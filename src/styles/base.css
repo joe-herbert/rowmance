@@ -1,0 +1,131 @@
+/* Global reset and base styles.
+   All values reference CSS variables — never hard-coded colours or sizes. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden; /* Tauri desktop app — no browser scroll. */
+  font-family: var(--font-family-ui);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: var(--radius-sm);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text-primary);
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+}
+
+/* Focus ring — visible for keyboard users, suppressed for pointer users. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Buttons */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+/* Inputs */
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* Remove default list styling */
+ul,
+ol {
+  list-style: none;
+}
+
+/* Prevent text selection on UI chrome */
+.no-select {
+  user-select: none;
+}
+
+/* Resize handle shared style */
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+.resize-handle:hover,
+.resize-handle.dragging {
+  background: var(--color-accent);
+  opacity: 0.4;
+}
+.resize-handle--horizontal {
+  cursor: col-resize;
+  width: var(--resize-handle-size);
+  top: 0;
+  bottom: 0;
+}
+.resize-handle--vertical {
+  cursor: row-resize;
+  height: var(--resize-handle-size);
+  left: 0;
+  right: 0;
+}

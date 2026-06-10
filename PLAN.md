@@ -15,10 +15,11 @@
 11. [Theme System](#11-theme-system)
 12. [Keyboard Shortcut System](#12-keyboard-shortcut-system)
 13. [Development Standards](#13-development-standards)
-14. [Phased Implementation Plan](#14-phased-implementation-plan)
-15. [Key Design Decisions](#15-key-design-decisions)
-16. [Risk Register](#16-risk-register)
-17. [Dependency Reference](#17-dependency-reference)
+14. [Makefile](#14-makefile)
+15. [Phased Implementation Plan](#15-phased-implementation-plan)
+16. [Key Design Decisions](#16-key-design-decisions)
+17. [Risk Register](#17-risk-register)
+18. [Dependency Reference](#18-dependency-reference)
 
 ---
 
@@ -1244,7 +1245,27 @@ Clippy should run with `-D warnings` (treat all warnings as errors). Add a `.car
 rustflags = ["-D", "warnings"]
 ```
 
-### 13.4 CI Pipeline
+### 13.4 README Maintenance
+
+`README.md` is a living document updated throughout development, not written once at the end. It should always reflect the current state of the project.
+
+**README must include at all times:**
+- Project description and screenshot (update the screenshot whenever the UI changes significantly)
+- Prerequisites (Rust toolchain version, bun version, OS requirements)
+- Quick-start instructions (`git clone` → `make install` → `make dev`)
+- Full `make` target reference (generated or kept in sync with the Makefile)
+- Configuration file locations (`~/.config/rowmance/`)
+- Supported database versions (MySQL 5.7+, MariaDB 10.5+, PostgreSQL 13+)
+- Link to `CONTRIBUTING.md`
+
+**Update the README when:**
+- A new phase is completed or a major feature is added
+- Prerequisites change (new tool, version bump)
+- The Makefile gains or loses targets
+- Configuration options change
+- The UI changes enough that the screenshot is misleading
+
+### 13.5 CI Pipeline
 
 Use GitHub Actions. Every push to any branch runs the full check suite; merging to `main` additionally runs tests.
 
@@ -1268,7 +1289,108 @@ jobs:
 
 ---
 
-## 14. Phased Implementation Plan
+## 14. Makefile
+
+A `Makefile` lives at the repo root and provides a single entry point for all common development tasks. Use `make help` to list available targets. All targets that wrap `bun` or `cargo` commands should print what they are running before executing.
+
+```makefile
+# Rowmance — developer convenience targets
+# Requires: bun, cargo, rustup (with rustfmt + clippy components)
+
+.PHONY: help dev build check lint format test test-watch test-coverage \
+        rust-check rust-lint rust-test rust-fmt rust-doc \
+        clean install update
+
+## Show available targets
+help:
+	@grep -E '^##' Makefile | sed 's/## //'
+
+## Install all dependencies (frontend + Rust toolchain components)
+install:
+	bun install
+	rustup component add rustfmt clippy
+
+## Start the app in development mode (hot reload)
+dev:
+	bun run dev
+
+## Build a production release for the current platform
+build:
+	bun run build
+
+# ── Frontend ─────────────────────────────────────────────────────────────────
+
+## Run all frontend checks (svelte-check, tsc, eslint, prettier)
+check:
+	bunx svelte-check
+	bunx tsc --noEmit
+	bunx eslint src/
+	bunx prettier --check src/
+
+## Run ESLint and Prettier checks
+lint:
+	bunx eslint src/
+	bunx prettier --check src/
+
+## Auto-fix formatting with Prettier
+format:
+	bunx prettier --write src/
+
+## Run frontend tests once
+test:
+	bun run test
+
+## Run frontend tests in watch mode
+test-watch:
+	bun run test:watch
+
+## Run frontend tests with coverage report
+test-coverage:
+	bun run test:coverage
+
+# ── Rust ─────────────────────────────────────────────────────────────────────
+
+## Run rustfmt check, clippy, and cargo test
+rust-check:
+	cargo fmt --check --manifest-path src-tauri/Cargo.toml
+	cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+	cargo test --manifest-path src-tauri/Cargo.toml
+
+## Run Clippy linter (warnings treated as errors)
+rust-lint:
+	cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+## Run Rust test suite
+rust-test:
+	cargo test --manifest-path src-tauri/Cargo.toml
+
+## Auto-fix Rust formatting
+rust-fmt:
+	cargo fmt --manifest-path src-tauri/Cargo.toml
+
+## Build and verify Rust documentation
+rust-doc:
+	cargo doc --manifest-path src-tauri/Cargo.toml --no-deps
+
+# ── Combined ─────────────────────────────────────────────────────────────────
+
+## Run all checks — frontend and Rust (CI equivalent)
+ci: check rust-check
+
+## Remove build artefacts
+clean:
+	cargo clean --manifest-path src-tauri/Cargo.toml
+	rm -rf node_modules .svelte-kit src-tauri/target
+
+## Update all dependencies
+update:
+	bun update
+	cargo update --manifest-path src-tauri/Cargo.toml
+```
+
+---
+
+## 15. Phased Implementation Plan
 
 ### Phase 1 — Foundation (Weeks 1–3)
 
@@ -1290,7 +1412,7 @@ jobs:
 - [ ] Migration runner pointing at `db/migrations/0001_init.sql`
 - [ ] `AppState` setup and `app.manage()` in `lib.rs`
 - [ ] Implement `connections::*` commands (CRUD only, no keychain yet)
-- [ ] `ConnectionForm.svelte` (basic fields, no SSH/SSL tabs yet)
+- [x] `ConnectionForm.svelte` (basic fields, no SSH/SSL tabs yet)
 - [ ] `ConnectionTree.svelte` (flat list for now, no groups)
 - [ ] Persist and load connections on startup
 
@@ -1472,7 +1594,7 @@ jobs:
 
 ---
 
-## 15. Key Design Decisions
+## 16. Key Design Decisions
 
 ### D1: sqlx over Diesel or SeaORM for remote queries
 
@@ -1530,7 +1652,7 @@ jobs:
 
 ---
 
-## 16. Risk Register
+## 17. Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
@@ -1544,7 +1666,7 @@ jobs:
 
 ---
 
-## 17. Dependency Reference
+## 18. Dependency Reference
 
 ### Cargo.toml (src-tauri)
 

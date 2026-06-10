@@ -1,0 +1,21 @@
+/* Light theme — these are also the defaults in variables.css so this file
+   is here primarily as a named override target when switching themes. */
+[data-theme='light'] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f5f5f5;
+  --color-bg-tertiary: #ebebeb;
+  --color-bg-overlay: #ffffff;
+  --color-bg-hover: rgba(0, 0, 0, 0.04);
+  --color-bg-active: rgba(0, 0, 0, 0.08);
+  --color-border: #e0e0e0;
+  --color-border-strong: #c0c0c0;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #555555;
+  --color-text-muted: #999999;
+  --color-editor-bg: #fafafa;
+  --color-editor-text: #1a1a1a;
+  --color-editor-gutter-bg: #f0f0f0;
+  --color-scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --color-scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+  --color-table-row-alt: rgba(0, 0, 0, 0.02);
+}

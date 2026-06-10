@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check *)",
+      "Bash(bunx svelte-check *)",
+      "Bash(bunx svelte-kit *)",
+      "Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")",
+      "Bash(export DATABASE_URL=\"sqlite:///tmp/rowmance_dev.db\")",
+      "Bash(cargo clippy *)",
+      "Bash(make rust-check *)",
+      "Bash(make ci *)",
+      "Bash(bunx prettier *)"
+    ]
+  }
+}

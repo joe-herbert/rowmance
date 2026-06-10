@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO connection_groups (id, name, parent_id, position) VALUES (?, ?, ?, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "60b67f1c26d716a6d4ec6a750dd9a4b85c35f0234acb0e9f458129008ffdc00a"
+}

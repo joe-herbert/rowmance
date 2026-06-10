@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO connection_profiles (\n            id, group_id, name, db_type, host, port, database, username, color,\n            read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,\n            ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,\n            pool_min, pool_max, created_at, updated_at\n        ) VALUES (\n            ?, ?, ?, ?, ?, ?, ?, ?, ?,\n            ?, ?, ?, ?, ?, ?, ?,\n            ?, ?, ?, ?,\n            ?, ?, ?, ?\n        )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 24
+    },
+    "nullable": []
+  },
+  "hash": "5b19c6923d8e9b49b5068c5834ced8f5f1e7dc9705a244d96848d3079a2161df"
+}
