@@ -118,15 +118,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_active_ids_empty_on_new() {
+    fn active_ids_empty_on_new() {
         let manager = ConnectionManager::new();
         assert!(manager.active_ids().is_empty());
         assert!(!manager.is_active("nonexistent"));
     }
 
     #[test]
-    fn test_get_returns_error_for_unknown_id() {
+    fn get_returns_error_for_unknown_id() {
         let manager = ConnectionManager::new();
-        assert!(manager.get("missing").is_err());
+        let err = manager.get("missing").unwrap_err();
+        assert!(matches!(err, RowmanceError::ConnectionNotActive(_)));
+    }
+
+    #[test]
+    fn is_active_returns_false_for_missing_id() {
+        let manager = ConnectionManager::new();
+        assert!(!manager.is_active("any-id"));
+    }
+
+    #[test]
+    fn active_ids_reflects_current_registry() {
+        // We can't insert a real pool without a running DB, but we can assert
+        // the registry is consistent at construction time.
+        let manager = ConnectionManager::new();
+        assert_eq!(manager.active_ids().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn disconnect_nonexistent_id_is_a_noop() {
+        let manager = ConnectionManager::new();
+        // Should not panic.
+        manager.disconnect("ghost").await;
+        assert!(!manager.is_active("ghost"));
+    }
+
+    #[test]
+    fn connect_with_unknown_db_type_returns_error() {
+        // This test exercises the synchronous path check (no real network needed).
+        // We use a block_on wrapper since ConnectionManager::connect is async.
+        let manager = ConnectionManager::new();
+        let result = tokio::runtime::Runtime::new().unwrap().block_on(async {
+            manager
+                .connect("id", "oracle", "localhost", 1521, "db", "user", "pw", 1, 1)
+                .await
+        });
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), RowmanceError::ConnectionNotFound(_)));
     }
 }

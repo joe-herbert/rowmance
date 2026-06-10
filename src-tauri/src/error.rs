@@ -81,3 +81,61 @@ impl From<RowmanceError> for AppError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_error_new_sets_fields() {
+        let err = AppError::new("TEST_CODE", "something went wrong");
+        assert_eq!(err.code, "TEST_CODE");
+        assert_eq!(err.message, "something went wrong");
+        assert!(err.detail.is_none());
+    }
+
+    #[test]
+    fn app_error_with_detail_sets_detail() {
+        let err = AppError::new("E", "msg").with_detail("context here");
+        assert_eq!(err.detail.as_deref(), Some("context here"));
+    }
+
+    #[test]
+    fn connection_not_active_maps_to_correct_code() {
+        let err: AppError = RowmanceError::ConnectionNotActive("abc".into()).into();
+        assert_eq!(err.code, "CONNECTION_NOT_ACTIVE");
+        assert!(err.message.contains("abc"));
+    }
+
+    #[test]
+    fn connection_not_found_maps_to_correct_code() {
+        let err: AppError = RowmanceError::ConnectionNotFound("xyz".into()).into();
+        assert_eq!(err.code, "CONNECTION_NOT_FOUND");
+        assert!(err.message.contains("xyz"));
+    }
+
+    #[test]
+    fn read_only_violation_maps_to_correct_code() {
+        let err: AppError = RowmanceError::ReadOnlyViolation.into();
+        assert_eq!(err.code, "READ_ONLY_VIOLATION");
+    }
+
+    #[test]
+    fn keychain_error_maps_to_correct_code() {
+        let err: AppError = RowmanceError::Keychain("no keychain".into()).into();
+        assert_eq!(err.code, "KEYCHAIN_ERROR");
+    }
+
+    #[test]
+    fn ssh_error_maps_to_correct_code() {
+        let err: AppError = RowmanceError::Ssh("handshake failed".into()).into();
+        assert_eq!(err.code, "SSH_ERROR");
+    }
+
+    #[test]
+    fn io_error_maps_to_correct_code() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let err: AppError = RowmanceError::Io(io_err).into();
+        assert_eq!(err.code, "IO_ERROR");
+    }
+}

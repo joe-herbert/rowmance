@@ -374,4 +374,38 @@ mod tests {
         assert!(!is_mutating_statement("SELECT * FROM t"));
         assert!(!is_mutating_statement("EXPLAIN SELECT 1"));
     }
+
+    #[test]
+    fn all_mutating_keywords_covered() {
+        for keyword in &["INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE", "REPLACE", "MERGE", "RENAME"] {
+            let sql = format!("{keyword} something");
+            assert!(is_mutating_statement(&sql), "{keyword} should be mutating");
+        }
+    }
+
+    #[test]
+    fn case_insensitive_detection() {
+        assert!(is_mutating_statement("insert into t values (1)"));
+        assert!(is_mutating_statement("Insert Into t Values (1)"));
+        assert!(!is_mutating_statement("select * from t"));
+    }
+
+    #[test]
+    fn leading_whitespace_is_handled() {
+        assert!(is_mutating_statement("   DELETE FROM t"));
+        assert!(is_mutating_statement("\tUPDATE t SET a = 1"));
+        assert!(!is_mutating_statement("   SELECT 1"));
+    }
+
+    #[test]
+    fn empty_sql_is_not_mutating() {
+        assert!(!is_mutating_statement(""));
+        assert!(!is_mutating_statement("   "));
+    }
+
+    #[test]
+    fn select_with_mutating_word_in_subquery_is_not_mutating() {
+        // Only the leading keyword matters, not words in the middle.
+        assert!(!is_mutating_statement("SELECT * FROM t WHERE id IN (SELECT id FROM deleted_items)"));
+    }
 }
