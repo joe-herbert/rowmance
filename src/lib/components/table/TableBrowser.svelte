@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { executeQuery } from '$lib/tauri/query';
+  import { executeQuery, updateRows } from '$lib/tauri/query';
+  import type { RowChange } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
-  import type { QueryResult } from '$lib/types';
+  import type { QueryResult, ColumnMeta } from '$lib/types';
   import DataTable from '$lib/components/table/DataTable.svelte';
+  import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
 
   interface Props {
     connectionId: string;
@@ -23,9 +25,88 @@
   let isLoading = $state(false);
   let error = $state<string | null>(null);
 
+  // ── Pending changes ───────────────────────────────────────────────────────
+
+  type CellValue = string | number | boolean | null;
+  let pendingChanges = $state<Map<string, Map<string, CellValue>>>(new Map());
+  let isSaving = $state(false);
+  let saveError = $state<string | null>(null);
+
+  // Key to force DataTable to fully reset (clears pending changes displayed)
+  let tableKey = $state(0);
+
+  const pendingCount = $derived(pendingChanges.size);
+
+  function handleChangePending(changes: Map<string, Map<string, CellValue>>): void {
+    pendingChanges = changes;
+  }
+
+  function discardChanges(): void {
+    pendingChanges = new Map();
+    tableKey++;
+  }
+
+  async function saveChanges(): Promise<void> {
+    if (!result) return;
+    isSaving = true;
+    saveError = null;
+
+    try {
+      const pkColumns = result.columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
+
+      const rowChanges: RowChange[] = [];
+
+      for (const [rowKey, colMap] of pendingChanges) {
+        // Build primary keys from the row key
+        // rowKey is either the PK values joined with | or the row index
+        const primaryKeys: Record<string, unknown> = {};
+
+        if (pkColumns.length > 0) {
+          const parts = rowKey.split('|');
+          pkColumns.forEach((pkCol, i) => {
+            primaryKeys[pkCol] = parts[i] ?? null;
+          });
+        } else {
+          // No PK — use _rowIndex as a hint; server may not support this
+          primaryKeys['_rowIndex'] = rowKey;
+        }
+
+        const changes: Record<string, unknown> = {};
+        for (const [col, val] of colMap) {
+          changes[col] = val;
+        }
+
+        rowChanges.push({ primaryKeys, changes });
+      }
+
+      await updateRows(connectionId, database, table, rowChanges);
+      pendingChanges = new Map();
+      tableKey++;
+      await load();
+    } catch (err) {
+      saveError = err instanceof Error ? err.message : String(err);
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  // ── Column visibility ─────────────────────────────────────────────────────
+
+  let hiddenColumns = $state<Set<string>>(new Set());
+  let showColumnPicker = $state(false);
+  let columnPickerAnchorEl = $state<HTMLButtonElement | null>(null);
+
+  function toggleColumn(name: string): void {
+    const next = new Set(hiddenColumns);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    hiddenColumns = next;
+  }
+
+  // ── DB type + SQL helpers ─────────────────────────────────────────────────
+
   let dbType = $derived(connections.getById(connectionId)?.dbType ?? 'mysql');
 
-  // Postgres uses double-quote identifiers; MySQL/MariaDB use backticks.
   function quoteIdentifier(name: string): string {
     return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;
   }
@@ -71,10 +152,8 @@
     load();
   }
 
-  // Re-fetch whenever the identity props change so switching to a different
-  // table in the same panel does not show stale data.
+  // Re-fetch whenever the identity props change.
   $effect(() => {
-    // Referencing all three identity props ensures the effect re-runs when any changes.
     const _conn = connectionId;
     const _db = database;
     const _tbl = table;
@@ -82,8 +161,31 @@
     page = 1;
     filterValue = '';
     pendingFilter = '';
+    pendingChanges = new Map();
+    hiddenColumns = new Set();
+    showColumnPicker = false;
     load();
   });
+
+  // Column picker position
+  let pickerTop = $state(0);
+  let pickerLeft = $state(0);
+
+  function openColumnPicker(): void {
+    if (columnPickerAnchorEl) {
+      const rect = columnPickerAnchorEl.getBoundingClientRect();
+      const containerRect = columnPickerAnchorEl
+        .closest('.table-browser')
+        ?.getBoundingClientRect();
+      if (containerRect) {
+        pickerTop = rect.bottom - containerRect.top + 4;
+        pickerLeft = rect.right - containerRect.left - 220; // align right edge
+      }
+    }
+    showColumnPicker = true;
+  }
+
+  const currentColumns = $derived<ColumnMeta[]>(result?.columns ?? []);
 </script>
 
 <div class="table-browser">
@@ -112,6 +214,44 @@
       />
     </div>
 
+    {#if currentColumns.length > 0}
+      <button
+        bind:this={columnPickerAnchorEl}
+        class="toolbar-btn"
+        onclick={openColumnPicker}
+        title="Show/hide columns"
+        aria-label="Column visibility"
+        aria-expanded={showColumnPicker}
+      >
+        Columns
+        {#if hiddenColumns.size > 0}
+          <span class="badge">{hiddenColumns.size} hidden</span>
+        {/if}
+      </button>
+    {/if}
+
+    {#if pendingCount > 0}
+      <button
+        class="toolbar-btn save-btn"
+        onclick={saveChanges}
+        disabled={isSaving}
+        title="Save pending changes to the database"
+        aria-label="Save {pendingCount} pending changes"
+      >
+        {isSaving ? 'Saving…' : `Save ${pendingCount} change${pendingCount !== 1 ? 's' : ''}`}
+      </button>
+
+      <button
+        class="toolbar-btn discard-btn"
+        onclick={discardChanges}
+        disabled={isSaving}
+        title="Discard all pending changes"
+        aria-label="Discard changes"
+      >
+        Discard
+      </button>
+    {/if}
+
     <button
       class="refresh-button"
       onclick={handleRefresh}
@@ -122,6 +262,16 @@
       ↺
     </button>
   </div>
+
+  {#if saveError !== null}
+    <div class="save-error-bar" role="alert">
+      <span class="save-error-label">Save failed:</span>
+      <span class="save-error-message">{saveError}</span>
+      <button class="save-error-close" onclick={() => (saveError = null)} aria-label="Dismiss">
+        ✕
+      </button>
+    </div>
+  {/if}
 
   <div class="content">
     {#if isLoading}
@@ -134,17 +284,38 @@
         <span class="error-message">{error}</span>
       </div>
     {:else if result !== null}
-      <DataTable columns={result.columns} rows={result.rows} pageSize={PAGE_SIZE} />
+      {#key tableKey}
+        <DataTable
+          columns={result.columns}
+          rows={result.rows}
+          pageSize={PAGE_SIZE}
+          editable={true}
+          {hiddenColumns}
+          onChangePending={handleChangePending}
+        />
+      {/key}
     {:else}
       <div class="loading">
         <span class="loading-text">No data.</span>
       </div>
     {/if}
   </div>
+
+  {#if showColumnPicker && currentColumns.length > 0}
+    <div class="picker-positioner" style="top: {pickerTop}px; left: {pickerLeft}px;">
+      <ColumnPicker
+        columns={currentColumns}
+        {hiddenColumns}
+        onToggle={toggleColumn}
+        onClose={() => (showColumnPicker = false)}
+      />
+    </div>
+  {/if}
 </div>
 
 <style>
   .table-browser {
+    position: relative;
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -163,6 +334,7 @@
     padding: 0 var(--spacing-3);
     background: var(--color-bg-secondary);
     border-bottom: 1px solid var(--color-border);
+    overflow: hidden;
   }
 
   .table-name {
@@ -241,6 +413,69 @@
     font-family: var(--font-family-ui);
   }
 
+  .toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    height: calc(var(--toolbar-height) - var(--spacing-2) * 2);
+    padding: 0 var(--spacing-2);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  .toolbar-btn:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .toolbar-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .save-btn {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .save-btn:hover:not(:disabled) {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+  }
+
+  .discard-btn {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+    background: var(--color-danger-subtle);
+  }
+
+  .discard-btn:hover:not(:disabled) {
+    background: var(--color-danger);
+    color: var(--color-text-on-accent);
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 1px var(--spacing-1);
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+    border-radius: var(--radius-sm);
+    font-variant-numeric: tabular-nums;
+  }
+
   .refresh-button {
     display: flex;
     align-items: center;
@@ -270,6 +505,52 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
+
+  /* ── Save error bar ──────────────────────────────────────────────────────── */
+
+  .save-error-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-1) var(--spacing-3);
+    background: var(--color-danger-subtle);
+    border-bottom: 1px solid var(--color-danger);
+    font-size: var(--font-size-xs);
+  }
+
+  .save-error-label {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-danger);
+    flex-shrink: 0;
+  }
+
+  .save-error-message {
+    color: var(--color-danger);
+    font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .save-error-close {
+    flex-shrink: 0;
+    padding: 0 var(--spacing-1);
+    background: transparent;
+    border: none;
+    font-size: var(--font-size-xs);
+    color: var(--color-danger);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+  }
+
+  .save-error-close:hover {
+    background: var(--color-danger-subtle);
+  }
+
+  /* ── Content area ────────────────────────────────────────────────────────── */
 
   .content {
     flex: 1;
@@ -315,5 +596,12 @@
     font-family: var(--font-family-mono);
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  /* ── Column picker positioner ────────────────────────────────────────────── */
+
+  .picker-positioner {
+    position: absolute;
+    z-index: 200;
   }
 </style>

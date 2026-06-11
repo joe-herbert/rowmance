@@ -41,9 +41,12 @@ pub fn run() {
             commands::connections::connection_groups_list,
             commands::connections::connection_groups_create,
             commands::connections::connection_groups_delete,
+            commands::connections::connection_groups_update,
+            commands::connections::connection_groups_reorder,
             // Query execution
             commands::query::query_execute,
             commands::query::query_execute_selection,
+            commands::query::query_update_rows,
             // Schema introspection
             commands::schema::schema_list_databases,
             commands::schema::schema_list_tables,
@@ -53,6 +56,15 @@ pub fn run() {
             commands::history::history_list,
             commands::history::history_clear,
             commands::history::history_delete,
+            // Saved queries
+            commands::saved_queries::saved_queries_list_folders,
+            commands::saved_queries::saved_queries_create_folder,
+            commands::saved_queries::saved_queries_update_folder,
+            commands::saved_queries::saved_queries_delete_folder,
+            commands::saved_queries::saved_queries_list,
+            commands::saved_queries::saved_queries_create,
+            commands::saved_queries::saved_queries_update,
+            commands::saved_queries::saved_queries_delete,
             // Settings
             commands::settings::settings_get_all,
             commands::settings::settings_get,

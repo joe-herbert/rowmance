@@ -10,10 +10,12 @@
 
   interface Props {
     profile?: ConnectionProfile;
+    /** Pre-select a group when creating a new connection. */
+    groupId?: string | null;
     onclose: () => void;
   }
 
-  const { profile, onclose }: Props = $props();
+  const { profile, groupId, onclose }: Props = $props();
 
   const connectionStore = useConnections();
 
@@ -68,6 +70,7 @@
         username: username.trim(),
         ...(password ? { password } : {}),
         color: color || null,
+        groupId: profile?.groupId ?? groupId ?? null,
       };
 
       if (isEditing) {
@@ -99,6 +102,7 @@
         username: username.trim(),
         ...(password ? { password } : {}),
         color: color || null,
+        groupId: profile?.groupId ?? groupId ?? null,
       };
 
       let savedId: string;

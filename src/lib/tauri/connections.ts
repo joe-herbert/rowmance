@@ -4,6 +4,7 @@ import type {
   ConnectionProfile,
   ConnectionProfileInput,
   ConnectionGroup,
+  ConnectionGroupInput,
   ConnectionTestResult,
 } from '$lib/types';
 
@@ -51,6 +52,13 @@ export async function createConnectionGroup(
   parentId?: string,
 ): Promise<ConnectionGroup> {
   return invoke<ConnectionGroup>('connection_groups_create', { input: { name, parentId } });
+}
+
+export async function updateConnectionGroup(
+  id: string,
+  input: ConnectionGroupInput,
+): Promise<ConnectionGroup> {
+  return invoke<ConnectionGroup>('connection_groups_update', { id, input });
 }
 
 export async function deleteConnectionGroup(id: string): Promise<void> {

@@ -67,6 +67,12 @@ export interface ConnectionGroup {
   position: number;
 }
 
+export interface ConnectionGroupInput {
+  name: string;
+  parentId?: string | null;
+  position?: number;
+}
+
 export interface ConnectionTestResult {
   success: boolean;
   message: string;
@@ -176,6 +182,7 @@ export interface SavedQuery {
 export type PanelKind =
   | { kind: 'query_editor'; connectionId: string; initialSql?: string }
   | { kind: 'table_browser'; connectionId: string; database: string; table: string }
+  | { kind: 'ddl_viewer'; connectionId: string; database: string; objectName: string; objectType: 'table' | 'view' }
   | { kind: 'empty' };
 
 export interface PanelState {

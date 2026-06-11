@@ -8,6 +8,7 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import QueryEditor from '$lib/components/editor/QueryEditor.svelte';
   import TableBrowser from '$lib/components/table/TableBrowser.svelte';
+  import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
 
   interface Props {
     index: number;
@@ -35,6 +36,13 @@
       connectionId={panel.content.connectionId}
       database={panel.content.database}
       table={panel.content.table}
+    />
+  {:else if panel.content.kind === 'ddl_viewer'}
+    <DdlViewer
+      connectionId={panel.content.connectionId}
+      database={panel.content.database}
+      objectName={panel.content.objectName}
+      objectType={panel.content.objectType}
     />
   {:else}
     <!-- Empty panel placeholder -->

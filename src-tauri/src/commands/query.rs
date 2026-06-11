@@ -1,5 +1,5 @@
 /// Tauri commands for executing SQL queries against remote databases.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{Column, Row};
 use std::sync::Arc;
 use tauri::State;
@@ -35,6 +35,219 @@ pub struct QueryResult {
     #[serde(rename = "affectedRows")]
     pub affected_rows: Option<u64>,
     pub error: Option<String>,
+}
+
+/// A single row's worth of changes sent from the frontend for an inline edit.
+#[derive(Deserialize, Debug)]
+pub struct RowChange {
+    /// The primary key value(s) that identify the row. Key = column name, Value = JSON value.
+    #[serde(rename = "primaryKeys")]
+    pub primary_keys: std::collections::HashMap<String, serde_json::Value>,
+    /// Column name → new value for each changed cell.
+    pub changes: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Result returned after executing a batch of row updates.
+#[derive(Serialize, Debug)]
+pub struct UpdateResult {
+    #[serde(rename = "updatedCount")]
+    pub updated_count: u64,
+}
+
+/// Quote an identifier for MySQL/MariaDB (backticks).
+fn quote_mysql(ident: &str) -> String {
+    format!("`{}`", ident.replace('`', "``"))
+}
+
+/// Quote an identifier for PostgreSQL (double-quotes).
+fn quote_postgres(ident: &str) -> String {
+    format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
+/// Bind a JSON value to a SQLx MySQL query.
+fn bind_mysql_value<'q>(
+    query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
+    value: &serde_json::Value,
+) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
+    match value {
+        serde_json::Value::String(s) => query.bind(s.clone()),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                query.bind(i)
+            } else if let Some(f) = n.as_f64() {
+                query.bind(f)
+            } else {
+                query.bind(n.to_string())
+            }
+        }
+        serde_json::Value::Bool(b) => query.bind(*b),
+        serde_json::Value::Null => query.bind(Option::<String>::None),
+        other => query.bind(other.to_string()),
+    }
+}
+
+/// Bind a JSON value to a SQLx Postgres query.
+fn bind_pg_value<'q>(
+    query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+    value: &serde_json::Value,
+) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+    match value {
+        serde_json::Value::String(s) => query.bind(s.clone()),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                query.bind(i)
+            } else if let Some(f) = n.as_f64() {
+                query.bind(f)
+            } else {
+                query.bind(n.to_string())
+            }
+        }
+        serde_json::Value::Bool(b) => query.bind(*b),
+        serde_json::Value::Null => query.bind(Option::<String>::None),
+        other => query.bind(other.to_string()),
+    }
+}
+
+/// Execute a batch of row-level UPDATE statements for inline cell editing.
+#[tauri::command]
+pub async fn query_update_rows(
+    sqlite: State<'_, sqlx::SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    table: String,
+    database: String,
+    changes: Vec<RowChange>,
+) -> Result<UpdateResult, AppError> {
+    // Check read-only mode before touching the remote pool.
+    let profile_row = sqlx::query!(
+        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    let is_read_only = match &profile_row {
+        Some(row) => row.read_only != 0,
+        None => {
+            return Err(AppError::new(
+                "CONNECTION_NOT_FOUND",
+                format!("No connection with id {connection_id}"),
+            ))
+        }
+    };
+
+    if is_read_only {
+        return Err(AppError::new(
+            "READ_ONLY_VIOLATION",
+            "This connection is in read-only mode — mutating statements are not allowed",
+        ));
+    }
+
+    if changes.is_empty() {
+        return Ok(UpdateResult { updated_count: 0 });
+    }
+
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+
+    let mut total_updated: u64 = 0;
+
+    match pool_ref.value() {
+        RemotePool::MySql(pool) => {
+            for change in &changes {
+                if change.changes.is_empty() || change.primary_keys.is_empty() {
+                    continue;
+                }
+
+                let set_clause: Vec<String> = change
+                    .changes
+                    .keys()
+                    .map(|col| format!("{} = ?", quote_mysql(col)))
+                    .collect();
+                let where_clause: Vec<String> = change
+                    .primary_keys
+                    .keys()
+                    .map(|col| format!("{} = ?", quote_mysql(col)))
+                    .collect();
+
+                let sql = format!(
+                    "UPDATE {}.{} SET {} WHERE {}",
+                    quote_mysql(&database),
+                    quote_mysql(&table),
+                    set_clause.join(", "),
+                    where_clause.join(" AND ")
+                );
+
+                let mut q = sqlx::query(&sql);
+                for val in change.changes.values() {
+                    q = bind_mysql_value(q, val);
+                }
+                for val in change.primary_keys.values() {
+                    q = bind_mysql_value(q, val);
+                }
+
+                let result = q
+                    .execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                total_updated += result.rows_affected();
+            }
+        }
+        RemotePool::Postgres(pool) => {
+            for change in &changes {
+                if change.changes.is_empty() || change.primary_keys.is_empty() {
+                    continue;
+                }
+
+                let mut param_idx: usize = 1;
+
+                let set_clause: Vec<String> = change
+                    .changes
+                    .keys()
+                    .map(|col| {
+                        let s = format!("{} = ${}", quote_postgres(col), param_idx);
+                        param_idx += 1;
+                        s
+                    })
+                    .collect();
+                let where_clause: Vec<String> = change
+                    .primary_keys
+                    .keys()
+                    .map(|col| {
+                        let s = format!("{} = ${}", quote_postgres(col), param_idx);
+                        param_idx += 1;
+                        s
+                    })
+                    .collect();
+
+                let sql = format!(
+                    "UPDATE {}.{} SET {} WHERE {}",
+                    quote_postgres(&database),
+                    quote_postgres(&table),
+                    set_clause.join(", "),
+                    where_clause.join(" AND ")
+                );
+
+                let mut q = sqlx::query(&sql);
+                for val in change.changes.values() {
+                    q = bind_pg_value(q, val);
+                }
+                for val in change.primary_keys.values() {
+                    q = bind_pg_value(q, val);
+                }
+
+                let result = q
+                    .execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                total_updated += result.rows_affected();
+            }
+        }
+    }
+
+    Ok(UpdateResult {
+        updated_count: total_updated,
+    })
 }
 
 /// Enforce read-only mode by checking the leading SQL keyword.
@@ -407,5 +620,39 @@ mod tests {
     fn select_with_mutating_word_in_subquery_is_not_mutating() {
         // Only the leading keyword matters, not words in the middle.
         assert!(!is_mutating_statement("SELECT * FROM t WHERE id IN (SELECT id FROM deleted_items)"));
+    }
+
+    // ── Identifier quoting ────────────────────────────────────────────────────
+
+    #[test]
+    fn quote_mysql_wraps_in_backticks() {
+        assert_eq!(quote_mysql("my_table"), "`my_table`");
+    }
+
+    #[test]
+    fn quote_mysql_escapes_embedded_backticks() {
+        assert_eq!(quote_mysql("ta`ble"), "`ta``ble`");
+    }
+
+    #[test]
+    fn quote_postgres_wraps_in_double_quotes() {
+        assert_eq!(quote_postgres("my_table"), "\"my_table\"");
+    }
+
+    #[test]
+    fn quote_postgres_escapes_embedded_double_quotes() {
+        assert_eq!(quote_postgres("ta\"ble"), "\"ta\"\"ble\"");
+    }
+
+    #[test]
+    fn quote_mysql_handles_simple_identifiers() {
+        assert_eq!(quote_mysql("users"), "`users`");
+        assert_eq!(quote_mysql("created_at"), "`created_at`");
+    }
+
+    #[test]
+    fn quote_postgres_handles_simple_identifiers() {
+        assert_eq!(quote_postgres("users"), "\"users\"");
+        assert_eq!(quote_postgres("created_at"), "\"created_at\"");
     }
 }

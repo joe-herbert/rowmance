@@ -9,7 +9,11 @@
       "Bash(cargo clippy *)",
       "Bash(make rust-check *)",
       "Bash(make ci *)",
-      "Bash(bunx prettier *)"
+      "Bash(bunx prettier *)",
+      "Bash(bun run *)",
+      "Bash(~/.cargo/bin/cargo check *)",
+      "Bash(~/.cargo/bin/cargo test *)",
+      "Bash(git stash *)"
     ]
   }
 }

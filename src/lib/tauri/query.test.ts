@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { executeQuery, executeSelection, cancelQuery } from './query';
+import { executeQuery, executeSelection, cancelQuery, updateRows } from './query';
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -53,5 +53,35 @@ describe('cancelQuery', () => {
     mockInvoke.mockResolvedValue(undefined);
     await cancelQuery('q-id');
     expect(mockInvoke).toHaveBeenCalledWith('query_cancel', { queryId: 'q-id' });
+  });
+});
+
+describe('updateRows', () => {
+  it('invokes query_update_rows with the correct parameters', async () => {
+    const stubUpdateResult = { updatedCount: 2 };
+    mockInvoke.mockResolvedValue(stubUpdateResult);
+
+    const changes = [
+      { primaryKeys: { id: 1 }, changes: { name: 'Alice' } },
+      { primaryKeys: { id: 2 }, changes: { name: 'Bob' } },
+    ];
+
+    const result = await updateRows('conn-1', 'mydb', 'users', changes);
+
+    expect(mockInvoke).toHaveBeenCalledWith('query_update_rows', {
+      connectionId: 'conn-1',
+      database: 'mydb',
+      table: 'users',
+      changes,
+    });
+    expect(result).toBe(stubUpdateResult);
+  });
+
+  it('returns the UpdateResult from invoke', async () => {
+    const stubUpdateResult = { updatedCount: 5 };
+    mockInvoke.mockResolvedValue(stubUpdateResult);
+
+    const result = await updateRows('conn-2', 'db', 'tbl', []);
+    expect(result.updatedCount).toBe(5);
   });
 });

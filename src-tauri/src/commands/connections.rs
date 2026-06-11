@@ -512,6 +512,61 @@ pub async fn connection_groups_delete(
     Ok(())
 }
 
+/// Update an existing connection group's name, parent, and position.
+#[tauri::command]
+pub async fn connection_groups_update(
+    sqlite: State<'_, SqlitePool>,
+    id: String,
+    input: ConnectionGroupInput,
+) -> Result<ConnectionGroup, AppError> {
+    sqlx::query!(
+        "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+        input.name,
+        input.parent_id,
+        id
+    )
+    .execute(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    let row =
+        sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+            .bind(&id)
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    Ok(ConnectionGroup::from(row))
+}
+
+/// Reorder connection groups by updating their parent_id and position.
+#[derive(Debug, Deserialize)]
+pub struct GroupReorderItem {
+    pub id: String,
+    #[serde(rename = "parentId")]
+    pub parent_id: Option<String>,
+    pub position: i64,
+}
+
+#[tauri::command]
+pub async fn connection_groups_reorder(
+    sqlite: State<'_, SqlitePool>,
+    updates: Vec<GroupReorderItem>,
+) -> Result<(), AppError> {
+    for item in &updates {
+        sqlx::query!(
+            "UPDATE connection_groups SET parent_id = ?, position = ? WHERE id = ?",
+            item.parent_id,
+            item.position,
+            item.id
+        )
+        .execute(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -797,5 +852,174 @@ mod tests {
         assert_eq!(profile.ssl_enabled, row.ssl_enabled);
         assert_eq!(profile.pool_min, row.pool_min);
         assert_eq!(profile.pool_max, row.pool_max);
+    }
+
+    // ── connection_groups_update ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn update_group_changes_name() {
+        let pool = setup_db().await;
+        insert_group(&pool, "g-upd", "Old Name").await;
+
+        sqlx::query!(
+            "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+            "New Name",
+            None::<String>,
+            "g-upd"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let row =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("g-upd")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(row.name, "New Name");
+    }
+
+    #[tokio::test]
+    async fn update_group_sets_parent_id() {
+        let pool = setup_db().await;
+        insert_group(&pool, "g-parent", "Parent").await;
+        insert_group(&pool, "g-child", "Child").await;
+
+        sqlx::query!(
+            "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+            "Child",
+            "g-parent",
+            "g-child"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let row =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("g-child")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(row.parent_id.as_deref(), Some("g-parent"));
+    }
+
+    #[tokio::test]
+    async fn update_group_clears_parent_id() {
+        let pool = setup_db().await;
+        insert_group(&pool, "g-par2", "Parent2").await;
+
+        // Insert a nested group with parent_id set.
+        sqlx::query(
+            "INSERT INTO connection_groups (id, name, parent_id, position) VALUES (?, ?, ?, 0)",
+        )
+        .bind("g-nested")
+        .bind("Nested")
+        .bind("g-par2")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Update clearing parent_id.
+        sqlx::query!(
+            "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+            "Nested",
+            None::<String>,
+            "g-nested"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let row =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("g-nested")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert!(row.parent_id.is_none());
+    }
+
+    // ── connection_groups_reorder ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn reorder_groups_updates_positions() {
+        let pool = setup_db().await;
+        insert_group(&pool, "rg-1", "Group 1").await;
+        insert_group(&pool, "rg-2", "Group 2").await;
+        insert_group(&pool, "rg-3", "Group 3").await;
+
+        // Reorder: rg-1 → pos 2, rg-2 → pos 0, rg-3 → pos 1
+        let updates: &[(&str, Option<&str>, i64)] = &[
+            ("rg-1", None, 2),
+            ("rg-2", None, 0),
+            ("rg-3", None, 1),
+        ];
+
+        for (id, parent_id, position) in updates {
+            sqlx::query!(
+                "UPDATE connection_groups SET parent_id = ?, position = ? WHERE id = ?",
+                *parent_id,
+                position,
+                id
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let rg1 =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("rg-1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let rg2 =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("rg-2")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let rg3 =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("rg-3")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(rg1.position, 2);
+        assert_eq!(rg2.position, 0);
+        assert_eq!(rg3.position, 1);
+    }
+
+    #[tokio::test]
+    async fn reorder_groups_moves_to_different_parent() {
+        let pool = setup_db().await;
+        insert_group(&pool, "rg-par", "Parent Group").await;
+        insert_group(&pool, "rg-orphan", "Orphan Child").await;
+
+        // Move orphan child under parent via reorder.
+        sqlx::query!(
+            "UPDATE connection_groups SET parent_id = ?, position = ? WHERE id = ?",
+            "rg-par",
+            0_i64,
+            "rg-orphan"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let row =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("rg-orphan")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(row.parent_id.as_deref(), Some("rg-par"));
     }
 }

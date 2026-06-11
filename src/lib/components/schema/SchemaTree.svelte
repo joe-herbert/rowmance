@@ -1,23 +1,84 @@
 <!--
   SchemaTree — shows the database schema for all active connections.
-  Databases expand to reveal tables, which expand to reveal columns/indexes/keys.
-  Clicking a table opens it as a table browser in the focused panel.
-  Phase 1: static tree with no fuzzy search (added in Phase 2).
+  Databases expand to reveal tables/views.
+  Right-click on a table shows a context menu (Open, View DDL, Copy Name).
+  A fuzzy-search box filters tables across all loaded databases.
 -->
 <script lang="ts">
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import type { TableInfo } from '$lib/types';
+  import Fuse from 'fuse.js';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
+
+  // ── Schema state ──────────────────────────────────────────────────────────────
 
   // Schema cache: connectionId → database → tables
   let schemaCache = $state<Map<string, Map<string, TableInfo[]>>>(new Map());
   let expandedConnections = $state<Set<string>>(new Set());
   let expandedDatabases = $state<Set<string>>(new Set()); // key: `${connectionId}/${database}`
   let loadingKeys = $state<Set<string>>(new Set());
+
+  // ── Context menu state ────────────────────────────────────────────────────────
+
+  interface ContextMenu {
+    x: number;
+    y: number;
+    connectionId: string;
+    database: string;
+    table: TableInfo;
+  }
+
+  let contextMenu = $state<ContextMenu | null>(null);
+
+  // ── Search state ──────────────────────────────────────────────────────────────
+
+  let searchQuery = $state('');
+
+  interface SearchItem {
+    connectionId: string;
+    database: string;
+    name: string;
+    label: string;
+  }
+
+  // Exported for testing.
+  export function buildSearchItems(
+    profiles: typeof connectionStore.profiles,
+    cache: Map<string, Map<string, TableInfo[]>>,
+  ): SearchItem[] {
+    const items: SearchItem[] = [];
+    for (const profile of profiles) {
+      const dbMap = cache.get(profile.id);
+      if (!dbMap) continue;
+      for (const [database, tables] of dbMap.entries()) {
+        for (const table of tables) {
+          items.push({
+            connectionId: profile.id,
+            database,
+            name: table.name,
+            label: `${profile.name}.${database}.${table.name}`,
+          });
+        }
+      }
+    }
+    return items;
+  }
+
+  const searchResults = $derived<SearchItem[]>(() => {
+    if (!searchQuery.trim()) return [];
+    const items = buildSearchItems(connectionStore.profiles, schemaCache);
+    if (items.length === 0) return [];
+    const fuse = new Fuse(items, { keys: ['name', 'label'], threshold: 0.4 });
+    return fuse.search(searchQuery).map((r) => r.item);
+  });
+
+  const isSearching = $derived(searchQuery.trim().length > 0);
+
+  // ── Tree helpers ──────────────────────────────────────────────────────────────
 
   async function toggleConnection(connectionId: string) {
     if (expandedConnections.has(connectionId)) {
@@ -72,17 +133,113 @@
     panelStore.openInFocused({ kind: 'table_browser', connectionId, database, table });
   }
 
+  // ── Context menu ──────────────────────────────────────────────────────────────
+
+  function showContextMenu(
+    event: MouseEvent,
+    connectionId: string,
+    database: string,
+    table: TableInfo,
+  ) {
+    event.preventDefault();
+    contextMenu = { x: event.clientX, y: event.clientY, connectionId, database, table };
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function ctxOpenTable() {
+    if (!contextMenu) return;
+    openTable(contextMenu.connectionId, contextMenu.database, contextMenu.table.name);
+    closeContextMenu();
+  }
+
+  function ctxViewDdl() {
+    if (!contextMenu) return;
+    panelStore.openInFocused({
+      kind: 'ddl_viewer',
+      connectionId: contextMenu.connectionId,
+      database: contextMenu.database,
+      objectName: contextMenu.table.name,
+      objectType: contextMenu.table.tableType,
+    });
+    closeContextMenu();
+  }
+
+  function ctxCopyName() {
+    if (!contextMenu) return;
+    navigator.clipboard.writeText(contextMenu.table.name);
+    closeContextMenu();
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && contextMenu) {
+      closeContextMenu();
+    }
+  }
+
+  function handleWindowClick(event: MouseEvent) {
+    if (!contextMenu) return;
+    // Dismiss if the click is outside the context menu itself.
+    const target = event.target as Element | null;
+    if (!target?.closest('.context-menu')) {
+      closeContextMenu();
+    }
+  }
+
   const activeProfiles = $derived(
     connectionStore.profiles.filter((p) => connectionStore.isActive(p.id)),
   );
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
 <div class="schema-tree">
   <div class="tree-header no-select">
     <span>Schema</span>
   </div>
 
-  {#if activeProfiles.length === 0}
+  <!-- Fuzzy search input -->
+  <div class="search-bar">
+    <input
+      class="search-input"
+      type="search"
+      placeholder="Search tables…"
+      bind:value={searchQuery}
+      aria-label="Search tables"
+    />
+    {#if searchQuery}
+      <button
+        class="search-clear"
+        onclick={() => (searchQuery = '')}
+        aria-label="Clear search"
+      >✕</button>
+    {/if}
+  </div>
+
+  {#if isSearching}
+    <!-- Flat search results -->
+    {#if searchResults.length === 0}
+      <div class="empty-hint">No tables match "{searchQuery}".</div>
+    {:else}
+      <ul class="search-results" role="listbox" aria-label="Search results">
+        {#each searchResults as item (item.label)}
+          <li role="option" aria-selected={false}>
+            <button
+              class="search-result-row"
+              onclick={() => openTable(item.connectionId, item.database, item.name)}
+              title={item.label}
+            >
+              <span class="result-icon" aria-hidden="true">▦</span>
+              <span class="result-name">{item.name}</span>
+              <span class="result-path">{item.database}</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {:else if activeProfiles.length === 0}
     <div class="empty-hint">Connect to a database to browse its schema.</div>
   {:else}
     <ul class="tree-root" role="tree" aria-label="Database schema">
@@ -141,10 +298,12 @@
                     <ul class="tree-children" role="group">
                       {#each tables as table}
                         <li class="tree-node leaf-node" role="treeitem" aria-selected={false}>
+                          <!-- svelte-ignore a11y_no_static_element_interactions -->
                           <button
                             class="node-row table-node"
                             ondblclick={() => openTable(profile.id, database, table.name)}
                             onclick={() => openTable(profile.id, database, table.name)}
+                            oncontextmenu={(e) => showContextMenu(e, profile.id, database, table)}
                             title="Open {table.name}"
                             aria-label="Open table {table.name}"
                           >
@@ -170,6 +329,21 @@
   {/if}
 </div>
 
+<!-- Context menu (portal-like, fixed positioning) -->
+{#if contextMenu}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="context-menu"
+    role="menu"
+    aria-label="Table options"
+    style="top: {contextMenu.y}px; left: {contextMenu.x}px;"
+  >
+    <button class="ctx-item" role="menuitem" onclick={ctxOpenTable}>Open Table</button>
+    <button class="ctx-item" role="menuitem" onclick={ctxViewDdl}>View DDL</button>
+    <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
+  </div>
+{/if}
+
 <style>
   .schema-tree {
     flex: 1;
@@ -189,6 +363,110 @@
     flex-shrink: 0;
   }
 
+  /* ── Search ── */
+
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-1) var(--spacing-2);
+    flex-shrink: 0;
+  }
+
+  .search-input {
+    flex: 1;
+    height: 26px;
+    padding: 0 var(--spacing-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    outline: none;
+    transition: border-color var(--transition-fast);
+    min-width: 0;
+  }
+
+  .search-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  /* Remove the default search × button in webkit */
+  .search-input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  .search-clear {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--color-text-muted);
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast), background var(--transition-fast);
+  }
+
+  .search-clear:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  /* ── Search results ── */
+
+  .search-results {
+    padding: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .search-result-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    width: 100%;
+    padding: 3px var(--spacing-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    text-align: left;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+    user-select: none;
+    cursor: pointer;
+  }
+
+  .search-result-row:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .result-icon {
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
+  }
+
+  .result-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .result-path {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 80px;
+  }
+
+  /* ── Empty hint ── */
+
   .empty-hint {
     padding: var(--spacing-2) var(--spacing-3);
     font-size: var(--font-size-xs);
@@ -196,6 +474,8 @@
     font-style: italic;
     line-height: var(--line-height-normal);
   }
+
+  /* ── Tree ── */
 
   .tree-root,
   .tree-children {
@@ -281,6 +561,34 @@
 
   .table-node {
     padding-left: calc(var(--spacing-3) * 2);
+  }
+
+  /* ── Context menu ── */
+
+  .context-menu {
+    position: fixed;
+    z-index: 500;
+    min-width: 140px;
+    padding: var(--spacing-1) 0;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+  }
+
+  .ctx-item {
+    display: block;
+    width: 100%;
+    padding: var(--spacing-1) var(--spacing-3);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .ctx-item:hover {
+    background: var(--color-bg-active);
   }
 
   @keyframes pulse {

@@ -26,11 +26,15 @@
     closeBracketsKeymap,
     autocompletion,
     completionKeymap,
+    type CompletionContext,
+    type CompletionResult,
+    type CompletionSource,
   } from '@codemirror/autocomplete';
   import type { QueryResult } from '$lib/types';
   import { executeQuery } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
   import ResultsPanel from '$lib/components/editor/ResultsPanel.svelte';
+  import * as schemaApi from '$lib/tauri/schema';
 
   interface Props {
     connectionId: string;
@@ -48,6 +52,98 @@
   let isRunning = $state(false);
 
   let connectionName = $derived(connections.getById(connectionId)?.name ?? connectionId);
+
+  // ── Schema-aware autocomplete ─────────────────────────────────────────────
+
+  interface SchemaTable {
+    database: string;
+    name: string;
+  }
+
+  // Plain mutable object — the completion source reads from it without needing
+  // Svelte reactivity. Updated whenever the schema loads.
+  const schemaRef: {
+    connectionId: string;
+    tables: SchemaTable[];
+    columns: Map<string, string[]>; // key: "database.tableName"
+  } = { connectionId: '', tables: [], columns: new Map() };
+
+  async function loadSchemaForCompletion(connId: string): Promise<void> {
+    schemaRef.connectionId = connId;
+    schemaRef.tables = [];
+    schemaRef.columns = new Map();
+    try {
+      const databases = await schemaApi.listDatabases(connId);
+      const tables: SchemaTable[] = [];
+      for (const db of databases) {
+        const dbTables = await schemaApi.listTables(connId, db);
+        for (const t of dbTables) {
+          tables.push({ database: db, name: t.name });
+        }
+      }
+      schemaRef.tables = tables;
+    } catch {
+      // Schema load failed — completions just won't show table/column names.
+    }
+  }
+
+  // Reload schema whenever the connection becomes active.
+  $effect(() => {
+    if (connections.isActive(connectionId)) {
+      loadSchemaForCompletion(connectionId);
+    }
+  });
+
+  function makeSchemaCompletionSource(): CompletionSource {
+    return async (context: CompletionContext): Promise<CompletionResult | null> => {
+      // "table.col" context: offer column completions for that table.
+      const dotMatch = context.matchBefore(/[\w"`]+\.[\w"`]*/);
+      if (dotMatch) {
+        const rawTable = dotMatch.text.split('.')[0].replace(/["`]/g, '');
+        const schemaTable = schemaRef.tables.find(
+          (t) => t.name.toLowerCase() === rawTable.toLowerCase(),
+        );
+        if (schemaTable) {
+          const cacheKey = `${schemaTable.database}.${schemaTable.name}`;
+          let cols = schemaRef.columns.get(cacheKey);
+          if (!cols) {
+            try {
+              const colInfos = await schemaApi.listColumns(
+                schemaRef.connectionId,
+                schemaTable.database,
+                schemaTable.name,
+              );
+              cols = colInfos.map((c) => c.name);
+              schemaRef.columns.set(cacheKey, cols);
+            } catch {
+              cols = [];
+            }
+          }
+          return {
+            from: dotMatch.from + rawTable.length + 1,
+            options: cols.map((col) => ({ label: col, type: 'property' })),
+            validFor: /^[\w"`]*$/,
+          };
+        }
+      }
+
+      // Default: offer table names from the loaded schema.
+      const word = context.matchBefore(/\w*/);
+      if (!word || (word.from === word.to && !context.explicit)) return null;
+
+      if (schemaRef.tables.length === 0) return null;
+
+      return {
+        from: word.from,
+        options: schemaRef.tables.map((t) => ({
+          label: t.name,
+          detail: t.database,
+          type: 'class',
+        })),
+        validFor: /^\w*$/,
+      };
+    };
+  }
 
   // CSS variables cannot be read at theme-build time because CodeMirror's theme
   // system needs literal strings. We resolve them at mount time from the computed
@@ -162,7 +258,7 @@
         syntaxHighlighting(defaultHighlightStyle),
         bracketMatching(),
         closeBrackets(),
-        autocompletion(),
+        autocompletion({ override: [makeSchemaCompletionSource()] }),
         sqlLang(),
         keymap.of([...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
         runKeymap,

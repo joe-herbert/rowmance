@@ -18,3 +18,21 @@ export async function executeSelection(connectionId: string, sql: string): Promi
 export async function cancelQuery(queryId: string): Promise<void> {
   return invoke<void>('query_cancel', { queryId });
 }
+
+export interface RowChange {
+  primaryKeys: Record<string, unknown>;
+  changes: Record<string, unknown>;
+}
+
+export interface UpdateResult {
+  updatedCount: number;
+}
+
+export async function updateRows(
+  connectionId: string,
+  database: string,
+  table: string,
+  changes: RowChange[],
+): Promise<UpdateResult> {
+  return invoke<UpdateResult>('query_update_rows', { connectionId, database, table, changes });
+}

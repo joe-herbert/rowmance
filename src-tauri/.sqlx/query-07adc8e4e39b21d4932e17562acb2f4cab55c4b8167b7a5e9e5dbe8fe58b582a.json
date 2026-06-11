@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "read_only",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "db_type",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "07adc8e4e39b21d4932e17562acb2f4cab55c4b8167b7a5e9e5dbe8fe58b582a"
+}

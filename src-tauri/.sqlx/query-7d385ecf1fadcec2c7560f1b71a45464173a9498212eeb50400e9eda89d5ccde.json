@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO saved_queries (id, connection_id, folder_id, name, sql, created_at, updated_at)\n        VALUES (?, ?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "7d385ecf1fadcec2c7560f1b71a45464173a9498212eeb50400e9eda89d5ccde"
+}

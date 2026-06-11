@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "92ce623c59bc7d0297697bbc09ac8056e8a1d505750de2bdececec6f0de4e8e7"
+}
