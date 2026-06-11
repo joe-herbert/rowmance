@@ -44,6 +44,7 @@ pub fn run() {
             commands::connections::connections_update,
             commands::connections::connections_delete,
             commands::connections::connections_test,
+            commands::connections::connections_test_unsaved,
             commands::connections::connections_connect,
             commands::connections::connections_disconnect,
             commands::connections::connections_list_active,

@@ -15,7 +15,9 @@
       "Bash(~/.cargo/bin/cargo test *)",
       "Bash(git stash *)",
       "Bash(bunx tsc *)",
-      "Bash(cargo test *)"
+      "Bash(cargo test *)",
+      "Bash(cargo build *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

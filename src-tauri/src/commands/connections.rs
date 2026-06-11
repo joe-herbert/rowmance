@@ -396,6 +396,63 @@ pub async fn connections_test(
     }
 }
 
+/// Test a connection from raw input without saving it to the database.
+#[tauri::command]
+pub async fn connections_test_unsaved(
+    input: ConnectionProfileInput,
+    password: Option<String>,
+) -> Result<ConnectionTestResult, AppError> {
+    let password = password.unwrap_or_default();
+    let start = std::time::Instant::now();
+
+    let result = match input.db_type.as_str() {
+        "mysql" | "mariadb" => {
+            let url = format!(
+                "mysql://{}:{}@{}:{}/{}",
+                input.username, password, input.host, input.port, input.database
+            );
+            sqlx::mysql::MySqlPoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .map(|_| ())
+        }
+        "postgres" => {
+            let url = format!(
+                "postgres://{}:{}@{}:{}/{}",
+                input.username, password, input.host, input.port, input.database
+            );
+            sqlx::postgres::PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .map(|_| ())
+        }
+        _ => {
+            return Ok(ConnectionTestResult {
+                success: false,
+                message: format!("Unknown db_type: {}", input.db_type),
+                latency_ms: None,
+            });
+        }
+    };
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(_) => Ok(ConnectionTestResult {
+            success: true,
+            message: "Connection successful".to_owned(),
+            latency_ms: Some(latency_ms),
+        }),
+        Err(e) => Ok(ConnectionTestResult {
+            success: false,
+            message: e.to_string(),
+            latency_ms: None,
+        }),
+    }
+}
+
 /// Open a connection pool for the given profile.
 #[tauri::command]
 pub async fn connections_connect(

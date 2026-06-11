@@ -34,6 +34,13 @@ export async function testConnection(
   return invoke<ConnectionTestResult>('connections_test', { id, password });
 }
 
+export async function testConnectionUnsaved(
+  input: ConnectionProfileInput,
+  password?: string,
+): Promise<ConnectionTestResult> {
+  return invoke<ConnectionTestResult>('connections_test_unsaved', { input, password });
+}
+
 export async function connectToDatabase(id: string): Promise<void> {
   return invoke<void>('connections_connect', { id });
 }

@@ -143,19 +143,7 @@
     testing = true;
 
     try {
-      const input = buildInput();
-      let savedId: string;
-
-      if (isEditing) {
-        const updated = await connectionStore.update(profile.id, input);
-        savedId = updated.id;
-      } else {
-        const created = await connectionStore.create(input);
-        savedId = created.id;
-      }
-
-      await saveSecrets(savedId);
-      testResult = await connectionsApi.testConnection(savedId, password || undefined);
+      testResult = await connectionsApi.testConnectionUnsaved(buildInput(), password || undefined);
     } catch (err) {
       saveError = err instanceof Error ? err.message : String(err);
     } finally {
