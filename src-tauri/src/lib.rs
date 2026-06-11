@@ -6,8 +6,10 @@ mod commands;
 mod connections;
 mod db;
 mod error;
+mod lib_sql;
 
 use connections::pool_manager::ConnectionManager;
+use connections::ssh_tunnel::SshTunnelManager;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,10 +23,17 @@ pub fn run() {
             let sqlite = tauri::async_runtime::block_on(db::init_pool())
                 .expect("Failed to initialise local SQLite database");
 
+            // Migrate any existing plaintext passwords to the OS keychain.
+            tauri::async_runtime::block_on(
+                commands::keychain::migrate_passwords_to_keychain(&sqlite),
+            );
+
             let connection_manager = ConnectionManager::new();
+            let ssh_tunnel_manager = SshTunnelManager::new();
 
             app.manage(sqlite);
             app.manage(connection_manager);
+            app.manage(ssh_tunnel_manager);
 
             Ok(())
         })
@@ -43,10 +52,19 @@ pub fn run() {
             commands::connections::connection_groups_delete,
             commands::connections::connection_groups_update,
             commands::connections::connection_groups_reorder,
+            // Keychain
+            commands::keychain::keychain_store,
+            commands::keychain::keychain_retrieve,
+            commands::keychain::keychain_delete,
+            // SSH tunnels
+            commands::ssh::ssh_create_tunnel,
+            commands::ssh::ssh_destroy_tunnel,
+            commands::ssh::ssh_tunnel_status,
             // Query execution
             commands::query::query_execute,
             commands::query::query_execute_selection,
             commands::query::query_update_rows,
+            commands::query::query_format,
             // Schema introspection
             commands::schema::schema_list_databases,
             commands::schema::schema_list_tables,
@@ -70,6 +88,13 @@ pub fn run() {
             commands::settings::settings_get,
             commands::settings::settings_set,
             commands::settings::settings_reset,
+            // Export
+            commands::export::export_result_to_clipboard,
+            commands::export::export_result_to_file,
+            // Import
+            commands::import::import_csv_preview,
+            commands::import::import_csv_execute,
+            commands::import::import_sql_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Rowmance");

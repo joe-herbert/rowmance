@@ -539,6 +539,13 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
     serde_json::Value::Null
 }
 
+/// Format a SQL string. Actual formatting is done by the frontend via sql-formatter;
+/// this command exists for API completeness and returns the SQL unchanged.
+#[tauri::command]
+pub async fn query_format(sql: String, _dialect: String) -> Result<String, AppError> {
+    Ok(sql)
+}
+
 /// Write a query execution record to the local history table.
 /// This is fire-and-forget — failures are swallowed so they never
 /// interrupt the user's query flow.

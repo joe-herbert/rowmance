@@ -347,6 +347,74 @@
     if (value === null) return '';
     return String(value);
   }
+
+  // ── Row selection (checkboxes) ────────────────────────────────────────────
+
+  let selectedRowKeys = $state<Set<string>>(new Set());
+
+  function toggleRowSelection(rowKey: string): void {
+    const next = new Set(selectedRowKeys);
+    if (next.has(rowKey)) next.delete(rowKey);
+    else next.add(rowKey);
+    selectedRowKeys = next;
+  }
+
+  // ── Context menu ──────────────────────────────────────────────────────────
+
+  interface ContextMenu {
+    x: number;
+    y: number;
+    rowKey: string;
+    row: CellValue[];
+  }
+
+  let contextMenu = $state<ContextMenu | null>(null);
+
+  function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number): void {
+    e.preventDefault();
+    const rowKey = buildRowKey(row, columns, pageOffset + rowIndex);
+    contextMenu = { x: e.clientX, y: e.clientY, rowKey, row };
+  }
+
+  function dismissContextMenu(): void {
+    contextMenu = null;
+  }
+
+  function copyRowTabSeparated(row: CellValue[]): void {
+    const text = visibleColumns
+      .map(({ originalIndex }) => {
+        const val = row[originalIndex];
+        return val === null ? '' : String(val);
+      })
+      .join('\t');
+    navigator.clipboard.writeText(text).catch(() => {});
+    dismissContextMenu();
+  }
+
+  function copySelectedRowsTabSeparated(): void {
+    const lines: string[] = [];
+    for (const key of selectedRowKeys) {
+      // Find the row in pageRows that matches this key
+      const found = pageRows.find(
+        (r, i) => buildRowKey(r, columns, pageOffset + i) === key,
+      );
+      if (found) {
+        const text = visibleColumns
+          .map(({ originalIndex }) => {
+            const val = found[originalIndex];
+            return val === null ? '' : String(val);
+          })
+          .join('\t');
+        lines.push(text);
+      }
+    }
+    navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+    dismissContextMenu();
+  }
+
+  function handleContextMenuKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') dismissContextMenu();
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -355,6 +423,8 @@
   class="data-table-wrapper"
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
+  onclick={dismissContextMenu}
+  onkeydown={handleContextMenuKeydown}
 >
   <div class="table-scroll">
     <table class="data-table">
@@ -367,6 +437,22 @@
       <thead>
         <!-- Header row -->
         <tr class="header-row">
+          <th class="checkbox-cell header-checkbox-cell" aria-label="Select all">
+            <input
+              type="checkbox"
+              class="row-checkbox"
+              checked={selectedRowKeys.size > 0 && pageRows.every((r, i) => selectedRowKeys.has(buildRowKey(r, columns, pageOffset + i)))}
+              onchange={(e) => {
+                if ((e.target as HTMLInputElement).checked) {
+                  const keys = new Set(pageRows.map((r, i) => buildRowKey(r, columns, pageOffset + i)));
+                  selectedRowKeys = keys;
+                } else {
+                  selectedRowKeys = new Set();
+                }
+              }}
+              aria-label="Select all rows"
+            />
+          </th>
           {#each visibleColumns as { col, originalIndex }}
             {@const isSorted = sortColIndex === originalIndex}
             {@const isDragging = draggingColName === col.name}
@@ -410,6 +496,7 @@
 
         <!-- Filter row -->
         <tr class="filter-row">
+          <th class="checkbox-cell filter-checkbox-cell"></th>
           {#each visibleColumns as { col, originalIndex }}
             <th class="filter-cell">
               <div class="filter-cell-inner">
@@ -444,7 +531,24 @@
         {#each pageRows as row, rowIndex (rowIndex)}
           {@const processedRowIndex = rowIndex}
           {@const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex)}
-          <tr class="data-row" class:alt={rowIndex % 2 === 1}>
+          {@const isSelected = selectedRowKeys.has(rowKey)}
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <tr
+            class="data-row"
+            class:alt={rowIndex % 2 === 1}
+            class:row-selected={isSelected}
+            oncontextmenu={(e) => handleRowContextMenu(e, row, processedRowIndex)}
+          >
+            <td class="checkbox-cell data-checkbox-cell">
+              <input
+                type="checkbox"
+                class="row-checkbox"
+                checked={isSelected}
+                onchange={() => toggleRowSelection(rowKey)}
+                onclick={(e) => e.stopPropagation()}
+                aria-label="Select row"
+              />
+            </td>
             {#each visibleColumns as { col, originalIndex }}
               {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
               {@const isPending = hasPendingChange(rowKey, col.name)}
@@ -483,6 +587,36 @@
       </tbody>
     </table>
   </div>
+
+  <!-- Context menu -->
+  {#if contextMenu !== null}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="context-menu"
+      role="menu"
+      style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={handleContextMenuKeydown}
+    >
+      {#if selectedRowKeys.size > 1}
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => copySelectedRowsTabSeparated()}
+        >
+          Copy {selectedRowKeys.size} selected rows (tab-separated)
+        </button>
+      {:else}
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => copyRowTabSeparated(contextMenu!.row)}
+        >
+          Copy row (tab-separated)
+        </button>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Inline cell editor overlay -->
   {#if editTarget !== null}
@@ -859,5 +993,70 @@
     margin-left: auto;
     color: var(--color-text-muted);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Checkbox column ────────────────────────────────────────────────────── */
+
+  .checkbox-cell {
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0 var(--spacing-1);
+    text-align: center;
+    vertical-align: middle;
+    border-right: 1px solid var(--color-border);
+    box-sizing: border-box;
+  }
+
+  .header-checkbox-cell {
+    background: var(--color-table-header-bg);
+  }
+
+  .filter-checkbox-cell {
+    background: var(--color-bg-secondary);
+  }
+
+  .data-checkbox-cell {
+    background: transparent;
+  }
+
+  .row-checkbox {
+    cursor: pointer;
+    accent-color: var(--color-accent);
+  }
+
+  .data-row.row-selected {
+    background: var(--color-accent-subtle) !important;
+  }
+
+  /* ── Context menu ───────────────────────────────────────────────────────── */
+
+  .context-menu {
+    position: fixed;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    z-index: 400;
+    min-width: 220px;
+    padding: var(--spacing-1) 0;
+  }
+
+  .context-menu-item {
+    display: block;
+    width: 100%;
+    padding: var(--spacing-2) var(--spacing-3);
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .context-menu-item:hover {
+    background: var(--color-bg-hover);
   }
 </style>

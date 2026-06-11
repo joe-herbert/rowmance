@@ -2,15 +2,17 @@
   ConnectionForm — create or edit a connection profile.
   Pass `profile` for edit mode; omit for create mode.
   Calls `onclose` when the dialog should be dismissed.
+  Passwords are stored in the OS keychain, not SQLite.
 -->
 <script lang="ts">
+  import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import { useConnections } from '$lib/stores/connections.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
+  import * as keychainApi from '$lib/tauri/keychain';
   import type { ConnectionProfile, DbType } from '$lib/types';
 
   interface Props {
     profile?: ConnectionProfile;
-    /** Pre-select a group when creating a new connection. */
     groupId?: string | null;
     onclose: () => void;
   }
@@ -25,7 +27,10 @@
     postgres: 5432,
   };
 
-  // ── Form state ───────────────────────────────────────────────────────────────
+  type Tab = 'basic' | 'ssh' | 'ssl' | 'advanced';
+  let activeTab = $state<Tab>('basic');
+
+  // ── Basic fields ──────────────────────────────────────────────────────────────
 
   let name = $state(profile?.name ?? '');
   let dbType = $state<DbType>(profile?.dbType ?? 'postgres');
@@ -35,6 +40,31 @@
   let username = $state(profile?.username ?? '');
   let password = $state('');
   let color = $state(profile?.color ?? '');
+  let readOnly = $state(profile?.readOnly ?? false);
+
+  // ── SSH fields ────────────────────────────────────────────────────────────────
+
+  let sshEnabled = $state(profile?.sshEnabled ?? false);
+  let sshHost = $state(profile?.sshHost ?? '');
+  let sshPort = $state(profile?.sshPort ?? 22);
+  let sshUser = $state(profile?.sshUser ?? '');
+  let sshAuthType = $state<'password' | 'key'>(profile?.sshAuthType ?? 'password');
+  let sshKeyPath = $state(profile?.sshKeyPath ?? '');
+  let sshPassword = $state('');
+
+  // ── SSL fields ────────────────────────────────────────────────────────────────
+
+  let sslEnabled = $state(profile?.sslEnabled ?? false);
+  let sslCaPath = $state(profile?.sslCaPath ?? '');
+  let sslCertPath = $state(profile?.sslCertPath ?? '');
+  let sslKeyPath = $state(profile?.sslKeyPath ?? '');
+
+  // ── Advanced fields ───────────────────────────────────────────────────────────
+
+  let poolMin = $state(profile?.poolMin ?? 1);
+  let poolMax = $state(profile?.poolMax ?? 5);
+
+  // ── Status ────────────────────────────────────────────────────────────────────
 
   let saving = $state(false);
   let testing = $state(false);
@@ -46,14 +76,40 @@
   const isEditing = profile !== undefined;
   const title = isEditing ? 'Edit Connection' : 'New Connection';
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  function handleDbTypeChange() {
-    // Only reset port if it still matches the previous default, to avoid
-    // overwriting a user-entered custom port.
-    const prevDefault = DEFAULT_PORTS[profile?.dbType ?? dbType];
-    if (port === prevDefault) {
-      port = DEFAULT_PORTS[dbType];
+  function buildInput() {
+    return {
+      name: name.trim(),
+      dbType,
+      host: host.trim(),
+      port,
+      database: database.trim(),
+      username: username.trim(),
+      color: color || null,
+      readOnly,
+      groupId: profile?.groupId ?? groupId ?? null,
+      sshEnabled,
+      sshHost: sshEnabled ? sshHost.trim() || null : null,
+      sshPort: sshEnabled ? sshPort : null,
+      sshUser: sshEnabled ? sshUser.trim() || null : null,
+      sshAuthType: sshEnabled ? sshAuthType : null,
+      sshKeyPath: sshEnabled && sshAuthType === 'key' ? sshKeyPath.trim() || null : null,
+      sslEnabled,
+      sslCaPath: sslEnabled ? sslCaPath.trim() || null : null,
+      sslCertPath: sslEnabled ? sslCertPath.trim() || null : null,
+      sslKeyPath: sslEnabled ? sslKeyPath.trim() || null : null,
+      poolMin,
+      poolMax,
+    };
+  }
+
+  async function saveSecrets(id: string) {
+    if (password) {
+      await keychainApi.keychainStore(id, 'db_password', password);
+    }
+    if (sshEnabled && sshPassword) {
+      await keychainApi.keychainStore(id, 'ssh_password', sshPassword);
     }
   }
 
@@ -61,23 +117,18 @@
     saveError = null;
     saving = true;
     try {
-      const input = {
-        name: name.trim(),
-        dbType,
-        host: host.trim(),
-        port,
-        database: database.trim(),
-        username: username.trim(),
-        ...(password ? { password } : {}),
-        color: color || null,
-        groupId: profile?.groupId ?? groupId ?? null,
-      };
+      const input = buildInput();
+      let savedId: string;
 
       if (isEditing) {
-        await connectionStore.update(profile.id, input);
+        const updated = await connectionStore.update(profile.id, input);
+        savedId = updated.id;
       } else {
-        await connectionStore.create(input);
+        const created = await connectionStore.create(input);
+        savedId = created.id;
       }
+
+      await saveSecrets(savedId);
       onclose();
     } catch (err) {
       saveError = err instanceof Error ? err.message : String(err);
@@ -92,20 +143,9 @@
     testing = true;
 
     try {
-      // Save first so the backend has the profile, then test against the saved ID.
-      const input = {
-        name: name.trim(),
-        dbType,
-        host: host.trim(),
-        port,
-        database: database.trim(),
-        username: username.trim(),
-        ...(password ? { password } : {}),
-        color: color || null,
-        groupId: profile?.groupId ?? groupId ?? null,
-      };
-
+      const input = buildInput();
       let savedId: string;
+
       if (isEditing) {
         const updated = await connectionStore.update(profile.id, input);
         savedId = updated.id;
@@ -114,11 +154,26 @@
         savedId = created.id;
       }
 
-      testResult = await connectionsApi.testConnection(savedId);
+      await saveSecrets(savedId);
+      testResult = await connectionsApi.testConnection(savedId, password || undefined);
     } catch (err) {
       saveError = err instanceof Error ? err.message : String(err);
     } finally {
       testing = false;
+    }
+  }
+
+  function handleDbTypeChange() {
+    const prevDefault = DEFAULT_PORTS[profile?.dbType ?? dbType];
+    if (port === prevDefault) {
+      port = DEFAULT_PORTS[dbType];
+    }
+  }
+
+  async function pickFile(stateRef: { value: string }) {
+    const selected = await openFileDialog({ multiple: false });
+    if (typeof selected === 'string') {
+      stateRef.value = selected;
     }
   }
 
@@ -129,148 +184,220 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
   }
+
+  const isValid = $derived(
+    name.trim() !== '' && host.trim() !== '' && database.trim() !== '' && username.trim() !== '',
+  );
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'basic', label: 'Basic' },
+    { id: 'ssh', label: 'SSH' },
+    { id: 'ssl', label: 'SSL' },
+    { id: 'advanced', label: 'Advanced' },
+  ];
+
+  // Reactive path holders for file pickers
+  let sshKeyPathRef = $derived({ value: sshKeyPath });
+  let sslCaPathRef = $derived({ value: sslCaPath });
+  let sslCertPathRef = $derived({ value: sslCertPath });
+  let sslKeyPathRef = $derived({ value: sslKeyPath });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div
-  class="backdrop"
-  role="dialog"
-  aria-modal="true"
-  aria-label={title}
-  onclick={handleBackdropClick}
->
+<div class="backdrop" role="dialog" aria-modal="true" aria-label={title} onclick={handleBackdropClick}>
   <div class="dialog">
     <header class="dialog-header">
       <h2 class="dialog-title">{title}</h2>
       <button class="close-btn" aria-label="Close" onclick={onclose}>✕</button>
     </header>
 
-    <form class="form" onsubmit={(e) => { e.preventDefault(); handleSave(); }}>
-      <!-- Name -->
-      <div class="field">
-        <label for="conn-name" class="label">Name</label>
-        <input
-          id="conn-name"
-          class="input"
-          type="text"
-          bind:value={name}
-          placeholder="My Database"
-          required
-          autocomplete="off"
-        />
-      </div>
-
-      <!-- Database type -->
-      <div class="field">
-        <label for="conn-type" class="label">Type</label>
-        <select
-          id="conn-type"
-          class="input select"
-          bind:value={dbType}
-          onchange={handleDbTypeChange}
+    <!-- Tab strip -->
+    <div class="tab-strip" role="tablist">
+      {#each tabs as tab}
+        <button
+          class="tab-btn"
+          class:active={activeTab === tab.id}
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          onclick={() => (activeTab = tab.id)}
         >
-          <option value="postgres">PostgreSQL</option>
-          <option value="mysql">MySQL</option>
-          <option value="mariadb">MariaDB</option>
-        </select>
-      </div>
+          {tab.label}
+        </button>
+      {/each}
+    </div>
 
-      <!-- Host + Port -->
-      <div class="field-row">
-        <div class="field field--grow">
-          <label for="conn-host" class="label">Host</label>
+    <form class="form" onsubmit={(e) => { e.preventDefault(); handleSave(); }}>
+      <!-- Basic tab -->
+      {#if activeTab === 'basic'}
+        <div class="field">
+          <label for="conn-name" class="label">Name</label>
+          <input id="conn-name" class="input" type="text" bind:value={name} placeholder="My Database" required autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label for="conn-type" class="label">Type</label>
+          <select id="conn-type" class="input select" bind:value={dbType} onchange={handleDbTypeChange}>
+            <option value="postgres">PostgreSQL</option>
+            <option value="mysql">MySQL</option>
+            <option value="mariadb">MariaDB</option>
+          </select>
+        </div>
+
+        <div class="field-row">
+          <div class="field field--grow">
+            <label for="conn-host" class="label">Host</label>
+            <input id="conn-host" class="input" type="text" bind:value={host} placeholder="localhost" required autocomplete="off" />
+          </div>
+          <div class="field field--port">
+            <label for="conn-port" class="label">Port</label>
+            <input id="conn-port" class="input" type="number" bind:value={port} min="1" max="65535" required />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="conn-database" class="label">Database</label>
+          <input id="conn-database" class="input" type="text" bind:value={database} placeholder="my_database" required autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label for="conn-username" class="label">Username</label>
+          <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="username" />
+        </div>
+
+        <div class="field">
+          <label for="conn-password" class="label">
+            Password
+            {#if isEditing}<span class="label-hint">(leave blank to keep existing)</span>{/if}
+          </label>
           <input
-            id="conn-host"
+            id="conn-password"
             class="input"
-            type="text"
-            bind:value={host}
-            placeholder="localhost"
-            required
-            autocomplete="off"
+            type="password"
+            bind:value={password}
+            placeholder={isEditing ? '••••••••' : ''}
+            autocomplete="current-password"
           />
         </div>
-        <div class="field field--port">
-          <label for="conn-port" class="label">Port</label>
-          <input
-            id="conn-port"
-            class="input"
-            type="number"
-            bind:value={port}
-            min="1"
-            max="65535"
-            required
-          />
+
+        <div class="field field--color">
+          <label for="conn-color" class="label">Colour</label>
+          <div class="color-row">
+            <input id="conn-color" class="color-input" type="color" bind:value={color} />
+            {#if color}
+              <button type="button" class="color-clear" onclick={() => (color = '')} aria-label="Clear colour">Clear</button>
+            {/if}
+          </div>
         </div>
-      </div>
 
-      <!-- Database -->
-      <div class="field">
-        <label for="conn-database" class="label">Database</label>
-        <input
-          id="conn-database"
-          class="input"
-          type="text"
-          bind:value={database}
-          placeholder="my_database"
-          required
-          autocomplete="off"
-        />
-      </div>
+        <div class="field field--inline">
+          <label for="conn-readonly" class="label">Read-only</label>
+          <input id="conn-readonly" type="checkbox" bind:checked={readOnly} />
+        </div>
 
-      <!-- Username -->
-      <div class="field">
-        <label for="conn-username" class="label">Username</label>
-        <input
-          id="conn-username"
-          class="input"
-          type="text"
-          bind:value={username}
-          placeholder="root"
-          required
-          autocomplete="username"
-        />
-      </div>
+      <!-- SSH tab -->
+      {:else if activeTab === 'ssh'}
+        <div class="field field--inline">
+          <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
+          <input id="ssh-enabled" type="checkbox" bind:checked={sshEnabled} />
+        </div>
 
-      <!-- Password -->
-      <div class="field">
-        <label for="conn-password" class="label">
-          Password
-          {#if isEditing}<span class="label-hint">(leave blank to keep existing)</span>{/if}
-        </label>
-        <input
-          id="conn-password"
-          class="input"
-          type="password"
-          bind:value={password}
-          placeholder={isEditing ? '••••••••' : ''}
-          autocomplete="current-password"
-        />
-      </div>
+        {#if sshEnabled}
+          <div class="field-row">
+            <div class="field field--grow">
+              <label for="ssh-host" class="label">SSH Host</label>
+              <input id="ssh-host" class="input" type="text" bind:value={sshHost} placeholder="ssh.example.com" autocomplete="off" />
+            </div>
+            <div class="field field--port">
+              <label for="ssh-port" class="label">Port</label>
+              <input id="ssh-port" class="input" type="number" bind:value={sshPort} min="1" max="65535" />
+            </div>
+          </div>
 
-      <!-- Color -->
-      <div class="field field--color">
-        <label for="conn-color" class="label">Colour</label>
-        <div class="color-row">
-          <input
-            id="conn-color"
-            class="color-input"
-            type="color"
-            bind:value={color}
-          />
-          {#if color}
-            <button
-              type="button"
-              class="color-clear"
-              onclick={() => (color = '')}
-              aria-label="Clear colour"
-            >
-              Clear
-            </button>
+          <div class="field">
+            <label for="ssh-user" class="label">SSH User</label>
+            <input id="ssh-user" class="input" type="text" bind:value={sshUser} placeholder="ubuntu" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="ssh-auth" class="label">Authentication</label>
+            <select id="ssh-auth" class="input select" bind:value={sshAuthType}>
+              <option value="password">Password</option>
+              <option value="key">Private Key</option>
+            </select>
+          </div>
+
+          {#if sshAuthType === 'password'}
+            <div class="field">
+              <label for="ssh-password" class="label">SSH Password</label>
+              <input id="ssh-password" class="input" type="password" bind:value={sshPassword} placeholder={isEditing ? '••••••••' : ''} />
+            </div>
+          {:else}
+            <div class="field">
+              <label for="ssh-key" class="label">Private Key File</label>
+              <div class="file-row">
+                <input id="ssh-key" class="input" type="text" bind:value={sshKeyPath} placeholder="/Users/you/.ssh/id_rsa" readonly />
+                <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sshKeyPath = p; }); }}>Browse</button>
+              </div>
+            </div>
           {/if}
+        {:else}
+          <p class="tab-hint">Enable SSH tunnelling to connect through a bastion host.</p>
+        {/if}
+
+      <!-- SSL tab -->
+      {:else if activeTab === 'ssl'}
+        <div class="field field--inline">
+          <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
+          <input id="ssl-enabled" type="checkbox" bind:checked={sslEnabled} />
         </div>
-      </div>
+
+        {#if sslEnabled}
+          <div class="field">
+            <label for="ssl-ca" class="label">CA Certificate</label>
+            <div class="file-row">
+              <input id="ssl-ca" class="input" type="text" bind:value={sslCaPath} placeholder="/path/to/ca.pem" readonly />
+              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslCaPath = p; }); }}>Browse</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="ssl-cert" class="label">Client Certificate</label>
+            <div class="file-row">
+              <input id="ssl-cert" class="input" type="text" bind:value={sslCertPath} placeholder="/path/to/client-cert.pem" readonly />
+              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslCertPath = p; }); }}>Browse</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="ssl-key" class="label">Client Key</label>
+            <div class="file-row">
+              <input id="ssl-key" class="input" type="text" bind:value={sslKeyPath} placeholder="/path/to/client-key.pem" readonly />
+              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslKeyPath = p; }); }}>Browse</button>
+            </div>
+          </div>
+        {:else}
+          <p class="tab-hint">Enable SSL/TLS to encrypt the connection to the database server.</p>
+        {/if}
+
+      <!-- Advanced tab -->
+      {:else if activeTab === 'advanced'}
+        <div class="field">
+          <label for="pool-min" class="label">Minimum Pool Connections</label>
+          <input id="pool-min" class="input" type="number" bind:value={poolMin} min="1" max="50" />
+        </div>
+
+        <div class="field">
+          <label for="pool-max" class="label">Maximum Pool Connections</label>
+          <input id="pool-max" class="input" type="number" bind:value={poolMax} min="1" max="100" />
+        </div>
+
+        <div class="field field--inline">
+          <label for="adv-readonly" class="label">Read-only Mode</label>
+          <input id="adv-readonly" type="checkbox" bind:checked={readOnly} />
+        </div>
+      {/if}
 
       <!-- Test result -->
       {#if testResult}
@@ -283,18 +410,16 @@
         </div>
       {/if}
 
-      <!-- Save error -->
       {#if saveError}
         <div class="save-error">{saveError}</div>
       {/if}
 
-      <!-- Actions -->
       <div class="actions">
         <button
           type="button"
           class="btn btn--ghost"
           onclick={handleTest}
-          disabled={testing || saving || !name.trim() || !host.trim() || !database.trim() || !username.trim()}
+          disabled={testing || saving || !isValid}
         >
           {testing ? 'Testing…' : 'Test Connection'}
         </button>
@@ -303,7 +428,7 @@
           <button
             type="submit"
             class="btn btn--primary"
-            disabled={saving || testing || !name.trim() || !host.trim() || !database.trim() || !username.trim()}
+            disabled={saving || testing || !isValid}
           >
             {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Connection'}
           </button>
@@ -328,7 +453,7 @@
     background: var(--color-bg-overlay);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
-    width: 420px;
+    width: 460px;
     max-width: calc(100vw - var(--spacing-8));
     max-height: calc(100vh - var(--spacing-8));
     overflow-y: auto;
@@ -365,6 +490,35 @@
     background: var(--color-bg-hover);
   }
 
+  .tab-strip {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0 var(--spacing-4);
+    background: var(--color-bg-secondary);
+    flex-shrink: 0;
+  }
+
+  .tab-btn {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    font-family: var(--font-family-ui);
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .tab-btn:hover {
+    color: var(--color-text-primary);
+  }
+
+  .tab-btn.active {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+    font-weight: var(--font-weight-medium);
+  }
+
   .form {
     padding: var(--spacing-5);
     display: flex;
@@ -378,9 +532,13 @@
     gap: var(--spacing-1);
   }
 
-  .field--grow {
-    flex: 1;
+  .field--inline {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
   }
+
+  .field--grow { flex: 1; }
 
   .field--port {
     width: 90px;
@@ -433,6 +591,16 @@
     cursor: pointer;
   }
 
+  .file-row {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: center;
+  }
+
+  .file-row .input {
+    flex: 1;
+  }
+
   .color-row {
     display: flex;
     align-items: center;
@@ -455,8 +623,14 @@
     text-decoration: underline;
   }
 
-  .color-clear:hover {
-    color: var(--color-text-secondary);
+  .color-clear:hover { color: var(--color-text-secondary); }
+
+  .tab-hint {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    font-style: italic;
+    margin: 0;
+    padding: var(--spacing-2) 0;
   }
 
   .test-result {
@@ -468,15 +642,8 @@
     gap: var(--spacing-2);
   }
 
-  .test-result--success {
-    background: var(--color-success-subtle);
-    color: var(--color-success);
-  }
-
-  .test-result--fail {
-    background: var(--color-danger-subtle);
-    color: var(--color-danger);
-  }
+  .test-result--success { background: var(--color-success-subtle); color: var(--color-success); }
+  .test-result--fail { background: var(--color-danger-subtle); color: var(--color-danger); }
 
   .latency {
     margin-left: auto;
@@ -519,10 +686,14 @@
     white-space: nowrap;
   }
 
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .btn--sm {
+    height: 28px;
+    padding: 0 var(--spacing-2);
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
   }
+
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .btn--primary {
     background: var(--color-accent);
@@ -530,9 +701,7 @@
     border: 1px solid transparent;
   }
 
-  .btn--primary:not(:disabled):hover {
-    background: var(--color-accent-hover);
-  }
+  .btn--primary:not(:disabled):hover { background: var(--color-accent-hover); }
 
   .btn--ghost {
     background: transparent;

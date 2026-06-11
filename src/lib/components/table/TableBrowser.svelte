@@ -5,6 +5,10 @@
   import type { QueryResult, ColumnMeta } from '$lib/types';
   import DataTable from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
+  import CsvImportModal from '$lib/components/table/CsvImportModal.svelte';
+  import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
+  import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
+  import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 
   interface Props {
     connectionId: string;
@@ -186,9 +190,146 @@
   }
 
   const currentColumns = $derived<ColumnMeta[]>(result?.columns ?? []);
+
+  // ── Export state ───────────────────────────────────────────────────────────
+
+  let showExportMenu = $state(false);
+  let exportTableName = $state('');
+  let showTableNameInput = $state(false);
+  let pendingExportFormat = $state<ExportFormat | null>(null);
+  let pendingExportToFile = $state(false);
+  let exportError = $state<string | null>(null);
+
+  // ── Import modal state ─────────────────────────────────────────────────────
+
+  let showCsvImport = $state(false);
+  let showSqlImport = $state(false);
+
+  const EXPORT_FORMATS: { label: string; format: ExportFormat; needsTableName: boolean }[] = [
+    { label: 'CSV', format: 'csv', needsTableName: false },
+    { label: 'JSON', format: 'json', needsTableName: false },
+    { label: 'Tab-separated', format: 'tab_separated', needsTableName: false },
+    { label: 'SQL INSERT', format: 'sql_insert', needsTableName: true },
+    { label: 'SQL IN Clause', format: 'sql_in_clause', needsTableName: false },
+  ];
+
+  const FORMAT_EXTENSIONS: Record<ExportFormat, string> = {
+    csv: 'csv',
+    json: 'json',
+    tab_separated: 'tsv',
+    sql_insert: 'sql',
+    sql_in_clause: 'sql',
+  };
+
+  function getExportColumns(): string[] {
+    return result?.columns.map((c) => c.name) ?? [];
+  }
+
+  function getExportRows(): unknown[][] {
+    return result?.rows ?? [];
+  }
+
+  function startExport(format: ExportFormat, toFile: boolean): void {
+    showExportMenu = false;
+    const def = EXPORT_FORMATS.find((f) => f.format === format);
+    if (def?.needsTableName) {
+      pendingExportFormat = format;
+      pendingExportToFile = toFile;
+      showTableNameInput = true;
+      return;
+    }
+    doExport(format, toFile, undefined);
+  }
+
+  async function doExport(format: ExportFormat, toFile: boolean, tblName: string | undefined): Promise<void> {
+    exportError = null;
+    try {
+      if (toFile) {
+        const ext = FORMAT_EXTENSIONS[format];
+        const filePath = await saveDialog({
+          defaultPath: `${table}.${ext}`,
+          filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+        });
+        if (!filePath) return;
+        await exportResultToFile(getExportRows(), getExportColumns(), format, filePath, tblName);
+      } else {
+        await exportResultToClipboard(getExportRows(), getExportColumns(), format, tblName);
+      }
+    } catch (err) {
+      exportError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  async function confirmTableNameExport(): Promise<void> {
+    if (!pendingExportFormat) return;
+    const format = pendingExportFormat;
+    const toFile = pendingExportToFile;
+    showTableNameInput = false;
+    pendingExportFormat = null;
+    await doExport(format, toFile, exportTableName || undefined);
+    exportTableName = '';
+  }
+
+  function cancelTableNameExport(): void {
+    showTableNameInput = false;
+    pendingExportFormat = null;
+    exportTableName = '';
+  }
+
+  function handleExportKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Enter') confirmTableNameExport();
+    else if (e.key === 'Escape') cancelTableNameExport();
+  }
+
+  // ── Table browser ref (for focus detection) ────────────────────────────────
+
+  let tableBrowserEl = $state<HTMLElement | null>(null);
+
+  // ── Shortcut event handling ────────────────────────────────────────────────
+
+  function handleShortcutAction(e: Event): void {
+    const customEvent = e as CustomEvent<{ action: string }>;
+    const action = customEvent.detail?.action;
+
+    // Only handle when this panel is focused/visible
+    if (!tableBrowserEl || !document.contains(tableBrowserEl)) return;
+    // Check if any part of this component is active (contains focus)
+    const hasFocus = tableBrowserEl.contains(document.activeElement) ||
+      document.activeElement === document.body;
+    if (!hasFocus) return;
+
+    switch (action) {
+      case 'TABLE_SAVE_CHANGES':
+        if (pendingCount > 0) saveChanges();
+        break;
+      case 'TABLE_DISCARD_CHANGES':
+        if (pendingCount > 0) discardChanges();
+        break;
+      case 'PAGE_NEXT':
+        nextTablePage();
+        break;
+      case 'PAGE_PREV':
+        prevTablePage();
+        break;
+    }
+  }
+
+  // Page navigation functions for keyboard shortcuts — delegate to DataTable page state
+  // by dispatching click events on the pagination buttons if they exist.
+  function nextTablePage(): void {
+    const btn = tableBrowserEl?.querySelector<HTMLButtonElement>('.page-btn[aria-label="Next page"]');
+    if (btn && !btn.disabled) btn.click();
+  }
+
+  function prevTablePage(): void {
+    const btn = tableBrowserEl?.querySelector<HTMLButtonElement>('.page-btn[aria-label="Previous page"]');
+    if (btn && !btn.disabled) btn.click();
+  }
 </script>
 
-<div class="table-browser">
+<svelte:window on:shortcut-action={handleShortcutAction} />
+
+<div class="table-browser" bind:this={tableBrowserEl}>
   <div class="toolbar">
     <span class="table-name" title={`${database}.${table}`}>
       <span class="db-name">{database}</span>
@@ -252,6 +393,72 @@
       </button>
     {/if}
 
+    <!-- Export dropdown -->
+    {#if result !== null}
+      <div class="export-dropdown">
+        <button
+          class="toolbar-btn"
+          onclick={() => { showExportMenu = !showExportMenu; exportError = null; }}
+          aria-expanded={showExportMenu}
+          aria-label="Export table data"
+          title="Export"
+        >
+          Export ▾
+        </button>
+
+        {#if showExportMenu}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="export-menu" role="menu">
+            {#each EXPORT_FORMATS as fmt}
+              <div class="export-menu-section">
+                <span class="export-format-label">{fmt.label}</span>
+                <button
+                  class="export-menu-item"
+                  role="menuitem"
+                  onclick={() => startExport(fmt.format, false)}
+                >
+                  Clipboard
+                </button>
+                <button
+                  class="export-menu-item"
+                  role="menuitem"
+                  onclick={() => startExport(fmt.format, true)}
+                >
+                  File
+                </button>
+              </div>
+            {/each}
+          </div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="export-backdrop"
+            role="presentation"
+            onclick={() => (showExportMenu = false)}
+            onkeydown={(e) => { if (e.key === 'Escape') showExportMenu = false; }}
+          ></div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Import buttons -->
+    <button
+      class="toolbar-btn"
+      onclick={() => (showCsvImport = true)}
+      title="Import CSV"
+      aria-label="Import CSV file"
+    >
+      Import CSV
+    </button>
+
+    <button
+      class="toolbar-btn"
+      onclick={() => (showSqlImport = true)}
+      title="Import SQL"
+      aria-label="Import SQL file"
+    >
+      Import SQL
+    </button>
+
     <button
       class="refresh-button"
       onclick={handleRefresh}
@@ -262,6 +469,31 @@
       ↺
     </button>
   </div>
+
+  {#if showTableNameInput}
+    <div class="table-name-export-bar">
+      <label class="table-name-label" for="tb-export-table-name">Table name for SQL INSERT:</label>
+      <input
+        id="tb-export-table-name"
+        class="table-name-input"
+        type="text"
+        placeholder="table_name"
+        bind:value={exportTableName}
+        onkeydown={handleExportKeydown}
+        aria-label="Table name for SQL INSERT export"
+      />
+      <button class="toolbar-btn save-btn" onclick={confirmTableNameExport}>Export</button>
+      <button class="toolbar-btn" onclick={cancelTableNameExport}>Cancel</button>
+    </div>
+  {/if}
+
+  {#if exportError !== null}
+    <div class="save-error-bar" role="alert">
+      <span class="save-error-label">Export failed:</span>
+      <span class="save-error-message">{exportError}</span>
+      <button class="save-error-close" onclick={() => (exportError = null)} aria-label="Dismiss">✕</button>
+    </div>
+  {/if}
 
   {#if saveError !== null}
     <div class="save-error-bar" role="alert">
@@ -312,6 +544,21 @@
     </div>
   {/if}
 </div>
+
+{#if showCsvImport}
+  <CsvImportModal
+    {connectionId}
+    onclose={() => (showCsvImport = false)}
+    onimported={(count) => { showCsvImport = false; load(); }}
+  />
+{/if}
+
+{#if showSqlImport}
+  <SqlImportModal
+    {connectionId}
+    onclose={() => (showSqlImport = false)}
+  />
+{/if}
 
 <style>
   .table-browser {
@@ -603,5 +850,104 @@
   .picker-positioner {
     position: absolute;
     z-index: 200;
+  }
+
+  /* ── Export ─────────────────────────────────────────────────────────────── */
+
+  .export-dropdown {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .export-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    z-index: 300;
+    min-width: 210px;
+    padding: var(--spacing-1) 0;
+  }
+
+  .export-menu-section {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 0;
+    padding: var(--spacing-1) var(--spacing-2);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .export-menu-section:last-child {
+    border-bottom: none;
+  }
+
+  .export-format-label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
+    padding-right: var(--spacing-2);
+  }
+
+  .export-menu-item {
+    padding: var(--spacing-1) var(--spacing-2);
+    background: transparent;
+    border: none;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    font-family: var(--font-family-ui);
+  }
+
+  .export-menu-item:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .export-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 299;
+  }
+
+  .table-name-export-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-1) var(--spacing-3);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-size-xs);
+  }
+
+  .table-name-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .table-name-input {
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-primary);
+    outline: none;
+    width: 180px;
+    transition: border-color var(--transition-fast);
+  }
+
+  .table-name-input:focus {
+    border-color: var(--color-accent);
   }
 </style>

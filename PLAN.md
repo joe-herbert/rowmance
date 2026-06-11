@@ -1398,35 +1398,35 @@ update:
 
 #### Week 1: Scaffold and Layout
 
-- [ ] `bun create tauri-app rowmance` with Svelte 5 template
-- [ ] Configure `bun.lockb`, `tsconfig.json`, `vite.config.ts`
-- [ ] Add all Rust crates to `Cargo.toml`
-- [ ] Add all npm packages to `package.json`
-- [ ] Implement static three-column layout (left sidebar, main area, right sidebar) with resize handles
-- [ ] CSS variables system (`variables.css`, `light.css`, `dark.css`)
-- [ ] Apply `data-theme` from `localStorage` before first render to avoid flash
+- [x] `bun create tauri-app rowmance` with Svelte 5 template
+- [x] Configure `bun.lockb`, `tsconfig.json`, `vite.config.ts`
+- [x] Add all Rust crates to `Cargo.toml`
+- [x] Add all npm packages to `package.json`
+- [x] Implement static three-column layout (left sidebar, main area, right sidebar) with resize handles
+- [x] CSS variables system (`variables.css`, `light.css`, `dark.css`)
+- [x] Apply `data-theme` from `localStorage` before first render to avoid flash
 
 #### Week 2: SQLite and Connection Profiles
 
-- [ ] SQLite pool initialisation in `db/mod.rs`
-- [ ] Migration runner pointing at `db/migrations/0001_init.sql`
-- [ ] `AppState` setup and `app.manage()` in `lib.rs`
-- [ ] Implement `connections::*` commands (CRUD only, no keychain yet)
+- [x] SQLite pool initialisation in `db/mod.rs`
+- [x] Migration runner pointing at `db/migrations/0001_init.sql`
+- [x] `AppState` setup and `app.manage()` in `lib.rs`
+- [x] Implement `connections::*` commands (CRUD only, no keychain yet)
 - [x] `ConnectionForm.svelte` (basic fields, no SSH/SSL tabs yet)
-- [ ] `ConnectionTree.svelte` (flat list for now, no groups)
-- [ ] Persist and load connections on startup
+- [x] `ConnectionTree.svelte` (flat list for now, no groups)
+- [x] Persist and load connections on startup
 
 #### Week 3: Query Execution
 
-- [ ] `ConnectionManager` with `DashMap<Uuid, RemotePool>`
-- [ ] `connections_connect` / `connections_disconnect` commands
-- [ ] `query_execute` command (MySQL + Postgres, full page + page_size support)
-- [ ] Read-only enforcement in Rust
-- [ ] `QueryEditor.svelte` — CodeMirror 6, no autocomplete, SQL highlighting only
-- [ ] `DataTable.svelte` — TanStack Table, read-only, basic pagination
-- [ ] `ResultsPanel.svelte` — editor above, results below, run on Cmd+Enter
-- [ ] `SchemaTree.svelte` — static tree rendering, no search, no context menu yet
-- [ ] Query history write on every execution
+- [x] `ConnectionManager` with `DashMap<Uuid, RemotePool>`
+- [x] `connections_connect` / `connections_disconnect` commands
+- [x] `query_execute` command (MySQL + Postgres, full page + page_size support)
+- [x] Read-only enforcement in Rust
+- [x] `QueryEditor.svelte` — CodeMirror 6, no autocomplete, SQL highlighting only
+- [x] `DataTable.svelte` — TanStack Table, read-only, basic pagination
+- [x] `ResultsPanel.svelte` — editor above, results below, run on Cmd+Enter
+- [x] `SchemaTree.svelte` — static tree rendering, no search, no context menu yet
+- [x] Query history write on every execution
 
 **Phase 1 Deliverable**: User can add a connection, connect to MySQL or Postgres, write SQL, run it, and see paginated results.
 
@@ -1438,35 +1438,35 @@ update:
 
 #### Week 4: Panel System and Table Browser
 
-- [ ] `SplitPanel.svelte` — up to 2x2, drag-to-split, drag-to-resize dividers
-- [ ] `panels.svelte.ts` — panel layout state, focus tracking
-- [ ] `Panel.svelte` — routes `PanelType` to the correct component
-- [ ] `SidebarTopHalf.svelte` — list of open panels (click to focus, close button)
-- [ ] `TableBrowser.svelte` — opens on table click in schema tree, filter bar, sort controls
-- [ ] Schema tree context menu (right-click): open table, view DDL
-- [ ] `DdlViewer.svelte` — read-only CodeMirror panel for DDL
+- [x] `SplitPanel.svelte` — up to 2x2, drag-to-split, drag-to-resize dividers
+- [x] `panels.svelte.ts` — panel layout state, focus tracking
+- [x] `Panel.svelte` — routes `PanelType` to the correct component
+- [x] `SidebarTopHalf.svelte` — list of open panels (click to focus, close button)
+- [x] `TableBrowser.svelte` — opens on table click in schema tree, filter bar, sort controls
+- [x] Schema tree context menu (right-click): open table, view DDL
+- [x] `DdlViewer.svelte` — read-only CodeMirror panel for DDL
 
 #### Week 5: Inline Editing and Column Controls
 
-- [ ] `CellEditor.svelte` — text input, Set NULL button, boolean toggle
-- [ ] Date picker and datetime picker controls in `CellEditor`
-- [ ] Pending changes queue and "Save Changes" toolbar button
-- [ ] `query_update_rows` command — parameterised UPDATE construction
-- [ ] Column resize (TanStack `columnResizeMode`)
-- [ ] Column reorder (drag column headers)
-- [ ] `ColumnPicker.svelte` — show/hide columns popover
-- [ ] Client-side column sorting (click header)
-- [ ] Column filter row (input below header)
+- [x] `CellEditor.svelte` — text input, Set NULL button, boolean toggle
+- [x] Date picker and datetime picker controls in `CellEditor`
+- [x] Pending changes queue and "Save Changes" toolbar button
+- [x] `query_update_rows` command — parameterised UPDATE construction
+- [x] Column resize (TanStack `columnResizeMode`)
+- [x] Column reorder (drag column headers)
+- [x] `ColumnPicker.svelte` — show/hide columns popover
+- [x] Client-side column sorting (click header)
+- [x] Column filter row (input below header)
 
 #### Week 6: Schema Features and Sidebar Panels
 
-- [ ] Schema-aware autocomplete in CodeMirror (`schema_list_tables`, `schema_list_columns` on connect)
-- [ ] Fuzzy search on schema tree with fuse.js
-- [ ] Connection groups/folders in `ConnectionTree.svelte`
-- [ ] `connection_groups_*` commands
-- [ ] Query history panel (right sidebar) — clickable, re-opens query in editor
-- [ ] Saved queries panel (right sidebar) — folder tree, create/edit/delete
-- [ ] `saved_queries_*` commands
+- [x] Schema-aware autocomplete in CodeMirror (`schema_list_tables`, `schema_list_columns` on connect)
+- [x] Fuzzy search on schema tree with fuse.js
+- [x] Connection groups/folders in `ConnectionTree.svelte`
+- [x] `connection_groups_*` commands
+- [x] Query history panel (right sidebar) — clickable, re-opens query in editor
+- [x] Saved queries panel (right sidebar) — folder tree, create/edit/delete
+- [x] `saved_queries_*` commands
 
 **Phase 2 Deliverable**: Full query-and-edit workflow; schema exploration; query history; saved queries.
 
@@ -1478,43 +1478,43 @@ update:
 
 #### Week 7: Security and Remote Connections
 
-- [ ] `keychain_*` commands using `keyring` crate
-- [ ] Update `ConnectionForm` to pass password to keychain, never SQLite
-- [ ] Retrieve credential from keychain in `connections_connect`
-- [ ] SSH tab in `ConnectionForm`
-- [ ] `ssh_tunnel.rs` — `russh`-based port forwarding
-- [ ] `ssh_*` commands (`create_tunnel`, `destroy_tunnel`, `tunnel_status`)
-- [ ] SSL/TLS tab in `ConnectionForm`; pass cert paths to sqlx `ConnectOptions`
+- [x] `keychain_*` commands using `keyring` crate
+- [x] Update `ConnectionForm` to pass password to keychain, never SQLite
+- [x] Retrieve credential from keychain in `connections_connect`
+- [x] SSH tab in `ConnectionForm`
+- [x] `ssh_tunnel.rs` — `russh`-based port forwarding
+- [x] `ssh_*` commands (`create_tunnel`, `destroy_tunnel`, `tunnel_status`)
+- [x] SSL/TLS tab in `ConnectionForm`; pass cert paths to sqlx `ConnectOptions`
 
 #### Week 8: Command Palette and Shortcuts
 
-- [ ] `shortcuts.svelte.ts` — preset definitions, override loading, effective map
-- [ ] `settings_*` commands
-- [ ] Global keyboard listener + action event dispatch
-- [ ] `CommandPalette.svelte` — Cmd+K, fuse.js over commands + connections + tables + saved queries
-- [ ] Shortcut bindings wired into all relevant components
-- [ ] `KeyboardShortcuts.svelte` settings page — table of all actions, editable bindings
-- [ ] `keyboard_shortcut_overrides` SQLite read/write
+- [x] `shortcuts.svelte.ts` — preset definitions, override loading, effective map
+- [x] `settings_*` commands
+- [x] Global keyboard listener + action event dispatch
+- [x] `CommandPalette.svelte` — Cmd+K, fuse.js over commands + connections + tables + saved queries
+- [x] Shortcut bindings wired into all relevant components
+- [x] `KeyboardShortcuts.svelte` settings page — table of all actions, editable bindings
+- [x] `keyboard_shortcut_overrides` SQLite read/write
 
 #### Week 9: Export and Import
 
-- [ ] `export_*` commands — all formats, to file and clipboard
-- [ ] Export button and format picker in `ResultsPanel` and `TableBrowser`
-- [ ] "Copy" context menu on selected rows (Tab-separated default)
-- [ ] `import_csv_preview` + `import_csv_execute` commands
-- [ ] CSV import modal (`CsvImportModal.svelte`) — preview, column editor, target picker
-- [ ] `import_sql_file` command with Tauri event streaming
-- [ ] SQL import progress modal
+- [x] `export_*` commands — all formats, to file and clipboard
+- [x] Export button and format picker in `ResultsPanel` and `TableBrowser`
+- [x] "Copy" context menu on selected rows (Tab-separated default)
+- [x] `import_csv_preview` + `import_csv_execute` commands
+- [x] CSV import modal (`CsvImportModal.svelte`) — preview, column editor, target picker
+- [x] `import_sql_file` command with Tauri event streaming
+- [x] SQL import progress modal
 
 #### Week 10: Multi-statement, Format, and Transactions
 
-- [ ] Multi-statement SQL splitter in `src/lib/utils/sql.ts` and Rust
-- [ ] Run selection / run under cursor actions
-- [ ] `query_format` integration — call `sql-formatter` in frontend, update editor content
-- [ ] Format shortcut (Shift+Alt+F)
-- [ ] Transaction control UI (Begin/Commit/Rollback toolbar)
-- [ ] `settings` transaction mode toggle
-- [ ] Transaction state indicator in toolbar
+- [x] Multi-statement SQL splitter in `src/lib/utils/sql.ts` and Rust
+- [x] Run selection / run under cursor actions
+- [x] `query_format` integration — call `sql-formatter` in frontend, update editor content
+- [x] Format shortcut (Shift+Alt+F)
+- [x] Transaction control UI (Begin/Commit/Rollback toolbar)
+- [x] `settings` transaction mode toggle
+- [x] Transaction state indicator in toolbar
 
 **Phase 3 Deliverable**: Secure connections via keychain, SSH, and SSL; full import/export; command palette; all keyboard shortcuts working.
 

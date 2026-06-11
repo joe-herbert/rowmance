@@ -1,4 +1,5 @@
 /// Tauri commands for managing connection profiles and groups.
+use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::sync::Arc;
@@ -118,6 +119,8 @@ pub struct ConnectionTestResult {
 }
 
 /// Input for creating or updating a connection profile.
+/// Passwords are NOT included here — they are stored in the OS keychain
+/// via `keychain_store` before or after calling create/update.
 #[derive(Debug, Deserialize)]
 pub struct ConnectionProfileInput {
     #[serde(rename = "groupId")]
@@ -129,7 +132,6 @@ pub struct ConnectionProfileInput {
     pub port: i64,
     pub database: String,
     pub username: String,
-    pub password: Option<String>,
     pub color: Option<String>,
     #[serde(rename = "readOnly", default)]
     pub read_only: bool,
@@ -157,6 +159,14 @@ pub struct ConnectionProfileInput {
     pub pool_min: Option<i64>,
     #[serde(rename = "poolMax")]
     pub pool_max: Option<i64>,
+}
+
+fn retrieve_keychain_password(connection_id: &str) -> String {
+    let name = format!("{connection_id}:db_password");
+    Entry::new("rowmance", &name)
+        .ok()
+        .and_then(|e| e.get_password().ok())
+        .unwrap_or_default()
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -190,12 +200,12 @@ pub async fn connections_create(
     sqlx::query(
         r#"
         INSERT INTO connection_profiles (
-            id, group_id, name, db_type, host, port, database, username, password, color,
+            id, group_id, name, db_type, host, port, database, username, color,
             read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
             ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
             pool_min, pool_max, created_at, updated_at
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?
@@ -210,7 +220,6 @@ pub async fn connections_create(
     .bind(input.port)
     .bind(&input.database)
     .bind(&input.username)
-    .bind(&input.password)
     .bind(&input.color)
     .bind(input.read_only)
     .bind(input.ssh_enabled)
@@ -251,16 +260,6 @@ pub async fn connections_update(
     let now = chrono::Utc::now().to_rfc3339();
     let pool_min = input.pool_min.unwrap_or(1);
     let pool_max = input.pool_max.unwrap_or(5);
-
-    // Only overwrite the stored password if the user provided a new one.
-    if let Some(ref pw) = input.password {
-        sqlx::query("UPDATE connection_profiles SET password = ? WHERE id = ?")
-            .bind(pw)
-            .bind(&id)
-            .execute(sqlite.inner())
-            .await
-            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
-    }
 
     sqlx::query!(
         r#"
@@ -322,10 +321,13 @@ pub async fn connections_delete(sqlite: State<'_, SqlitePool>, id: String) -> Re
 }
 
 /// Test a connection (connect and disconnect immediately, measuring latency).
+/// `password` is accepted directly here so the connection can be tested before
+/// it is saved to the keychain (e.g. from the "Test Connection" button in the form).
 #[tauri::command]
 pub async fn connections_test(
     sqlite: State<'_, SqlitePool>,
     id: String,
+    password: Option<String>,
 ) -> Result<ConnectionTestResult, AppError> {
     let row =
         sqlx::query_as::<_, ConnectionProfileRow>("SELECT * FROM connection_profiles WHERE id = ?")
@@ -340,7 +342,10 @@ pub async fn connections_test(
                 )
             })?;
 
-    let password = row.password.clone().unwrap_or_default();
+    // Use the provided password, fall back to keychain, then to empty string.
+    let password = password
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| retrieve_keychain_password(&id));
     let start = std::time::Instant::now();
 
     let result = match row.db_type.as_str() {
@@ -411,7 +416,7 @@ pub async fn connections_connect(
                 )
             })?;
 
-    let password = row.password.clone().unwrap_or_default();
+    let password = retrieve_keychain_password(&id);
 
     connections
         .connect(
@@ -424,6 +429,10 @@ pub async fn connections_connect(
             &password,
             row.pool_min as u32,
             row.pool_max as u32,
+            row.ssl_enabled,
+            row.ssl_ca_path.as_deref(),
+            row.ssl_cert_path.as_deref(),
+            row.ssl_key_path.as_deref(),
         )
         .await
         .map_err(AppError::from)?;

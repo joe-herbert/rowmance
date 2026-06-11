@@ -33,7 +33,8 @@ export interface ConnectionProfile {
   updatedAt: string;
 }
 
-/** Input type for creating or updating a connection profile. */
+/** Input type for creating or updating a connection profile.
+ * Passwords are stored in the OS keychain via keychainStore(), never here. */
 export interface ConnectionProfileInput {
   groupId?: string | null;
   name: string;
@@ -42,8 +43,6 @@ export interface ConnectionProfileInput {
   port: number;
   database: string;
   username: string;
-  /** Passed to the keychain, never stored in SQLite. */
-  password?: string;
   color?: string | null;
   readOnly?: boolean;
   sshEnabled?: boolean;

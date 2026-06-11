@@ -27,8 +27,11 @@ export async function deleteConnection(id: string): Promise<void> {
   return invoke<void>('connections_delete', { id });
 }
 
-export async function testConnection(id: string): Promise<ConnectionTestResult> {
-  return invoke<ConnectionTestResult>('connections_test', { id });
+export async function testConnection(
+  id: string,
+  password?: string,
+): Promise<ConnectionTestResult> {
+  return invoke<ConnectionTestResult>('connections_test', { id, password });
 }
 
 export async function connectToDatabase(id: string): Promise<void> {

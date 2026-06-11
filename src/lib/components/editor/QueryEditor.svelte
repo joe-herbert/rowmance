@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import {
     EditorView,
     keymap,
@@ -30,28 +30,47 @@
     type CompletionResult,
     type CompletionSource,
   } from '@codemirror/autocomplete';
+  import { format as sqlFormat } from 'sql-formatter';
   import type { QueryResult } from '$lib/types';
-  import { executeQuery } from '$lib/tauri/query';
+  import { executeQuery, executeSelection } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
   import ResultsPanel from '$lib/components/editor/ResultsPanel.svelte';
   import * as schemaApi from '$lib/tauri/schema';
+  import { statementAtCursor } from '$lib/utils/sql';
 
   interface Props {
     connectionId: string;
+    initialSql?: string;
     onExecute?: (_sql: string) => void;
   }
 
-  let { connectionId, onExecute }: Props = $props();
+  let { connectionId, initialSql = '', onExecute }: Props = $props();
 
   const connections = useConnections();
+  const settingsStore = useSettings();
 
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
   let editorView = $state<EditorView | undefined>(undefined);
-  let sqlText = $state('');
+  let sqlText = $state(initialSql);
   let result = $state<QueryResult | null>(null);
   let isRunning = $state(false);
+  let transactionActive = $state(false);
 
   let connectionName = $derived(connections.getById(connectionId)?.name ?? connectionId);
+  let transactionMode = $derived(settingsStore.settings.transactionMode);
+  let showTransactionToolbar = $derived(transactionMode || transactionActive);
+
+  const DB_TYPE_DIALECT: Record<string, string> = {
+    mysql: 'mysql',
+    mariadb: 'mysql',
+    postgres: 'postgresql',
+  };
+
+  let sqlDialect = $derived(() => {
+    const profile = connections.getById(connectionId);
+    return profile ? (DB_TYPE_DIALECT[profile.dbType] ?? 'sql') : 'sql';
+  });
 
   // ── Schema-aware autocomplete ─────────────────────────────────────────────
 
@@ -60,12 +79,10 @@
     name: string;
   }
 
-  // Plain mutable object — the completion source reads from it without needing
-  // Svelte reactivity. Updated whenever the schema loads.
   const schemaRef: {
     connectionId: string;
     tables: SchemaTable[];
-    columns: Map<string, string[]>; // key: "database.tableName"
+    columns: Map<string, string[]>;
   } = { connectionId: '', tables: [], columns: new Map() };
 
   async function loadSchemaForCompletion(connId: string): Promise<void> {
@@ -87,7 +104,6 @@
     }
   }
 
-  // Reload schema whenever the connection becomes active.
   $effect(() => {
     if (connections.isActive(connectionId)) {
       loadSchemaForCompletion(connectionId);
@@ -96,7 +112,6 @@
 
   function makeSchemaCompletionSource(): CompletionSource {
     return async (context: CompletionContext): Promise<CompletionResult | null> => {
-      // "table.col" context: offer column completions for that table.
       const dotMatch = context.matchBefore(/[\w"`]+\.[\w"`]*/);
       if (dotMatch) {
         const rawTable = dotMatch.text.split('.')[0].replace(/["`]/g, '');
@@ -127,10 +142,8 @@
         }
       }
 
-      // Default: offer table names from the loaded schema.
       const word = context.matchBefore(/\w*/);
       if (!word || (word.from === word.to && !context.explicit)) return null;
-
       if (schemaRef.tables.length === 0) return null;
 
       return {
@@ -145,9 +158,8 @@
     };
   }
 
-  // CSS variables cannot be read at theme-build time because CodeMirror's theme
-  // system needs literal strings. We resolve them at mount time from the computed
-  // style of the document root so the theme still reacts to the active CSS theme.
+  // ── Theme ─────────────────────────────────────────────────────────────────
+
   function resolveCSSVar(name: string): string {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
@@ -208,6 +220,8 @@
     });
   }
 
+  // ── Query execution ───────────────────────────────────────────────────────
+
   async function runQuery(): Promise<void> {
     const query = sqlText.trim();
     if (!query || isRunning) return;
@@ -231,16 +245,202 @@
     }
   }
 
-  // Ctrl/Cmd+Enter runs the query from within the editor without bubbling to the toolbar.
+  async function runSelection(): Promise<void> {
+    if (!editorView || isRunning) return;
+    const state = editorView.state;
+    const { from, to } = state.selection.main;
+    const selected = from === to ? sqlText : state.sliceDoc(from, to);
+    const query = selected.trim();
+    if (!query) return;
+
+    isRunning = true;
+    try {
+      result = await executeSelection(connectionId, query);
+      onExecute?.(query);
+    } catch (err) {
+      result = {
+        queryId: '',
+        columns: [],
+        rows: [],
+        totalRows: null,
+        durationMs: 0,
+        affectedRows: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  async function runUnderCursor(): Promise<void> {
+    if (!editorView || isRunning) return;
+    const pos = editorView.state.selection.main.head;
+    const stmt = statementAtCursor(sqlText, pos);
+    if (!stmt.trim()) return;
+
+    isRunning = true;
+    try {
+      result = await executeSelection(connectionId, stmt);
+      onExecute?.(stmt);
+    } catch (err) {
+      result = {
+        queryId: '',
+        columns: [],
+        rows: [],
+        totalRows: null,
+        durationMs: 0,
+        affectedRows: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  function formatQuery(): void {
+    if (!editorView) return;
+    const dialect = sqlDialect();
+    try {
+      const formatted = sqlFormat(sqlText, { language: dialect as Parameters<typeof sqlFormat>[1]['language'] });
+      editorView.dispatch({
+        changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
+      });
+    } catch {
+      // Formatting failed silently — leave content unchanged.
+    }
+  }
+
+  async function runExplain(): Promise<void> {
+    const query = sqlText.trim();
+    if (!query || isRunning) return;
+    const explain = `EXPLAIN ${query}`;
+    isRunning = true;
+    try {
+      result = await executeQuery(connectionId, explain, 1, 100);
+    } catch (err) {
+      result = {
+        queryId: '',
+        columns: [],
+        rows: [],
+        totalRows: null,
+        durationMs: 0,
+        affectedRows: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  // ── Transaction controls ──────────────────────────────────────────────────
+
+  async function beginTransaction(): Promise<void> {
+    const profile = connections.getById(connectionId);
+    const sql = (profile?.dbType === 'mysql' || profile?.dbType === 'mariadb')
+      ? 'START TRANSACTION'
+      : 'BEGIN';
+    isRunning = true;
+    try {
+      await executeSelection(connectionId, sql);
+      transactionActive = true;
+    } catch (err) {
+      result = {
+        queryId: '',
+        columns: [],
+        rows: [],
+        totalRows: null,
+        durationMs: 0,
+        affectedRows: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  async function commitTransaction(): Promise<void> {
+    isRunning = true;
+    try {
+      await executeSelection(connectionId, 'COMMIT');
+      transactionActive = false;
+    } catch (err) {
+      result = {
+        queryId: '',
+        columns: [],
+        rows: [],
+        totalRows: null,
+        durationMs: 0,
+        affectedRows: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  async function rollbackTransaction(): Promise<void> {
+    isRunning = true;
+    try {
+      await executeSelection(connectionId, 'ROLLBACK');
+      transactionActive = false;
+    } catch (err) {
+      result = {
+        queryId: '',
+        columns: [],
+        rows: [],
+        totalRows: null,
+        durationMs: 0,
+        affectedRows: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  // ── Shortcut action listener ──────────────────────────────────────────────
+
+  function handleShortcutAction(e: Event) {
+    const { action } = (e as CustomEvent<{ action: string }>).detail;
+    switch (action) {
+      case 'QUERY_RUN_ALL':
+        runQuery();
+        break;
+      case 'QUERY_RUN_SELECTION':
+        runSelection();
+        break;
+      case 'QUERY_RUN_UNDER_CURSOR':
+        runUnderCursor();
+        break;
+      case 'QUERY_FORMAT':
+        formatQuery();
+        break;
+      case 'QUERY_EXPLAIN':
+        runExplain();
+        break;
+    }
+  }
+
+  // Cmd+Enter runs the query from within the editor.
   function runQueryCommand(): boolean {
     runQuery();
     return true;
   }
 
+  let unlistenShortcut: (() => void) | null = null;
+
   onMount(() => {
     if (!editorContainer) return;
 
-    const runKeymap = keymap.of([{ key: 'Mod-Enter', run: runQueryCommand }]);
+    document.addEventListener('shortcut-action', handleShortcutAction);
+    unlistenShortcut = () => document.removeEventListener('shortcut-action', handleShortcutAction);
+
+    const runKeymap = keymap.of([
+      { key: 'Mod-Enter', run: runQueryCommand },
+      { key: 'Mod-Shift-Enter', run: () => { runSelection(); return true; } },
+      { key: 'Mod-Shift-r', run: () => { runUnderCursor(); return true; } },
+      { key: 'Mod-Shift-f', run: () => { formatQuery(); return true; } },
+    ]);
 
     const state = EditorState.create({
       doc: sqlText,
@@ -277,6 +477,10 @@
       editorView = undefined;
     };
   });
+
+  onDestroy(() => {
+    unlistenShortcut?.();
+  });
 </script>
 
 <div class="query-editor-panel">
@@ -295,19 +499,63 @@
       {connectionName}
     </span>
 
+    {#if transactionActive}
+      <span class="tx-badge" title="Transaction in progress">TXN</span>
+    {/if}
+
     <div class="toolbar-spacer"></div>
 
     <button
-      class="format-button"
-      onclick={() => {
-        // Format is a no-op until a SQL formatter library is wired up.
-        // The button is present for layout completeness and future use.
-      }}
-      title="Format SQL"
+      class="toolbar-btn"
+      onclick={runSelection}
+      disabled={isRunning}
+      title="Run selection (Cmd+Shift+Enter)"
+    >
+      Run Selection
+    </button>
+
+    <button
+      class="toolbar-btn"
+      onclick={runUnderCursor}
+      disabled={isRunning}
+      title="Run statement under cursor (Cmd+Shift+R)"
+    >
+      Run Cursor
+    </button>
+
+    <button
+      class="toolbar-btn"
+      onclick={formatQuery}
+      title="Format SQL (Cmd+Shift+F)"
     >
       Format
     </button>
+
+    <button
+      class="toolbar-btn"
+      onclick={runExplain}
+      disabled={isRunning}
+      title="Explain query"
+    >
+      Explain
+    </button>
   </div>
+
+  {#if showTransactionToolbar}
+    <div class="tx-toolbar" class:tx-active={transactionActive}>
+      <span class="tx-label">
+        {transactionActive ? 'Transaction active' : 'Transaction mode'}
+      </span>
+      <div class="tx-actions">
+        {#if !transactionActive}
+          <button class="tx-btn" onclick={beginTransaction} disabled={isRunning}>Begin</button>
+        {:else}
+          <button class="tx-btn tx-btn--commit" onclick={commitTransaction} disabled={isRunning}>Commit</button>
+          <button class="tx-btn tx-btn--rollback" onclick={rollbackTransaction} disabled={isRunning}>Rollback</button>
+        {/if}
+      </div>
+    </div>
+  {/if}
 
   <div class="editor-wrapper">
     <div class="editor-container" bind:this={editorContainer}></div>
@@ -383,11 +631,25 @@
     white-space: nowrap;
   }
 
+  .tx-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--spacing-2);
+    height: calc(var(--toolbar-height) - var(--spacing-3));
+    background: var(--color-warning-subtle, #fff3cd);
+    border: 1px solid var(--color-warning, #f59e0b);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-warning, #f59e0b);
+    letter-spacing: 0.05em;
+  }
+
   .toolbar-spacer {
     flex: 1;
   }
 
-  .format-button {
+  .toolbar-btn {
     padding: 0 var(--spacing-2);
     height: calc(var(--toolbar-height) - var(--spacing-3));
     background: transparent;
@@ -399,11 +661,92 @@
     transition:
       color var(--transition-fast),
       background var(--transition-fast);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
-  .format-button:hover {
+  .toolbar-btn:hover:not(:disabled) {
     color: var(--color-text-primary);
     background: var(--color-bg-hover);
+  }
+
+  .toolbar-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Transaction toolbar */
+  .tx-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: 0 var(--spacing-3);
+    height: 32px;
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .tx-toolbar.tx-active {
+    background: var(--color-warning-subtle, #fff3cd);
+    border-bottom-color: var(--color-warning, #f59e0b);
+  }
+
+  .tx-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    flex: 1;
+  }
+
+  .tx-active .tx-label {
+    color: var(--color-warning, #f59e0b);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .tx-actions {
+    display: flex;
+    gap: var(--spacing-1);
+  }
+
+  .tx-btn {
+    padding: 0 var(--spacing-2);
+    height: 22px;
+    font-size: var(--font-size-xs);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-primary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    white-space: nowrap;
+  }
+
+  .tx-btn:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .tx-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .tx-btn--commit {
+    border-color: var(--color-success);
+    color: var(--color-success);
+  }
+
+  .tx-btn--commit:hover:not(:disabled) {
+    background: var(--color-success-subtle);
+  }
+
+  .tx-btn--rollback {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
+  .tx-btn--rollback:hover:not(:disabled) {
+    background: var(--color-danger-subtle);
   }
 
   .editor-wrapper {
@@ -417,7 +760,6 @@
     overflow: hidden;
   }
 
-  /* Pass height down into CodeMirror's own scroll container. */
   .editor-container :global(.cm-editor) {
     height: 100%;
   }
