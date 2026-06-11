@@ -9,6 +9,7 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import ConnectionForm from './ConnectionForm.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
+  import { ask } from '@tauri-apps/plugin-dialog';
   import type { ConnectionProfile, ConnectionGroup } from '$lib/types';
 
   const connectionStore = useConnections();
@@ -113,10 +114,24 @@
 
   async function ctxDeleteGroup() {
     if (!groupContextMenu) return;
-    const { id } = groupContextMenu.group;
+    const { name, id } = groupContextMenu.group;
     closeGroupContextMenu();
+    if (!await ask(`Delete group "${name}" and all its connections? This cannot be undone.`, { title: 'Delete Group', kind: 'warning' })) return;
     try {
       await connectionsApi.deleteConnectionGroup(id);
+      await connectionStore.load();
+    } catch {
+      // Ignore.
+    }
+  }
+
+  async function deleteConnection(profile: ConnectionProfile) {
+    if (!await ask(`Delete "${profile.name}"? This cannot be undone.`, { title: 'Delete Connection', kind: 'warning' })) return;
+    if (connectionStore.isActive(profile.id)) {
+      await connectionStore.disconnect(profile.id);
+    }
+    try {
+      await connectionsApi.deleteConnection(profile.id);
       await connectionStore.load();
     } catch {
       // Ignore.
@@ -214,6 +229,12 @@
                         aria-label="Edit {profile.name}"
                         onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
                       >✎</button>
+                      <button
+                        class="delete-btn"
+                        title="Delete connection"
+                        aria-label="Delete {profile.name}"
+                        onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
+                      >✕</button>
                     </div>
                     {#if connectionStore.errorIds.has(profile.id)}
                       <div class="error-row">{connectionStore.errorIds.get(profile.id)}</div>
@@ -245,6 +266,12 @@
                   aria-label="Edit {profile.name}"
                   onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
                 >✎</button>
+                <button
+                  class="delete-btn"
+                  title="Delete connection"
+                  aria-label="Delete {profile.name}"
+                  onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
+                >✕</button>
               </div>
               {#if connectionStore.errorIds.has(profile.id)}
                 <div class="error-row">{connectionStore.errorIds.get(profile.id)}</div>
@@ -309,6 +336,12 @@
                       aria-label="Edit {profile.name}"
                       onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
                     >✎</button>
+                    <button
+                      class="delete-btn"
+                      title="Delete connection"
+                      aria-label="Delete {profile.name}"
+                      onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
+                    >✕</button>
                   </div>
                   {#if connectionStore.errorIds.has(profile.id)}
                     <div class="error-row">{connectionStore.errorIds.get(profile.id)}</div>
@@ -326,7 +359,6 @@
 
 <!-- Group context menu -->
 {#if groupContextMenu}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="group-context-menu"
     role="menu"
@@ -611,6 +643,30 @@
 
   .edit-btn:hover {
     color: var(--color-text-primary);
+    background: var(--color-bg-active);
+  }
+
+  .delete-btn {
+    opacity: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    transition: opacity var(--transition-fast), color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .connection-row:hover .delete-btn {
+    opacity: 1;
+  }
+
+  .delete-btn:hover {
+    color: var(--color-danger);
     background: var(--color-bg-active);
   }
 
