@@ -10,6 +10,7 @@
   import * as connectionsApi from '$lib/tauri/connections';
   import * as keychainApi from '$lib/tauri/keychain';
   import type { ConnectionProfile, DbType } from '$lib/types';
+  import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     profile?: ConnectionProfile;
@@ -131,7 +132,7 @@
       await saveSecrets(savedId);
       onclose();
     } catch (err) {
-      saveError = err instanceof Error ? err.message : String(err);
+      saveError = errorMessage(err);
     } finally {
       saving = false;
     }
@@ -145,7 +146,7 @@
     try {
       testResult = await connectionsApi.testConnectionUnsaved(buildInput(), password || undefined);
     } catch (err) {
-      saveError = err instanceof Error ? err.message : String(err);
+      saveError = errorMessage(err);
     } finally {
       testing = false;
     }

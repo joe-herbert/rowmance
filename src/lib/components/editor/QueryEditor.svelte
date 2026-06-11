@@ -38,6 +38,7 @@
   import ResultsPanel from '$lib/components/editor/ResultsPanel.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { statementAtCursor } from '$lib/utils/sql';
+  import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     connectionId: string;
@@ -238,7 +239,7 @@
         totalRows: null,
         durationMs: 0,
         affectedRows: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       };
     } finally {
       isRunning = false;
@@ -265,7 +266,7 @@
         totalRows: null,
         durationMs: 0,
         affectedRows: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       };
     } finally {
       isRunning = false;
@@ -290,7 +291,7 @@
         totalRows: null,
         durationMs: 0,
         affectedRows: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       };
     } finally {
       isRunning = false;
@@ -325,7 +326,7 @@
         totalRows: null,
         durationMs: 0,
         affectedRows: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       };
     } finally {
       isRunning = false;
@@ -351,7 +352,7 @@
         totalRows: null,
         durationMs: 0,
         affectedRows: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       };
     } finally {
       isRunning = false;
@@ -371,7 +372,7 @@
         totalRows: null,
         durationMs: 0,
         affectedRows: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       };
     } finally {
       isRunning = false;
@@ -391,7 +392,7 @@
         totalRows: null,
         durationMs: 0,
         affectedRows: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       };
     } finally {
       isRunning = false;

@@ -6,6 +6,7 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import * as importApi from '$lib/tauri/import';
   import { onDestroy } from 'svelte';
+  import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     connectionId: string;
@@ -70,7 +71,7 @@
       phase = 'done';
       onimported?.(executedCount);
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      error = errorMessage(err);
       phase = 'pick';
     } finally {
       loading = false;

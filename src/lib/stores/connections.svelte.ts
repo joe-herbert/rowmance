@@ -5,6 +5,7 @@
  */
 import type { ConnectionProfile, ConnectionGroup, ConnectionProfileInput } from '$lib/types';
 import * as api from '$lib/tauri/connections';
+import { errorMessage } from '$lib/utils/errors';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ export function useConnections() {
         await api.connectToDatabase(id);
         activeIds = new Set([...activeIds, id]);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         errorIds = new Map([...errorIds, [id, message]]);
         throw err;
       } finally {

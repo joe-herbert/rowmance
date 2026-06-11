@@ -9,6 +9,7 @@
   import { sql as sqlLang } from '@codemirror/lang-sql';
   import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
   import { getDdl } from '$lib/tauri/schema';
+  import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     connectionId: string;
@@ -61,7 +62,7 @@
     try {
       ddlText = await getDdl(connectionId, database, objectName, objectType);
     } catch (err) {
-      loadError = err instanceof Error ? err.message : String(err);
+      loadError = errorMessage(err);
     } finally {
       isLoading = false;
     }

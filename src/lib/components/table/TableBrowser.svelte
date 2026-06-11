@@ -3,6 +3,7 @@
   import type { RowChange } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
   import type { QueryResult, ColumnMeta } from '$lib/types';
+  import { errorMessage } from '$lib/utils/errors';
   import DataTable from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
   import CsvImportModal from '$lib/components/table/CsvImportModal.svelte';
@@ -88,7 +89,7 @@
       tableKey++;
       await load();
     } catch (err) {
-      saveError = err instanceof Error ? err.message : String(err);
+      saveError = errorMessage(err);
     } finally {
       isSaving = false;
     }
@@ -137,7 +138,7 @@
         result = null;
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      error = errorMessage(err);
       result = null;
     } finally {
       isLoading = false;
@@ -256,7 +257,7 @@
         await exportResultToClipboard(getExportRows(), getExportColumns(), format, tblName);
       }
     } catch (err) {
-      exportError = err instanceof Error ? err.message : String(err);
+      exportError = errorMessage(err);
     }
   }
 

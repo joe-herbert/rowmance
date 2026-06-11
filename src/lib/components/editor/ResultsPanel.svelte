@@ -3,6 +3,7 @@
   import DataTable from '$lib/components/table/DataTable.svelte';
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     result: QueryResult | null;
@@ -85,7 +86,7 @@
         await exportResultToClipboard(getRows(), getColumns(), format, tableName);
       }
     } catch (err) {
-      exportError = err instanceof Error ? err.message : String(err);
+      exportError = errorMessage(err);
     }
   }
 

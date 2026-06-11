@@ -7,6 +7,7 @@
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import * as importApi from '$lib/tauri/import';
   import type { InferredColumn } from '$lib/tauri/import';
+  import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     connectionId: string;
@@ -56,7 +57,7 @@
       tableName = fname.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9_]/g, '_');
       step = 'preview';
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      error = errorMessage(err);
     } finally {
       loading = false;
     }
@@ -92,7 +93,7 @@
       step = 'done';
       onimported?.(importedCount);
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+      error = errorMessage(err);
       step = 'preview';
     }
   }

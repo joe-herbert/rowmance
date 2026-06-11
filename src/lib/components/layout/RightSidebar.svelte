@@ -9,6 +9,7 @@
   import * as historyApi from '$lib/tauri/history';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder } from '$lib/types';
+  import { errorMessage } from '$lib/utils/errors';
 
   type ActivePanel = 'history' | 'saved' | null;
 
@@ -59,7 +60,7 @@
     try {
       historyEntries = await historyApi.listHistory(selectedHistoryConnectionId, 100, 0);
     } catch (err) {
-      historyError = err instanceof Error ? err.message : String(err);
+      historyError = errorMessage(err);
     } finally {
       historyLoading = false;
     }
@@ -143,7 +144,7 @@
         savedQueriesApi.listSavedQueries(),
       ]);
     } catch (err) {
-      savedError = err instanceof Error ? err.message : String(err);
+      savedError = errorMessage(err);
     } finally {
       savedLoading = false;
     }
