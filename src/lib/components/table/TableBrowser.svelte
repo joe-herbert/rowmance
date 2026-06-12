@@ -119,12 +119,10 @@
   function buildSql(): string {
     const quotedDb = quoteIdentifier(database);
     const quotedTable = quoteIdentifier(table);
-    const offset = (page - 1) * PAGE_SIZE;
     let base = `SELECT * FROM ${quotedDb}.${quotedTable}`;
     if (filterValue.trim()) {
       base += ` WHERE ${filterValue.trim()}`;
     }
-    base += ` LIMIT ${PAGE_SIZE} OFFSET ${offset}`;
     return base;
   }
 

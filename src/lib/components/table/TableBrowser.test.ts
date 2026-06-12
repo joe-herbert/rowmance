@@ -20,12 +20,10 @@ function buildSql(
 ): string {
   const quotedDb = quoteIdentifier(database, dbType);
   const quotedTable = quoteIdentifier(table, dbType);
-  const offset = (page - 1) * pageSize;
   let base = `SELECT * FROM ${quotedDb}.${quotedTable}`;
   if (filterValue.trim()) {
     base += ` WHERE ${filterValue.trim()}`;
   }
-  base += ` LIMIT ${pageSize} OFFSET ${offset}`;
   return base;
 }
 
@@ -58,22 +56,22 @@ describe('quoteIdentifier', () => {
 describe('buildSql', () => {
   it('produces a basic SELECT with no filter for mysql', () => {
     const sql = buildSql('mydb', 'users', 1, PAGE_SIZE, '', 'mysql');
-    expect(sql).toBe('SELECT * FROM `mydb`.`users` LIMIT 50 OFFSET 0');
+    expect(sql).toBe('SELECT * FROM `mydb`.`users`');
   });
 
   it('produces a basic SELECT with no filter for postgres', () => {
     const sql = buildSql('mydb', 'users', 1, PAGE_SIZE, '', 'postgres');
-    expect(sql).toBe('SELECT * FROM "mydb"."users" LIMIT 50 OFFSET 0');
+    expect(sql).toBe('SELECT * FROM "mydb"."users"');
   });
 
   it('includes a WHERE clause when filterValue is non-empty', () => {
     const sql = buildSql('mydb', 'users', 1, PAGE_SIZE, 'age > 18', 'mysql');
-    expect(sql).toBe('SELECT * FROM `mydb`.`users` WHERE age > 18 LIMIT 50 OFFSET 0');
+    expect(sql).toBe('SELECT * FROM `mydb`.`users` WHERE age > 18');
   });
 
   it('trims whitespace from filterValue in the WHERE clause', () => {
     const sql = buildSql('mydb', 'users', 1, PAGE_SIZE, '  age > 18  ', 'mysql');
-    expect(sql).toBe('SELECT * FROM `mydb`.`users` WHERE age > 18 LIMIT 50 OFFSET 0');
+    expect(sql).toBe('SELECT * FROM `mydb`.`users` WHERE age > 18');
   });
 
   it('does not include WHERE clause when filterValue is only whitespace', () => {
@@ -81,19 +79,14 @@ describe('buildSql', () => {
     expect(sql).not.toContain('WHERE');
   });
 
-  it('calculates OFFSET as 0 for page 1', () => {
-    const sql = buildSql('mydb', 'users', 1, PAGE_SIZE, '', 'mysql');
-    expect(sql).toContain('OFFSET 0');
-  });
-
-  it('calculates OFFSET as pageSize for page 2', () => {
-    const sql = buildSql('mydb', 'users', 2, PAGE_SIZE, '', 'mysql');
-    expect(sql).toContain(`OFFSET ${PAGE_SIZE}`);
-  });
-
-  it('calculates OFFSET as 2 * pageSize for page 3', () => {
-    const sql = buildSql('mydb', 'users', 3, PAGE_SIZE, '', 'mysql');
-    expect(sql).toContain(`OFFSET ${PAGE_SIZE * 2}`);
+  it('does not include LIMIT or OFFSET (pagination is handled by the backend)', () => {
+    const sql1 = buildSql('mydb', 'users', 1, PAGE_SIZE, '', 'mysql');
+    const sql2 = buildSql('mydb', 'users', 2, PAGE_SIZE, '', 'mysql');
+    const sql3 = buildSql('mydb', 'users', 3, PAGE_SIZE, '', 'mysql');
+    expect(sql1).not.toContain('LIMIT');
+    expect(sql1).not.toContain('OFFSET');
+    expect(sql2).not.toContain('LIMIT');
+    expect(sql3).not.toContain('LIMIT');
   });
 
   it('uses double-quote identifiers for postgres', () => {
@@ -111,8 +104,8 @@ describe('buildSql', () => {
     expect(sql).toContain('`prod`.`orders`');
   });
 
-  it('includes LIMIT in all queries', () => {
+  it('does not include LIMIT (pagination handled by backend)', () => {
     const sql = buildSql('mydb', 'users', 1, PAGE_SIZE, '', 'mysql');
-    expect(sql).toContain(`LIMIT ${PAGE_SIZE}`);
+    expect(sql).not.toContain('LIMIT');
   });
 });
