@@ -40,6 +40,7 @@
   let database = $state(profile?.database ?? '');
   let username = $state(profile?.username ?? '');
   let password = $state('');
+  let passwordDirty = $state(false);
   let color = $state(profile?.color ?? '');
   let readOnly = $state(profile?.readOnly ?? false);
 
@@ -108,6 +109,9 @@
   async function saveSecrets(id: string) {
     if (password) {
       await keychainApi.keychainStore(id, 'db_password', password);
+    } else if (passwordDirty) {
+      // User explicitly cleared the field — remove any stored password.
+      await keychainApi.keychainDelete(id, 'db_password');
     }
     if (sshEnabled && sshPassword) {
       await keychainApi.keychainStore(id, 'ssh_password', sshPassword);
@@ -144,7 +148,13 @@
     testing = true;
 
     try {
-      testResult = await connectionsApi.testConnectionUnsaved(buildInput(), password || undefined);
+      if (isEditing && !password) {
+        // No new password entered — test with the stored keychain credentials so the
+        // result accurately reflects what connecting from the sidebar will do.
+        testResult = await connectionsApi.testConnection(profile.id, undefined);
+      } else {
+        testResult = await connectionsApi.testConnectionUnsaved(buildInput(), password || undefined);
+      }
     } catch (err) {
       saveError = errorMessage(err);
     } finally {
@@ -265,6 +275,7 @@
             class="input"
             type="password"
             bind:value={password}
+            oninput={() => (passwordDirty = true)}
             placeholder={isEditing ? '••••••••' : ''}
             autocomplete="current-password"
           />

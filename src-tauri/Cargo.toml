@@ -28,7 +28,7 @@ sqlx = { version = "0.8", features = [
   "chrono",
   "json",
 ] }
-keyring = "3"
+keyring = { version = "3", features = ["apple-native"] }
 arboard = "3"
 csv = "1"
 serde = { version = "1", features = ["derive"] }
