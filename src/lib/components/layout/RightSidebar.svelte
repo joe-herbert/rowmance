@@ -11,7 +11,7 @@
   import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
 
-  type ActivePanel = 'history' | 'saved' | null;
+  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | null;
 
   interface Props {
     onClose: () => void;
@@ -33,6 +33,12 @@
       if (panel === 'saved') loadSavedQueries();
     }
   }
+
+  // ── Column Inspector placeholder ──────────────────────────────────────────────
+  // Future: receive selected column via event or store; for now, shows a hint.
+
+  // ── Table Info placeholder ────────────────────────────────────────────────────
+  // Future: receive focused table and run a quick schema query to show stats.
 
   // ── Query History ─────────────────────────────────────────────────────────────
 
@@ -257,6 +263,30 @@
       🔖
     </button>
 
+    <button
+      class="tab-btn"
+      class:active={activePanel === 'column'}
+      role="tab"
+      aria-selected={activePanel === 'column'}
+      aria-controls="panel-column"
+      title="Column Inspector"
+      onclick={(e) => { e.stopPropagation(); selectPanel('column'); }}
+    >
+      ≡
+    </button>
+
+    <button
+      class="tab-btn"
+      class:active={activePanel === 'table-info'}
+      role="tab"
+      aria-selected={activePanel === 'table-info'}
+      aria-controls="panel-table-info"
+      title="Table Info"
+      onclick={(e) => { e.stopPropagation(); selectPanel('table-info'); }}
+    >
+      ℹ
+    </button>
+
     <div class="spacer"></div>
 
     <button class="tab-btn close-btn" title="Close sidebar" onclick={onClose} aria-label="Close sidebar">
@@ -443,6 +473,25 @@
             {/if}
           </ul>
         {/if}
+      </div>
+    {:else if activePanel === 'column'}
+      <div id="panel-column" role="tabpanel" aria-label="Column Inspector">
+        <div class="panel-toolbar">
+          <span class="panel-title">Column Inspector</span>
+        </div>
+        <div class="placeholder-panel">
+          <p>Click a column in the schema tree to inspect it.</p>
+        </div>
+      </div>
+
+    {:else if activePanel === 'table-info'}
+      <div id="panel-table-info" role="tabpanel" aria-label="Table Info">
+        <div class="panel-toolbar">
+          <span class="panel-title">Table Info</span>
+        </div>
+        <div class="placeholder-panel">
+          <p>Open a table from the schema tree to see its details here.</p>
+        </div>
       </div>
     {/if}
   </div>
@@ -835,5 +884,13 @@
 
   .ctx-item.danger:hover {
     background: var(--color-danger-subtle);
+  }
+
+  .placeholder-panel {
+    padding: var(--spacing-3) var(--spacing-3);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
+    line-height: var(--line-height-normal);
   }
 </style>

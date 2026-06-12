@@ -35,7 +35,15 @@
     table: TableInfo;
   }
 
+  interface DbContextMenu {
+    x: number;
+    y: number;
+    connectionId: string;
+    database: string;
+  }
+
   let contextMenu = $state<ContextMenu | null>(null);
+  let dbContextMenu = $state<DbContextMenu | null>(null);
 
   // ── Search state ──────────────────────────────────────────────────────────────
 
@@ -183,18 +191,39 @@
     closeContextMenu();
   }
 
+  function showDbContextMenu(event: MouseEvent, connectionId: string, database: string) {
+    event.preventDefault();
+    dbContextMenu = { x: event.clientX, y: event.clientY, connectionId, database };
+  }
+
+  function closeDbContextMenu() {
+    dbContextMenu = null;
+  }
+
+  function ctxOpenErd() {
+    if (!dbContextMenu) return;
+    panelStore.openInFocused({
+      kind: 'erd',
+      connectionId: dbContextMenu.connectionId,
+      database: dbContextMenu.database,
+    });
+    closeDbContextMenu();
+  }
+
   function handleWindowKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && contextMenu) {
-      closeContextMenu();
+    if (event.key === 'Escape') {
+      if (contextMenu) closeContextMenu();
+      if (dbContextMenu) closeDbContextMenu();
     }
   }
 
   function handleWindowClick(event: MouseEvent) {
-    if (!contextMenu) return;
-    // Dismiss if the click is outside the context menu itself.
     const target = event.target as Element | null;
-    if (!target?.closest('.context-menu')) {
+    if (contextMenu && !target?.closest('.context-menu')) {
       closeContextMenu();
+    }
+    if (dbContextMenu && !target?.closest('.context-menu')) {
+      closeDbContextMenu();
     }
   }
 
@@ -298,6 +327,7 @@
                   <button
                     class="node-row database-node"
                     onclick={() => toggleDatabase(profile.id, database)}
+                    oncontextmenu={(e) => showDbContextMenu(e, profile.id, database)}
                     aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} database {database}"
                   >
                     <span class="chevron" class:open={isDbExpanded} aria-hidden="true">›</span>
@@ -359,6 +389,18 @@
     <button class="ctx-item" role="menuitem" onclick={ctxOpenTable}>Open Table</button>
     <button class="ctx-item" role="menuitem" onclick={ctxViewDdl}>View DDL</button>
     <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
+  </div>
+{/if}
+
+{#if dbContextMenu}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="context-menu"
+    role="menu"
+    aria-label="Database options"
+    style="top: {dbContextMenu.y}px; left: {dbContextMenu.x}px;"
+  >
+    <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
   </div>
 {/if}
 

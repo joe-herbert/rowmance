@@ -4,15 +4,50 @@
   Handles horizontal resize of both sidebars via pointer-drag.
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Sidebar from './Sidebar.svelte';
   import SplitPanel from './SplitPanel.svelte';
   import RightSidebar from './RightSidebar.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import * as updaterApi from '$lib/tauri/updater';
+  import { openNewWindow } from '$lib/tauri/window';
 
   // ── Sidebar widths (persisted as CSS variables) ───────────────────────────
 
   let leftWidth = $state(240);
   let rightWidth = $state(280);
   let rightVisible = $state(true);
+
+  // ── Update notification ───────────────────────────────────────────────────
+
+  const settingsStore = useSettings();
+  const settings = $derived(settingsStore.settings);
+
+  interface UpdateInfo { version: string; notes: string | null }
+  let pendingUpdate = $state<UpdateInfo | null>(null);
+  let updateDismissed = $state(false);
+  let installing = $state(false);
+
+  onMount(async () => {
+    if (!settings.autoUpdateCheck) return;
+    try {
+      const result = await updaterApi.updaterCheck();
+      if (result.available && result.version) {
+        pendingUpdate = { version: result.version, notes: result.notes };
+      }
+    } catch {
+      // Update check failures are silently swallowed to avoid disrupting startup.
+    }
+  });
+
+  async function installUpdate() {
+    installing = true;
+    try {
+      await updaterApi.updaterInstall();
+    } catch {
+      installing = false;
+    }
+  }
 
   // ── Resize drag state ─────────────────────────────────────────────────────
 
@@ -47,14 +82,48 @@
   function toggleRightSidebar() {
     rightVisible = !rightVisible;
   }
+
+  function handleShortcutAction(e: Event) {
+    const action = (e as CustomEvent<{ action: string }>).detail.action;
+    if (action === 'TOGGLE_RIGHT_SIDEBAR') toggleRightSidebar();
+    if (action === 'NEW_WINDOW') openNewWindow();
+  }
 </script>
+
+<svelte:document on:shortcut-action={handleShortcutAction} />
+
+<div
+  class="app-shell-wrapper"
+  style="--sidebar-width: {leftWidth}px; --right-sidebar-width: {rightWidth}px;"
+>
+  {#if pendingUpdate && !updateDismissed}
+    <div class="update-banner" role="alert" aria-live="polite">
+      <span class="update-message">
+        Update {pendingUpdate.version} available
+        {#if pendingUpdate.notes} — {pendingUpdate.notes.slice(0, 80)}{/if}
+      </span>
+      <div class="update-actions">
+        <button
+          class="update-btn update-btn--primary"
+          onclick={installUpdate}
+          disabled={installing}
+        >
+          {installing ? 'Installing…' : 'Install Now'}
+        </button>
+        <button
+          class="update-btn"
+          onclick={() => (updateDismissed = true)}
+          aria-label="Dismiss update notification"
+        >Later</button>
+      </div>
+    </div>
+  {/if}
 
 <div
   class="app-shell"
   role="application"
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
-  style="--sidebar-width: {leftWidth}px; --right-sidebar-width: {rightWidth}px;"
 >
   <!-- Left sidebar -->
   <aside class="left-sidebar" style="width: {leftWidth}px;">
@@ -109,15 +178,82 @@
     </button>
   {/if}
 </div>
+</div>
 
 <style>
-  .app-shell {
+  .app-shell-wrapper {
     display: flex;
+    flex-direction: column;
     width: 100vw;
     height: 100vh;
     overflow: hidden;
+  }
+
+  .app-shell {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
     position: relative;
     background: var(--color-bg-primary);
+  }
+
+  .update-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: var(--spacing-2) var(--spacing-4);
+    background: var(--color-warning-subtle);
+    border-bottom: 1px solid var(--color-warning);
+    flex-shrink: 0;
+  }
+
+  .update-message {
+    flex: 1;
+    font-size: var(--font-size-sm);
+    color: var(--color-warning);
+    font-weight: var(--font-weight-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .update-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    flex-shrink: 0;
+  }
+
+  .update-btn {
+    height: 26px;
+    padding: 0 var(--spacing-3);
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-warning);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .update-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .update-btn--primary {
+    background: var(--color-warning);
+    color: #fff;
+  }
+
+  .update-btn--primary:hover {
+    opacity: 0.9;
+  }
+
+  .update-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   .left-sidebar {

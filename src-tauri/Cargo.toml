@@ -19,6 +19,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
+tauri-plugin-updater = "2"
 sqlx = { version = "0.8", features = [
   "mysql",
   "postgres",
@@ -43,3 +44,4 @@ chrono = { version = "0.4", features = ["serde"] }
 [dev-dependencies]
 testcontainers = "0.23"
 testcontainers-modules = { version = "0.11", features = ["mysql", "postgres"] }
+tempfile = "3"

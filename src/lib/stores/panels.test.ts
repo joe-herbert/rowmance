@@ -87,4 +87,30 @@ describe('usePanels', () => {
     store.openInFocused({ kind: 'query_editor', connectionId: 'conn-1' });
     expect(store.panels[0].content).toEqual({ kind: 'query_editor', connectionId: 'conn-1' });
   });
+
+  it('openInFocused accepts an erd panel kind', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'erd', connectionId: 'conn-1', database: 'mydb' });
+    expect(store.panels[0].content).toEqual({ kind: 'erd', connectionId: 'conn-1', database: 'mydb' });
+  });
+
+  it('openInFocused accepts an explain panel kind', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'explain', connectionId: 'conn-1', sql: 'SELECT 1', dialect: 'postgres' });
+    const content = store.panels[0].content;
+    expect(content.kind).toBe('explain');
+    if (content.kind === 'explain') {
+      expect(content.sql).toBe('SELECT 1');
+      expect(content.dialect).toBe('postgres');
+    }
+  });
+
+  it('erd panel opened in second panel after split', () => {
+    const store = usePanels();
+    store.split('right');
+    store.focus(1);
+    store.openInFocused({ kind: 'erd', connectionId: 'conn-2', database: 'analytics' });
+    expect(store.panels[1]?.content).toEqual({ kind: 'erd', connectionId: 'conn-2', database: 'analytics' });
+    expect(store.panels[0].content.kind).toBe('empty');
+  });
 });

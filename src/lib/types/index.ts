@@ -176,12 +176,34 @@ export interface SavedQuery {
   updatedAt: string;
 }
 
+// ── ERD ──────────────────────────────────────────────────────────────────────
+
+export interface ErdColumn { name: string; dataType: string; isPrimaryKey: boolean; }
+export interface ErdTable { name: string; columns: ErdColumn[]; }
+export interface ErdRelation { fromTable: string; fromColumns: string[]; toTable: string; toColumns: string[]; constraintName: string; }
+export interface ErdGraph { nodes: ErdTable[]; edges: ErdRelation[]; }
+
+// ── EXPLAIN ──────────────────────────────────────────────────────────────────
+
+export interface ExplainResult { rawJson: string; dialect: string; }
+
+// ── Themes ───────────────────────────────────────────────────────────────────
+
+export interface ThemeMeta { name: string; extends: string; }
+export interface ThemeData { name: string; extends: string; variables: Record<string, string>; }
+
+// ── Updater ──────────────────────────────────────────────────────────────────
+
+export interface UpdateCheckResult { available: boolean; version: string | null; notes: string | null; }
+
 // ── Panels ───────────────────────────────────────────────────────────────────
 
 export type PanelKind =
   | { kind: 'query_editor'; connectionId: string; initialSql?: string }
   | { kind: 'table_browser'; connectionId: string; database: string; table: string }
   | { kind: 'ddl_viewer'; connectionId: string; database: string; objectName: string; objectType: 'table' | 'view' }
+  | { kind: 'erd'; connectionId: string; database: string }
+  | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'empty' };
 
 export interface PanelState {

@@ -3,15 +3,56 @@
   Keyboard, and Connections (placeholder).
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import KeyboardShortcuts from '$lib/components/settings/KeyboardShortcuts.svelte';
-  import type { AppSettings } from '$lib/types';
+  import ThemeEditor from '$lib/components/settings/ThemeEditor.svelte';
+  import * as themesApi from '$lib/tauri/themes';
+  import type { AppSettings, ThemeMeta } from '$lib/types';
+  import { errorMessage } from '$lib/utils/errors';
 
-  type Section = 'general' | 'editor' | 'keyboard' | 'connections';
+  type Section = 'general' | 'editor' | 'keyboard' | 'connections' | 'appearance';
 
   let activeSection = $state<Section>('general');
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
+
+  let userThemes = $state<ThemeMeta[]>([]);
+  let selectedCustomTheme = $state<string | null>(null);
+  let themeError = $state<string | null>(null);
+
+  onMount(async () => {
+    try {
+      userThemes = await themesApi.themesList();
+      if (userThemes.length > 0) selectedCustomTheme = userThemes[0].name;
+    } catch (err) {
+      themeError = errorMessage(err);
+    }
+  });
+
+  async function createNewTheme() {
+    const base = settings.theme === 'light' ? 'light' : 'dark';
+    const newName = `custom-${Date.now()}`;
+    try {
+      const meta = await themesApi.themesDuplicate(base, newName);
+      userThemes = [...userThemes, meta];
+      selectedCustomTheme = meta.name;
+    } catch (err) {
+      themeError = errorMessage(err);
+    }
+  }
+
+  async function deleteTheme(name: string) {
+    try {
+      await themesApi.themesDelete(name);
+      userThemes = userThemes.filter((t) => t.name !== name);
+      if (selectedCustomTheme === name) {
+        selectedCustomTheme = userThemes[0]?.name ?? null;
+      }
+    } catch (err) {
+      themeError = errorMessage(err);
+    }
+  }
 
   async function update<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
     await settingsStore.set(key, value);
@@ -21,7 +62,7 @@
 <div class="settings-page">
   <!-- Sidebar nav -->
   <nav class="settings-nav" aria-label="Settings sections">
-    {#each (['general', 'editor', 'keyboard', 'connections'] as const) as section}
+    {#each (['general', 'editor', 'keyboard', 'connections', 'appearance'] as const) as section}
       <button
         class="nav-item"
         class:active={activeSection === section}
@@ -173,6 +214,63 @@
       <p class="section-description">
         Connection-level settings are managed per connection in the Connections panel.
       </p>
+
+    {:else if activeSection === 'appearance'}
+      <h2 class="section-title">Appearance</h2>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Theme</span>
+            <span class="label-hint">Base colour scheme</span>
+          </div>
+          <select
+            class="setting-select"
+            value={settings.theme}
+            onchange={(e) => update('theme', (e.currentTarget as HTMLSelectElement).value as AppSettings['theme'])}
+          >
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="appearance-section-title">Custom Themes</div>
+
+      {#if themeError}
+        <p class="section-description" style="color: var(--color-danger);">{themeError}</p>
+      {/if}
+
+      <div class="theme-actions">
+        <button class="action-btn" onclick={createNewTheme}>+ New Theme</button>
+        {#if userThemes.length > 0}
+          <select
+            class="setting-select"
+            value={selectedCustomTheme}
+            onchange={(e) => (selectedCustomTheme = (e.currentTarget as HTMLSelectElement).value)}
+            aria-label="Select custom theme to edit"
+          >
+            {#each userThemes as theme (theme.name)}
+              <option value={theme.name}>{theme.name}</option>
+            {/each}
+          </select>
+          {#if selectedCustomTheme}
+            <button
+              class="action-btn action-btn--danger"
+              onclick={() => selectedCustomTheme && deleteTheme(selectedCustomTheme)}
+            >Delete</button>
+          {/if}
+        {/if}
+      </div>
+
+      {#if selectedCustomTheme}
+        <div class="theme-editor-wrap">
+          <ThemeEditor themeName={selectedCustomTheme} />
+        </div>
+      {:else if userThemes.length === 0}
+        <p class="section-description">No custom themes yet. Click "+ New Theme" to create one.</p>
+      {/if}
     {/if}
   </div>
 </div>
@@ -323,5 +421,55 @@
     height: 16px;
     cursor: pointer;
     accent-color: var(--color-accent);
+  }
+
+  .appearance-section-title {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-top: var(--spacing-4);
+    margin-bottom: var(--spacing-2);
+  }
+
+  .theme-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-3);
+  }
+
+  .action-btn {
+    height: 28px;
+    padding: 0 var(--spacing-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .action-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .action-btn--danger {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+  }
+
+  .action-btn--danger:hover {
+    background: var(--color-danger-subtle);
+  }
+
+  .theme-editor-wrap {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    max-height: 500px;
+    overflow-y: auto;
   }
 </style>

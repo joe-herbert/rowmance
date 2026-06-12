@@ -6,6 +6,7 @@
 <script lang="ts">
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { openNewWindow } from '$lib/tauri/window';
   import type { PanelKind } from '$lib/types';
 
   const panelStore = usePanels();
@@ -39,7 +40,15 @@
 </script>
 
 <div class="section">
-  <div class="section-header no-select">Open</div>
+  <div class="section-header no-select">
+    <span>Open</span>
+    <button
+      class="new-window-btn"
+      onclick={openNewWindow}
+      title="New Window (⌘⇧N)"
+      aria-label="Open new window"
+    >⊕</button>
+  </div>
 
   {#if panelStore.panels.length === 0 || (panelStore.panels.length === 1 && panelStore.panels[0].content.kind === 'empty')}
     <div class="empty-hint">No open editors</div>
@@ -81,7 +90,10 @@
   }
 
   .section-header {
-    padding: var(--spacing-1) var(--spacing-3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-1) var(--spacing-1) var(--spacing-1) var(--spacing-3);
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-muted);
@@ -89,6 +101,30 @@
     letter-spacing: 0.06em;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+  }
+
+  .new-window-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    color: var(--color-text-muted);
+    opacity: 0;
+    transition:
+      opacity var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .section:hover .new-window-btn {
+    opacity: 1;
+  }
+
+  .new-window-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 
   .empty-hint {

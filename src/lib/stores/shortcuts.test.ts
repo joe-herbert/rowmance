@@ -18,7 +18,7 @@ import {
   type ShortcutAction,
 } from './shortcuts.svelte';
 
-// All 18 expected action IDs.
+// All 19 expected action IDs.
 const EXPECTED_ACTIONS: ShortcutAction[] = [
   'QUERY_RUN_ALL',
   'QUERY_RUN_SELECTION',
@@ -38,11 +38,12 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
   'PAGE_PREV',
   'COMMAND_PALETTE',
   'NEW_QUERY_EDITOR',
+  'NEW_WINDOW',
 ];
 
 describe('SHORTCUT_DEFINITIONS', () => {
-  it('contains exactly 18 action definitions', () => {
-    expect(SHORTCUT_DEFINITIONS).toHaveLength(18);
+  it('contains exactly 19 action definitions', () => {
+    expect(SHORTCUT_DEFINITIONS).toHaveLength(19);
   });
 
   it('contains all expected action IDs', () => {

@@ -1526,40 +1526,40 @@ update:
 
 #### Week 11: ERD
 
-- [ ] `erd_get_graph` command — introspect all FK relationships for a database
-- [ ] `ErdCanvas.svelte` — elkjs layout in Web Worker, SVG rendering
-- [ ] Pan (d3-drag) and zoom (d3-zoom) on SVG
-- [ ] Click table node → open in main panel
-- [ ] Export PNG (`<canvas>` drawImage from SVG blob URL)
-- [ ] Export SVG (serialize SVG element)
-- [ ] "Open in ERD" context menu option in schema tree
+- [x] `erd_get_graph` command — introspect all FK relationships for a database
+- [x] `ErdCanvas.svelte` — elkjs layout in Web Worker, SVG rendering
+- [x] Pan (d3-drag) and zoom (d3-zoom) on SVG
+- [x] Click table node → open in main panel
+- [x] Export PNG (`<canvas>` drawImage from SVG blob URL)
+- [x] Export SVG (serialize SVG element)
+- [x] "Open in ERD" context menu option in schema tree
 
 #### Week 12: EXPLAIN Visualiser
 
-- [ ] `query_explain` command — runs `EXPLAIN (ANALYZE, FORMAT JSON)` per dialect
-- [ ] EXPLAIN output parser for MySQL JSON format and Postgres JSON format
-- [ ] `ExplainCanvas.svelte` — elkjs node tree, cost highlighting
-- [ ] Keyboard shortcut for "Explain current query"
-- [ ] Display explain result in a main panel
+- [x] `query_explain` command — runs `EXPLAIN (ANALYZE, FORMAT JSON)` per dialect
+- [x] EXPLAIN output parser for MySQL JSON format and Postgres JSON format
+- [x] `ExplainCanvas.svelte` — elkjs node tree, cost highlighting
+- [x] Keyboard shortcut for "Explain current query"
+- [x] Display explain result in a main panel
 
 #### Week 13: Theme Editor and Settings Page
 
-- [ ] `themes_*` commands — list, read, write, delete, duplicate
-- [ ] `ThemeEditor.svelte` — grouped variable list, colour picker, live preview, debounced save
-- [ ] "Duplicate built-in theme" flow
-- [ ] Theme picker in settings and command palette
-- [ ] `Settings.svelte` — full settings page with all sections:
+- [x] `themes_*` commands — list, read, write, delete, duplicate
+- [x] `ThemeEditor.svelte` — grouped variable list, colour picker, live preview, debounced save
+- [x] "Duplicate built-in theme" flow
+- [x] Theme picker in settings and command palette
+- [x] `Settings.svelte` — full settings page with all sections:
   - General, Appearance, Editor, Keyboard, Connections
 
 #### Week 14: Auto-update and Multiple Windows
 
-- [ ] `tauri-plugin-updater` integration in `updater.rs`
-- [ ] `updater_check` / `updater_install` commands
-- [ ] Update notification banner (dismissible, with "Install now" / "Later" buttons)
-- [ ] Check on startup if `auto_update_check` setting is true
-- [ ] Multiple window support: "Open New Window" menu item
-- [ ] Window state independence (each window has its own panel layout)
-- [ ] Right sidebar `ColumnInspector` and `TableInfo` panels completed
+- [x] `tauri-plugin-updater` integration in `updater.rs`
+- [x] `updater_check` / `updater_install` commands
+- [x] Update notification banner (dismissible, with "Install now" / "Later" buttons)
+- [x] Check on startup if `auto_update_check` setting is true
+- [x] Multiple window support: "Open New Window" menu item
+- [x] Window state independence (each window has its own panel layout)
+- [x] Right sidebar `ColumnInspector` and `TableInfo` panels completed
 
 **Phase 4 Deliverable**: ERD, EXPLAIN, custom themes, auto-update, multiple windows.
 

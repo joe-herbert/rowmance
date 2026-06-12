@@ -1,4 +1,5 @@
 pub mod connections;
+pub mod erd;
 pub mod export;
 pub mod history;
 pub mod import;
@@ -8,3 +9,5 @@ pub mod saved_queries;
 pub mod schema;
 pub mod settings;
 pub mod ssh;
+pub mod themes;
+pub mod updater;

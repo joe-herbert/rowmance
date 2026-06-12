@@ -563,6 +563,63 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
     serde_json::Value::Null
 }
 
+/// Result from running EXPLAIN on a query.
+#[derive(Debug, Serialize)]
+pub struct ExplainResult {
+    #[serde(rename = "rawJson")]
+    pub raw_json: String,
+    pub dialect: String,
+}
+
+/// Run EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) for Postgres or EXPLAIN FORMAT=JSON for MySQL.
+#[tauri::command]
+pub async fn query_explain(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    sql: String,
+) -> Result<ExplainResult, AppError> {
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+    match pool_ref.value() {
+        RemotePool::MySql(pool) => {
+            let explain_sql = format!("EXPLAIN FORMAT=JSON {sql}");
+            let rows = sqlx::query(&explain_sql)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            let raw = if let Some(row) = rows.first() {
+                use sqlx::Row;
+                row.try_get::<String, _>(0).unwrap_or_default()
+            } else {
+                String::new()
+            };
+            Ok(ExplainResult {
+                raw_json: raw,
+                dialect: "mysql".to_string(),
+            })
+        }
+        RemotePool::Postgres(pool) => {
+            let explain_sql = format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}");
+            let rows = sqlx::query(&explain_sql)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            let plans: Vec<serde_json::Value> = rows
+                .iter()
+                .map(|row| {
+                    use sqlx::Row;
+                    row.try_get::<serde_json::Value, _>(0)
+                        .unwrap_or(serde_json::Value::Null)
+                })
+                .collect();
+            Ok(ExplainResult {
+                raw_json: serde_json::to_string(&plans)
+                    .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?,
+                dialect: "postgres".to_string(),
+            })
+        }
+    }
+}
+
 /// Format a SQL string. Actual formatting is done by the frontend via sql-formatter;
 /// this command exists for API completeness and returns the SQL unchanged.
 #[tauri::command]

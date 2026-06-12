@@ -31,7 +31,8 @@ export type ShortcutAction =
   | 'PAGE_NEXT'
   | 'PAGE_PREV'
   | 'COMMAND_PALETTE'
-  | 'NEW_QUERY_EDITOR';
+  | 'NEW_QUERY_EDITOR'
+  | 'NEW_WINDOW';
 
 export interface ShortcutDefinition {
   action: ShortcutAction;
@@ -169,6 +170,13 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+N',
     jetbrains: 'Mod+N',
     vim: 'Mod+N',
+  },
+  {
+    action: 'NEW_WINDOW',
+    label: 'New Window',
+    vscode: 'Mod+Shift+N',
+    jetbrains: 'Mod+Shift+N',
+    vim: 'Mod+Shift+N',
   },
 ];
 

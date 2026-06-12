@@ -32,7 +32,8 @@
   } from '@codemirror/autocomplete';
   import { format as sqlFormat } from 'sql-formatter';
   import type { QueryResult } from '$lib/types';
-  import { executeQuery, executeSelection } from '$lib/tauri/query';
+  import { executeQuery, executeSelection, explainQuery } from '$lib/tauri/query';
+  import { usePanels } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import ResultsPanel from '$lib/components/editor/ResultsPanel.svelte';
@@ -50,6 +51,7 @@
 
   const connections = useConnections();
   const settingsStore = useSettings();
+  const panelStore = usePanels();
 
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
   let editorView = $state<EditorView | undefined>(undefined);
@@ -314,10 +316,15 @@
   async function runExplain(): Promise<void> {
     const query = sqlText.trim();
     if (!query || isRunning) return;
-    const explain = `EXPLAIN ${query}`;
     isRunning = true;
     try {
-      result = await executeQuery(connectionId, explain, 1, 100);
+      const explainResult = await explainQuery(connectionId, query);
+      panelStore.openInFocused({
+        kind: 'explain',
+        connectionId,
+        sql: explainResult.rawJson,
+        dialect: explainResult.dialect,
+      });
     } catch (err) {
       result = {
         queryId: '',
@@ -441,6 +448,7 @@
       { key: 'Mod-Shift-Enter', run: () => { runSelection(); return true; } },
       { key: 'Mod-Shift-r', run: () => { runUnderCursor(); return true; } },
       { key: 'Mod-Shift-f', run: () => { formatQuery(); return true; } },
+      { key: 'Alt-e', run: () => { runExplain(); return true; } },
     ]);
 
     const state = EditorState.create({

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { executeQuery, executeSelection, cancelQuery, updateRows } from './query';
+import { executeQuery, executeSelection, cancelQuery, updateRows, explainQuery } from './query';
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -83,5 +83,32 @@ describe('updateRows', () => {
 
     const result = await updateRows('conn-2', 'db', 'tbl', []);
     expect(result.updatedCount).toBe(5);
+  });
+});
+
+describe('explainQuery', () => {
+  it('invokes query_explain with connectionId and sql', async () => {
+    const stub = { rawJson: '{}', dialect: 'postgres' };
+    mockInvoke.mockResolvedValue(stub);
+    await explainQuery('conn-1', 'SELECT 1');
+    expect(mockInvoke).toHaveBeenCalledWith('query_explain', {
+      connectionId: 'conn-1',
+      sql: 'SELECT 1',
+    });
+  });
+
+  it('returns ExplainResult from invoke', async () => {
+    const stub = { rawJson: '[{"Plan":{"Node Type":"Seq Scan"}}]', dialect: 'postgres' };
+    mockInvoke.mockResolvedValue(stub);
+    const result = await explainQuery('conn-1', 'SELECT * FROM users');
+    expect(result.dialect).toBe('postgres');
+    expect(result.rawJson).toBe(stub.rawJson);
+  });
+
+  it('returns mysql dialect result', async () => {
+    const stub = { rawJson: '{"query_block":{}}', dialect: 'mysql' };
+    mockInvoke.mockResolvedValue(stub);
+    const result = await explainQuery('conn-2', 'SELECT * FROM orders');
+    expect(result.dialect).toBe('mysql');
   });
 });

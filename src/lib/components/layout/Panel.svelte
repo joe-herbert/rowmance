@@ -9,6 +9,8 @@
   import QueryEditor from '$lib/components/editor/QueryEditor.svelte';
   import TableBrowser from '$lib/components/table/TableBrowser.svelte';
   import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
+  import ErdCanvas from '$lib/components/erd/ErdCanvas.svelte';
+  import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
 
   interface Props {
     index: number;
@@ -43,6 +45,16 @@
       database={panel.content.database}
       objectName={panel.content.objectName}
       objectType={panel.content.objectType}
+    />
+  {:else if panel.content.kind === 'erd'}
+    <ErdCanvas
+      connectionId={panel.content.connectionId}
+      database={panel.content.database}
+    />
+  {:else if panel.content.kind === 'explain'}
+    <ExplainCanvas
+      rawJson={panel.content.sql}
+      dialect={panel.content.dialect}
     />
   {:else}
     <!-- Empty panel placeholder -->

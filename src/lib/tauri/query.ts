@@ -1,6 +1,6 @@
 /** Typed wrappers around the Tauri `query::*` commands. */
 import { invoke } from '@tauri-apps/api/core';
-import type { QueryResult } from '$lib/types';
+import type { QueryResult, ExplainResult } from '$lib/types';
 
 export async function executeQuery(
   connectionId: string,
@@ -39,4 +39,8 @@ export async function updateRows(
   changes: RowChange[],
 ): Promise<UpdateResult> {
   return invoke<UpdateResult>('query_update_rows', { connectionId, database, table, changes });
+}
+
+export async function explainQuery(connectionId: string, sql: string): Promise<ExplainResult> {
+  return invoke<ExplainResult>('query_explain', { connectionId, sql });
 }

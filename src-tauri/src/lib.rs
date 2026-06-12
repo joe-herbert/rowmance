@@ -18,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Initialise the SQLite pool synchronously via a blocking call during setup.
             let sqlite = tauri::async_runtime::block_on(db::init_pool())
@@ -96,6 +97,19 @@ pub fn run() {
             commands::import::import_csv_preview,
             commands::import::import_csv_execute,
             commands::import::import_sql_file,
+            // ERD
+            commands::erd::erd_get_graph,
+            // Themes
+            commands::themes::themes_list,
+            commands::themes::themes_read,
+            commands::themes::themes_write,
+            commands::themes::themes_delete,
+            commands::themes::themes_duplicate,
+            // Updater
+            commands::updater::updater_check,
+            commands::updater::updater_install,
+            // Explain
+            commands::query::query_explain,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Rowmance");
