@@ -208,7 +208,6 @@
 
   function onResizePointerDown(e: PointerEvent, originalIndex: number): void {
     e.preventDefault();
-    e.stopPropagation();
     resizingColIndex = originalIndex;
     resizeStartX = e.clientX;
     resizeStartWidth = colWidths[originalIndex] ?? 120;
@@ -428,12 +427,6 @@
 >
   <div class="table-scroll">
     <table class="data-table">
-      <colgroup>
-        {#each visibleColumns as { originalIndex }}
-          <col style="width: {colWidths[originalIndex]}px; min-width: 60px;" />
-        {/each}
-      </colgroup>
-
       <thead>
         <!-- Header row -->
         <tr class="header-row">
@@ -461,7 +454,7 @@
               class="header-cell"
               class:dragging={isDragging}
               class:drag-over={isDragOver}
-              style="width: {colWidths[originalIndex]}px;"
+              style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
               title="{col.name} ({col.dataType})"
               draggable={true}
               ondragstart={() => onHeaderDragStart(col.name)}
@@ -488,6 +481,8 @@
                 class="resize-handle"
                 role="separator"
                 aria-label="Resize {col.name} column"
+                draggable={false}
+                ondragstart={(e) => e.stopPropagation()}
                 onpointerdown={(e) => onResizePointerDown(e, originalIndex)}
               ></div>
             </th>
@@ -556,6 +551,7 @@
                 class="data-cell"
                 class:cell-pending={isPending}
                 class:cell-editable={editable}
+                style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
                 title={editable ? 'Double-click to edit' : undefined}
               >
@@ -700,7 +696,6 @@
     border-collapse: collapse;
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
-    table-layout: fixed;
   }
 
   thead {
