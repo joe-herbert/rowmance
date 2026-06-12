@@ -1,6 +1,6 @@
 /// Tauri commands for executing SQL queries against remote databases.
 use serde::{Deserialize, Serialize};
-use sqlx::{Column, Row};
+use sqlx::{Column, Row, TypeInfo};
 use std::sync::Arc;
 use tauri::State;
 
@@ -373,6 +373,30 @@ pub async fn query_execute_selection(
     query_execute(sqlite, connections, connection_id, sql, 1, 10_000).await
 }
 
+// ── Type formatting helpers ───────────────────────────────────────────────────
+
+fn format_mysql_type(type_info: &sqlx::mysql::MySqlTypeInfo) -> String {
+    let base = type_info.name().to_lowercase();
+    // max_size is pub(crate) in sqlx, so extract it from the Debug representation.
+    let debug = format!("{type_info:?}");
+    if let Some(size) = parse_max_size(&debug) {
+        match base.as_str() {
+            "varchar" | "char" | "varbinary" | "binary" | "bit" => {
+                return format!("{base}({size})");
+            }
+            _ => {}
+        }
+    }
+    base
+}
+
+fn parse_max_size(debug: &str) -> Option<u32> {
+    let prefix = "max_size: Some(";
+    let start = debug.find(prefix)? + prefix.len();
+    let end = debug[start..].find(')')? + start;
+    debug[start..end].parse().ok()
+}
+
 // ── Dialect-specific executors ────────────────────────────────────────────────
 
 type ExecuteResult = Result<
@@ -407,7 +431,7 @@ async fn execute_mysql(
                 .iter()
                 .map(|c| ColumnMeta {
                     name: c.name().to_owned(),
-                    data_type: format!("{:?}", c.type_info()),
+                    data_type: format_mysql_type(c.type_info()),
                     nullable: true,
                     is_primary_key: false,
                     is_foreign_key: false,
@@ -457,7 +481,7 @@ async fn execute_postgres(
                 .iter()
                 .map(|c| ColumnMeta {
                     name: c.name().to_owned(),
-                    data_type: format!("{:?}", c.type_info()),
+                    data_type: c.type_info().name().to_lowercase(),
                     nullable: true,
                     is_primary_key: false,
                     is_foreign_key: false,
