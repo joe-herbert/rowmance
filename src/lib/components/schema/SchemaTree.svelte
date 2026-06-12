@@ -9,6 +9,7 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import type { TableInfo } from '$lib/types';
+  import { errorMessage } from '$lib/utils/errors';
   import Fuse from 'fuse.js';
 
   const connectionStore = useConnections();
@@ -21,6 +22,8 @@
   let expandedConnections = $state<Set<string>>(new Set());
   let expandedDatabases = $state<Set<string>>(new Set()); // key: `${connectionId}/${database}`
   let loadingKeys = $state<Set<string>>(new Set());
+  // Error state: key → error message (key is connectionId or `${connectionId}/${database}`)
+  let loadErrors = $state<Map<string, string>>(new Map());
 
   // ── Context menu state ────────────────────────────────────────────────────────
 
@@ -92,12 +95,15 @@
   async function loadDatabases(connectionId: string) {
     if (schemaCache.has(connectionId)) return;
     loadingKeys = new Set([...loadingKeys, connectionId]);
+    loadErrors = new Map([...loadErrors].filter(([k]) => k !== connectionId));
 
     try {
       const databases = await schemaApi.listDatabases(connectionId);
       const dbMap = new Map<string, TableInfo[]>();
       databases.forEach((db) => dbMap.set(db, []));
       schemaCache = new Map([...schemaCache, [connectionId, dbMap]]);
+    } catch (err) {
+      loadErrors = new Map([...loadErrors, [connectionId, errorMessage(err)]]);
     } finally {
       loadingKeys = new Set([...loadingKeys].filter((k) => k !== connectionId));
     }
@@ -119,11 +125,15 @@
     if (existing && existing.length > 0) return;
 
     loadingKeys = new Set([...loadingKeys, key]);
+    loadErrors = new Map([...loadErrors].filter(([k]) => k !== key));
+
     try {
       const tables = await schemaApi.listTables(connectionId, database);
       const connMap = new Map(schemaCache.get(connectionId) ?? []);
       connMap.set(database, tables);
       schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+    } catch (err) {
+      loadErrors = new Map([...loadErrors, [key, errorMessage(err)]]);
     } finally {
       loadingKeys = new Set([...loadingKeys].filter((k) => k !== key));
     }
@@ -266,6 +276,10 @@
             {/if}
           </button>
 
+          {#if isExpanded && loadErrors.has(profile.id)}
+            <div class="load-error">{loadErrors.get(profile.id)}</div>
+          {/if}
+
           {#if isExpanded && databases}
             <ul class="tree-children" role="group">
               {#each [...databases.keys()] as database}
@@ -293,6 +307,10 @@
                       <span class="loading-indicator" aria-label="Loading">…</span>
                     {/if}
                   </button>
+
+                  {#if isDbExpanded && loadErrors.has(dbKey)}
+                    <div class="load-error db-load-error">{loadErrors.get(dbKey)}</div>
+                  {/if}
 
                   {#if isDbExpanded && tables.length > 0}
                     <ul class="tree-children" role="group">
@@ -473,6 +491,18 @@
     color: var(--color-text-muted);
     font-style: italic;
     line-height: var(--line-height-normal);
+  }
+
+  .load-error {
+    padding: var(--spacing-1) var(--spacing-3);
+    font-size: var(--font-size-xs);
+    color: var(--color-error, #e05c5c);
+    line-height: var(--line-height-normal);
+    word-break: break-word;
+  }
+
+  .db-load-error {
+    padding-left: calc(var(--spacing-3) * 2);
   }
 
   /* ── Tree ── */

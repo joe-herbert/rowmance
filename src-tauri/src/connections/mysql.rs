@@ -32,9 +32,11 @@ pub struct ColumnInfo {
 
 /// List all databases visible to this connection.
 pub async fn list_databases(pool: &MySqlPool) -> Result<Vec<String>, RowmanceError> {
-    let rows = sqlx::query_scalar::<_, String>("SHOW DATABASES")
-        .fetch_all(pool)
-        .await?;
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT CAST(SCHEMA_NAME AS CHAR) FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME",
+    )
+    .fetch_all(pool)
+    .await?;
     Ok(rows)
 }
 
@@ -47,15 +49,15 @@ pub async fn list_tables(
     struct Row {
         name: Option<String>,
         table_type: Option<String>,
-        row_count: Option<u64>,
+        row_count: Option<i64>,
     }
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            TABLE_NAME AS name,
-            TABLE_TYPE AS table_type,
-            TABLE_ROWS AS row_count
+            CAST(TABLE_NAME AS CHAR) AS name,
+            CAST(TABLE_TYPE AS CHAR) AS table_type,
+            CAST(TABLE_ROWS AS SIGNED) AS row_count
         FROM information_schema.TABLES
         WHERE TABLE_SCHEMA = ?
         ORDER BY TABLE_NAME
@@ -74,7 +76,7 @@ pub async fn list_tables(
             } else {
                 "table".to_owned()
             },
-            row_count: r.row_count.map(|v| v as i64),
+            row_count: r.row_count,
         })
         .collect())
 }
@@ -99,13 +101,13 @@ pub async fn list_columns(
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            c.COLUMN_NAME    AS name,
-            c.COLUMN_TYPE    AS data_type,
-            c.IS_NULLABLE    AS nullable,
-            c.COLUMN_DEFAULT AS default_value,
-            c.COLUMN_KEY     AS column_key,
-            c.EXTRA          AS extra,
-            c.COLUMN_COMMENT AS comment
+            CAST(c.COLUMN_NAME    AS CHAR) AS name,
+            CAST(c.COLUMN_TYPE    AS CHAR) AS data_type,
+            CAST(c.IS_NULLABLE    AS CHAR) AS nullable,
+            CAST(c.COLUMN_DEFAULT AS CHAR) AS default_value,
+            CAST(c.COLUMN_KEY     AS CHAR) AS column_key,
+            CAST(c.EXTRA          AS CHAR) AS extra,
+            CAST(c.COLUMN_COMMENT AS CHAR) AS comment
         FROM information_schema.COLUMNS c
         WHERE c.TABLE_SCHEMA = ? AND c.TABLE_NAME = ?
         ORDER BY c.ORDINAL_POSITION
