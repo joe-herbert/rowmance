@@ -201,8 +201,10 @@
 
   // ── Import modal state ─────────────────────────────────────────────────────
 
+  let showImportMenu = $state(false);
   let showCsvImport = $state(false);
   let showSqlImport = $state(false);
+  let importSource = $state<'file' | 'clipboard'>('file');
 
   const EXPORT_FORMATS: { label: string; format: ExportFormat; needsTableName: boolean }[] = [
     { label: 'CSV', format: 'csv', needsTableName: false },
@@ -439,24 +441,65 @@
       </div>
     {/if}
 
-    <!-- Import buttons -->
-    <button
-      class="toolbar-btn"
-      onclick={() => (showCsvImport = true)}
-      title="Import CSV"
-      aria-label="Import CSV file"
-    >
-      Import CSV
-    </button>
+    <!-- Import dropdown -->
+    <div class="export-dropdown">
+      <button
+        class="toolbar-btn"
+        onclick={() => { showImportMenu = !showImportMenu; }}
+        aria-expanded={showImportMenu}
+        aria-label="Import data"
+        title="Import"
+      >
+        Import ▾
+      </button>
 
-    <button
-      class="toolbar-btn"
-      onclick={() => (showSqlImport = true)}
-      title="Import SQL"
-      aria-label="Import SQL file"
-    >
-      Import SQL
-    </button>
+      {#if showImportMenu}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="export-menu" role="menu">
+          <div class="export-menu-section">
+            <span class="export-format-label">CSV</span>
+            <button
+              class="export-menu-item"
+              role="menuitem"
+              onclick={() => { showImportMenu = false; importSource = 'clipboard'; showCsvImport = true; }}
+            >
+              Clipboard
+            </button>
+            <button
+              class="export-menu-item"
+              role="menuitem"
+              onclick={() => { showImportMenu = false; importSource = 'file'; showCsvImport = true; }}
+            >
+              File
+            </button>
+          </div>
+          <div class="export-menu-section">
+            <span class="export-format-label">SQL</span>
+            <button
+              class="export-menu-item"
+              role="menuitem"
+              onclick={() => { showImportMenu = false; importSource = 'clipboard'; showSqlImport = true; }}
+            >
+              Clipboard
+            </button>
+            <button
+              class="export-menu-item"
+              role="menuitem"
+              onclick={() => { showImportMenu = false; importSource = 'file'; showSqlImport = true; }}
+            >
+              File
+            </button>
+          </div>
+        </div>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="export-backdrop"
+          role="presentation"
+          onclick={() => (showImportMenu = false)}
+          onkeydown={(e) => { if (e.key === 'Escape') showImportMenu = false; }}
+        ></div>
+      {/if}
+    </div>
 
     <button
       class="refresh-button"
@@ -547,6 +590,7 @@
 {#if showCsvImport}
   <CsvImportModal
     {connectionId}
+    source={importSource}
     onclose={() => (showCsvImport = false)}
     onimported={(count) => { showCsvImport = false; load(); }}
   />
@@ -555,6 +599,7 @@
 {#if showSqlImport}
   <SqlImportModal
     {connectionId}
+    source={importSource}
     onclose={() => (showSqlImport = false)}
   />
 {/if}
@@ -580,7 +625,9 @@
     padding: 0 var(--spacing-3);
     background: var(--color-bg-secondary);
     border-bottom: 1px solid var(--color-border);
-    overflow: hidden;
+    overflow: visible;
+    position: relative;
+    z-index: 10;
   }
 
   .table-name {

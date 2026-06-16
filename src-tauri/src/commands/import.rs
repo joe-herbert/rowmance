@@ -73,12 +73,7 @@ fn infer_type(values: &[&str]) -> String {
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-/// Read the first 20 rows of a CSV file and return column names with inferred types.
-#[tauri::command]
-pub async fn import_csv_preview(file_path: String) -> Result<CsvPreview, AppError> {
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
-
+fn csv_preview_from_text(content: &str) -> Result<CsvPreview, AppError> {
     let mut reader = csv::Reader::from_reader(content.as_bytes());
 
     let headers: Vec<String> = reader
@@ -117,19 +112,29 @@ pub async fn import_csv_preview(file_path: String) -> Result<CsvPreview, AppErro
     Ok(CsvPreview { columns, preview_rows })
 }
 
-/// Import a CSV file into a database table.
+/// Read the first 20 rows of a CSV file and return column names with inferred types.
 #[tauri::command]
-pub async fn import_csv_execute(
-    connections: State<'_, Arc<ConnectionManager>>,
+pub async fn import_csv_preview(file_path: String) -> Result<CsvPreview, AppError> {
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
+    csv_preview_from_text(&content)
+}
+
+/// Preview CSV data from a raw text string (e.g. clipboard content).
+#[tauri::command]
+pub async fn import_csv_preview_text(csv_text: String) -> Result<CsvPreview, AppError> {
+    csv_preview_from_text(&csv_text)
+}
+
+async fn csv_execute_from_text(
+    connections: &Arc<ConnectionManager>,
     connection_id: String,
-    file_path: String,
+    csv_text: String,
     table_name: String,
     create_table: bool,
     column_overrides: Vec<ColumnOverride>,
 ) -> Result<u32, AppError> {
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
-
+    let content = csv_text;
     let mut reader = csv::Reader::from_reader(content.as_bytes());
     let headers: Vec<String> = reader
         .headers()
@@ -264,19 +269,42 @@ pub async fn import_csv_execute(
     Ok(inserted)
 }
 
-/// Execute all statements in a SQL file, emitting progress events.
+/// Import a CSV file into a database table.
 #[tauri::command]
-pub async fn import_sql_file(
-    app: tauri::AppHandle,
+pub async fn import_csv_execute(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     file_path: String,
+    table_name: String,
+    create_table: bool,
+    column_overrides: Vec<ColumnOverride>,
+) -> Result<u32, AppError> {
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
+    csv_execute_from_text(connections.inner(), connection_id, content, table_name, create_table, column_overrides).await
+}
+
+/// Import CSV data from a raw text string (e.g. clipboard content).
+#[tauri::command]
+pub async fn import_csv_execute_text(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    csv_text: String,
+    table_name: String,
+    create_table: bool,
+    column_overrides: Vec<ColumnOverride>,
+) -> Result<u32, AppError> {
+    csv_execute_from_text(connections.inner(), connection_id, csv_text, table_name, create_table, column_overrides).await
+}
+
+async fn sql_execute_from_text(
+    app: tauri::AppHandle,
+    connections: &Arc<ConnectionManager>,
+    connection_id: String,
+    content: String,
     stop_on_error: bool,
 ) -> Result<u32, AppError> {
     use tauri::Emitter;
-
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
 
     let statements = crate::lib_sql::split_sql_statements(&content);
     let total = statements.len() as u32;
@@ -301,10 +329,7 @@ pub async fn import_sql_file(
         let progress = ImportProgress {
             current: i as u32 + 1,
             total: Some(total),
-            statement: stmt
-                .chars()
-                .take(200)
-                .collect::<String>(),
+            statement: stmt.chars().take(200).collect::<String>(),
             error: error.clone(),
         };
 
@@ -320,8 +345,34 @@ pub async fn import_sql_file(
         }
     }
 
-    let _ = errors; // suppress warning
+    let _ = errors;
     Ok(executed)
+}
+
+/// Execute all statements in a SQL file, emitting progress events.
+#[tauri::command]
+pub async fn import_sql_file(
+    app: tauri::AppHandle,
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    file_path: String,
+    stop_on_error: bool,
+) -> Result<u32, AppError> {
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
+    sql_execute_from_text(app, connections.inner(), connection_id, content, stop_on_error).await
+}
+
+/// Execute SQL statements from a raw text string (e.g. clipboard content).
+#[tauri::command]
+pub async fn import_sql_text(
+    app: tauri::AppHandle,
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    sql_text: String,
+    stop_on_error: bool,
+) -> Result<u32, AppError> {
+    sql_execute_from_text(app, connections.inner(), connection_id, sql_text, stop_on_error).await
 }
 
 #[cfg(test)]

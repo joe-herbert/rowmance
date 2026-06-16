@@ -1,25 +1,28 @@
 <!--
   CsvImportModal — multi-step CSV import dialog.
-  Step 1: file picker.
+  Step 1: file picker (or clipboard paste).
   Step 2: preview table with editable column names and type dropdowns.
 -->
 <script lang="ts">
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
+  import { onMount } from 'svelte';
   import * as importApi from '$lib/tauri/import';
   import type { InferredColumn } from '$lib/tauri/import';
   import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     connectionId: string;
+    source?: 'file' | 'clipboard';
     onclose: () => void;
     onimported?: (rowCount: number) => void;
   }
 
-  const { connectionId, onclose, onimported }: Props = $props();
+  const { connectionId, source = 'file', onclose, onimported }: Props = $props();
 
   type Step = 'pick' | 'preview' | 'importing' | 'done';
   let step = $state<Step>('pick');
   let filePath = $state('');
+  let clipboardText = $state('');
   let preview = $state<importApi.CsvPreview | null>(null);
   let columns = $state<InferredColumn[]>([]);
   let tableName = $state('');
@@ -30,6 +33,20 @@
 
   const DB_TYPES = ['TEXT', 'INTEGER', 'REAL', 'BLOB', 'BOOLEAN', 'DATE', 'TIMESTAMP', 'VARCHAR(255)'];
 
+  onMount(async () => {
+    if (source === 'clipboard') {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text.trim()) {
+          clipboardText = text;
+          await loadPreviewFromText(text);
+        }
+      } catch {
+        // clipboard read failed — user will paste manually
+      }
+    }
+  });
+
   async function pickFile() {
     const selected = await openFileDialog({
       multiple: false,
@@ -37,24 +54,35 @@
     });
     if (typeof selected === 'string' && selected) {
       filePath = selected;
-      await loadPreview();
+      await loadPreviewFromFile();
     }
   }
 
-  async function loadPreview() {
+  async function loadPreviewFromFile() {
     if (!filePath) return;
     loading = true;
     error = null;
     try {
       preview = await importApi.importCsvPreview(filePath);
-      columns = preview.columns.map((c) => ({
-        name: c.name,
-        inferredType: c.inferredType,
-      }));
-      // Default table name from file name.
+      columns = preview.columns.map((c) => ({ name: c.name, inferredType: c.inferredType }));
       const parts = filePath.replace(/\\/g, '/').split('/');
       const fname = parts[parts.length - 1] ?? '';
       tableName = fname.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9_]/g, '_');
+      step = 'preview';
+    } catch (err) {
+      error = errorMessage(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadPreviewFromText(text: string) {
+    loading = true;
+    error = null;
+    try {
+      preview = await importApi.importCsvPreviewText(text);
+      columns = preview.columns.map((c) => ({ name: c.name, inferredType: c.inferredType }));
+      tableName = 'imported_data';
       step = 'preview';
     } catch (err) {
       error = errorMessage(err);
@@ -73,7 +101,9 @@
   }
 
   async function runImport() {
-    if (!filePath || !tableName.trim()) return;
+    if (!tableName.trim()) return;
+    if (source === 'file' && !filePath) return;
+    if (source === 'clipboard' && !clipboardText) return;
     step = 'importing';
     error = null;
 
@@ -83,13 +113,23 @@
         dbType: typeForInferred(c.inferredType),
       }));
 
-      importedCount = await importApi.importCsvExecute(
-        connectionId,
-        filePath,
-        tableName.trim(),
-        createTable,
-        overrides,
-      );
+      if (source === 'clipboard') {
+        importedCount = await importApi.importCsvExecuteText(
+          connectionId,
+          clipboardText,
+          tableName.trim(),
+          createTable,
+          overrides,
+        );
+      } else {
+        importedCount = await importApi.importCsvExecute(
+          connectionId,
+          filePath,
+          tableName.trim(),
+          createTable,
+          overrides,
+        );
+      }
       step = 'done';
       onimported?.(importedCount);
     } catch (err) {
@@ -120,10 +160,23 @@
     <div class="modal-body">
       {#if step === 'pick'}
         <div class="pick-step">
-          <p class="pick-hint">Select a CSV file to import.</p>
-          <button class="btn btn--primary" onclick={pickFile} disabled={loading}>
-            {loading ? 'Loading…' : 'Choose File'}
-          </button>
+          {#if source === 'clipboard'}
+            <p class="pick-hint">Paste CSV data below.</p>
+            <textarea
+              class="paste-area"
+              placeholder="Paste CSV here…"
+              bind:value={clipboardText}
+              aria-label="CSV data to import"
+            ></textarea>
+            <button class="btn btn--primary" onclick={() => loadPreviewFromText(clipboardText)} disabled={loading || !clipboardText.trim()}>
+              {loading ? 'Loading…' : 'Preview'}
+            </button>
+          {:else}
+            <p class="pick-hint">Select a CSV file to import.</p>
+            <button class="btn btn--primary" onclick={pickFile} disabled={loading}>
+              {loading ? 'Loading…' : 'Choose File'}
+            </button>
+          {/if}
           {#if error}
             <div class="error-msg">{error}</div>
           {/if}
@@ -131,10 +184,12 @@
 
       {:else if step === 'preview' && preview}
         <div class="preview-step">
+          {#if source === 'file'}
           <div class="file-row">
             <span class="file-path">{filePath}</span>
             <button class="btn btn--ghost btn--sm" onclick={pickFile}>Change</button>
           </div>
+          {/if}
 
           <div class="table-settings">
             <div class="setting-row">
@@ -302,6 +357,23 @@
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
   }
+
+  .paste-area {
+    width: 100%;
+    min-height: 160px;
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .paste-area:focus { border-color: var(--color-accent); }
 
   .preview-step {
     display: flex;

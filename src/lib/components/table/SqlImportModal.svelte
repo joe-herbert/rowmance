@@ -1,20 +1,21 @@
 <!--
-  SqlImportModal — imports a SQL file, showing progress as statements execute.
+  SqlImportModal — imports a SQL file or clipboard text, showing progress as statements execute.
 -->
 <script lang="ts">
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import * as importApi from '$lib/tauri/import';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     connectionId: string;
+    source?: 'file' | 'clipboard';
     onclose: () => void;
     onimported?: (statementCount: number) => void;
   }
 
-  const { connectionId, onclose, onimported }: Props = $props();
+  const { connectionId, source = 'file', onclose, onimported }: Props = $props();
 
   interface ProgressEvent {
     current: number;
@@ -27,6 +28,7 @@
 
   let phase = $state<Phase>('pick');
   let filePath = $state('');
+  let sqlText = $state('');
   let stopOnError = $state(true);
   let progress = $state<ProgressEvent | null>(null);
   let errors = $state<string[]>([]);
@@ -35,6 +37,17 @@
   let loading = $state(false);
 
   let unlisten: UnlistenFn | null = null;
+
+  onMount(async () => {
+    if (source === 'clipboard') {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text.trim()) sqlText = text;
+      } catch {
+        // clipboard read failed — user will paste manually
+      }
+    }
+  });
 
   onDestroy(() => {
     unlisten?.();
@@ -51,14 +64,14 @@
   }
 
   async function startImport() {
-    if (!filePath) return;
+    if (source === 'file' && !filePath) return;
+    if (source === 'clipboard' && !sqlText.trim()) return;
     phase = 'running';
     errors = [];
     error = null;
     progress = null;
     loading = true;
 
-    // Listen for progress events.
     unlisten = await listen<ProgressEvent>('import-sql-progress', (event) => {
       progress = event.payload;
       if (event.payload.error) {
@@ -67,7 +80,11 @@
     });
 
     try {
-      executedCount = await importApi.importSqlFile(connectionId, filePath, stopOnError);
+      if (source === 'clipboard') {
+        executedCount = await importApi.importSqlText(connectionId, sqlText, stopOnError);
+      } else {
+        executedCount = await importApi.importSqlFile(connectionId, filePath, stopOnError);
+      }
       phase = 'done';
       onimported?.(executedCount);
     } catch (err) {
@@ -108,17 +125,26 @@
     <div class="modal-body">
       {#if phase === 'pick'}
         <div class="pick-step">
-          <div class="file-picker-row">
-            <input
-              class="file-input"
-              type="text"
-              value={filePath}
-              readonly
-              placeholder="No file selected…"
-              aria-label="SQL file path"
-            />
-            <button class="btn btn--ghost btn--sm" onclick={pickFile}>Browse</button>
-          </div>
+          {#if source === 'clipboard'}
+            <textarea
+              class="paste-area"
+              placeholder="Paste SQL here…"
+              bind:value={sqlText}
+              aria-label="SQL statements to execute"
+            ></textarea>
+          {:else}
+            <div class="file-picker-row">
+              <input
+                class="file-input"
+                type="text"
+                value={filePath}
+                readonly
+                placeholder="No file selected…"
+                aria-label="SQL file path"
+              />
+              <button class="btn btn--ghost btn--sm" onclick={pickFile}>Browse</button>
+            </div>
+          {/if}
 
           <div class="option-row">
             <label class="option-label" for="stop-on-error">
@@ -190,7 +216,7 @@
         <button
           class="btn btn--primary"
           onclick={startImport}
-          disabled={!filePath}
+          disabled={source === 'clipboard' ? !sqlText.trim() : !filePath}
         >
           Import
         </button>
@@ -271,6 +297,23 @@
     flex-direction: column;
     gap: var(--spacing-4);
   }
+
+  .paste-area {
+    width: 100%;
+    min-height: 200px;
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .paste-area:focus { border-color: var(--color-accent); }
 
   .file-picker-row {
     display: flex;

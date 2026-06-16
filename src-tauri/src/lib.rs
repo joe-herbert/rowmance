@@ -95,8 +95,11 @@ pub fn run() {
             commands::export::export_result_to_file,
             // Import
             commands::import::import_csv_preview,
+            commands::import::import_csv_preview_text,
             commands::import::import_csv_execute,
+            commands::import::import_csv_execute_text,
             commands::import::import_sql_file,
+            commands::import::import_sql_text,
             // ERD
             commands::erd::erd_get_graph,
             // Themes
