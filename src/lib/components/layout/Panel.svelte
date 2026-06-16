@@ -41,11 +41,14 @@
       <QueryEditor connectionId={panel.content.connectionId} initialSql={panel.content.initialSql} />
     {/key}
   {:else if panel.content.kind === 'table_browser'}
-    <TableBrowser
-      connectionId={panel.content.connectionId}
-      database={panel.content.database}
-      table={panel.content.table}
-    />
+    {#key panel.content}
+      <TableBrowser
+        connectionId={panel.content.connectionId}
+        database={panel.content.database}
+        table={panel.content.table}
+        initialFilter={panel.content.initialFilter}
+      />
+    {/key}
   {:else if panel.content.kind === 'ddl_viewer'}
     <DdlViewer
       connectionId={panel.content.connectionId}

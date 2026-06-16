@@ -200,7 +200,7 @@ export interface UpdateCheckResult { available: boolean; version: string | null;
 
 export type PanelKind =
   | { kind: 'query_editor'; connectionId: string; initialSql?: string }
-  | { kind: 'table_browser'; connectionId: string; database: string; table: string }
+  | { kind: 'table_browser'; connectionId: string; database: string; table: string; initialFilter?: string }
   | { kind: 'ddl_viewer'; connectionId: string; database: string; objectName: string; objectType: 'table' | 'view' }
   | { kind: 'erd'; connectionId: string; database: string }
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
@@ -229,6 +229,7 @@ export interface AppSettings {
   autoUpdateCheck: boolean;
   transactionMode: boolean;
   historyMaxEntries: number;
+  sidebarFloating: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -244,6 +245,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoUpdateCheck: true,
   transactionMode: false,
   historyMaxEntries: 500,
+  sidebarFloating: false,
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

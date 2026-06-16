@@ -2,6 +2,7 @@
   import { executeQuery, updateRows } from '$lib/tauri/query';
   import type { RowChange } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import type { QueryResult, ColumnMeta } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import DataTable from '$lib/components/table/DataTable.svelte';
@@ -15,17 +16,19 @@
     connectionId: string;
     database: string;
     table: string;
+    initialFilter?: string;
   }
 
-  let { connectionId, database, table }: Props = $props();
+  let { connectionId, database, table, initialFilter }: Props = $props();
 
   const connections = useConnections();
+  const cellSelectionStore = useCellSelection();
 
   const PAGE_SIZE = 50;
 
   let page = $state(1);
-  let filterValue = $state('');
-  let pendingFilter = $state('');
+  let filterValue = $state(initialFilter ?? '');
+  let pendingFilter = $state(initialFilter ?? '');
   let result = $state<QueryResult | null>(null);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -160,10 +163,11 @@
     const _conn = connectionId;
     const _db = database;
     const _tbl = table;
+    const _filter = initialFilter;
 
     page = 1;
-    filterValue = '';
-    pendingFilter = '';
+    filterValue = initialFilter ?? '';
+    pendingFilter = initialFilter ?? '';
     pendingChanges = new Map();
     hiddenColumns = new Set();
     showColumnPicker = false;
@@ -280,6 +284,23 @@
   function handleExportKeydown(e: KeyboardEvent): void {
     if (e.key === 'Enter') confirmTableNameExport();
     else if (e.key === 'Escape') cancelTableNameExport();
+  }
+
+  // ── Cell selection (feeds the Relations panel) ────────────────────────────
+
+  function handleCellSelect(colIndex: number, row: CellValue[]): void {
+    if (!result) return;
+    const col = result.columns[colIndex];
+    if (!col) return;
+    cellSelectionStore.set({
+      connectionId,
+      database,
+      table,
+      columnName: col.name,
+      cellValue: row[colIndex],
+      row,
+      columns: result.columns,
+    });
   }
 
   // ── Table browser ref (for focus detection) ────────────────────────────────
@@ -566,6 +587,7 @@
           editable={true}
           {hiddenColumns}
           onChangePending={handleChangePending}
+          onCellSelect={handleCellSelect}
         />
       {/key}
     {:else}

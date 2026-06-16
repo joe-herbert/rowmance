@@ -23,10 +23,13 @@
   let rightWidth = $state(280);
   let rightVisible = $state(true);
 
+  const SIDEBAR_INSET = 0;
+
   // ── Update notification ───────────────────────────────────────────────────
 
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
+  const sidebarFloating = $derived(settings.sidebarFloating);
   const panelStore = usePanels();
 
   function openSettings() {
@@ -125,7 +128,7 @@
 
 <div
   class="app-shell-wrapper"
-  style="--sidebar-width: {leftVisible ? leftWidth : 0}px; --right-sidebar-width: {rightWidth}px;"
+  style="--sidebar-width: {leftVisible ? leftWidth + SIDEBAR_INSET : 0}px; --right-sidebar-width: {rightWidth}px;"
 >
   {#if isMacOS}
     <div class="titlebar" data-tauri-drag-region aria-hidden="true"></div>
@@ -162,7 +165,7 @@
 >
   <!-- Left sidebar (toggleable) -->
   {#if leftVisible}
-    <aside class="left-sidebar" style="width: {leftWidth}px;">
+    <aside class="left-sidebar" class:floating={sidebarFloating} style="width: {leftWidth}px;">
       <Sidebar onClose={toggleLeftSidebar} />
     </aside>
   {/if}
@@ -186,7 +189,7 @@
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize left sidebar"
-      style="left: {leftWidth}px;"
+      style="left: {leftWidth + SIDEBAR_INSET}px;"
       onpointerdown={(e) => onResizePointerDown('left', e)}
       class:dragging={dragging === 'left'}
     ></div>
@@ -204,7 +207,7 @@
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize right sidebar"
-      style="right: {rightWidth}px;"
+      style="right: {rightWidth + SIDEBAR_INSET}px;"
       onpointerdown={(e) => onResizePointerDown('right', e)}
       class:dragging={dragging === 'right'}
     ></div>
@@ -212,7 +215,7 @@
 
   <!-- Right sidebar (toggleable) -->
   {#if rightVisible}
-    <aside class="right-sidebar" style="width: {rightWidth}px;">
+    <aside class="right-sidebar" class:floating={sidebarFloating} style="width: {rightWidth}px;">
       <RightSidebar onClose={toggleRightSidebar} />
     </aside>
   {/if}
@@ -347,11 +350,22 @@
 
   .left-sidebar {
     flex-shrink: 0;
-    height: 100%;
     overflow: hidden;
-    border-right: 1px solid var(--color-border);
     background: var(--color-bg-secondary);
-    position: relative;
+    margin: 0;
+    border-right: 1px solid var(--color-border);
+  }
+
+  .left-sidebar.floating {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    bottom: 8px;
+    margin: 0;
+    z-index: 15;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
   }
 
   .main-area {
@@ -365,10 +379,22 @@
 
   .right-sidebar {
     flex-shrink: 0;
-    height: 100%;
     overflow: hidden;
     border-left: 1px solid var(--color-border);
     background: var(--color-bg-secondary);
+    margin: 0;
+  }
+
+  .right-sidebar.floating {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    bottom: 8px;
+    margin: 0;
+    z-index: 15;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
   }
 
   .left-resize {

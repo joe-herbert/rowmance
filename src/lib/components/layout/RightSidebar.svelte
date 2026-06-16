@@ -10,8 +10,9 @@
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
 
-  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | null;
+  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
 
   interface Props {
     onClose: () => void;
@@ -33,6 +34,8 @@
       if (panel === 'saved') loadSavedQueries();
     }
   }
+
+  // ── Relations panel ───────────────────────────────────────────────────────
 
   // ── Column Inspector placeholder ──────────────────────────────────────────────
   // Future: receive selected column via event or store; for now, shows a hint.
@@ -287,6 +290,18 @@
       ℹ
     </button>
 
+    <button
+      class="tab-btn"
+      class:active={activePanel === 'relations'}
+      role="tab"
+      aria-selected={activePanel === 'relations'}
+      aria-controls="panel-relations"
+      title="Relations"
+      onclick={(e) => { e.stopPropagation(); selectPanel('relations'); }}
+    >
+      ↔
+    </button>
+
     <div class="spacer"></div>
 
     <button class="tab-btn close-btn" title="Close sidebar" onclick={onClose} aria-label="Close sidebar">
@@ -492,6 +507,14 @@
         <div class="placeholder-panel">
           <p>Open a table from the schema tree to see its details here.</p>
         </div>
+      </div>
+
+    {:else if activePanel === 'relations'}
+      <div id="panel-relations" role="tabpanel" aria-label="Relations" class="relations-tabpanel">
+        <div class="panel-toolbar">
+          <span class="panel-title">Relations</span>
+        </div>
+        <RelationsPanel />
       </div>
     {/if}
   </div>
@@ -892,5 +915,10 @@
     color: var(--color-text-muted);
     font-style: italic;
     line-height: var(--line-height-normal);
+  }
+
+  .relations-tabpanel {
+    flex: 1;
+    overflow: hidden;
   }
 </style>

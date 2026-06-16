@@ -234,6 +234,19 @@
             <option value="dark">Dark</option>
           </select>
         </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Floating Sidebars</span>
+            <span class="label-hint">Sidebars overlay the main content instead of pushing it</span>
+          </div>
+          <input
+            type="checkbox"
+            class="setting-checkbox"
+            checked={settings.sidebarFloating}
+            onchange={(e) => update('sidebarFloating', (e.currentTarget as HTMLInputElement).checked)}
+          />
+        </div>
       </div>
 
       <div class="appearance-section-title">Custom Themes</div>

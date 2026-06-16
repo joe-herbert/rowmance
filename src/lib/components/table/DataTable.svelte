@@ -17,6 +17,7 @@
     editable?: boolean;
     hiddenColumns?: Set<string>;
     onChangePending?: (changes: Map<string, Map<string, CellValue>>) => void;
+    onCellSelect?: (originalColIndex: number, row: CellValue[]) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -101,6 +102,7 @@
     editable = false,
     hiddenColumns = new Set<string>(),
     onChangePending,
+    onCellSelect,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -632,7 +634,10 @@
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
-                onfocus={() => (focusedCell = { row: rowIndex, col: colIndex })}
+                onfocus={() => {
+                  focusedCell = { row: rowIndex, col: colIndex };
+                  onCellSelect?.(originalIndex, row);
+                }}
                 title={editable ? 'Double-click or press Enter to edit' : undefined}
               >
                 {#if cellValue === null}
