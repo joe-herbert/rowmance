@@ -25,6 +25,7 @@ export type ShortcutAction =
   | 'PANEL_NEXT'
   | 'PANEL_PREV'
   | 'PANEL_CLOSE'
+  | 'TOGGLE_LEFT_SIDEBAR'
   | 'TOGGLE_RIGHT_SIDEBAR'
   | 'TABLE_SAVE_CHANGES'
   | 'TABLE_DISCARD_CHANGES'
@@ -122,6 +123,13 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+W',
     jetbrains: 'Mod+F4',
     vim: ':q',
+  },
+  {
+    action: 'TOGGLE_LEFT_SIDEBAR',
+    label: 'Toggle Left Sidebar',
+    vscode: 'Mod+Shift+B',
+    jetbrains: 'Mod+B',
+    vim: 'Mod+Shift+B',
   },
   {
     action: 'TOGGLE_RIGHT_SIDEBAR',

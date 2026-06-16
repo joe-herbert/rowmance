@@ -19,6 +19,7 @@
   // ── Sidebar widths (persisted as CSS variables) ───────────────────────────
 
   let leftWidth = $state(240);
+  let leftVisible = $state(true);
   let rightWidth = $state(280);
   let rightVisible = $state(true);
 
@@ -97,12 +98,17 @@
     dragging = null;
   }
 
+  function toggleLeftSidebar() {
+    leftVisible = !leftVisible;
+  }
+
   function toggleRightSidebar() {
     rightVisible = !rightVisible;
   }
 
   function handleShortcutAction(e: Event) {
     const action = (e as CustomEvent<{ action: string }>).detail.action;
+    if (action === 'TOGGLE_LEFT_SIDEBAR') toggleLeftSidebar();
     if (action === 'TOGGLE_RIGHT_SIDEBAR') toggleRightSidebar();
     if (action === 'NEW_WINDOW') openNewWindow();
     if (action === 'OPEN_SETTINGS') openSettings();
@@ -119,7 +125,7 @@
 
 <div
   class="app-shell-wrapper"
-  style="--sidebar-width: {leftWidth}px; --right-sidebar-width: {rightWidth}px;"
+  style="--sidebar-width: {leftVisible ? leftWidth : 0}px; --right-sidebar-width: {rightWidth}px;"
 >
   {#if isMacOS}
     <div class="titlebar" data-tauri-drag-region aria-hidden="true"></div>
@@ -154,21 +160,37 @@
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
 >
-  <!-- Left sidebar -->
-  <aside class="left-sidebar" style="width: {leftWidth}px;">
-    <Sidebar />
-  </aside>
+  <!-- Left sidebar (toggleable) -->
+  {#if leftVisible}
+    <aside class="left-sidebar" style="width: {leftWidth}px;">
+      <Sidebar onClose={toggleLeftSidebar} />
+    </aside>
+  {/if}
+
+  <!-- Floating toggle button when left sidebar is hidden -->
+  {#if !leftVisible}
+    <button
+      class="left-sidebar-toggle"
+      onclick={toggleLeftSidebar}
+      aria-label="Show left sidebar"
+      title="Show left sidebar"
+    >
+      ›
+    </button>
+  {/if}
 
   <!-- Resize handle: left sidebar ↔ main area -->
-  <div
-    class="resize-handle resize-handle--horizontal left-resize"
-    role="separator"
-    aria-orientation="vertical"
-    aria-label="Resize left sidebar"
-    style="left: {leftWidth}px;"
-    onpointerdown={(e) => onResizePointerDown('left', e)}
-    class:dragging={dragging === 'left'}
-  ></div>
+  {#if leftVisible}
+    <div
+      class="resize-handle resize-handle--horizontal left-resize"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize left sidebar"
+      style="left: {leftWidth}px;"
+      onpointerdown={(e) => onResizePointerDown('left', e)}
+      class:dragging={dragging === 'left'}
+    ></div>
+  {/if}
 
   <!-- Main split-panel area -->
   <main id="main-content" class="main-area">
@@ -365,6 +387,32 @@
     width: 4px;
     transform: translateX(2px);
     z-index: 20;
+  }
+
+  .left-sidebar-toggle {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-left: none;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-lg);
+    cursor: pointer;
+    z-index: 10;
+    transition: background var(--transition-fast);
+  }
+
+  .left-sidebar-toggle:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 
   .right-sidebar-toggle {

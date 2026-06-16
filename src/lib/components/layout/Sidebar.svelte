@@ -8,6 +8,12 @@
   import SidebarTopHalf from './SidebarTopHalf.svelte';
   import SidebarBottomHalf from './SidebarBottomHalf.svelte';
 
+  interface Props {
+    onClose: () => void;
+  }
+
+  const { onClose }: Props = $props();
+
   // Top half height as a percentage of the sidebar total height.
   let topHeightPct = $state(35);
 
@@ -39,6 +45,7 @@
   onpointermove={onDividerPointerMove}
   onpointerup={onDividerPointerUp}
 >
+  <button class="collapse-btn" onclick={onClose} title="Collapse sidebar" aria-label="Collapse left sidebar">‹</button>
   <div class="top-half" style="height: {topHeightPct}%;">
     <SidebarTopHalf />
   </div>
@@ -86,5 +93,31 @@
   .divider.dragging {
     background: var(--color-accent);
     opacity: 0.5;
+  }
+
+  .collapse-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-lg);
+    cursor: pointer;
+    z-index: 10;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    line-height: 1;
+    padding: 0;
+  }
+
+  .collapse-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 </style>
