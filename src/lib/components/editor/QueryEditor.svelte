@@ -480,6 +480,7 @@
     });
 
     editorView = new EditorView({ state, parent: editorContainer });
+    editorView.focus();
 
     return () => {
       editorView?.destroy();

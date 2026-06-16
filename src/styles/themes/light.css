@@ -1,21 +1,117 @@
-/* Light theme — these are also the defaults in variables.css so this file
-   is here primarily as a named override target when switching themes. */
+/* Light glassmorphism theme — frosted panels over a soft pastel aurora background. */
+
+/* Explicit light theme selection */
 [data-theme='light'] {
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f5f5f5;
-  --color-bg-tertiary: #ebebeb;
-  --color-bg-overlay: #ffffff;
-  --color-bg-hover: rgba(0, 0, 0, 0.04);
-  --color-bg-active: rgba(0, 0, 0, 0.08);
-  --color-border: #e0e0e0;
-  --color-border-strong: #c0c0c0;
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #555555;
-  --color-text-muted: #999999;
-  --color-editor-bg: #fafafa;
-  --color-editor-text: #1a1a1a;
-  --color-editor-gutter-bg: #f0f0f0;
-  --color-scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --color-scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+  --app-background:
+    radial-gradient(130% 130% at 8% -10%, #d9c6ff 0%, transparent 46%),
+    radial-gradient(120% 120% at 108% 6%, #c2ddff 0%, transparent 50%),
+    radial-gradient(120% 130% at 74% 116%, #c4f3e4 0%, transparent 55%),
+    linear-gradient(155deg, #f2eefb, #eaf0fb);
+  --glass-blur: blur(22px) saturate(160%);
+
+  --color-bg-primary: rgba(255, 255, 255, 0.58);
+  --color-bg-secondary: rgba(255, 255, 255, 0.50);
+  --color-bg-tertiary: rgba(255, 255, 255, 0.42);
+  --color-bg-overlay: rgba(245, 243, 255, 0.90);
+  --color-bg-hover: rgba(255, 255, 255, 0.55);
+  --color-bg-active: rgba(255, 255, 255, 0.65);
+
+  --color-border: rgba(120, 110, 180, 0.18);
+  --color-border-strong: rgba(100, 90, 160, 0.28);
+
+  --color-text-primary: #26262f;
+  --color-text-secondary: rgba(38, 38, 47, 0.62);
+  --color-text-muted: rgba(38, 38, 47, 0.42);
+  --color-text-disabled: rgba(38, 38, 47, 0.28);
+
+  --color-accent: #7c5cff;
+  --color-accent-hover: #6c4ee8;
+  --color-accent-subtle: rgba(124, 92, 255, 0.12);
+
+  --color-editor-bg: rgba(255, 255, 255, 0.62);
+  --color-editor-text: #26262f;
+  --color-editor-gutter-bg: rgba(240, 238, 252, 0.6);
+  --color-editor-gutter-text: rgba(38, 38, 47, 0.35);
+  --color-editor-selection: rgba(124, 92, 255, 0.15);
+  --color-editor-active-line: rgba(124, 92, 255, 0.06);
+  --color-editor-cursor: #7c5cff;
+  --color-editor-keyword: #7c5cff;
+  --color-editor-string: #1f9d6a;
+  --color-editor-number: #b45309;
+  --color-editor-comment: rgba(38, 38, 47, 0.38);
+  --color-editor-function: #0369a1;
+  --color-editor-type: #0891b2;
+  --color-editor-bracket-match: rgba(124, 92, 255, 0.18);
+
+  --color-scrollbar-thumb: rgba(100, 90, 160, 0.18);
+  --color-scrollbar-thumb-hover: rgba(100, 90, 160, 0.32);
+
   --color-table-row-alt: rgba(0, 0, 0, 0.02);
+  --color-table-row-hover: rgba(124, 92, 255, 0.07);
+  --color-table-row-selected: rgba(124, 92, 255, 0.13);
+  --color-table-header-bg: rgba(240, 238, 252, 0.5);
+
+  --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
+  --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
+  --shadow-lg: 0 12px 40px rgba(60, 40, 120, 0.16);
+  --shadow-overlay: 0 24px 60px rgba(60, 40, 120, 0.22);
+}
+
+/* System theme following OS light preference */
+@media (prefers-color-scheme: light) {
+  [data-theme='system'] {
+    --app-background:
+      radial-gradient(130% 130% at 8% -10%, #d9c6ff 0%, transparent 46%),
+      radial-gradient(120% 120% at 108% 6%, #c2ddff 0%, transparent 50%),
+      radial-gradient(120% 130% at 74% 116%, #c4f3e4 0%, transparent 55%),
+      linear-gradient(155deg, #f2eefb, #eaf0fb);
+    --glass-blur: blur(22px) saturate(160%);
+
+    --color-bg-primary: rgba(255, 255, 255, 0.58);
+    --color-bg-secondary: rgba(255, 255, 255, 0.50);
+    --color-bg-tertiary: rgba(255, 255, 255, 0.42);
+    --color-bg-overlay: rgba(245, 243, 255, 0.90);
+    --color-bg-hover: rgba(255, 255, 255, 0.55);
+    --color-bg-active: rgba(255, 255, 255, 0.65);
+
+    --color-border: rgba(120, 110, 180, 0.18);
+    --color-border-strong: rgba(100, 90, 160, 0.28);
+
+    --color-text-primary: #26262f;
+    --color-text-secondary: rgba(38, 38, 47, 0.62);
+    --color-text-muted: rgba(38, 38, 47, 0.42);
+    --color-text-disabled: rgba(38, 38, 47, 0.28);
+
+    --color-accent: #7c5cff;
+    --color-accent-hover: #6c4ee8;
+    --color-accent-subtle: rgba(124, 92, 255, 0.12);
+
+    --color-editor-bg: rgba(255, 255, 255, 0.62);
+    --color-editor-text: #26262f;
+    --color-editor-gutter-bg: rgba(240, 238, 252, 0.6);
+    --color-editor-gutter-text: rgba(38, 38, 47, 0.35);
+    --color-editor-selection: rgba(124, 92, 255, 0.15);
+    --color-editor-active-line: rgba(124, 92, 255, 0.06);
+    --color-editor-cursor: #7c5cff;
+    --color-editor-keyword: #7c5cff;
+    --color-editor-string: #1f9d6a;
+    --color-editor-number: #b45309;
+    --color-editor-comment: rgba(38, 38, 47, 0.38);
+    --color-editor-function: #0369a1;
+    --color-editor-type: #0891b2;
+    --color-editor-bracket-match: rgba(124, 92, 255, 0.18);
+
+    --color-scrollbar-thumb: rgba(100, 90, 160, 0.18);
+    --color-scrollbar-thumb-hover: rgba(100, 90, 160, 0.32);
+
+    --color-table-row-alt: rgba(0, 0, 0, 0.02);
+    --color-table-row-hover: rgba(124, 92, 255, 0.07);
+    --color-table-row-selected: rgba(124, 92, 255, 0.13);
+    --color-table-header-bg: rgba(240, 238, 252, 0.5);
+
+    --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
+    --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
+    --shadow-lg: 0 12px 40px rgba(60, 40, 120, 0.16);
+    --shadow-overlay: 0 24px 60px rgba(60, 40, 120, 0.22);
+  }
 }

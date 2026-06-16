@@ -287,7 +287,9 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.35);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: flex-start;
     justify-content: center;
@@ -297,8 +299,10 @@
 
   .palette {
     background: var(--color-bg-overlay);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-xl);
     box-shadow: var(--shadow-overlay);
     width: 560px;
     max-width: calc(100vw - var(--spacing-8));

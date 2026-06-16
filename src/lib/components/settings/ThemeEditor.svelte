@@ -5,17 +5,34 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as themesApi from '$lib/tauri/themes';
+  import { syncTrafficLightPosition } from '$lib/tauri/window';
   import type { ThemeData } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     themeName: string;
+    onrename?: (newName: string) => Promise<void>;
   }
 
-  const { themeName }: Props = $props();
+  const { themeName, onrename }: Props = $props();
 
   // Variable groups drawn from the design token structure in variables.css.
   const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
+    {
+      label: 'Background',
+      vars: [
+        '--app-background',
+        '--glass-blur',
+      ],
+    },
+    {
+      label: 'Panels',
+      vars: [
+        '--panel-spacing',
+        '--panel-radius',
+        '--panel-opacity',
+      ],
+    },
     {
       label: 'Colours',
       vars: [
@@ -45,11 +62,38 @@
       ],
     },
     {
+      label: 'Connections',
+      vars: [
+        '--color-connection-connected',
+        '--color-connection-connecting',
+        '--color-connection-error',
+      ],
+    },
+    {
+      label: 'Scrollbar',
+      vars: [
+        '--color-scrollbar-thumb',
+        '--color-scrollbar-thumb-hover',
+        '--color-scrollbar-track',
+      ],
+    },
+    {
+      label: 'Table',
+      vars: [
+        '--color-table-row-alt',
+        '--color-table-row-hover',
+        '--color-table-row-selected',
+        '--color-table-header-bg',
+      ],
+    },
+    {
       label: 'Typography',
       vars: [
         '--font-family-ui', '--font-family-mono',
         '--font-size-xs', '--font-size-sm', '--font-size-md',
         '--font-size-lg', '--font-size-xl',
+        '--font-weight-normal', '--font-weight-medium', '--font-weight-semibold',
+        '--line-height-tight', '--line-height-normal',
       ],
     },
     {
@@ -59,11 +103,35 @@
         '--spacing-5', '--spacing-6', '--spacing-8',
       ],
     },
+    {
+      label: 'Radius',
+      vars: [
+        '--radius-sm', '--radius-md', '--radius-lg', '--radius-xl',
+      ],
+    },
+    {
+      label: 'Shadows',
+      vars: [
+        '--shadow-sm', '--shadow-md', '--shadow-lg', '--shadow-overlay',
+      ],
+    },
+    {
+      label: 'Transitions',
+      vars: [
+        '--transition-fast', '--transition-md', '--transition-slow',
+      ],
+    },
   ];
 
   let themeData = $state<ThemeData | null>(null);
   let loadError = $state<string | null>(null);
   let saveError = $state<string | null>(null);
+  let renameError = $state<string | null>(null);
+  let editingName = $state('');
+
+  $effect(() => {
+    editingName = themeName;
+  });
 
   // Local overrides: variable name → value (accumulated edits not yet reflected in themeData)
   let localValues = $state<Record<string, string>>({});
@@ -95,7 +163,20 @@
   function handleChange(varName: string, newValue: string) {
     localValues = { ...localValues, [varName]: newValue };
     document.documentElement.style.setProperty(varName, newValue);
+    if (varName === '--panel-spacing') syncTrafficLightPosition();
     scheduleSave();
+  }
+
+  async function commitRename() {
+    const trimmed = editingName.trim();
+    if (!trimmed || trimmed === themeName || !onrename) return;
+    try {
+      await onrename(trimmed);
+      renameError = null;
+    } catch (err) {
+      editingName = themeName;
+      renameError = errorMessage(err);
+    }
   }
 
   function scheduleSave() {
@@ -124,9 +205,22 @@
     <div class="editor-loading">Loading…</div>
   {:else}
     <div class="editor-meta">
-      <span class="theme-name">{themeData.name}</span>
+      {#if onrename}
+        <input
+          class="theme-name-input"
+          type="text"
+          bind:value={editingName}
+          onblur={commitRename}
+          onkeydown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); if (e.key === 'Escape') { editingName = themeName; (e.currentTarget as HTMLInputElement).blur(); } }}
+          aria-label="Theme name"
+        />
+      {:else}
+        <span class="theme-name">{themeData.name}</span>
+      {/if}
       <span class="theme-extends">extends: {themeData.extends}</span>
-      {#if saveError}
+      {#if renameError}
+        <span class="save-error">{renameError}</span>
+      {:else if saveError}
         <span class="save-error">{saveError}</span>
       {/if}
     </div>
@@ -204,6 +298,31 @@
     font-weight: var(--font-weight-semibold);
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
+  }
+
+  .theme-name-input {
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 1px var(--spacing-1);
+    outline: none;
+    font-family: var(--font-family-ui);
+    min-width: 80px;
+    max-width: 200px;
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+  }
+
+  .theme-name-input:hover {
+    border-color: var(--color-border);
+    background: var(--color-bg-secondary);
+  }
+
+  .theme-name-input:focus {
+    border-color: var(--color-accent);
+    background: var(--color-bg-secondary);
   }
 
   .theme-extends {

@@ -21,3 +21,7 @@ export async function themesDelete(name: string): Promise<void> {
 export async function themesDuplicate(source: string, newName: string): Promise<ThemeMeta> {
   return invoke<ThemeMeta>('themes_duplicate', { source, newName });
 }
+
+export async function themesRename(oldName: string, newName: string): Promise<ThemeMeta> {
+  return invoke<ThemeMeta>('themes_rename', { oldName, newName });
+}

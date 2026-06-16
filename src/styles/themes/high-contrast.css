@@ -4,6 +4,9 @@
  */
 
 [data-theme='high-contrast'] {
+  --app-background: #000000;
+  --glass-blur: none;
+
   --color-bg-primary: #000000;
   --color-bg-secondary: #0a0a0a;
   --color-bg-tertiary: #111111;
@@ -75,6 +78,7 @@
   --radius-md: 0px;
   --radius-lg: 2px;
   --radius-xl: 2px;
+  --panel-radius: 2px;
 }
 
 /* Respect the OS forced-colors mode (Windows High Contrast, etc.) */

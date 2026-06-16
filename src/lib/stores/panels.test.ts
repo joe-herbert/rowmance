@@ -113,4 +113,53 @@ describe('usePanels', () => {
     expect(store.panels[1]?.content).toEqual({ kind: 'erd', connectionId: 'conn-2', database: 'analytics' });
     expect(store.panels[0].content.kind).toBe('empty');
   });
+
+  it('openInFocused adds to openItems', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    expect(store.openItems).toHaveLength(1);
+    expect(store.openItems[0].content).toMatchObject({ kind: 'table_browser', table: 'users' });
+  });
+
+  it('openInFocused deduplicates table_browser items', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    store.split('right');
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    expect(store.openItems).toHaveLength(1);
+  });
+
+  it('opening a second table keeps first in openItems', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'orders' });
+    expect(store.openItems).toHaveLength(2);
+    expect(store.panels[0].content).toMatchObject({ table: 'orders' });
+  });
+
+  it('closeOpenItem removes item and resets displaying panel', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    const itemId = store.openItems[0].id;
+    store.closeOpenItem(itemId);
+    expect(store.openItems).toHaveLength(0);
+    expect(store.panels[0].content.kind).toBe('empty');
+  });
+
+  it('closePanel does not remove item from openItems', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    store.split('right');
+    store.closePanel(0);
+    expect(store.openItems).toHaveLength(1);
+  });
+
+  it('openInFocused focuses existing panel when content is already shown', () => {
+    const store = usePanels();
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    store.split('right');
+    store.focus(1);
+    store.openInFocused({ kind: 'table_browser', connectionId: 'c', database: 'db', table: 'users' });
+    expect(store.focusedIndex).toBe(0);
+  });
 });

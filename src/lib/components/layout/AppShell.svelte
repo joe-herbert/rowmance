@@ -4,7 +4,7 @@
   Handles horizontal resize of both sidebars via pointer-drag.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Sidebar from './Sidebar.svelte';
   import SplitPanel from './SplitPanel.svelte';
   import RightSidebar from './RightSidebar.svelte';
@@ -13,8 +13,9 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useShortcuts } from '$lib/stores/shortcuts.svelte';
+  import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
   import * as updaterApi from '$lib/tauri/updater';
-  import { openNewWindow } from '$lib/tauri/window';
+  import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
 
   // ── Sidebar widths (persisted as CSS variables) ───────────────────────────
@@ -35,18 +36,18 @@
   const shortcutsStore = useShortcuts();
 
   function openSettings() {
-    const existingIdx = panelStore.panels.findIndex(p => p.content.kind === 'settings');
-    if (existingIdx !== -1) {
-      panelStore.focus(existingIdx);
-    } else {
-      panelStore.openInFocused({ kind: 'settings' });
-    }
+    panelStore.openInFocused({ kind: 'settings' });
   }
 
   interface UpdateInfo { version: string; notes: string | null }
   let pendingUpdate = $state<UpdateInfo | null>(null);
   let updateDismissed = $state(false);
   let installing = $state(false);
+
+  $effect(() => {
+    const _theme = settings.theme;
+    tick().then(syncTrafficLightPosition);
+  });
 
   onMount(async () => {
     shortcutsStore.load(settings.shortcutPreset);
@@ -119,6 +120,7 @@
     if (action === 'TOGGLE_RIGHT_SIDEBAR') toggleRightSidebar();
     if (action === 'NEW_WINDOW') openNewWindow();
     if (action === 'OPEN_SETTINGS') openSettings();
+    if (action === 'COMMAND_PALETTE') openPalette();
     if (action === 'NEW_QUERY_EDITOR') {
       const focused = panelStore.focusedPanel.content;
       const connectionId = 'connectionId' in focused ? focused.connectionId : null;
@@ -126,8 +128,13 @@
     }
   }
 
-  // On macOS with titleBarStyle:"overlay" the webview fills behind the traffic
-  // lights, so we render a draggable strip to push content clear of them.
+  let paletteOpen = $state(false);
+
+  function openPalette() { paletteOpen = true; }
+  function closePalette() { paletteOpen = false; }
+
+  // On macOS with titleBarStyle:"overlay" the webview fills behind the native traffic
+  // lights, so we reserve space to push content clear of them.
   const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 </script>
 
@@ -139,9 +146,27 @@
   class="app-shell-wrapper"
   style="--sidebar-width: {leftVisible ? leftWidth + SIDEBAR_INSET : 0}px; --right-sidebar-width: {rightWidth}px;"
 >
-  {#if isMacOS}
-    <div class="titlebar" data-tauri-drag-region aria-hidden="true"></div>
-  {/if}
+  <div class="titlebar-card" data-tauri-drag-region>
+    {#if isMacOS}
+      <div class="traffic-lights-spacer" aria-hidden="true"></div>
+    {/if}
+    <span class="app-title">Rowmance</span>
+    <div class="titlebar-spacer"></div>
+    <button class="titlebar-btn" onclick={openPalette} title="Command palette (⌘K)" aria-label="Open command palette">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <circle cx="11" cy="11" r="7"></circle>
+        <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
+      </svg>
+      <span class="titlebar-btn-label">Search</span>
+      <kbd>⌘K</kbd>
+    </button>
+    <button class="titlebar-btn titlebar-btn--icon" onclick={openSettings} title="Settings" aria-label="Open settings">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+  </div>
 
   {#if pendingUpdate && !updateDismissed}
     <div class="update-banner" role="alert" aria-live="polite">
@@ -167,14 +192,14 @@
   {/if}
 
 <div
-  class="app-shell"
+  class="app-body"
   role="application"
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
 >
   <!-- Left sidebar (toggleable) -->
   {#if leftVisible}
-    <aside class="left-sidebar" class:floating={sidebarFloating} style="width: {leftWidth}px;">
+    <aside class="left-sidebar" style="width: {leftWidth}px;">
       <Sidebar onClose={toggleLeftSidebar} />
     </aside>
   {/if}
@@ -198,7 +223,7 @@
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize left sidebar"
-      style="left: {leftWidth + SIDEBAR_INSET}px;"
+      style="left: {leftWidth}px;"
       onpointerdown={(e) => onResizePointerDown('left', e)}
       class:dragging={dragging === 'left'}
     ></div>
@@ -216,7 +241,7 @@
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize right sidebar"
-      style="right: {rightWidth + SIDEBAR_INSET}px;"
+      style="right: {rightWidth}px;"
       onpointerdown={(e) => onResizePointerDown('right', e)}
       class:dragging={dragging === 'right'}
     ></div>
@@ -224,7 +249,7 @@
 
   <!-- Right sidebar (toggleable) -->
   {#if rightVisible}
-    <aside class="right-sidebar" class:floating={sidebarFloating} style="width: {rightWidth}px;">
+    <aside class="right-sidebar" style="width: {rightWidth}px;">
       <RightSidebar onClose={toggleRightSidebar} />
     </aside>
   {/if}
@@ -246,7 +271,22 @@
 <Toast />
 <OnboardingTip />
 
+{#if paletteOpen}
+  <CommandPalette onclose={closePalette} />
+{/if}
+
 <style>
+  .app-shell-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    padding: var(--panel-spacing);
+    gap: var(--panel-spacing);
+    background: transparent;
+  }
+
   .skip-link {
     position: absolute;
     left: -9999px;
@@ -266,38 +306,85 @@
     left: var(--spacing-4);
   }
 
-  .titlebar {
-    height: 28px;
+  /* ── Title bar card ────────────────────────────────────────────────────── */
+
+  .titlebar-card {
     flex-shrink: 0;
-    /* Left portion matches the sidebar, right matches the main area — hard stop
-       at the sidebar width using the same CSS variable used for layout. */
-    background: linear-gradient(
-      to right,
-      var(--color-bg-secondary) var(--sidebar-width),
-      var(--color-bg-primary) var(--sidebar-width)
-    );
-    /* Keep the border consistent with the sidebar/main-area boundary. */
-    border-bottom: 1px solid var(--color-border);
-    position: relative;
-    z-index: 50;
-  }
-
-  .app-shell-wrapper {
+    height: 46px;
     display: flex;
-    flex-direction: column;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  .app-shell {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    position: relative;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px 0 16px;
     background: var(--color-bg-primary);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border);
+    border-radius: var(--panel-radius);
+    opacity: var(--panel-opacity);
+    position: relative;
+    z-index: 45;
   }
+
+  /* Space reserved for native macOS traffic light buttons (3×12px + 2×8px gap + margins) */
+  .traffic-lights-spacer {
+    width: 68px;
+    flex-shrink: 0;
+  }
+
+  .app-title {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+    letter-spacing: 0.02em;
+    user-select: none;
+  }
+
+  .titlebar-spacer {
+    flex: 1;
+  }
+
+  .titlebar-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .titlebar-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .titlebar-btn--icon {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .titlebar-btn-label {
+    color: var(--color-text-muted);
+  }
+
+  kbd {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+    font-family: var(--font-family-ui);
+  }
+
+  /* ── Update banner ─────────────────────────────────────────────────────── */
 
   .update-banner {
     display: flex;
@@ -305,7 +392,8 @@
     gap: var(--spacing-3);
     padding: var(--spacing-2) var(--spacing-4);
     background: var(--color-warning-subtle);
-    border-bottom: 1px solid var(--color-warning);
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-xl);
     flex-shrink: 0;
   }
 
@@ -339,43 +427,35 @@
     transition: background var(--transition-fast);
   }
 
-  .update-btn:hover {
-    background: rgba(0, 0, 0, 0.05);
+  .update-btn:hover { background: rgba(0, 0, 0, 0.05); }
+  .update-btn--primary { background: var(--color-warning); color: #fff; }
+  .update-btn--primary:hover { opacity: 0.9; }
+  .update-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* ── App body (flex row with sidebar + main + sidebar) ─────────────────── */
+
+  .app-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: var(--panel-spacing);
+    position: relative;
   }
 
-  .update-btn--primary {
-    background: var(--color-warning);
-    color: #fff;
-  }
-
-  .update-btn--primary:hover {
-    opacity: 0.9;
-  }
-
-  .update-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+  /* ── Left sidebar card ─────────────────────────────────────────────────── */
 
   .left-sidebar {
     flex-shrink: 0;
     overflow: hidden;
     background: var(--color-bg-secondary);
-    margin: 0;
-    border-right: 1px solid var(--color-border);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border);
+    border-radius: var(--panel-radius);
+    opacity: var(--panel-opacity);
   }
 
-  .left-sidebar.floating {
-    position: absolute;
-    left: 8px;
-    top: 8px;
-    bottom: 8px;
-    margin: 0;
-    z-index: 15;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-  }
+  /* ── Main content area ─────────────────────────────────────────────────── */
 
   .main-area {
     flex: 1;
@@ -384,65 +464,79 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    background: var(--color-bg-primary);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border);
+    border-radius: var(--panel-radius);
+    opacity: var(--panel-opacity);
   }
+
+  /* ── Right sidebar card ────────────────────────────────────────────────── */
 
   .right-sidebar {
     flex-shrink: 0;
     overflow: hidden;
-    border-left: 1px solid var(--color-border);
+    border: 1px solid var(--color-border);
     background: var(--color-bg-secondary);
-    margin: 0;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-radius: var(--panel-radius);
+    opacity: var(--panel-opacity);
   }
 
-  .right-sidebar.floating {
-    position: absolute;
-    right: 8px;
-    top: 8px;
-    bottom: 8px;
-    margin: 0;
-    z-index: 15;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-  }
+  /* ── Resize handles ─────────────────────────────────────────────────────── */
 
   .left-resize {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 4px;
-    transform: translateX(-2px);
+    width: var(--panel-spacing);
     z-index: 20;
+    cursor: col-resize;
+    background: transparent;
   }
 
   .right-resize {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 4px;
-    transform: translateX(2px);
+    width: var(--panel-spacing);
     z-index: 20;
+    cursor: col-resize;
+    background: transparent;
   }
+
+  .left-resize:hover,
+  .left-resize.dragging,
+  .right-resize:hover,
+  .right-resize.dragging {
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    border-radius: var(--radius-sm);
+  }
+
+  /* ── Sidebar toggle buttons (when sidebar is hidden) ───────────────────── */
 
   .left-sidebar-toggle {
     position: absolute;
     left: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 20px;
-    height: 48px;
+    width: 28px;
+    height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--color-bg-tertiary);
+    background: var(--color-bg-secondary);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--color-border);
-    border-left: none;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    color: var(--color-text-secondary);
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    color: var(--color-text-muted);
     font-size: var(--font-size-lg);
     cursor: pointer;
     z-index: 10;
-    transition: background var(--transition-fast);
+    transition: background var(--transition-fast), color var(--transition-fast);
   }
 
   .left-sidebar-toggle:hover {
@@ -455,20 +549,21 @@
     right: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 20px;
-    height: 48px;
+    width: 28px;
+    height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--color-bg-tertiary);
+    background: var(--color-bg-secondary);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--color-border);
-    border-right: none;
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-    color: var(--color-text-secondary);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    color: var(--color-text-muted);
     font-size: var(--font-size-lg);
     cursor: pointer;
     z-index: 10;
-    transition: background var(--transition-fast);
+    transition: background var(--transition-fast), color var(--transition-fast);
   }
 
   .right-sidebar-toggle:hover {

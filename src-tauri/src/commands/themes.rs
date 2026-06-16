@@ -105,9 +105,26 @@ pub fn themes_delete(name: String) -> Result<(), AppError> {
 }
 
 #[command]
+pub fn themes_rename(old_name: String, new_name: String) -> Result<ThemeMeta, AppError> {
+    let dir = themes_dir()?;
+    let mut data = read_in_dir(&dir, &old_name)?;
+    data.name = new_name.clone();
+    write_in_dir(&dir, &new_name, &data)?;
+    if old_name != new_name {
+        delete_in_dir(&dir, &old_name)?;
+    }
+    Ok(ThemeMeta { name: new_name, extends: data.extends })
+}
+
+#[command]
 pub fn themes_duplicate(source: String, new_name: String) -> Result<ThemeMeta, AppError> {
     let dir = themes_dir()?;
-    let mut data = read_in_dir(&dir, &source)?;
+    // If source doesn't exist on disk it's a built-in theme; start with empty variables.
+    let mut data = read_in_dir(&dir, &source).unwrap_or_else(|_| ThemeData {
+        name: source.clone(),
+        extends: source.clone(),
+        variables: HashMap::new(),
+    });
     data.name = new_name.clone();
     write_in_dir(&dir, &new_name, &data)?;
     Ok(ThemeMeta { name: new_name, extends: data.extends })

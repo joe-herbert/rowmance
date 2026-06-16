@@ -1,171 +1,268 @@
 <!--
-  ConnectionTree — lists all connection profiles grouped by folder.
-  Each connection shows a status dot and a context menu.
-  Clicking a disconnected connection prompts to connect; clicking a connected one expands the schema.
-  Groups are collapsible and have a right-click context menu (New Connection, Rename, Delete).
+  ConnectionTree — unified connection + schema tree.
+  Shows all connections with expand-to-browse (databases → tables).
+  Visual design matches Glass Workspace spec: chevron + color-dot-with-glow + name.
 -->
 <script lang="ts">
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import ConnectionForm from './ConnectionForm.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
+  import * as schemaApi from '$lib/tauri/schema';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import type { ConnectionProfile, ConnectionGroup } from '$lib/types';
+  import { errorMessage } from '$lib/utils/errors';
+  import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
 
+  // ── Add / edit forms ──────────────────────────────────────────────────────
+
   let showAddForm = $state(false);
   let editingProfile = $state<ConnectionProfile | undefined>(undefined);
-  let newConnectionGroupId = $state<string | null | undefined>(undefined); // undefined = not set
+  let newConnectionGroupId = $state<string | null | undefined>(undefined);
 
-  // Group UI state
+  // ── Schema state ──────────────────────────────────────────────────────────
+
+  let schemaCache = $state<Map<string, Map<string, TableInfo[]>>>(new Map());
+  let expandedConnections = $state<Set<string>>(new Set());
+  let expandedDatabases = $state<Set<string>>(new Set());
+  let loadingKeys = $state<Set<string>>(new Set());
+  let loadErrors = $state<Map<string, string>>(new Map());
+
+  // ── Group UI state ────────────────────────────────────────────────────────
+
   let expandedGroups = $state<Set<string>>(new Set());
   let ungroupedExpanded = $state(true);
-
-  // Group context menu
-  interface GroupContextMenu {
-    x: number;
-    y: number;
-    group: ConnectionGroup;
-  }
-  let groupContextMenu = $state<GroupContextMenu | null>(null);
-
-  // Rename state
   let renamingGroupId = $state<string | null>(null);
   let renameValue = $state('');
 
-  // ── Helpers ────────────────────────────────────────────────────────────────────
+  // ── Context menus ─────────────────────────────────────────────────────────
+
+  interface TableCtxMenu { x: number; y: number; connectionId: string; database: string; table: TableInfo }
+  interface DbCtxMenu    { x: number; y: number; connectionId: string; database: string }
+  interface GrpCtxMenu   { x: number; y: number; group: ConnectionGroup }
+
+  let tableCtx = $state<TableCtxMenu | null>(null);
+  let dbCtx    = $state<DbCtxMenu | null>(null);
+  let grpCtx   = $state<GrpCtxMenu | null>(null);
+
+  // ── Connection helpers ────────────────────────────────────────────────────
+
+  function isConnected(id: string)   { return connectionStore.activeIds.has(id); }
+  function isConnecting(id: string)  { return connectionStore.connectingIds.has(id); }
+  function hasError(id: string)      { return connectionStore.errorIds.has(id); }
+  function connError(id: string)     { return connectionStore.errorIds.get(id) ?? 'Connection error'; }
+  function dotColor(profile: ConnectionProfile): string {
+    return profile.color ?? '#7c5cff';
+  }
 
   async function handleConnect(profile: ConnectionProfile) {
-    if (connectionStore.isActive(profile.id)) return;
+    if (isConnected(profile.id)) return;
     await connectionStore.connect(profile.id);
+    // Auto-expand schema when connection succeeds
+    if (isConnected(profile.id)) toggleExpand(profile.id);
   }
 
-  function openQueryEditor(profile: ConnectionProfile) {
-    panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id });
+  async function deleteConnection(profile: ConnectionProfile) {
+    if (!await ask(`Delete "${profile.name}"? This cannot be undone.`, { title: 'Delete Connection', kind: 'warning' })) return;
+    if (connectionStore.isActive(profile.id)) await connectionStore.disconnect(profile.id);
+    try {
+      await connectionsApi.deleteConnection(profile.id);
+      await connectionStore.load();
+    } catch { /* ignore */ }
   }
 
-  function statusClass(profileId: string): string {
-    if (connectionStore.connectingIds.has(profileId)) return 'connecting';
-    if (connectionStore.errorIds.has(profileId)) return 'error';
-    if (connectionStore.activeIds.has(profileId)) return 'connected';
-    return 'idle';
+  // ── Schema helpers ────────────────────────────────────────────────────────
+
+  async function toggleExpand(connectionId: string) {
+    if (expandedConnections.has(connectionId)) {
+      expandedConnections = new Set([...expandedConnections].filter(id => id !== connectionId));
+    } else {
+      expandedConnections = new Set([...expandedConnections, connectionId]);
+      await loadDatabases(connectionId);
+    }
   }
 
-  function statusLabel(profileId: string): string {
-    const status = statusClass(profileId);
-    const labels: Record<string, string> = {
-      connected: 'Connected',
-      connecting: 'Connecting…',
-      error: connectionStore.errorIds.get(profileId) ?? 'Connection error',
-      idle: 'Not connected',
-    };
-    return labels[status];
+  async function loadDatabases(connectionId: string) {
+    if (schemaCache.has(connectionId)) return;
+    loadingKeys = new Set([...loadingKeys, connectionId]);
+    loadErrors = new Map([...loadErrors].filter(([k]) => k !== connectionId));
+    try {
+      const databases = await schemaApi.listDatabases(connectionId);
+      const dbMap = new Map<string, TableInfo[]>();
+      databases.forEach(db => dbMap.set(db, []));
+      schemaCache = new Map([...schemaCache, [connectionId, dbMap]]);
+    } catch (err) {
+      loadErrors = new Map([...loadErrors, [connectionId, errorMessage(err)]]);
+    } finally {
+      loadingKeys = new Set([...loadingKeys].filter(k => k !== connectionId));
+    }
   }
 
-  // ── Group helpers ──────────────────────────────────────────────────────────────
+  async function toggleDatabase(connectionId: string, database: string) {
+    const key = `${connectionId}/${database}`;
+    if (expandedDatabases.has(key)) {
+      expandedDatabases = new Set([...expandedDatabases].filter(k => k !== key));
+    } else {
+      expandedDatabases = new Set([...expandedDatabases, key]);
+      await loadTables(connectionId, database);
+    }
+  }
+
+  async function loadTables(connectionId: string, database: string) {
+    const key = `${connectionId}/${database}`;
+    const existing = schemaCache.get(connectionId)?.get(database);
+    if (existing && existing.length > 0) return;
+    loadingKeys = new Set([...loadingKeys, key]);
+    loadErrors = new Map([...loadErrors].filter(([k]) => k !== key));
+    try {
+      const tables = await schemaApi.listTables(connectionId, database);
+      const connMap = new Map(schemaCache.get(connectionId) ?? []);
+      connMap.set(database, tables);
+      schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+    } catch (err) {
+      loadErrors = new Map([...loadErrors, [key, errorMessage(err)]]);
+    } finally {
+      loadingKeys = new Set([...loadingKeys].filter(k => k !== key));
+    }
+  }
+
+  function openTable(connectionId: string, database: string, table: string) {
+    panelStore.openInFocused({ kind: 'table_browser', connectionId, database, table });
+  }
+
+  // ── Group helpers ─────────────────────────────────────────────────────────
 
   function toggleGroup(groupId: string) {
     if (expandedGroups.has(groupId)) {
-      expandedGroups = new Set([...expandedGroups].filter((id) => id !== groupId));
+      expandedGroups = new Set([...expandedGroups].filter(id => id !== groupId));
     } else {
       expandedGroups = new Set([...expandedGroups, groupId]);
     }
   }
 
-  function showGroupContextMenu(event: MouseEvent, group: ConnectionGroup) {
-    event.preventDefault();
-    groupContextMenu = { x: event.clientX, y: event.clientY, group };
-  }
-
-  function closeGroupContextMenu() {
-    groupContextMenu = null;
-  }
-
-  function ctxNewConnectionInGroup() {
-    if (!groupContextMenu) return;
-    newConnectionGroupId = groupContextMenu.group.id;
-    showAddForm = true;
-    closeGroupContextMenu();
-  }
-
-  function ctxRenameGroup() {
-    if (!groupContextMenu) return;
-    renamingGroupId = groupContextMenu.group.id;
-    renameValue = groupContextMenu.group.name;
-    closeGroupContextMenu();
-  }
-
   async function commitRename() {
-    if (!renamingGroupId || !renameValue.trim()) {
-      renamingGroupId = null;
-      return;
-    }
+    if (!renamingGroupId || !renameValue.trim()) { renamingGroupId = null; return; }
     try {
       await connectionsApi.updateConnectionGroup(renamingGroupId, { name: renameValue.trim() });
       await connectionStore.load();
-    } catch {
-      // Silently ignore — the name reverts on next load.
-    } finally {
-      renamingGroupId = null;
-    }
+    } catch { /* ignore */ } finally { renamingGroupId = null; }
   }
 
-  async function ctxDeleteGroup() {
-    if (!groupContextMenu) return;
-    const { name, id } = groupContextMenu.group;
-    closeGroupContextMenu();
-    if (!await ask(`Delete group "${name}" and all its connections? This cannot be undone.`, { title: 'Delete Group', kind: 'warning' })) return;
+  async function deleteGroup(group: ConnectionGroup) {
+    grpCtx = null;
+    if (!await ask(`Delete group "${group.name}" and all its connections? This cannot be undone.`, { title: 'Delete Group', kind: 'warning' })) return;
     try {
-      await connectionsApi.deleteConnectionGroup(id);
+      await connectionsApi.deleteConnectionGroup(group.id);
       await connectionStore.load();
-    } catch {
-      // Ignore.
-    }
+    } catch { /* ignore */ }
   }
 
-  async function deleteConnection(profile: ConnectionProfile) {
-    if (!await ask(`Delete "${profile.name}"? This cannot be undone.`, { title: 'Delete Connection', kind: 'warning' })) return;
-    if (connectionStore.isActive(profile.id)) {
-      await connectionStore.disconnect(profile.id);
-    }
-    try {
-      await connectionsApi.deleteConnection(profile.id);
-      await connectionStore.load();
-    } catch {
-      // Ignore.
-    }
+  // ── Context menu helpers ──────────────────────────────────────────────────
+
+  function showTableCtx(e: MouseEvent, connectionId: string, database: string, table: TableInfo) {
+    e.preventDefault();
+    tableCtx = { x: e.clientX, y: e.clientY, connectionId, database, table };
   }
 
-  function handleWindowKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      if (groupContextMenu) closeGroupContextMenu();
-      if (renamingGroupId) renamingGroupId = null;
-    }
+  function showDbCtx(e: MouseEvent, connectionId: string, database: string) {
+    e.preventDefault();
+    dbCtx = { x: e.clientX, y: e.clientY, connectionId, database };
   }
 
-  function handleWindowClick(event: MouseEvent) {
-    if (!groupContextMenu) return;
-    const target = event.target as Element | null;
-    if (!target?.closest('.group-context-menu')) {
-      closeGroupContextMenu();
-    }
+  function showGrpCtx(e: MouseEvent, group: ConnectionGroup) {
+    e.preventDefault();
+    grpCtx = { x: e.clientX, y: e.clientY, group };
   }
 
-  // ── Derived groupings ──────────────────────────────────────────────────────────
+  function ctxOpenTable() {
+    if (!tableCtx) return;
+    openTable(tableCtx.connectionId, tableCtx.database, tableCtx.table.name);
+    tableCtx = null;
+  }
+
+  function ctxViewDdl() {
+    if (!tableCtx) return;
+    panelStore.openInFocused({ kind: 'ddl_viewer', connectionId: tableCtx.connectionId, database: tableCtx.database, objectName: tableCtx.table.name, objectType: tableCtx.table.tableType });
+    tableCtx = null;
+  }
+
+  function ctxCopyName() {
+    if (!tableCtx) return;
+    navigator.clipboard.writeText(tableCtx.table.name);
+    tableCtx = null;
+  }
+
+  function ctxOpenErd() {
+    if (!dbCtx) return;
+    panelStore.openInFocused({ kind: 'erd', connectionId: dbCtx.connectionId, database: dbCtx.database });
+    dbCtx = null;
+  }
+
+  function handleWindowKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') { tableCtx = null; dbCtx = null; grpCtx = null; if (renamingGroupId) renamingGroupId = null; }
+  }
+
+  function handleWindowClick(e: MouseEvent) {
+    const t = e.target as Element | null;
+    if (tableCtx && !t?.closest('.ctx-menu')) tableCtx = null;
+    if (dbCtx    && !t?.closest('.ctx-menu')) dbCtx = null;
+    if (grpCtx   && !t?.closest('.ctx-menu')) grpCtx = null;
+  }
+
+  // ── System database / table detection ────────────────────────────────────
+
+  const SYSTEM_DATABASES = new Set([
+    // MySQL / MariaDB
+    'information_schema', 'mysql', 'performance_schema', 'sys',
+    // PostgreSQL
+    'postgres', 'template0', 'template1',
+    // SQL Server
+    'master', 'model', 'msdb', 'tempdb',
+  ]);
+  const SYSTEM_TABLE_PATTERNS = [
+    // Generic
+    /^migrations$/i,
+    // Drizzle
+    /^__drizzle_migrations$/i,
+    // Prisma
+    /^_prisma_migrations$/i,
+    // Rails / ActiveRecord
+    /^schema_migrations$/i, /^ar_internal_metadata$/i,
+    // Django
+    /^django_migrations$/i,
+    // Laravel
+    /^laravel_migrations$/i,
+    // Flyway
+    /^flyway_schema_history$/i,
+    // Liquibase
+    /^databasechangelog(lock)?$/i,
+    // Knex
+    /^knex_migrations(_(lock))?$/i,
+    // Sequelize
+    /^sequelize_meta$/i,
+    // TypeORM
+    /^typeorm_metadata$/i,
+    // Alembic
+    /^alembic_version$/i,
+    // Goose
+    /^goose_db_version$/i,
+  ];
+
+  function isSystemDatabase(name: string) { return SYSTEM_DATABASES.has(name.toLowerCase()); }
+  function isSystemTable(name: string) { return SYSTEM_TABLE_PATTERNS.some(p => p.test(name)); }
+
+  // ── Derived groupings ─────────────────────────────────────────────────────
 
   const grouped = $derived(() => {
     const groups = connectionStore.groups;
     const profiles = connectionStore.profiles;
-
-    const ungrouped = profiles.filter((p) => p.groupId === null);
+    const ungrouped = profiles.filter(p => p.groupId === null);
     const byGroup = new Map<string, ConnectionProfile[]>();
     for (const g of groups) byGroup.set(g.id, []);
     for (const p of profiles) {
-      if (p.groupId !== null && byGroup.has(p.groupId)) {
-        byGroup.get(p.groupId)!.push(p);
-      }
+      if (p.groupId !== null && byGroup.has(p.groupId)) byGroup.get(p.groupId)!.push(p);
     }
     return { groups, ungrouped, byGroup };
   });
@@ -174,212 +271,274 @@
 <svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
 <div class="connection-tree">
+  <!-- Section header -->
   <div class="tree-header no-select">
-    <span class="header-label">Connections</span>
-    <button
-      class="add-btn"
-      title="Add connection"
-      aria-label="Add new connection"
-      onclick={() => { newConnectionGroupId = undefined; showAddForm = true; }}>+</button
-    >
+    <span class="header-label">CONNECTIONS</span>
+    <span class="header-count">{connectionStore.profiles.length}</span>
   </div>
 
-  {#if connectionStore.profiles.length === 0 && connectionStore.groups.length === 0}
-    <div class="empty-state">
-      <p>No connections yet.</p>
-      <button class="link-btn" onclick={() => { newConnectionGroupId = undefined; showAddForm = true; }}>
-        Add your first connection
-      </button>
-    </div>
-  {:else}
-    <ul class="tree-list" role="tree" aria-label="Database connections">
+  <!-- Scrollable list -->
+  <div class="tree-scroll gscroll">
+    {#if connectionStore.profiles.length === 0 && connectionStore.groups.length === 0}
+      <div class="empty-state">
+        <p>No connections yet.</p>
+      </div>
+    {:else}
 
       <!-- Ungrouped profiles -->
-      {#if grouped().ungrouped.length > 0 || connectionStore.groups.length > 0}
-        {#if connectionStore.groups.length > 0}
-          <!-- Only show "Ungrouped" header when there are groups -->
-          <li class="group-item" role="treeitem" aria-expanded={ungroupedExpanded}>
-            <button
-              class="group-header"
-              onclick={() => (ungroupedExpanded = !ungroupedExpanded)}
-              aria-label="{ungroupedExpanded ? 'Collapse' : 'Expand'} Ungrouped"
-            >
-              <span class="group-chevron" class:open={ungroupedExpanded} aria-hidden="true">›</span>
-              <span class="group-name">Ungrouped</span>
-            </button>
-            {#if ungroupedExpanded}
-              <ul role="group" class="group-children">
-                {#each grouped().ungrouped as profile (profile.id)}
-                  {@const status = statusClass(profile.id)}
-                  <li class="tree-item" role="treeitem" aria-selected={false}>
-                    <div class="connection-row" class:active={status === 'connected'}>
-                      {#if profile.color}
-                        <span class="color-dot" style="background: {profile.color};" aria-hidden="true"></span>
-                      {/if}
-                      <span class="status-dot status-dot--{status}" title={statusLabel(profile.id)} aria-label={statusLabel(profile.id)}></span>
-                      <button
-                        class="connection-name"
-                        onclick={() => status === 'connected' ? openQueryEditor(profile) : handleConnect(profile)}
-                        title={profile.host}
-                      >{profile.name}</button>
-                      <span class="db-badge">{profile.dbType}</span>
-                      <button
-                        class="edit-btn"
-                        title="Edit connection"
-                        aria-label="Edit {profile.name}"
-                        onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
-                      >✎</button>
-                      <button
-                        class="delete-btn"
-                        title="Delete connection"
-                        aria-label="Delete {profile.name}"
-                        onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
-                      >✕</button>
-                    </div>
-                    {#if connectionStore.errorIds.has(profile.id)}
-                      <div class="error-row">
-                        <span class="error-message">{connectionStore.errorIds.get(profile.id)}</span>
-                        <button
-                          class="retry-btn"
-                          onclick={() => handleConnect(profile)}
-                          aria-label="Retry connecting to {profile.name}"
-                          title="Retry connection"
-                        >Retry</button>
-                      </div>
-                    {/if}
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          </li>
-        {:else}
-          <!-- No groups: render profiles flat -->
-          {#each grouped().ungrouped as profile (profile.id)}
-            {@const status = statusClass(profile.id)}
-            <li class="tree-item" role="treeitem" aria-selected={false}>
-              <div class="connection-row" class:active={status === 'connected'}>
-                {#if profile.color}
-                  <span class="color-dot" style="background: {profile.color};" aria-hidden="true"></span>
-                {/if}
-                <span class="status-dot status-dot--{status}" title={statusLabel(profile.id)} aria-label={statusLabel(profile.id)}></span>
-                <button
-                  class="connection-name"
-                  onclick={() => status === 'connected' ? openQueryEditor(profile) : handleConnect(profile)}
-                  title={profile.host}
-                >{profile.name}</button>
-                <span class="db-badge">{profile.dbType}</span>
-                <button
-                  class="edit-btn"
-                  title="Edit connection"
-                  aria-label="Edit {profile.name}"
-                  onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
-                >✎</button>
-                <button
-                  class="delete-btn"
-                  title="Delete connection"
-                  aria-label="Delete {profile.name}"
-                  onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
-                >✕</button>
-              </div>
-              {#if connectionStore.errorIds.has(profile.id)}
-                <div class="error-row">{connectionStore.errorIds.get(profile.id)}</div>
-              {/if}
-            </li>
-          {/each}
-        {/if}
+      {#if connectionStore.groups.length > 0 && grouped().ungrouped.length > 0}
+        <div class="group-section">
+          <button class="group-row" onclick={() => (ungroupedExpanded = !ungroupedExpanded)}>
+            <span class="chevron" class:open={ungroupedExpanded} aria-hidden="true">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </span>
+            <span class="group-name">Ungrouped</span>
+          </button>
+          {#if ungroupedExpanded}
+            {#each grouped().ungrouped as profile (profile.id)}
+              {@render connectionRow(profile)}
+            {/each}
+          {/if}
+        </div>
+      {:else}
+        {#each grouped().ungrouped as profile (profile.id)}
+          {@render connectionRow(profile)}
+        {/each}
       {/if}
 
       <!-- Named groups -->
       {#each grouped().groups as group (group.id)}
         {@const isExpanded = expandedGroups.has(group.id)}
         {@const groupProfiles = grouped().byGroup.get(group.id) ?? []}
-        <li class="group-item" role="treeitem" aria-expanded={isExpanded}>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div
-            class="group-header-wrapper"
-            oncontextmenu={(e) => showGroupContextMenu(e, group)}
-          >
-            {#if renamingGroupId === group.id}
-              <input
-                class="rename-input"
-                type="text"
-                bind:value={renameValue}
-                onblur={commitRename}
-                onkeydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') renamingGroupId = null; }}
-                aria-label="Rename group"
-                autofocus
-              />
-            {:else}
-              <button
-                class="group-header"
-                onclick={() => toggleGroup(group.id)}
-                aria-label="{isExpanded ? 'Collapse' : 'Expand'} {group.name}"
-              >
-                <span class="group-chevron" class:open={isExpanded} aria-hidden="true">›</span>
-                <span class="group-name">{group.name}</span>
-                <span class="group-count">{groupProfiles.length}</span>
-              </button>
-            {/if}
-          </div>
-
-          {#if isExpanded}
-            <ul role="group" class="group-children">
-              {#each groupProfiles as profile (profile.id)}
-                {@const status = statusClass(profile.id)}
-                <li class="tree-item" role="treeitem" aria-selected={false}>
-                  <div class="connection-row" class:active={status === 'connected'}>
-                    {#if profile.color}
-                      <span class="color-dot" style="background: {profile.color};" aria-hidden="true"></span>
-                    {/if}
-                    <span class="status-dot status-dot--{status}" title={statusLabel(profile.id)} aria-label={statusLabel(profile.id)}></span>
-                    <button
-                      class="connection-name"
-                      onclick={() => status === 'connected' ? openQueryEditor(profile) : handleConnect(profile)}
-                      title={profile.host}
-                    >{profile.name}</button>
-                    <span class="db-badge">{profile.dbType}</span>
-                    <button
-                      class="edit-btn"
-                      title="Edit connection"
-                      aria-label="Edit {profile.name}"
-                      onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
-                    >✎</button>
-                    <button
-                      class="delete-btn"
-                      title="Delete connection"
-                      aria-label="Delete {profile.name}"
-                      onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
-                    >✕</button>
-                  </div>
-                  {#if connectionStore.errorIds.has(profile.id)}
-                    <div class="error-row">{connectionStore.errorIds.get(profile.id)}</div>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
+          {#if renamingGroupId === group.id}
+            <input
+              class="rename-input"
+              type="text"
+              bind:value={renameValue}
+              onblur={commitRename}
+              onkeydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') renamingGroupId = null; }}
+              aria-label="Rename group"
+              autofocus
+            />
+          {:else}
+            <button class="group-row" onclick={() => toggleGroup(group.id)}>
+              <span class="chevron" class:open={isExpanded} aria-hidden="true">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </span>
+              <span class="group-name">{group.name}</span>
+              <span class="group-count">{groupProfiles.length}</span>
+            </button>
           {/if}
-        </li>
+          {#if isExpanded}
+            {#each groupProfiles as profile (profile.id)}
+              {@render connectionRow(profile)}
+            {/each}
+          {/if}
+        </div>
       {/each}
 
-    </ul>
-  {/if}
+    {/if}
+
+    <!-- Add connection inline row -->
+    <button class="add-row" onclick={() => { newConnectionGroupId = undefined; showAddForm = true; }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      Add connection
+    </button>
+  </div>
 </div>
 
-<!-- Group context menu -->
-{#if groupContextMenu}
-  <div
-    class="group-context-menu"
-    role="menu"
-    aria-label="Group options"
-    style="top: {groupContextMenu.y}px; left: {groupContextMenu.x}px;"
-  >
-    <button class="ctx-item" role="menuitem" onclick={ctxNewConnectionInGroup}>
-      New Connection in Group
-    </button>
-    <button class="ctx-item" role="menuitem" onclick={ctxRenameGroup}>Rename Group</button>
-    <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDeleteGroup}>
-      Delete Group
-    </button>
+<!-- ── Connection row snippet ─────────────────────────────────────────────── -->
+{#snippet connectionRow(profile: ConnectionProfile)}
+  {@const connected = isConnected(profile.id)}
+  {@const connecting = isConnecting(profile.id)}
+  {@const errored = hasError(profile.id)}
+  {@const expanded = expandedConnections.has(profile.id)}
+  {@const color = dotColor(profile)}
+
+  <div class="conn-item">
+    <!-- Main row -->
+    <div class="conn-row" class:connected class:errored>
+      <!-- Chevron: rotates when expanded -->
+      <button
+        class="conn-chevron"
+        class:open={expanded}
+        onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)}
+        aria-label="{expanded ? 'Collapse' : 'Expand'} {profile.name}"
+        disabled={connecting}
+      >
+        {#if connecting}
+          <span class="spin-ring" aria-hidden="true"></span>
+        {:else}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        {/if}
+      </button>
+
+      <!-- Color dot with glow -->
+      <span
+        class="color-dot"
+        class:dim={!connected && !connecting}
+        style="background:{color};{connected ? `box-shadow:0 0 0 3px color-mix(in srgb,${color} 18%,transparent)` : ''}"
+        aria-hidden="true"
+      ></span>
+
+      <!-- Name -->
+      <button
+        class="conn-name"
+        onclick={() => connected ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id }) : handleConnect(profile)}
+        title={profile.host}
+      >{profile.name}</button>
+
+      <!-- Lock icon if read-only -->
+      {#if profile.readOnly}
+        <svg class="lock-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
+          <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+          <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+        </svg>
+      {/if}
+
+      <!-- Hover actions -->
+      <div class="conn-actions">
+        <button
+          class="action-btn"
+          onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
+          title="Edit connection"
+          aria-label="Edit {profile.name}"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+        <button
+          class="action-btn action-btn--danger"
+          onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
+          title="Delete connection"
+          aria-label="Delete {profile.name}"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <path d="M10 11v6"></path><path d="M14 11v6"></path>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Error banner -->
+    {#if errored}
+      <div class="error-row">
+        <span class="error-msg">{connError(profile.id)}</span>
+        <button class="retry-btn" onclick={() => handleConnect(profile)}>Retry</button>
+      </div>
+    {/if}
+
+    <!-- Schema tree when expanded -->
+    {#if expanded && connected}
+      {@const databases = schemaCache.get(profile.id)}
+      {@const isLoadingConn = loadingKeys.has(profile.id)}
+      {@const connLoadError = loadErrors.get(profile.id)}
+
+      <div class="schema-children">
+        {#if isLoadingConn}
+          <div class="loading-row">
+            <span class="loading-dots" aria-label="Loading">Loading…</span>
+          </div>
+        {:else if connLoadError}
+          <div class="load-error">{connLoadError}</div>
+        {:else if databases}
+          {#each [...databases.keys()] as database}
+            {@const dbKey = `${profile.id}/${database}`}
+            {@const isDbExpanded = expandedDatabases.has(dbKey)}
+            {@const isDbLoading = loadingKeys.has(dbKey)}
+            {@const tables = databases.get(database) ?? []}
+            {@const dbLoadError = loadErrors.get(dbKey)}
+
+            <div class="db-item" class:system-item={isSystemDatabase(database)}>
+              <button
+                class="db-row"
+                class:open={isDbExpanded}
+                onclick={() => toggleDatabase(profile.id, database)}
+                oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
+                aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
+              >
+                <span class="chevron" class:open={isDbExpanded} aria-hidden="true">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </span>
+                <svg class="db-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                  <path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                  <path d="M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6"></path>
+                </svg>
+                <span class="db-name">{database}</span>
+                {#if isDbLoading}
+                  <span class="loading-dots" aria-label="Loading">…</span>
+                {/if}
+              </button>
+
+              {#if dbLoadError}
+                <div class="load-error db-load-error">{dbLoadError}</div>
+              {/if}
+
+              {#if isDbExpanded && tables.length > 0}
+                <div class="table-list">
+                  {#each tables as table}
+                    <button
+                      class="table-row"
+                      class:system-item={isSystemTable(table.name)}
+                      onclick={() => openTable(profile.id, database, table.name)}
+                      oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
+                      title={table.name}
+                      aria-label="Open {table.name}"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="table-icon">
+                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                        <line x1="3" y1="9.5" x2="21" y2="9.5"></line>
+                        <line x1="9" y1="9.5" x2="9" y2="20"></line>
+                      </svg>
+                      <span class="table-name">{table.name}</span>
+                      {#if table.rowCount !== null}
+                        <span class="row-count">{table.rowCount.toLocaleString()}</span>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        {/if}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+<!-- Context menus -->
+{#if tableCtx}
+  <div class="ctx-menu" role="menu" style="top:{tableCtx.y}px;left:{tableCtx.x}px">
+    <button class="ctx-item" role="menuitem" onclick={ctxOpenTable}>Open Table</button>
+    <button class="ctx-item" role="menuitem" onclick={ctxViewDdl}>View DDL</button>
+    <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
+  </div>
+{/if}
+
+{#if dbCtx}
+  <div class="ctx-menu" role="menu" style="top:{dbCtx.y}px;left:{dbCtx.x}px">
+    <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
+  </div>
+{/if}
+
+{#if grpCtx}
+  <div class="ctx-menu" role="menu" style="top:{grpCtx.y}px;left:{grpCtx.x}px">
+    <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { newConnectionGroupId = grpCtx.group.id; showAddForm = true; grpCtx = null; } }}>New Connection in Group</button>
+    <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { renamingGroupId = grpCtx.group.id; renameValue = grpCtx.group.name; grpCtx = null; } }}>Rename Group</button>
+    <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</button>
   </div>
 {/if}
 
@@ -401,239 +560,213 @@
   .connection-tree {
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
-    border-bottom: 1px solid var(--color-border);
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
+  /* ── Header ── */
+
   .tree-header {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
-    padding: var(--spacing-1) var(--spacing-3);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    gap: 6px;
+    padding: 11px 14px 6px;
   }
 
   .header-label {
-    flex: 1;
-  }
-
-  .add-btn {
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-size-lg);
-    color: var(--color-text-muted);
-    border-radius: var(--radius-sm);
-    transition:
-      background var(--transition-fast),
-      color var(--transition-fast);
-  }
-
-  .add-btn:hover {
-    background: var(--color-bg-hover);
-    color: var(--color-text-primary);
-  }
-
-  .empty-state {
-    padding: var(--spacing-2) var(--spacing-3);
-    font-size: var(--font-size-sm);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
     color: var(--color-text-muted);
   }
 
-  .link-btn {
-    color: var(--color-accent);
-    font-size: var(--font-size-sm);
-    text-decoration: underline;
-    margin-top: var(--spacing-1);
-    display: block;
+  .header-count {
+    font-size: 10.5px;
+    color: var(--color-text-disabled);
   }
 
-  .tree-list {
-    padding: var(--spacing-1) 0;
-  }
+  /* ── Scroll container ── */
 
-  /* ── Groups ── */
-
-  .group-item {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .group-header-wrapper {
-    display: flex;
-  }
-
-  .group-header {
+  .tree-scroll {
     flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 8px 8px;
+    min-height: 0;
+  }
+
+  /* ── Group headers ── */
+
+  .group-section {
+    margin-bottom: 2px;
+  }
+
+  .group-row {
     display: flex;
     align-items: center;
-    gap: var(--spacing-1);
-    padding: var(--spacing-1) var(--spacing-3);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
+    gap: 6px;
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     color: var(--color-text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
     text-align: left;
+    border-radius: 6px;
     cursor: pointer;
     transition: background var(--transition-fast);
     user-select: none;
   }
 
-  .group-header:hover {
-    background: var(--color-bg-hover);
-    color: var(--color-text-secondary);
-  }
+  .group-row:hover { background: var(--color-bg-hover); }
 
-  .group-chevron {
-    flex-shrink: 0;
-    font-size: var(--font-size-xs);
-    transition: transform var(--transition-fast);
-    display: inline-block;
-    width: 10px;
-  }
-
-  .group-chevron.open {
-    transform: rotate(90deg);
-  }
-
-  .group-name {
-    flex: 1;
-  }
+  .group-name { flex: 1; }
 
   .group-count {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
+    font-size: 10px;
+    color: var(--color-text-disabled);
     background: var(--color-bg-tertiary);
     border-radius: var(--radius-sm);
     padding: 0 4px;
-    font-weight: var(--font-weight-normal);
+    font-weight: 400;
     text-transform: none;
     letter-spacing: normal;
   }
 
-  .group-children {
-    padding: 0;
-  }
-
   .rename-input {
-    flex: 1;
+    width: 100%;
     height: 24px;
     padding: 0 var(--spacing-2);
-    margin: 2px var(--spacing-3);
+    margin: 2px 0;
     border: 1px solid var(--color-accent);
     border-radius: var(--radius-sm);
     background: var(--color-bg-primary);
     color: var(--color-text-primary);
-    font-size: var(--font-size-xs);
+    font-size: 10.5px;
     font-family: var(--font-family-ui);
     outline: none;
   }
 
   /* ── Connection rows ── */
 
-  .tree-item {
-    display: flex;
-    flex-direction: column;
+  .conn-item {
+    margin-bottom: 3px;
   }
 
-  .connection-row {
+  .conn-row {
     display: flex;
     align-items: center;
-    gap: var(--spacing-1);
-    padding: var(--spacing-1) var(--spacing-3);
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    cursor: default;
     transition: background var(--transition-fast);
+    position: relative;
   }
 
-  .connection-row:hover {
+  .conn-row:hover {
     background: var(--color-bg-hover);
   }
 
-  .connection-row.active {
-    background: var(--color-accent-subtle);
+  .conn-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform var(--transition-fast), color var(--transition-fast);
+    background: transparent;
   }
+
+  .conn-chevron.open svg {
+    transform: rotate(90deg);
+  }
+
+  .conn-chevron svg {
+    transition: transform var(--transition-fast);
+  }
+
+  .conn-chevron:hover { color: var(--color-text-primary); background: var(--color-bg-active); }
+  .conn-chevron:disabled { opacity: 0.5; cursor: default; }
 
   .color-dot {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     flex-shrink: 0;
+    transition: opacity var(--transition-fast);
   }
 
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
+  .color-dot.dim { opacity: 0.4; }
 
-  .status-dot--connected {
-    background: var(--color-connection-connected);
-  }
-
-  .status-dot--connecting {
-    background: var(--color-connection-connecting);
-    animation: pulse 1s infinite;
-  }
-
-  .status-dot--error {
-    background: var(--color-connection-error);
-  }
-
-  .status-dot--idle {
-    background: var(--color-border-strong);
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.4;
-    }
-  }
-
-  .connection-name {
+  .conn-name {
     flex: 1;
-    font-size: var(--font-size-sm);
+    font-size: 12.5px;
+    font-weight: 600;
     color: var(--color-text-primary);
     text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: var(--font-weight-medium);
+    background: transparent;
+    cursor: pointer;
   }
 
-  .connection-name:hover {
-    color: var(--color-accent);
-  }
+  .conn-name:hover { color: var(--color-accent); }
 
-  .db-badge {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    background: var(--color-bg-tertiary);
-    border-radius: var(--radius-sm);
-    padding: 1px var(--spacing-1);
-    text-transform: lowercase;
+  .lock-icon {
     flex-shrink: 0;
+    color: var(--color-text-muted);
+    opacity: 0.6;
   }
+
+  /* Hover-only action buttons */
+  .conn-actions {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    opacity: 0;
+    flex-shrink: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .conn-row:hover .conn-actions { opacity: 1; }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    background: transparent;
+  }
+
+  .action-btn:hover { background: var(--color-bg-active); color: var(--color-text-primary); }
+  .action-btn--danger:hover { color: var(--color-danger); }
+
+  /* ── Error / loading ── */
 
   .error-row {
     display: flex;
     align-items: center;
-    gap: var(--spacing-2);
-    padding: 2px var(--spacing-3) var(--spacing-1) 36px;
-    font-size: var(--font-size-xs);
+    gap: 8px;
+    padding: 2px 8px 4px 34px;
+    font-size: 11px;
     color: var(--color-danger);
   }
 
-  .error-message {
+  .error-msg {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -643,11 +776,11 @@
   .retry-btn {
     flex-shrink: 0;
     height: 16px;
-    padding: 0 var(--spacing-1);
+    padding: 0 6px;
     background: transparent;
     border: 1px solid var(--color-danger);
     border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
+    font-size: 10px;
     font-family: var(--font-family-ui);
     color: var(--color-danger);
     cursor: pointer;
@@ -655,67 +788,174 @@
     transition: background var(--transition-fast);
   }
 
-  .retry-btn:hover {
-    background: var(--color-danger-subtle);
+  .retry-btn:hover { background: var(--color-danger-subtle); }
+
+  .loading-row {
+    padding: 4px 8px 4px 34px;
   }
 
-  .edit-btn {
-    opacity: 0;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-size-sm);
+  .loading-dots {
+    font-size: 11px;
     color: var(--color-text-muted);
-    border-radius: var(--radius-sm);
-    flex-shrink: 0;
-    transition: opacity var(--transition-fast), color var(--transition-fast),
-      background var(--transition-fast);
+    animation: pulse 1s infinite;
   }
 
-  .connection-row:hover .edit-btn {
-    opacity: 1;
-  }
-
-  .edit-btn:hover {
-    color: var(--color-text-primary);
-    background: var(--color-bg-active);
-  }
-
-  .delete-btn {
-    opacity: 0;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    border-radius: var(--radius-sm);
-    flex-shrink: 0;
-    transition: opacity var(--transition-fast), color var(--transition-fast),
-      background var(--transition-fast);
-  }
-
-  .connection-row:hover .delete-btn {
-    opacity: 1;
-  }
-
-  .delete-btn:hover {
+  .load-error {
+    padding: 3px 8px 3px 34px;
+    font-size: 11px;
     color: var(--color-danger);
-    background: var(--color-bg-active);
+    word-break: break-word;
   }
 
-  /* ── Group context menu ── */
+  .db-load-error {
+    padding-left: 50px;
+  }
 
-  .group-context-menu {
+  /* ── Schema children ── */
+
+  .schema-children {
+    padding-left: 8px;
+  }
+
+  /* ── Database rows ── */
+
+  .db-item {
+    margin-bottom: 1px;
+  }
+
+  .db-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 5px 8px 5px 8px;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    text-align: left;
+    border-radius: 7px;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition-fast);
+    background: transparent;
+  }
+
+  .db-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+
+  .db-icon { flex-shrink: 0; color: var(--color-text-muted); }
+  .db-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Table rows ── */
+
+  .table-list {
+    padding-left: 8px;
+  }
+
+  .table-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 6px 10px 6px 18px;
+    font-size: 12.5px;
+    color: var(--color-text-secondary);
+    text-align: left;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    background: transparent;
+  }
+
+  .table-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+
+  .table-icon { flex-shrink: 0; }
+  .table-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .row-count {
+    font-size: 10px;
+    color: var(--color-text-disabled);
+    font-family: var(--font-family-mono);
+    flex-shrink: 0;
+  }
+
+  /* ── System items ── */
+
+  .system-item { opacity: 0.6; }
+  .system-item:hover { opacity: 0.9; }
+
+  /* ── Chevron shared ── */
+
+  .chevron {
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+  }
+
+  .chevron svg { transition: transform var(--transition-fast); }
+  .chevron.open svg { transform: rotate(90deg); }
+
+  /* ── Add connection row ── */
+
+  .add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    background: transparent;
+  }
+
+  .add-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+
+  /* ── Empty state ── */
+
+  .empty-state {
+    padding: 8px 10px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
+  /* ── Spinning indicator ── */
+
+  .spin-ring {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    border-top-color: var(--color-accent);
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── Context menu ── */
+
+  .ctx-menu {
     position: fixed;
     z-index: 500;
-    min-width: 180px;
+    min-width: 160px;
     padding: var(--spacing-1) 0;
     background: var(--color-bg-overlay);
-    border: 1px solid var(--color-border);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
   }
@@ -729,13 +969,9 @@
     text-align: left;
     cursor: pointer;
     transition: background var(--transition-fast);
+    background: transparent;
   }
 
-  .ctx-item:hover {
-    background: var(--color-bg-active);
-  }
-
-  .ctx-item--danger {
-    color: var(--color-danger);
-  }
+  .ctx-item:hover { background: var(--color-bg-active); }
+  .ctx-item--danger { color: var(--color-danger); }
 </style>

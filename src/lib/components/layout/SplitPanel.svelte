@@ -160,6 +160,8 @@
     background: var(--color-border);
     transition: background var(--transition-fast);
     z-index: 5;
+    width: 1px;
+    margin: 0 1.5px;
   }
 
   .divider--row {
@@ -167,6 +169,8 @@
     background: var(--color-border);
     transition: background var(--transition-fast);
     z-index: 5;
+    height: 1px;
+    margin: 1.5px 0;
   }
 
   .divider--col:hover,

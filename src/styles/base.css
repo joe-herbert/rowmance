@@ -17,26 +17,29 @@ body {
   font-size: var(--font-size-md);
   line-height: var(--line-height-normal);
   color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
+  background: var(--app-background, var(--color-bg-primary));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none; /* Desktop app — UI chrome is not selectable. */
 }
 
-/* Scrollbars */
+/* Scrollbars — floating pill style */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 11px;
+  height: 11px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-scrollbar-track);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-scrollbar-thumb);
-  border-radius: var(--radius-sm);
+  border-radius: 9px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-scrollbar-thumb-hover);
+  background-clip: content-box;
 }
 
 /* Typography */
@@ -84,8 +87,8 @@ select {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
 }
 input:focus,
@@ -93,6 +96,7 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--color-accent);
+  background: var(--color-bg-primary);
 }
 
 /* Remove default list styling */

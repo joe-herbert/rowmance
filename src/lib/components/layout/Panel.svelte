@@ -101,12 +101,11 @@
   }
 
   .panel:not(.focused)::after {
-    /* Subtle overlay on unfocused panels to indicate they are clickable. */
     content: '';
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: rgba(0, 0, 0, 0.015);
+    background: rgba(0, 0, 0, 0.02);
   }
 
   .empty-panel {
@@ -114,7 +113,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--color-bg-primary);
+    background: transparent;
   }
 
   .empty-panel-hint {

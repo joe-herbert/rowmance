@@ -119,9 +119,12 @@ pub fn run() {
             commands::themes::themes_write,
             commands::themes::themes_delete,
             commands::themes::themes_duplicate,
+            commands::themes::themes_rename,
             // Updater
             commands::updater::updater_check,
             commands::updater::updater_install,
+            // Window
+            commands::window::window_set_traffic_light_position,
             // Explain
             commands::query::query_explain,
         ])

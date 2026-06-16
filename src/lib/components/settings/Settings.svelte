@@ -20,6 +20,8 @@
   let userThemes = $state<ThemeMeta[]>([]);
   let selectedCustomTheme = $state<string | null>(null);
   let themeError = $state<string | null>(null);
+  let creatingTheme = $state(false);
+  let newThemeName = $state('');
 
   onMount(async () => {
     try {
@@ -30,13 +32,38 @@
     }
   });
 
-  async function createNewTheme() {
+  function startCreatingTheme() {
+    newThemeName = '';
+    creatingTheme = true;
+  }
+
+  async function confirmCreateTheme() {
+    const name = newThemeName.trim();
+    if (!name) return;
     const base = settings.theme === 'light' ? 'light' : 'dark';
-    const newName = `custom-${Date.now()}`;
     try {
-      const meta = await themesApi.themesDuplicate(base, newName);
+      const meta = await themesApi.themesDuplicate(base, name);
       userThemes = [...userThemes, meta];
       selectedCustomTheme = meta.name;
+      creatingTheme = false;
+      newThemeName = '';
+    } catch (err) {
+      themeError = errorMessage(err);
+    }
+  }
+
+  function cancelCreateTheme() {
+    creatingTheme = false;
+    newThemeName = '';
+  }
+
+  async function renameTheme(newName: string) {
+    if (!selectedCustomTheme || newName === selectedCustomTheme) return;
+    try {
+      const meta = await themesApi.themesRename(selectedCustomTheme, newName);
+      userThemes = userThemes.map((t) => t.name === selectedCustomTheme ? meta : t);
+      selectedCustomTheme = meta.name;
+      themeError = null;
     } catch (err) {
       themeError = errorMessage(err);
     }
@@ -255,33 +282,49 @@
         <p class="section-description" style="color: var(--color-danger);">{themeError}</p>
       {/if}
 
-      <div class="theme-actions">
-        <button class="action-btn" onclick={createNewTheme}>+ New Theme</button>
-        {#if userThemes.length > 0}
-          <select
-            class="setting-select"
-            value={selectedCustomTheme}
-            onchange={(e) => (selectedCustomTheme = (e.currentTarget as HTMLSelectElement).value)}
-            aria-label="Select custom theme to edit"
-          >
-            {#each userThemes as theme (theme.name)}
-              <option value={theme.name}>{theme.name}</option>
-            {/each}
-          </select>
-          {#if selectedCustomTheme}
-            <button
-              class="action-btn action-btn--danger"
-              onclick={() => selectedCustomTheme && deleteTheme(selectedCustomTheme)}
-            >Delete</button>
+      {#if creatingTheme}
+        <div class="theme-actions">
+          <input
+            class="setting-input"
+            type="text"
+            placeholder="Theme name"
+            bind:value={newThemeName}
+            onkeydown={(e) => { if (e.key === 'Enter') confirmCreateTheme(); if (e.key === 'Escape') cancelCreateTheme(); }}
+            autofocus
+            aria-label="New theme name"
+          />
+          <button class="action-btn action-btn--primary" onclick={confirmCreateTheme} disabled={!newThemeName.trim()}>Create</button>
+          <button class="action-btn" onclick={cancelCreateTheme}>Cancel</button>
+        </div>
+      {:else}
+        <div class="theme-actions">
+          <button class="action-btn" onclick={startCreatingTheme}>+ New Theme</button>
+          {#if userThemes.length > 0}
+            <select
+              class="setting-select"
+              value={selectedCustomTheme}
+              onchange={(e) => (selectedCustomTheme = (e.currentTarget as HTMLSelectElement).value)}
+              aria-label="Select custom theme to edit"
+            >
+              {#each userThemes as theme (theme.name)}
+                <option value={theme.name}>{theme.name}</option>
+              {/each}
+            </select>
+            {#if selectedCustomTheme}
+              <button
+                class="action-btn action-btn--danger"
+                onclick={() => selectedCustomTheme && deleteTheme(selectedCustomTheme)}
+              >Delete</button>
+            {/if}
           {/if}
-        {/if}
-      </div>
+        </div>
+      {/if}
 
       {#if selectedCustomTheme}
         <div class="theme-editor-wrap">
-          <ThemeEditor themeName={selectedCustomTheme} />
+          <ThemeEditor themeName={selectedCustomTheme} onrename={renameTheme} />
         </div>
-      {:else if userThemes.length === 0}
+      {:else if userThemes.length === 0 && !creatingTheme}
         <p class="section-description">No custom themes yet. Click "+ New Theme" to create one.</p>
       {/if}
     {/if}
@@ -476,6 +519,22 @@
 
   .action-btn--danger:hover {
     background: var(--color-danger-subtle);
+  }
+
+  .action-btn--primary {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+    border-color: var(--color-accent);
+  }
+
+  .action-btn--primary:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .theme-editor-wrap {

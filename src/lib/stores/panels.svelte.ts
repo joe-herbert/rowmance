@@ -2,19 +2,51 @@
  * Panel layout store.
  * Manages the split-panel state for the main area of the application.
  * Up to four panels can be open in a 2×2 grid.
+ *
+ * Open items are tracked independently of the panel layout — closing a panel
+ * does not remove items from the open list. Items are removed only via closeOpenItem().
  */
 import type { PanelState, PanelKind, SplitMode } from '$lib/types';
 
+export interface OpenItem {
+  id: string;
+  content: PanelKind;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-let nextPanelId = 0;
+let nextId = 0;
 
-function createPanelId(): string {
-  return `panel-${++nextPanelId}`;
+function createId(): string {
+  return `panel-${++nextId}`;
 }
 
 function makePanel(content: PanelKind): PanelState {
-  return { id: createPanelId(), content };
+  return { id: createId(), content };
+}
+
+/**
+ * Returns true when two PanelKind values represent the same logical item.
+ * query_editor instances are always treated as distinct.
+ */
+export function sameContent(a: PanelKind, b: PanelKind): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case 'table_browser':
+      return b.kind === 'table_browser' && a.connectionId === b.connectionId && a.database === b.database && a.table === b.table;
+    case 'ddl_viewer':
+      return b.kind === 'ddl_viewer' && a.connectionId === b.connectionId && a.database === b.database && a.objectName === b.objectName;
+    case 'erd':
+      return b.kind === 'erd' && a.connectionId === b.connectionId && a.database === b.database;
+    case 'explain':
+      return b.kind === 'explain' && a.connectionId === b.connectionId && a.sql === b.sql;
+    case 'settings':
+      return true;
+    case 'query_editor':
+      return false;
+    case 'empty':
+      return true;
+  }
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -22,6 +54,7 @@ function makePanel(content: PanelKind): PanelState {
 let panels = $state<PanelState[]>([makePanel({ kind: 'empty' })]);
 let splitMode = $state<SplitMode>('none');
 let focusedIndex = $state(0);
+let openItems = $state<OpenItem[]>([]);
 
 // ── Split mode transitions ────────────────────────────────────────────────────
 
@@ -69,10 +102,53 @@ export function usePanels() {
     get focusedPanel(): PanelState {
       return panels[focusedIndex];
     },
+    get openItems() {
+      return openItems;
+    },
 
-    /** Open content in the currently focused panel. */
+    /**
+     * Open content in the currently focused panel.
+     * - If the content is already shown in another panel, focuses that panel instead.
+     * - Adds the item to the open list (deduplicated by sameContent).
+     * - query_editor always adds a new entry (each session is distinct).
+     */
     openInFocused(content: PanelKind) {
+      if (content.kind !== 'empty') {
+        // If already visible in some panel, just focus it
+        const existingPanelIdx = panels.findIndex(p => sameContent(p.content, content));
+        if (existingPanelIdx !== -1) {
+          focusedIndex = existingPanelIdx;
+          return;
+        }
+        // Add to open items if not already tracked
+        if (!openItems.find(item => sameContent(item.content, content))) {
+          openItems = [...openItems, { id: createId(), content }];
+        }
+      }
       panels = panels.map((p, i) => (i === focusedIndex ? { ...p, content } : p));
+    },
+
+    /** Show an already-tracked open item in the focused panel. */
+    showItem(item: OpenItem) {
+      // If item is already visible in some panel, focus that panel
+      const existingPanelIdx = panels.findIndex(p => sameContent(p.content, item.content));
+      if (existingPanelIdx !== -1) {
+        focusedIndex = existingPanelIdx;
+        return;
+      }
+      panels = panels.map((p, i) => (i === focusedIndex ? { ...p, content: item.content } : p));
+    },
+
+    /** Remove an item from the open list and reset any panel showing it to empty. */
+    closeOpenItem(itemId: string) {
+      const item = openItems.find(i => i.id === itemId);
+      if (!item) return;
+      openItems = openItems.filter(i => i.id !== itemId);
+      panels = panels.map(p =>
+        sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+      );
+      // Clamp focused index in case the layout visually changes
+      focusedIndex = Math.min(focusedIndex, panels.length - 1);
     },
 
     /** Split the layout by adding a new panel in the given direction. */

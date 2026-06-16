@@ -1,60 +1,71 @@
 /**
  * Master design token definitions for Rowmance.
  * All colours, spacing, typography and layout values live here as CSS variables.
- * Theme files (light.css, dark.css) override only the values that differ.
+ * The default state is the light glassmorphism theme.
+ * Theme files (light.css, dark.css) override specific values.
  * User-created themes stored in ~/.config/rowmance/themes/ follow the same pattern.
  */
 
 :root {
+  /* ── Aurora background ──────────────────────────────────────────────────── */
+  --app-background:
+    radial-gradient(130% 130% at 8% -10%, #d9c6ff 0%, transparent 46%),
+    radial-gradient(120% 120% at 108% 6%, #c2ddff 0%, transparent 50%),
+    radial-gradient(120% 130% at 74% 116%, #c4f3e4 0%, transparent 55%),
+    linear-gradient(155deg, #f2eefb, #eaf0fb);
+
+  /* ── Glass effect ───────────────────────────────────────────────────────── */
+  --glass-blur: blur(22px) saturate(160%);
+
   /* ── Colour palette ─────────────────────────────────────────────────────── */
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f5f5f5;
-  --color-bg-tertiary: #ebebeb;
-  --color-bg-overlay: #ffffff;
-  --color-bg-hover: rgba(0, 0, 0, 0.04);
-  --color-bg-active: rgba(0, 0, 0, 0.08);
+  --color-bg-primary: rgba(255, 255, 255, 0.58);
+  --color-bg-secondary: rgba(255, 255, 255, 0.50);
+  --color-bg-tertiary: rgba(255, 255, 255, 0.42);
+  --color-bg-overlay: rgba(245, 243, 255, 0.90);
+  --color-bg-hover: rgba(255, 255, 255, 0.55);
+  --color-bg-active: rgba(255, 255, 255, 0.65);
 
-  --color-border: #e0e0e0;
-  --color-border-strong: #c0c0c0;
+  --color-border: rgba(120, 110, 180, 0.18);
+  --color-border-strong: rgba(100, 90, 160, 0.28);
 
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #555555;
-  --color-text-muted: #999999;
-  --color-text-disabled: #c0c0c0;
+  --color-text-primary: #26262f;
+  --color-text-secondary: rgba(38, 38, 47, 0.62);
+  --color-text-muted: rgba(38, 38, 47, 0.42);
+  --color-text-disabled: rgba(38, 38, 47, 0.28);
   --color-text-on-accent: #ffffff;
 
-  --color-accent: #4f46e5;
-  --color-accent-hover: #4338ca;
-  --color-accent-subtle: #eef2ff;
+  --color-accent: #7c5cff;
+  --color-accent-hover: #6c4ee8;
+  --color-accent-subtle: rgba(124, 92, 255, 0.12);
 
   --color-danger: #dc2626;
   --color-danger-hover: #b91c1c;
-  --color-danger-subtle: #fef2f2;
+  --color-danger-subtle: rgba(220, 38, 38, 0.12);
 
   --color-warning: #d97706;
-  --color-warning-subtle: #fffbeb;
+  --color-warning-subtle: rgba(217, 119, 6, 0.12);
 
   --color-success: #16a34a;
-  --color-success-subtle: #f0fdf4;
+  --color-success-subtle: rgba(22, 163, 74, 0.12);
 
   --color-null: #a855f7;
 
   /* ── Editor colours ─────────────────────────────────────────────────────── */
-  --color-editor-bg: #fafafa;
-  --color-editor-text: #1a1a1a;
-  --color-editor-gutter-bg: #f0f0f0;
-  --color-editor-gutter-text: #aaaaaa;
-  --color-editor-selection: #b3d4fc;
-  --color-editor-active-line: #f0f0f0;
-  --color-editor-cursor: #4f46e5;
-  --color-editor-keyword: #7c3aed;
-  --color-editor-string: #16a34a;
+  --color-editor-bg: rgba(255, 255, 255, 0.62);
+  --color-editor-text: #26262f;
+  --color-editor-gutter-bg: rgba(240, 238, 252, 0.6);
+  --color-editor-gutter-text: rgba(38, 38, 47, 0.35);
+  --color-editor-selection: rgba(124, 92, 255, 0.15);
+  --color-editor-active-line: rgba(124, 92, 255, 0.06);
+  --color-editor-cursor: #7c5cff;
+  --color-editor-keyword: #7c5cff;
+  --color-editor-string: #1f9d6a;
   --color-editor-number: #b45309;
-  --color-editor-comment: #9ca3af;
+  --color-editor-comment: rgba(38, 38, 47, 0.38);
   --color-editor-operator: #d97706;
-  --color-editor-function: #0ea5e9;
+  --color-editor-function: #0369a1;
   --color-editor-type: #0891b2;
-  --color-editor-bracket-match: #c7d2fe;
+  --color-editor-bracket-match: rgba(124, 92, 255, 0.18);
 
   /* ── Connection dot colours ─────────────────────────────────────────────── */
   --color-connection-connected: #16a34a;
@@ -62,8 +73,8 @@
   --color-connection-error: #dc2626;
 
   /* ── Scrollbar ──────────────────────────────────────────────────────────── */
-  --color-scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --color-scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+  --color-scrollbar-thumb: rgba(100, 90, 160, 0.18);
+  --color-scrollbar-thumb-hover: rgba(100, 90, 160, 0.32);
   --color-scrollbar-track: transparent;
 
   /* ── Spacing scale ──────────────────────────────────────────────────────── */
@@ -94,21 +105,26 @@
   --line-height-normal: 1.5;
 
   /* ── Border radius ──────────────────────────────────────────────────────── */
-  --radius-sm: 3px;
-  --radius-md: 5px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --radius-xl: 13px;
 
   /* ── Shadows ────────────────────────────────────────────────────────────── */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.14);
-  --shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.18);
+  --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
+  --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
+  --shadow-lg: 0 12px 40px rgba(60, 40, 120, 0.16);
+  --shadow-overlay: 0 24px 60px rgba(60, 40, 120, 0.22);
 
   /* ── Transitions ────────────────────────────────────────────────────────── */
   --transition-fast: 100ms ease;
   --transition-md: 180ms ease;
   --transition-slow: 300ms ease;
+
+  /* ── Panels ─────────────────────────────────────────────────────────────── */
+  --panel-spacing: 11px;
+  --panel-radius: 13px;
+  --panel-opacity: 1;
 
   /* ── Layout dimensions ──────────────────────────────────────────────────── */
   --sidebar-width: 240px;
@@ -129,7 +145,7 @@
   --table-cell-padding-x: 10px;
   --table-cell-padding-y: 6px;
   --color-table-row-alt: rgba(0, 0, 0, 0.02);
-  --color-table-row-hover: rgba(79, 70, 229, 0.05);
-  --color-table-row-selected: rgba(79, 70, 229, 0.1);
-  --color-table-header-bg: var(--color-bg-secondary);
+  --color-table-row-hover: rgba(124, 92, 255, 0.07);
+  --color-table-row-selected: rgba(124, 92, 255, 0.13);
+  --color-table-header-bg: rgba(240, 238, 252, 0.5);
 }
