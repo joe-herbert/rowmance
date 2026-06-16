@@ -230,6 +230,28 @@
   const activeProfiles = $derived(
     connectionStore.profiles.filter((p) => connectionStore.isActive(p.id)),
   );
+
+  // ── System item helpers ───────────────────────────────────────────────────────
+
+  const SYSTEM_DATABASES = new Set([
+    'information_schema',
+    'mysql',
+    'performance_schema',
+    'sys',
+    'pg_catalog',
+    'pg_toast',
+    'pg_temp',
+  ]);
+
+  const SYSTEM_TABLE_PATTERNS = [/^__drizzle_migrations$/, /^migrations$/, /^schema_migrations$/];
+
+  function isSystemDatabase(db: string): boolean {
+    return SYSTEM_DATABASES.has(db.toLowerCase());
+  }
+
+  function isSystemTable(name: string): boolean {
+    return SYSTEM_TABLE_PATTERNS.some((p) => p.test(name));
+  }
 </script>
 
 <svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
@@ -326,6 +348,7 @@
                   <!-- Database node -->
                   <button
                     class="node-row database-node"
+                    class:system={isSystemDatabase(database)}
                     onclick={() => toggleDatabase(profile.id, database)}
                     oncontextmenu={(e) => showDbContextMenu(e, profile.id, database)}
                     aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} database {database}"
@@ -349,6 +372,7 @@
                           <!-- svelte-ignore a11y_no_static_element_interactions -->
                           <button
                             class="node-row table-node"
+                            class:system={isSystemTable(table.name)}
                             ondblclick={() => openTable(profile.id, database, table.name)}
                             onclick={() => openTable(profile.id, database, table.name)}
                             oncontextmenu={(e) => showContextMenu(e, profile.id, database, table)}
@@ -621,6 +645,10 @@
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     flex-shrink: 0;
+  }
+
+  .node-row.system {
+    opacity: 0.5;
   }
 
   .connection-node {

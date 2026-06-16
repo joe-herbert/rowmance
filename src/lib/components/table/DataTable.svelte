@@ -637,6 +637,8 @@
               >
                 {#if cellValue === null}
                   <span class="null-value">NULL</span>
+                {:else if cellValue === ''}
+                  <span class="empty-value">EMPTY</span>
                 {:else if typeof cellValue === 'boolean'}
                   <span
                     class="bool-value"
@@ -1006,6 +1008,12 @@
   }
 
   .null-value {
+    color: var(--color-null);
+    font-style: italic;
+    font-size: var(--font-size-xs);
+  }
+
+  .empty-value {
     color: var(--color-null);
     font-style: italic;
     font-size: var(--font-size-xs);
