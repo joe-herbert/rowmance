@@ -12,6 +12,7 @@
   import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useShortcuts } from '$lib/stores/shortcuts.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import { openNewWindow } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
@@ -31,6 +32,7 @@
   const settings = $derived(settingsStore.settings);
   const sidebarFloating = $derived(settings.sidebarFloating);
   const panelStore = usePanels();
+  const shortcutsStore = useShortcuts();
 
   function openSettings() {
     const existingIdx = panelStore.panels.findIndex(p => p.content.kind === 'settings');
@@ -47,6 +49,8 @@
   let installing = $state(false);
 
   onMount(async () => {
+    shortcutsStore.load(settings.shortcutPreset);
+
     if (settings.autoUpdateCheck) {
       try {
         const result = await updaterApi.updaterCheck();
@@ -115,6 +119,11 @@
     if (action === 'TOGGLE_RIGHT_SIDEBAR') toggleRightSidebar();
     if (action === 'NEW_WINDOW') openNewWindow();
     if (action === 'OPEN_SETTINGS') openSettings();
+    if (action === 'NEW_QUERY_EDITOR') {
+      const focused = panelStore.focusedPanel.content;
+      const connectionId = 'connectionId' in focused ? focused.connectionId : null;
+      if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
+    }
   }
 
   // On macOS with titleBarStyle:"overlay" the webview fills behind the traffic
