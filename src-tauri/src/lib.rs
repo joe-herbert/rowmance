@@ -10,7 +10,8 @@ mod lib_sql;
 
 use connections::pool_manager::ConnectionManager;
 use connections::ssh_tunnel::SshTunnelManager;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri::menu::{Menu, MenuItem, Submenu};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,6 +21,16 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            let settings_item = MenuItem::with_id(app, "settings", "Settings", true, Some("cmd+,"))?;
+            let app_submenu = Submenu::with_items(app, "Rowmance", true, &[&settings_item])?;
+            let menu = Menu::with_items(app, &[&app_submenu])?;
+            app.set_menu(menu)?;
+            app.on_menu_event(|app, event| {
+                if event.id() == "settings" {
+                    let _ = app.emit("menu:open-settings", ());
+                }
+            });
+
             // Initialise the SQLite pool synchronously via a blocking call during setup.
             let sqlite = tauri::async_runtime::block_on(db::init_pool())
                 .expect("Failed to initialise local SQLite database");

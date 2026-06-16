@@ -11,8 +11,10 @@
   import Toast from '$lib/components/ui/Toast.svelte';
   import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { usePanels } from '$lib/stores/panels.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import { openNewWindow } from '$lib/tauri/window';
+  import { listen } from '@tauri-apps/api/event';
 
   // ── Sidebar widths (persisted as CSS variables) ───────────────────────────
 
@@ -24,6 +26,16 @@
 
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
+  const panelStore = usePanels();
+
+  function openSettings() {
+    const existingIdx = panelStore.panels.findIndex(p => p.content.kind === 'settings');
+    if (existingIdx !== -1) {
+      panelStore.focus(existingIdx);
+    } else {
+      panelStore.openInFocused({ kind: 'settings' });
+    }
+  }
 
   interface UpdateInfo { version: string; notes: string | null }
   let pendingUpdate = $state<UpdateInfo | null>(null);
@@ -31,15 +43,19 @@
   let installing = $state(false);
 
   onMount(async () => {
-    if (!settings.autoUpdateCheck) return;
-    try {
-      const result = await updaterApi.updaterCheck();
-      if (result.available && result.version) {
-        pendingUpdate = { version: result.version, notes: result.notes };
+    if (settings.autoUpdateCheck) {
+      try {
+        const result = await updaterApi.updaterCheck();
+        if (result.available && result.version) {
+          pendingUpdate = { version: result.version, notes: result.notes };
+        }
+      } catch {
+        // Update check failures are silently swallowed to avoid disrupting startup.
       }
-    } catch {
-      // Update check failures are silently swallowed to avoid disrupting startup.
     }
+
+    const unlisten = await listen('menu:open-settings', openSettings);
+    return unlisten;
   });
 
   async function installUpdate() {
@@ -89,6 +105,7 @@
     const action = (e as CustomEvent<{ action: string }>).detail.action;
     if (action === 'TOGGLE_RIGHT_SIDEBAR') toggleRightSidebar();
     if (action === 'NEW_WINDOW') openNewWindow();
+    if (action === 'OPEN_SETTINGS') openSettings();
   }
 
   // On macOS with titleBarStyle:"overlay" the webview fills behind the traffic

@@ -12,6 +12,7 @@
   import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
   import ErdCanvas from '$lib/components/erd/ErdCanvas.svelte';
   import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
+  import Settings from '$lib/components/settings/Settings.svelte';
 
   interface Props {
     index: number;
@@ -62,6 +63,8 @@
       rawJson={panel.content.sql}
       dialect={panel.content.dialect}
     />
+  {:else if panel.content.kind === 'settings'}
+    <Settings />
   {:else}
     <!-- Empty panel placeholder -->
     <div class="empty-panel">

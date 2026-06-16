@@ -204,6 +204,7 @@ export type PanelKind =
   | { kind: 'ddl_viewer'; connectionId: string; database: string; objectName: string; objectType: 'table' | 'view' }
   | { kind: 'erd'; connectionId: string; database: string }
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
+  | { kind: 'settings' }
   | { kind: 'empty' };
 
 export interface PanelState {

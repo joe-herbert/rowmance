@@ -32,7 +32,8 @@ export type ShortcutAction =
   | 'PAGE_PREV'
   | 'COMMAND_PALETTE'
   | 'NEW_QUERY_EDITOR'
-  | 'NEW_WINDOW';
+  | 'NEW_WINDOW'
+  | 'OPEN_SETTINGS';
 
 export interface ShortcutDefinition {
   action: ShortcutAction;
@@ -177,6 +178,13 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+Shift+N',
     jetbrains: 'Mod+Shift+N',
     vim: 'Mod+Shift+N',
+  },
+  {
+    action: 'OPEN_SETTINGS',
+    label: 'Open Settings',
+    vscode: 'Mod+,',
+    jetbrains: 'Mod+,',
+    vim: 'Mod+,',
   },
 ];
 
