@@ -1,0 +1,99 @@
+/**
+ * High-contrast theme — WCAG AAA contrast ratios.
+ * Black background, white text, bright yellow accent.
+ */
+
+[data-theme='high-contrast'] {
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-tertiary: #111111;
+  --color-bg-overlay: #000000;
+  --color-bg-hover: rgba(255, 255, 255, 0.12);
+  --color-bg-active: rgba(255, 255, 255, 0.2);
+
+  --color-border: #ffffff;
+  --color-border-strong: #ffffff;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #eeeeee;
+  --color-text-muted: #cccccc;
+  --color-text-disabled: #888888;
+  --color-text-on-accent: #000000;
+
+  --color-accent: #ffff00;
+  --color-accent-hover: #e6e600;
+  --color-accent-subtle: #1a1a00;
+
+  --color-danger: #ff6b6b;
+  --color-danger-hover: #ff4444;
+  --color-danger-subtle: #1a0000;
+
+  --color-warning: #ffcc00;
+  --color-warning-subtle: #1a1400;
+
+  --color-success: #00ff88;
+  --color-success-subtle: #001a0e;
+
+  --color-null: #ff88ff;
+
+  --color-editor-bg: #000000;
+  --color-editor-text: #ffffff;
+  --color-editor-gutter-bg: #0a0a0a;
+  --color-editor-gutter-text: #aaaaaa;
+  --color-editor-selection: #333300;
+  --color-editor-active-line: #111100;
+  --color-editor-cursor: #ffff00;
+  --color-editor-keyword: #ffff00;
+  --color-editor-string: #00ff88;
+  --color-editor-number: #ffcc00;
+  --color-editor-comment: #888888;
+  --color-editor-operator: #ff88ff;
+  --color-editor-function: #88ffff;
+  --color-editor-type: #88ffff;
+  --color-editor-bracket-match: #333300;
+
+  --color-connection-connected: #00ff88;
+  --color-connection-connecting: #ffcc00;
+  --color-connection-error: #ff6b6b;
+
+  --color-scrollbar-thumb: rgba(255, 255, 255, 0.4);
+  --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.6);
+  --color-scrollbar-track: #000000;
+
+  --color-table-row-alt: rgba(255, 255, 255, 0.04);
+  --color-table-row-hover: rgba(255, 255, 0, 0.08);
+  --color-table-row-selected: rgba(255, 255, 0, 0.15);
+  --color-table-header-bg: #0a0a0a;
+
+  --shadow-sm: 0 1px 2px rgba(255, 255, 255, 0.1);
+  --shadow-md: 0 2px 8px rgba(255, 255, 255, 0.1);
+  --shadow-lg: 0 4px 24px rgba(255, 255, 255, 0.15);
+  --shadow-overlay: 0 8px 32px rgba(255, 255, 255, 0.2);
+
+  /* Bold borders everywhere */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+}
+
+/* Respect the OS forced-colors mode (Windows High Contrast, etc.) */
+@media (forced-colors: active) {
+  [data-theme='high-contrast'],
+  :root {
+    --color-bg-primary: Canvas;
+    --color-bg-secondary: Canvas;
+    --color-bg-tertiary: Canvas;
+    --color-bg-overlay: Canvas;
+    --color-border: ButtonText;
+    --color-border-strong: ButtonText;
+    --color-text-primary: CanvasText;
+    --color-text-secondary: CanvasText;
+    --color-text-muted: GrayText;
+    --color-accent: Highlight;
+    --color-text-on-accent: HighlightText;
+    --color-danger: LinkText;
+    --color-success: ButtonText;
+    --color-warning: ButtonText;
+  }
+}

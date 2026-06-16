@@ -2,6 +2,7 @@
   import '../styles/variables.css';
   import '../styles/themes/light.css';
   import '../styles/themes/dark.css';
+  import '../styles/themes/high-contrast.css';
   import '../styles/base.css';
   import AppShell from '$lib/components/layout/AppShell.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';

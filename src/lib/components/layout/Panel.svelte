@@ -6,6 +6,7 @@
 <script lang="ts">
   import type { PanelState } from '$lib/types';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useConnections } from '$lib/stores/connections.svelte';
   import QueryEditor from '$lib/components/editor/QueryEditor.svelte';
   import TableBrowser from '$lib/components/table/TableBrowser.svelte';
   import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
@@ -20,6 +21,9 @@
 
   const { index, panel, isFocused }: Props = $props();
   const panelStore = usePanels();
+  const connectionStore = useConnections();
+
+  const hasConnections = $derived(connectionStore.profiles.length > 0);
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -32,7 +36,9 @@
   onclick={() => !isFocused && panelStore.focus(index)}
 >
   {#if panel.content.kind === 'query_editor'}
-    <QueryEditor connectionId={panel.content.connectionId} />
+    {#key panel.content}
+      <QueryEditor connectionId={panel.content.connectionId} initialSql={panel.content.initialSql} />
+    {/key}
   {:else if panel.content.kind === 'table_browser'}
     <TableBrowser
       connectionId={panel.content.connectionId}
@@ -59,9 +65,17 @@
   {:else}
     <!-- Empty panel placeholder -->
     <div class="empty-panel">
-      <div class="empty-panel-hint">
-        <p>Open a table from the sidebar, or start a new query.</p>
-      </div>
+      {#if !hasConnections}
+        <div class="empty-panel-hint">
+          <div class="empty-panel-icon" aria-hidden="true">🗄</div>
+          <p class="empty-panel-title">No database connections</p>
+          <p class="empty-panel-subtitle">Add a connection in the left sidebar to get started</p>
+        </div>
+      {:else}
+        <div class="empty-panel-hint">
+          <p>Open a table from the sidebar, or start a new query.</p>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -101,7 +115,28 @@
     text-align: center;
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
-    max-width: 220px;
+    max-width: 260px;
+    line-height: var(--line-height-normal);
+  }
+
+  .empty-panel-icon {
+    font-size: 40px;
+    margin-bottom: var(--spacing-3);
+    line-height: 1;
+    opacity: 0.5;
+  }
+
+  .empty-panel-title {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    margin: 0 0 var(--spacing-2);
+  }
+
+  .empty-panel-subtitle {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin: 0;
     line-height: var(--line-height-normal);
   }
 </style>

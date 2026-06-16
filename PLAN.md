@@ -1571,24 +1571,24 @@ update:
 
 #### Week 15: Keyboard Navigation and Accessibility
 
-- [ ] Audit every interactive element for keyboard reachability (Tab order)
-- [ ] Focus trap in modals (dialog, command palette)
-- [ ] ARIA roles and labels on custom components (tree, data table, split panels)
+- [x] Audit every interactive element for keyboard reachability (Tab order)
+- [x] Focus trap in modals (dialog, command palette)
+- [x] ARIA roles and labels on custom components (tree, data table, split panels)
 - [ ] Screen reader test pass on macOS (VoiceOver)
-- [ ] High-contrast theme variant
-- [ ] Keyboard navigation within data table (arrow keys, Enter to edit)
-- [ ] Skip links where appropriate
+- [x] High-contrast theme variant
+- [x] Keyboard navigation within data table (arrow keys, Enter to edit)
+- [x] Skip links where appropriate
 
 #### Week 16: Error Handling, Onboarding, and Docs
 
-- [ ] Connection error UX — inline error with reconnect button
-- [ ] Query error UX — error displayed below editor with line number if available
-- [ ] Toast/notification system for background operations (import progress, update available)
-- [ ] Empty state screen when no connections exist (illustrated prompt to add first connection)
-- [ ] Onboarding tooltip sequence for first-time users (dismissible)
-- [ ] `README.md` — project overview, build instructions, contribution guide
-- [ ] `CONTRIBUTING.md` — branch conventions, PR process, testing guide
-- [ ] End-to-end smoke test for core path (connect → query → edit → save)
+- [x] Connection error UX — inline error with reconnect button
+- [x] Query error UX — error displayed below editor with line number if available
+- [x] Toast/notification system for background operations (import progress, update available)
+- [x] Empty state screen when no connections exist (illustrated prompt to add first connection)
+- [x] Onboarding tooltip sequence for first-time users (dismissible)
+- [x] `README.md` — project overview, build instructions, contribution guide
+- [x] `CONTRIBUTING.md` — branch conventions, PR process, testing guide
+- [x] End-to-end smoke test for core path (connect → query → edit → save)
 
 **Phase 5 Deliverable**: v1.0 release candidate.
 

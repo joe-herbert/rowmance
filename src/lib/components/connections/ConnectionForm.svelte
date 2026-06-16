@@ -41,6 +41,7 @@
   let username = $state(profile?.username ?? '');
   let password = $state('');
   let passwordDirty = $state(false);
+  let showPassword = $state(false);
   let color = $state(profile?.color ?? '');
   let readOnly = $state(profile?.readOnly ?? false);
 
@@ -53,6 +54,7 @@
   let sshAuthType = $state<'password' | 'key'>(profile?.sshAuthType ?? 'password');
   let sshKeyPath = $state(profile?.sshKeyPath ?? '');
   let sshPassword = $state('');
+  let showSshPassword = $state(false);
 
   // ── SSL fields ────────────────────────────────────────────────────────────────
 
@@ -77,6 +79,16 @@
 
   const isEditing = profile !== undefined;
   const title = isEditing ? 'Edit Connection' : 'New Connection';
+
+  $effect(() => {
+    if (!isEditing) return;
+    keychainApi.keychainRetrieve(profile.id, 'db_password').then((v) => {
+      if (v) password = v;
+    });
+    keychainApi.keychainRetrieve(profile.id, 'ssh_password').then((v) => {
+      if (v) sshPassword = v;
+    });
+  });
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -107,9 +119,9 @@
   }
 
   async function saveSecrets(id: string) {
-    if (password) {
+    if (password && (!isEditing || passwordDirty)) {
       await keychainApi.keychainStore(id, 'db_password', password);
-    } else if (passwordDirty) {
+    } else if (passwordDirty && !password) {
       // User explicitly cleared the field — remove any stored password.
       await keychainApi.keychainDelete(id, 'db_password');
     }
@@ -266,19 +278,24 @@
         </div>
 
         <div class="field">
-          <label for="conn-password" class="label">
-            Password
-            {#if isEditing}<span class="label-hint">(leave blank to keep existing)</span>{/if}
-          </label>
-          <input
-            id="conn-password"
-            class="input"
-            type="password"
-            bind:value={password}
-            oninput={() => (passwordDirty = true)}
-            placeholder={isEditing ? '••••••••' : ''}
-            autocomplete="current-password"
-          />
+          <label for="conn-password" class="label">Password</label>
+          <div class="password-row">
+            <input
+              id="conn-password"
+              class="input"
+              type={showPassword ? 'text' : 'password'}
+              bind:value={password}
+              oninput={() => (passwordDirty = true)}
+              placeholder={isEditing ? '••••••••' : ''}
+              autocomplete="current-password"
+            />
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm btn--icon"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onclick={() => (showPassword = !showPassword)}
+            >{showPassword ? '🙈' : '👁'}</button>
+          </div>
         </div>
 
         <div class="field field--color">
@@ -331,7 +348,15 @@
           {#if sshAuthType === 'password'}
             <div class="field">
               <label for="ssh-password" class="label">SSH Password</label>
-              <input id="ssh-password" class="input" type="password" bind:value={sshPassword} placeholder={isEditing ? '••••••••' : ''} />
+              <div class="password-row">
+                <input id="ssh-password" class="input" type={showSshPassword ? 'text' : 'password'} bind:value={sshPassword} placeholder={isEditing ? '••••••••' : ''} />
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--sm btn--icon"
+                  aria-label={showSshPassword ? 'Hide password' : 'Show password'}
+                  onclick={() => (showSshPassword = !showSshPassword)}
+                >{showSshPassword ? '🙈' : '👁'}</button>
+              </div>
             </div>
           {:else}
             <div class="field">
@@ -599,6 +624,22 @@
 
   .file-row .input {
     flex: 1;
+  }
+
+  .password-row {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: center;
+  }
+
+  .password-row .input {
+    flex: 1;
+  }
+
+  .btn--icon {
+    flex-shrink: 0;
+    padding: 0 var(--spacing-2);
+    font-size: var(--font-size-md);
   }
 
   .color-row {

@@ -8,6 +8,7 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { SHORTCUT_DEFINITIONS, type ShortcutAction } from '$lib/stores/shortcuts.svelte';
+  import { focusTrap } from '$lib/utils/focus-trap';
   import type { SavedQuery } from '$lib/types';
 
   interface Props {
@@ -237,7 +238,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="backdrop" role="dialog" aria-modal="true" aria-label="Command Palette" onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}>
-  <div class="palette">
+  <div class="palette" use:focusTrap>
     <div class="search-row">
       <span class="search-icon" aria-hidden="true">⌘</span>
       <input

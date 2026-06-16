@@ -237,7 +237,15 @@
                       >✕</button>
                     </div>
                     {#if connectionStore.errorIds.has(profile.id)}
-                      <div class="error-row">{connectionStore.errorIds.get(profile.id)}</div>
+                      <div class="error-row">
+                        <span class="error-message">{connectionStore.errorIds.get(profile.id)}</span>
+                        <button
+                          class="retry-btn"
+                          onclick={() => handleConnect(profile)}
+                          aria-label="Retry connecting to {profile.name}"
+                          title="Retry connection"
+                        >Retry</button>
+                      </div>
                     {/if}
                   </li>
                 {/each}
@@ -617,9 +625,38 @@
   }
 
   .error-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
     padding: 2px var(--spacing-3) var(--spacing-1) 36px;
     font-size: var(--font-size-xs);
     color: var(--color-danger);
+  }
+
+  .error-message {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .retry-btn {
+    flex-shrink: 0;
+    height: 16px;
+    padding: 0 var(--spacing-1);
+    background: transparent;
+    border: 1px solid var(--color-danger);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    color: var(--color-danger);
+    cursor: pointer;
+    line-height: 1;
+    transition: background var(--transition-fast);
+  }
+
+  .retry-btn:hover {
+    background: var(--color-danger-subtle);
   }
 
   .edit-btn {

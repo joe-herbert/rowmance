@@ -340,6 +340,82 @@
     editTarget = null;
   }
 
+  // ── Keyboard cell navigation ──────────────────────────────────────────────
+
+  let focusedCell = $state<{ row: number; col: number } | null>(null);
+
+  function handleTableKeydown(e: KeyboardEvent): void {
+    // Don't intercept keystrokes when an editor is open or target is an input.
+    if (editTarget !== null) return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+    const rowCount = pageRows.length;
+    const colCount = visibleColumns.length;
+    if (rowCount === 0 || colCount === 0) return;
+
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
+      e.preventDefault();
+    }
+
+    if (!focusedCell) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        focusedCell = { row: 0, col: 0 };
+        scrollFocusedCellIntoView(focusedCell);
+      }
+      return;
+    }
+
+    let { row, col } = focusedCell;
+
+    if (e.key === 'ArrowDown') {
+      row = Math.min(row + 1, rowCount - 1);
+    } else if (e.key === 'ArrowUp') {
+      row = Math.max(row - 1, 0);
+    } else if (e.key === 'ArrowRight') {
+      col = Math.min(col + 1, colCount - 1);
+    } else if (e.key === 'ArrowLeft') {
+      col = Math.max(col - 1, 0);
+    } else if (e.key === 'Enter') {
+      if (editable) {
+        const { originalIndex } = visibleColumns[col];
+        const row_data = pageRows[row];
+        if (row_data) {
+          const fakeEvent = { currentTarget: getFocusedCellEl(row, col) } as unknown as MouseEvent;
+          handleCellDblClick(fakeEvent, row_data, row, originalIndex);
+        }
+      }
+      return;
+    } else if (e.key === 'Escape') {
+      cancelEdit();
+      focusedCell = null;
+      return;
+    } else {
+      return;
+    }
+
+    focusedCell = { row, col };
+    scrollFocusedCellIntoView(focusedCell);
+  }
+
+  function getFocusedCellEl(row: number, col: number): HTMLTableCellElement | null {
+    if (!tableContainerEl) return null;
+    // +2 for the two header rows; +1 for the checkbox column
+    const tr = tableContainerEl.querySelector<HTMLTableRowElement>(
+      `tbody tr:nth-child(${row + 1})`,
+    );
+    if (!tr) return null;
+    return tr.querySelector<HTMLTableCellElement>(`td:nth-child(${col + 2})`);
+  }
+
+  function scrollFocusedCellIntoView(cell: { row: number; col: number }): void {
+    requestAnimationFrame(() => {
+      const el = getFocusedCellEl(cell.row, cell.col);
+      el?.focus();
+      el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+  }
+
   // ── Cell formatting ───────────────────────────────────────────────────────
 
   function formatCell(value: CellValue): string {
@@ -423,7 +499,7 @@
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
   onclick={dismissContextMenu}
-  onkeydown={handleContextMenuKeydown}
+  onkeydown={(e) => { handleContextMenuKeydown(e); handleTableKeydown(e); }}
 >
   <div class="table-scroll">
     <table class="data-table">
@@ -544,16 +620,20 @@
                 aria-label="Select row"
               />
             </td>
-            {#each visibleColumns as { col, originalIndex }}
+            {#each visibleColumns as { col, originalIndex }, colIndex}
               {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
               {@const isPending = hasPendingChange(rowKey, col.name)}
+              {@const isFocused = focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
               <td
                 class="data-cell"
                 class:cell-pending={isPending}
                 class:cell-editable={editable}
+                class:cell-focused={isFocused}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
+                tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
-                title={editable ? 'Double-click to edit' : undefined}
+                onfocus={() => (focusedCell = { row: rowIndex, col: colIndex })}
+                title={editable ? 'Double-click or press Enter to edit' : undefined}
               >
                 {#if cellValue === null}
                   <span class="null-value">NULL</span>
@@ -903,6 +983,7 @@
     font-size: var(--font-size-sm);
     vertical-align: middle;
     box-sizing: border-box;
+    user-select: text;
   }
 
   .data-cell.cell-editable {
@@ -911,6 +992,13 @@
 
   .data-cell.cell-editable:hover {
     background: var(--color-bg-hover);
+  }
+
+  .data-cell.cell-focused,
+  .data-cell:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+    background: var(--color-accent-subtle);
   }
 
   .data-cell.cell-pending {

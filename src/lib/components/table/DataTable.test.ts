@@ -260,3 +260,96 @@ describe('reorderColumns', () => {
     expect(reorderColumns([0, 1], 1, 0)).toEqual([1, 0]);
   });
 });
+
+// ── keyboard cell navigation ──────────────────────────────────────────────────
+
+// Pure mirror of handleTableKeydown's movement logic, extracted for testing.
+function moveFocus(
+  current: { row: number; col: number } | null,
+  key: string,
+  rowCount: number,
+  colCount: number,
+): { row: number; col: number } | null {
+  if (rowCount === 0 || colCount === 0) return current;
+
+  if (!current) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+      return { row: 0, col: 0 };
+    }
+    return null;
+  }
+
+  let { row, col } = current;
+
+  if (key === 'ArrowDown') row = Math.min(row + 1, rowCount - 1);
+  else if (key === 'ArrowUp') row = Math.max(row - 1, 0);
+  else if (key === 'ArrowRight') col = Math.min(col + 1, colCount - 1);
+  else if (key === 'ArrowLeft') col = Math.max(col - 1, 0);
+  else return current;
+
+  return { row, col };
+}
+
+describe('moveFocus — initial selection', () => {
+  it('returns {0,0} on ArrowDown when no cell is focused', () => {
+    expect(moveFocus(null, 'ArrowDown', 3, 3)).toEqual({ row: 0, col: 0 });
+  });
+
+  it('returns {0,0} on ArrowRight when no cell is focused', () => {
+    expect(moveFocus(null, 'ArrowRight', 3, 3)).toEqual({ row: 0, col: 0 });
+  });
+
+  it('returns null for non-arrow keys when no cell is focused', () => {
+    expect(moveFocus(null, 'Enter', 3, 3)).toBeNull();
+    expect(moveFocus(null, 'Escape', 3, 3)).toBeNull();
+  });
+
+  it('returns current as-is when the table is empty', () => {
+    expect(moveFocus(null, 'ArrowDown', 0, 0)).toBeNull();
+    expect(moveFocus({ row: 0, col: 0 }, 'ArrowDown', 0, 0)).toEqual({ row: 0, col: 0 });
+  });
+});
+
+describe('moveFocus — arrow movement', () => {
+  it('moves down one row', () => {
+    expect(moveFocus({ row: 0, col: 0 }, 'ArrowDown', 3, 3)).toEqual({ row: 1, col: 0 });
+  });
+
+  it('moves up one row', () => {
+    expect(moveFocus({ row: 2, col: 0 }, 'ArrowUp', 3, 3)).toEqual({ row: 1, col: 0 });
+  });
+
+  it('moves right one column', () => {
+    expect(moveFocus({ row: 0, col: 0 }, 'ArrowRight', 3, 3)).toEqual({ row: 0, col: 1 });
+  });
+
+  it('moves left one column', () => {
+    expect(moveFocus({ row: 0, col: 2 }, 'ArrowLeft', 3, 3)).toEqual({ row: 0, col: 1 });
+  });
+});
+
+describe('moveFocus — boundary clamping', () => {
+  it('does not move past the last row on ArrowDown', () => {
+    expect(moveFocus({ row: 2, col: 0 }, 'ArrowDown', 3, 3)).toEqual({ row: 2, col: 0 });
+  });
+
+  it('does not move past row 0 on ArrowUp', () => {
+    expect(moveFocus({ row: 0, col: 0 }, 'ArrowUp', 3, 3)).toEqual({ row: 0, col: 0 });
+  });
+
+  it('does not move past the last column on ArrowRight', () => {
+    expect(moveFocus({ row: 0, col: 2 }, 'ArrowRight', 3, 3)).toEqual({ row: 0, col: 2 });
+  });
+
+  it('does not move past column 0 on ArrowLeft', () => {
+    expect(moveFocus({ row: 0, col: 0 }, 'ArrowLeft', 3, 3)).toEqual({ row: 0, col: 0 });
+  });
+});
+
+describe('moveFocus — unrecognised keys', () => {
+  it('returns the current position unchanged for unrecognised keys', () => {
+    const pos = { row: 1, col: 1 };
+    expect(moveFocus(pos, 'Home', 3, 3)).toEqual(pos);
+    expect(moveFocus(pos, 'PageDown', 3, 3)).toEqual(pos);
+  });
+});

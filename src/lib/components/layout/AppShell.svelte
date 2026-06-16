@@ -8,6 +8,8 @@
   import Sidebar from './Sidebar.svelte';
   import SplitPanel from './SplitPanel.svelte';
   import RightSidebar from './RightSidebar.svelte';
+  import Toast from '$lib/components/ui/Toast.svelte';
+  import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import { openNewWindow } from '$lib/tauri/window';
@@ -88,14 +90,24 @@
     if (action === 'TOGGLE_RIGHT_SIDEBAR') toggleRightSidebar();
     if (action === 'NEW_WINDOW') openNewWindow();
   }
+
+  // On macOS with titleBarStyle:"overlay" the webview fills behind the traffic
+  // lights, so we render a draggable strip to push content clear of them.
+  const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 </script>
 
 <svelte:document on:shortcut-action={handleShortcutAction} />
+
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
 <div
   class="app-shell-wrapper"
   style="--sidebar-width: {leftWidth}px; --right-sidebar-width: {rightWidth}px;"
 >
+  {#if isMacOS}
+    <div class="titlebar" data-tauri-drag-region aria-hidden="true"></div>
+  {/if}
+
   {#if pendingUpdate && !updateDismissed}
     <div class="update-banner" role="alert" aria-live="polite">
       <span class="update-message">
@@ -142,7 +154,7 @@
   ></div>
 
   <!-- Main split-panel area -->
-  <main class="main-area">
+  <main id="main-content" class="main-area">
     <SplitPanel />
   </main>
 
@@ -180,7 +192,45 @@
 </div>
 </div>
 
+<Toast />
+<OnboardingTip />
+
 <style>
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 9999;
+    padding: var(--spacing-2) var(--spacing-4);
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+  }
+
+  .skip-link:focus {
+    left: var(--spacing-4);
+  }
+
+  .titlebar {
+    height: 28px;
+    flex-shrink: 0;
+    /* Left portion matches the sidebar, right matches the main area — hard stop
+       at the sidebar width using the same CSS variable used for layout. */
+    background: linear-gradient(
+      to right,
+      var(--color-bg-secondary) var(--sidebar-width),
+      var(--color-bg-primary) var(--sidebar-width)
+    );
+    /* Keep the border consistent with the sidebar/main-area boundary. */
+    border-bottom: 1px solid var(--color-border);
+    position: relative;
+    z-index: 50;
+  }
+
   .app-shell-wrapper {
     display: flex;
     flex-direction: column;

@@ -20,6 +20,7 @@ body {
   background-color: var(--color-bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  user-select: none; /* Desktop app — UI chrome is not selectable. */
 }
 
 /* Scrollbars */
