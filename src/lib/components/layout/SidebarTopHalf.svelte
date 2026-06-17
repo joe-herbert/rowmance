@@ -41,6 +41,61 @@
   const focusedContent = $derived(panelStore.panels[panelStore.focusedIndex]?.content);
   const hasFocusedConnection = $derived(focusedContent !== undefined && 'connectionId' in focusedContent);
 
+  // ── Drag state ────────────────────────────────────────────────────────────────
+
+  let dragId = $state<string | null>(null);
+  let isDragging = $state(false);
+  let dropTarget = $state<{ id: string; position: 'before' | 'after' } | null>(null);
+  let pointerStartY = 0;
+
+  $effect(() => {
+    if (!dragId) return;
+
+    function onMove(e: PointerEvent) {
+      if (!isDragging && Math.abs(e.clientY - pointerStartY) > 4) {
+        isDragging = true;
+      }
+      if (!isDragging) return;
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const item = el?.closest<HTMLElement>('[data-drag-id]');
+      const targetId = item?.dataset.dragId;
+
+      if (!targetId || targetId === dragId) {
+        dropTarget = null;
+        return;
+      }
+
+      const rect = item!.getBoundingClientRect();
+      const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      dropTarget = { id: targetId, position };
+    }
+
+    function onUp() {
+      if (isDragging && dropTarget) {
+        panelStore.reorderOpenItems(dragId!, dropTarget.id, dropTarget.position);
+      }
+      dragId = null;
+      isDragging = false;
+      dropTarget = null;
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  });
+
+  function onPointerDown(e: PointerEvent, id: string) {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('.close-btn')) return;
+    pointerStartY = e.clientY;
+    dragId = id;
+  }
+
   function openNewQueryEditor() {
     const focused = panelStore.focusedPanel.content;
     const connectionId = 'connectionId' in focused ? focused.connectionId : null;
@@ -81,17 +136,23 @@
   {#if panelStore.openItems.length === 0}
     <div class="empty-hint">No open editors</div>
   {:else}
-    <ul class="panel-list" role="listbox" aria-label="Open panels">
+    <ul class="panel-list" class:is-dragging={isDragging} role="listbox" aria-label="Open panels">
       {#each panelStore.openItems as item (item.id)}
         {@const isFocused = focusedContent !== undefined && sameContent(focusedContent, item.content)}
         {@const connInfo = panelConnInfo(item.content)}
+        {#if dropTarget?.id === item.id && dropTarget.position === 'before'}
+          <div class="drop-indicator" aria-hidden="true"></div>
+        {/if}
         <li
           class="panel-item"
           class:focused={isFocused}
+          class:dragging={isDragging && dragId === item.id}
           role="option"
           aria-selected={isFocused}
+          data-drag-id={item.id}
           onclick={() => panelStore.showItem(item)}
           onkeydown={(e) => e.key === 'Enter' && panelStore.showItem(item)}
+          onpointerdown={(e) => onPointerDown(e, item.id)}
           tabindex="0"
         >
           <span
@@ -143,6 +204,9 @@
             </svg>
           </button>
         </li>
+        {#if dropTarget?.id === item.id && dropTarget.position === 'after'}
+          <div class="drop-indicator" aria-hidden="true"></div>
+        {/if}
       {/each}
     </ul>
   {/if}
@@ -209,6 +273,11 @@
     flex-direction: column;
     overflow-y: auto;
     min-height: 0;
+    padding: 1px 0;
+  }
+
+  .panel-list.is-dragging {
+    cursor: grabbing;
   }
 
   .panel-item {
@@ -235,6 +304,19 @@
     color: var(--color-accent);
     font-weight: 600;
     box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+
+  .panel-item.dragging {
+    opacity: 0.4;
+  }
+
+  .drop-indicator {
+    height: 2px;
+    margin: -1px 18px;
+    background: var(--color-accent);
+    border-radius: 1px;
+    flex-shrink: 0;
+    pointer-events: none;
   }
 
   .conn-dot {

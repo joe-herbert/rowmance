@@ -629,7 +629,6 @@
                   selectedRowKeys = new Set([rowKey]);
                   onCellSelect?.(originalIndex, row);
                 }}
-                title={editable ? 'Double-click or press Enter to edit' : undefined}
               >
                 {#if cellValue === null}
                   <span class="null-value">NULL</span>

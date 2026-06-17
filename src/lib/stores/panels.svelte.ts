@@ -229,5 +229,18 @@ export function usePanels() {
         focusedIndex = index;
       }
     },
+
+    /** Reorder open items by moving fromId to before/after toId. */
+    reorderOpenItems(fromId: string, toId: string, position: 'before' | 'after') {
+      if (fromId === toId) return;
+      const fromIndex = openItems.findIndex(i => i.id === fromId);
+      if (fromIndex === -1) return;
+      const items = [...openItems];
+      const [item] = items.splice(fromIndex, 1);
+      const insertAt = items.findIndex(i => i.id === toId);
+      if (insertAt === -1) return;
+      items.splice(position === 'before' ? insertAt : insertAt + 1, 0, item);
+      openItems = items;
+    },
   };
 }
