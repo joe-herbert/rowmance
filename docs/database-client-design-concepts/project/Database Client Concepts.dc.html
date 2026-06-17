@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body::-webkit-scrollbar{width:13px;height:13px}
+  body::-webkit-scrollbar-thumb{background:var(--page-faint,#9a9aa4);border-radius:10px;border:4px solid transparent;background-clip:content-box}
+  body::-webkit-scrollbar-track{background:transparent}
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" style="--page-bg:#ececed;--page-text:#1c1c22;--page-muted:#73737e;--page-faint:#a3a3ad;--card-cap:#ffffff;--cap-text:#5a5a64;--cap-border:#e4e4ea;--hair:#dcdcde;min-height:100vh;width:max-content;min-width:100%;background:var(--page-bg);color:var(--page-text);padding:60px 64px 100px;font-family:-apple-system,'SF Pro Text','SF Pro Display','Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased">
+
+  <!-- INTRO -->
+  <header style="max-width:880px;margin-bottom:56px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <span style="width:26px;height:26px;border-radius:7px;background:var(--accent-global,#7c5cff);display:grid;place-items:center;box-shadow:0 4px 12px -2px color-mix(in srgb,var(--accent-global,#7c5cff) 55%,transparent)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><ellipse cx="12" cy="5.5" rx="8" ry="3"></ellipse><path d="M4 5.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path><path d="M4 11.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path></svg>
+      </span>
+      <span style="font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--page-muted)">DATABASE CLIENT · DESIGN CONCEPTS</span>
+    </div>
+    <h1 style="font-size:46px;line-height:1.05;letter-spacing:-0.025em;font-weight:680;margin:0 0 18px">Four directions,<br>one workspace.</h1>
+    <p style="font-size:16.5px;line-height:1.6;color:var(--page-muted);margin:0 0 26px;max-width:720px;text-wrap:pretty">Every concept below is the <strong style="color:var(--page-text);font-weight:600">same functional skeleton</strong> — collapsible schema sidebar, query editor, data grid, and row inspector under macOS-native chrome — wearing a different skin. You're comparing aesthetics, not layouts. The entire palette is driven by CSS variables, so a single accent token re-themes every screen at once.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:9px;margin-bottom:22px">
+      <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--page-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:7px 12px;border-radius:9px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-global,#7c5cff)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        Panels collapse — click the chevrons
+      </span>
+      <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--page-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:7px 12px;border-radius:9px">
+        <span style="width:11px;height:11px;border-radius:3px;background:var(--accent-global,#7c5cff)"></span>
+        Accent is live — open Tweaks
+      </span>
+      <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--page-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:7px 12px;border-radius:9px">Light + dark, side by side</span>
+      <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--page-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:7px 12px;border-radius:9px">PostgreSQL · SQL editor</span>
+    </div>
+  </header>
+
+  <!-- 01 MINIMALISM -->
+  <section style="margin-bottom:64px">
+    <div style="display:flex;align-items:baseline;gap:16px;padding-bottom:16px;margin-bottom:26px;border-bottom:1px solid var(--hair)">
+      <span style="font-size:13px;font-weight:700;color:var(--accent-global,#7c5cff);font-family:ui-monospace,Menlo,monospace">01</span>
+      <div>
+        <h2 style="font-size:23px;font-weight:640;letter-spacing:-0.01em;margin:0 0 5px">Crisp minimalism</h2>
+        <p style="font-size:14px;color:var(--page-muted);margin:0;max-width:640px">Flat surfaces, hairline rules, zero ornament. Every pixel earns its place — the data <em>is</em> the interface.</p>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:7px">
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">Hairline borders</span>
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">High contrast</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:30px">
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#fff;border:1px solid #d8d8de"></span>Light</figcaption>
+        <dc-import name="DBWindow" vars="{{ minLight }}" treatment="flat" screen="Minimalism — Light" hint-size="1240px,720px"></dc-import>
+      </figure>
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#16161c"></span>Dark</figcaption>
+        <dc-import name="DBWindow" vars="{{ minDark }}" treatment="flat" screen="Minimalism — Dark" hint-size="1240px,720px"></dc-import>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 02 NEUMORPHISM -->
+  <section style="margin-bottom:64px">
+    <div style="display:flex;align-items:baseline;gap:16px;padding-bottom:16px;margin-bottom:26px;border-bottom:1px solid var(--hair)">
+      <span style="font-size:13px;font-weight:700;color:var(--accent-global,#7c5cff);font-family:ui-monospace,Menlo,monospace">02</span>
+      <div>
+        <h2 style="font-size:23px;font-weight:640;letter-spacing:-0.01em;margin:0 0 5px">Neumorphism</h2>
+        <p style="font-size:14px;color:var(--page-muted);margin:0;max-width:640px">Soft, extruded monochrome. Controls feel physical — raised buttons, recessed inputs — on one calm surface.</p>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:7px">
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">Soft shadows</span>
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">Tactile controls</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:30px">
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#e7e8ef;border:1px solid #d8d8de"></span>Light</figcaption>
+        <dc-import name="DBWindow" vars="{{ neuLight }}" treatment="neu" screen="Neumorphism — Light" hint-size="1240px,720px"></dc-import>
+      </figure>
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#2a2c34"></span>Dark</figcaption>
+        <dc-import name="DBWindow" vars="{{ neuDark }}" treatment="neu" screen="Neumorphism — Dark" hint-size="1240px,720px"></dc-import>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 03 GLASSMORPHISM -->
+  <section style="margin-bottom:64px">
+    <div style="display:flex;align-items:baseline;gap:16px;padding-bottom:16px;margin-bottom:26px;border-bottom:1px solid var(--hair)">
+      <span style="font-size:13px;font-weight:700;color:var(--accent-global,#7c5cff);font-family:ui-monospace,Menlo,monospace">03</span>
+      <div>
+        <h2 style="font-size:23px;font-weight:640;letter-spacing:-0.01em;margin:0 0 5px">Glassmorphism</h2>
+        <p style="font-size:14px;color:var(--page-muted);margin:0;max-width:640px">Frosted, translucent panels float over an ambient gradient. Depth comes from blur and light, not lines.</p>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:7px">
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">Backdrop blur</span>
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">Floating panels</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:30px">
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#16161c"></span>Dark</figcaption>
+        <dc-import name="DBWindow" vars="{{ glassDark }}" treatment="glass" screen="Glassmorphism — Dark" hint-size="1240px,720px"></dc-import>
+      </figure>
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#e7e0fb;border:1px solid #d8d8de"></span>Light</figcaption>
+        <dc-import name="DBWindow" vars="{{ glassLight }}" treatment="glass" screen="Glassmorphism — Light" hint-size="1240px,720px"></dc-import>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 04 AURORA -->
+  <section style="margin-bottom:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;padding-bottom:16px;margin-bottom:26px;border-bottom:1px solid var(--hair)">
+      <span style="font-size:13px;font-weight:700;color:var(--accent-global,#7c5cff);font-family:ui-monospace,Menlo,monospace">04</span>
+      <div>
+        <h2 style="font-size:23px;font-weight:640;letter-spacing:-0.01em;margin:0 0 5px">Aurora blobs</h2>
+        <p style="font-size:14px;color:var(--page-muted);margin:0;max-width:640px">Living color drifts behind calm, translucent panels. Atmospheric and modern — and it follows your accent.</p>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:7px">
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">Ambient color</span>
+        <span style="font-size:11.5px;color:var(--page-muted);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 10px;border-radius:7px">Accent-driven</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:30px">
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#0a0a12"></span>Dark</figcaption>
+        <dc-import name="DBWindow" vars="{{ auroraDark }}" treatment="aurora" screen="Aurora — Dark" hint-size="1240px,720px"></dc-import>
+      </figure>
+      <figure style="margin:0">
+        <figcaption style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--cap-text);background:var(--card-cap);border:1px solid var(--cap-border);padding:5px 11px;border-radius:999px;margin-bottom:13px"><span style="width:9px;height:9px;border-radius:50%;background:#efe9fb;border:1px solid #d8d8de"></span>Light</figcaption>
+        <dc-import name="DBWindow" vars="{{ auroraLight }}" treatment="aurora" screen="Aurora — Light" hint-size="1240px,720px"></dc-import>
+      </figure>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#7c5cff&quot;,&quot;options&quot;:[&quot;#7c5cff&quot;,&quot;#6366f1&quot;,&quot;#3b82f6&quot;,&quot;#0ea5e9&quot;,&quot;#10b981&quot;,&quot;#f59e0b&quot;,&quot;#f43f5e&quot;,&quot;#ec4899&quot;],&quot;tsType&quot;:&quot;string&quot;},&quot;canvas&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Light&quot;,&quot;options&quot;:[&quot;Light&quot;,&quot;Dark&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  rootRef = React.createRef();
+
+  componentDidMount() { this.apply(); }
+  componentDidUpdate() { this.apply(); }
+
+  apply() {
+    const el = this.rootRef.current;
+    if (!el) return;
+    el.style.setProperty("--accent-global", this.props.accent || "#7c5cff");
+    const dark = (this.props.canvas || "Light") === "Dark";
+    const p = dark
+      ? { bg: "#121216", text: "#f0f0f4", muted: "#8a8a95", faint: "#5c5c66", cap: "#1e1e25", capText: "#b9b9c3", capBorder: "#2a2a33", hair: "#26262d" }
+      : { bg: "#ececed", text: "#1c1c22", muted: "#73737e", faint: "#a3a3ad", cap: "#ffffff", capText: "#5a5a64", capBorder: "#e4e4ea", hair: "#dcdcde" };
+    el.style.setProperty("--page-bg", p.bg);
+    el.style.setProperty("--page-text", p.text);
+    el.style.setProperty("--page-muted", p.muted);
+    el.style.setProperty("--page-faint", p.faint);
+    el.style.setProperty("--card-cap", p.cap);
+    el.style.setProperty("--cap-text", p.capText);
+    el.style.setProperty("--cap-border", p.capBorder);
+    el.style.setProperty("--hair", p.hair);
+  }
+
+  renderVals() {
+    const minLight = "--winbg:#f6f6f8;--bg:#f6f6f8;--panel:#ffffff;--panel2:#fafafb;--rail:#fbfbfc;--text:#1b1b22;--muted:#84848f;--faint:#b3b3bd;--border:#ececf0;--bstrong:#e2e2e8;--grid:#f1f1f4;--hover:#f5f5f8;--chip:#f1f1f5;--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 9%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:var(--accent-global,#7c5cff);--str:#2f9e6d;--num:#b45309;--pane-edge:none;--seam-b:1px solid var(--border);--seam-t:1px solid var(--border);--seam-r:1px solid var(--border);--seam-l:1px solid var(--border);--pane-radius:0;--bodypad:0;--panegap:0;--blur:none;--ctl-bg:var(--panel2);--ctl-border:1px solid var(--border);--raise:none;--inset:none;--win-border:1px solid #e3e3e9;--win-shadow:0 30px 64px -26px rgba(25,25,55,.30),0 8px 24px -12px rgba(25,25,55,.12);";
+
+    const minDark = "--winbg:#0f0f14;--bg:#0f0f14;--panel:#16161c;--panel2:#1b1b22;--rail:#131319;--text:#ecedf2;--muted:#80808c;--faint:#52525c;--border:#26262e;--bstrong:#08080c;--grid:#1e1e25;--hover:#1f1f28;--chip:#23232c;--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 17%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:#b6a4ff;--str:#6ee7b7;--num:#fdba74;--pane-edge:none;--seam-b:1px solid var(--border);--seam-t:1px solid var(--border);--seam-r:1px solid var(--border);--seam-l:1px solid var(--border);--pane-radius:0;--bodypad:0;--panegap:0;--blur:none;--ctl-bg:#1f1f28;--ctl-border:1px solid #2b2b34;--raise:none;--inset:none;--win-border:1px solid #000;--win-shadow:0 30px 70px -24px rgba(0,0,0,.72),0 8px 24px -12px rgba(0,0,0,.55);";
+
+    const neuLight = "--winbg:#e7e8ef;--bg:#e7e8ef;--panel:#e7e8ef;--panel2:#e7e8ef;--rail:#e7e8ef;--text:#454860;--muted:#8d91a6;--faint:#abafc1;--border:#d6d8e3;--bstrong:#d2d4df;--grid:#dcdee7;--hover:#e1e2eb;--chip:#e7e8ef;--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 13%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:var(--accent-global,#7c5cff);--str:#3a9d77;--num:#b45309;--pane-edge:none;--seam-b:1px solid #dadce6;--seam-t:1px solid #dadce6;--seam-r:1px solid #dadce6;--seam-l:1px solid #dadce6;--pane-radius:0;--bodypad:0;--panegap:0;--blur:none;--ctl-bg:#e7e8ef;--ctl-border:none;--raise:-5px -5px 11px #ffffff,5px 5px 11px #bcbecb;--inset:inset 4px 4px 8px #bcbecb,inset -4px -4px 8px #ffffff;--win-border:none;--win-shadow:18px 18px 40px #c2c4d0,-16px -16px 38px #ffffff;";
+
+    const neuDark = "--winbg:#2a2c34;--bg:#2a2c34;--panel:#2a2c34;--panel2:#2a2c34;--rail:#2a2c34;--text:#d7dae8;--muted:#8b8fa2;--faint:#6c7082;--border:#34363f;--bstrong:#34363f;--grid:#30323b;--hover:#30323b;--chip:#2a2c34;--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 22%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:#b6a4ff;--str:#6ee7b7;--num:#fdba74;--pane-edge:none;--seam-b:1px solid #34363f;--seam-t:1px solid #34363f;--seam-r:1px solid #34363f;--seam-l:1px solid #34363f;--pane-radius:0;--bodypad:0;--panegap:0;--blur:none;--ctl-bg:#2a2c34;--ctl-border:none;--raise:-5px -5px 11px #353842,5px 5px 11px #1b1c22;--inset:inset 4px 4px 8px #1b1c22,inset -4px -4px 8px #363943;--win-border:none;--win-shadow:0 30px 64px -26px rgba(0,0,0,.62);";
+
+    const glassDark = "--winbg:radial-gradient(130% 130% at 8% -10%,#3c1d72 0%,transparent 46%),radial-gradient(120% 120% at 108% 8%,#123a72 0%,transparent 50%),radial-gradient(120% 130% at 72% 116%,#0c5b59 0%,transparent 55%),linear-gradient(155deg,#0d0d1a,#0a0a14);--bg:transparent;--panel:rgba(255,255,255,0.055);--panel2:rgba(255,255,255,0.04);--rail:rgba(255,255,255,0.05);--text:#eef0f8;--muted:rgba(238,240,248,0.62);--faint:rgba(238,240,248,0.4);--border:rgba(255,255,255,0.10);--bstrong:rgba(255,255,255,0.16);--grid:rgba(255,255,255,0.06);--hover:rgba(255,255,255,0.07);--chip:rgba(255,255,255,0.10);--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 30%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:#c4b5fd;--str:#6ee7b7;--num:#fdba74;--pane-edge:1px solid rgba(255,255,255,0.10);--seam-b:1px solid rgba(255,255,255,0.10);--seam-t:1px solid rgba(255,255,255,0.10);--seam-r:1px solid rgba(255,255,255,0.10);--seam-l:1px solid rgba(255,255,255,0.10);--pane-radius:15px;--bodypad:11px;--panegap:11px;--blur:blur(22px) saturate(150%);--ctl-bg:rgba(255,255,255,0.06);--ctl-border:1px solid rgba(255,255,255,0.14);--raise:none;--inset:none;--win-border:1px solid rgba(255,255,255,0.14);--win-shadow:0 44px 96px -30px rgba(0,0,0,.72);";
+
+    const glassLight = "--winbg:radial-gradient(130% 130% at 8% -10%,#d9c6ff 0%,transparent 46%),radial-gradient(120% 120% at 108% 6%,#c2ddff 0%,transparent 50%),radial-gradient(120% 130% at 74% 116%,#c4f3e4 0%,transparent 55%),linear-gradient(155deg,#f2eefb,#eaf0fb);--bg:transparent;--panel:rgba(255,255,255,0.58);--panel2:rgba(255,255,255,0.42);--rail:rgba(255,255,255,0.5);--text:#26262f;--muted:rgba(38,38,47,0.6);--faint:rgba(38,38,47,0.4);--border:rgba(255,255,255,0.75);--bstrong:rgba(120,110,170,0.22);--grid:rgba(110,100,150,0.13);--hover:rgba(255,255,255,0.55);--chip:rgba(255,255,255,0.62);--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 16%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:var(--accent-global,#7c5cff);--str:#1f9d6a;--num:#b45309;--pane-edge:1px solid rgba(255,255,255,0.8);--seam-b:1px solid rgba(255,255,255,0.7);--seam-t:1px solid rgba(255,255,255,0.7);--seam-r:1px solid rgba(255,255,255,0.7);--seam-l:1px solid rgba(255,255,255,0.7);--pane-radius:15px;--bodypad:11px;--panegap:11px;--blur:blur(22px) saturate(150%);--ctl-bg:rgba(255,255,255,0.5);--ctl-border:1px solid rgba(255,255,255,0.8);--raise:none;--inset:none;--win-border:1px solid rgba(255,255,255,0.85);--win-shadow:0 44px 96px -32px rgba(70,50,130,.42);";
+
+    const auroraDark = "--winbg:#08080f;--bg:transparent;--panel:rgba(16,16,26,0.8);--panel2:rgba(22,22,34,0.78);--rail:rgba(13,13,20,0.8);--text:#edeef5;--muted:rgba(237,238,245,0.6);--faint:rgba(237,238,245,0.38);--border:rgba(255,255,255,0.09);--bstrong:rgba(255,255,255,0.14);--grid:rgba(255,255,255,0.055);--hover:rgba(255,255,255,0.06);--chip:rgba(255,255,255,0.08);--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 30%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:#c4b5fd;--str:#6ee7b7;--num:#fdba74;--pane-edge:1px solid rgba(255,255,255,0.09);--seam-b:1px solid rgba(255,255,255,0.09);--seam-t:1px solid rgba(255,255,255,0.09);--seam-r:1px solid rgba(255,255,255,0.09);--seam-l:1px solid rgba(255,255,255,0.09);--pane-radius:14px;--bodypad:18px;--panegap:12px;--blur:blur(7px);--ctl-bg:rgba(255,255,255,0.06);--ctl-border:1px solid rgba(255,255,255,0.11);--raise:none;--inset:none;--blob-op:0.95;--win-border:1px solid rgba(255,255,255,0.1);--win-shadow:0 44px 96px -30px rgba(0,0,0,.82);";
+
+    const auroraLight = "--winbg:#f1f0fa;--bg:transparent;--panel:rgba(255,255,255,0.86);--panel2:rgba(255,255,255,0.8);--rail:rgba(255,255,255,0.84);--text:#26262f;--muted:rgba(38,38,47,0.6);--faint:rgba(38,38,47,0.4);--border:rgba(110,100,160,0.16);--bstrong:rgba(110,100,160,0.24);--grid:rgba(110,100,150,0.13);--hover:rgba(150,140,190,0.1);--chip:rgba(245,243,252,0.9);--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 14%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:var(--accent-global,#7c5cff);--str:#1f9d6a;--num:#b45309;--pane-edge:1px solid rgba(255,255,255,0.9);--seam-b:1px solid rgba(110,100,160,0.14);--seam-t:1px solid rgba(110,100,160,0.14);--seam-r:1px solid rgba(110,100,160,0.14);--seam-l:1px solid rgba(110,100,160,0.14);--pane-radius:14px;--bodypad:18px;--panegap:12px;--blur:blur(7px);--ctl-bg:rgba(255,255,255,0.7);--ctl-border:1px solid rgba(255,255,255,0.9);--raise:none;--inset:none;--blob-op:0.62;--win-border:1px solid rgba(255,255,255,0.9);--win-shadow:0 44px 96px -34px rgba(80,60,150,.32);";
+
+    return { rootRef: this.rootRef, minLight, minDark, neuLight, neuDark, glassDark, glassLight, auroraDark, auroraLight };
+  }
+}
+</script>
+</body>
+</html>

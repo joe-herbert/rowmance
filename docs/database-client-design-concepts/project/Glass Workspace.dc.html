@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0}
+  .gscroll::-webkit-scrollbar{width:11px;height:11px}
+  .gscroll::-webkit-scrollbar-thumb{background:var(--faint);border-radius:9px;border:3px solid transparent;background-clip:content-box}
+  .gscroll::-webkit-scrollbar-track{background:transparent}
+  @keyframes gspin{to{transform:rotate(360deg)}}
+  @keyframes gshimmer{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+  .gedit{font-family:inherit}
+  .gedit:focus{outline:none}
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" style="--page-bg:#0b0b14;--winbg:radial-gradient(130% 130% at 8% -10%,#3c1d72 0%,transparent 46%),radial-gradient(120% 120% at 108% 8%,#123a72 0%,transparent 50%),radial-gradient(120% 130% at 72% 116%,#0c5b59 0%,transparent 55%),linear-gradient(155deg,#0d0d1a,#0a0a14);--panel:rgba(255,255,255,0.055);--panel2:rgba(255,255,255,0.04);--rail:rgba(255,255,255,0.05);--text:#eef0f8;--muted:rgba(238,240,248,0.62);--faint:rgba(238,240,248,0.4);--border:rgba(255,255,255,0.10);--bstrong:rgba(255,255,255,0.16);--grid:rgba(255,255,255,0.06);--hover:rgba(255,255,255,0.07);--chip:rgba(255,255,255,0.10);--sel:color-mix(in srgb,var(--accent-global,#7c5cff) 30%,transparent);--selbar:var(--accent-global,#7c5cff);--kw:#c4b5fd;--str:#6ee7b7;--num:#fdba74;--ctl-bg:rgba(255,255,255,0.06);--ctl-border:1px solid rgba(255,255,255,0.14);--blur:blur(22px) saturate(150%);min-height:100vh;background:var(--page-bg);padding:38px 40px 60px;display:flex;flex-direction:column;align-items:center;gap:22px;font-family:-apple-system,'SF Pro Text','SF Pro Display','Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;color:var(--text)">
+
+  <!-- HINT BAR -->
+  <div style="width:1240px;display:flex;align-items:center;gap:14px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="width:26px;height:26px;border-radius:7px;background:var(--accent-global,#7c5cff);display:grid;place-items:center;box-shadow:0 4px 14px -2px color-mix(in srgb,var(--accent-global,#7c5cff) 60%,transparent)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><ellipse cx="12" cy="5.5" rx="8" ry="3"></ellipse><path d="M4 5.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path><path d="M4 11.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path></svg>
+      </span>
+      <span style="font-size:13px;font-weight:600;letter-spacing:.04em;color:rgba(255,255,255,0.9)">Glassmorphism · multiple connections</span>
+    </div>
+    <div style="flex:1"></div>
+    <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(255,255,255,0.66);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:6px 11px;border-radius:8px">Open editors carry a connection color</span>
+    <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(255,255,255,0.66);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:6px 11px;border-radius:8px">Switch tabs → context follows</span>
+    <span style="display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(255,255,255,0.66);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:6px 11px;border-radius:8px">Double-click a cell to edit</span>
+  </div>
+
+  <!-- WINDOW -->
+  <div data-screen-label="Glass workspace · multi-connection" style="position:relative;overflow:hidden;width:1240px;height:760px;border-radius:15px;background:var(--winbg);color:var(--text);box-shadow:0 50px 110px -34px rgba(0,0,0,.75);border:1px solid rgba(255,255,255,0.14);display:flex;flex-direction:column;font-size:13px">
+
+    <sc-if value="{{ connOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeConn }}" style="position:absolute;inset:0;z-index:40"></div>
+    </sc-if>
+
+    <div style="position:relative;z-index:1;display:flex;flex-direction:column;flex:1;min-height:0;padding:11px;gap:11px">
+
+      <!-- TITLE BAR -->
+      <div style="position:relative;z-index:45;flex-shrink:0;height:46px;display:flex;align-items:center;gap:12px;padding:0 14px 0 16px;background:var(--panel);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);border-radius:13px">
+        <div style="display:flex;gap:8px;align-items:center;margin-right:4px">
+          <span style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></span>
+          <span style="width:12px;height:12px;border-radius:50%;background:#febc2e"></span>
+          <span style="width:12px;height:12px;border-radius:50%;background:#28c840"></span>
+        </div>
+
+        <!-- FOCUSED CONNECTION (follows active editor) -->
+        <div style="position:relative">
+          <button onClick="{{ toggleConn }}" style="display:flex;align-items:center;gap:8px;padding:5px 11px 5px 9px;border-radius:9px;background:var(--ctl-bg);border:var(--ctl-border);border-left:3px solid {{ chipColor }};color:var(--text);cursor:pointer" style-hover="background:var(--hover)">
+            <span style="width:8px;height:8px;border-radius:50%;background:{{ chipColor }};box-shadow:0 0 0 3px color-mix(in srgb,{{ chipColor }} 26%,transparent)"></span>
+            <span style="font-weight:600;font-size:12.5px">{{ chipName }}</span>
+            <span style="font-size:9.5px;color:var(--muted);background:var(--chip);padding:1px 6px;border-radius:5px">{{ chipTag }}</span>
+            <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></sc-if>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <sc-if value="{{ connOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;top:40px;left:0;z-index:50;width:344px;padding:7px;border-radius:13px;background:rgba(28,26,42,0.72);-webkit-backdrop-filter:blur(26px) saturate(160%);backdrop-filter:blur(26px) saturate(160%);border:1px solid rgba(255,255,255,0.16);box-shadow:0 30px 60px -18px rgba(0,0,0,.7)">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:7px 9px 6px">ACTIVE CONNECTIONS · 3</div>
+              <sc-for list="{{ connections }}" as="c" hint-placeholder-count="3">
+                <div onClick="{{ c.jump }}" style="display:flex;align-items:center;gap:11px;padding:9px;border-radius:9px;cursor:pointer;background:{{ c.bg }}" style-hover="background:var(--hover)">
+                  <span style="width:9px;height:9px;border-radius:50%;background:{{ c.color }};flex-shrink:0;box-shadow:0 0 0 3px color-mix(in srgb,{{ c.color }} 20%,transparent)"></span>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:7px"><span style="font-size:13px;font-weight:600;color:var(--text)">{{ c.name }}</span><span style="font-size:9.5px;color:var(--muted);background:var(--chip);padding:1px 6px;border-radius:5px">{{ c.tag }}</span></div>
+                    <div style="font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.host }}</div>
+                  </div>
+                  <sc-if value="{{ c.active }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-global,#7c5cff)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></sc-if>
+                </div>
+              </sc-for>
+              <div style="height:1px;background:var(--border);margin:6px 4px"></div>
+              <div style="display:flex;align-items:center;gap:9px;padding:9px;border-radius:9px;cursor:pointer;color:var(--accent-global,#7c5cff);font-weight:600;font-size:12.5px" style-hover="background:var(--hover)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Add connection…
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;padding:2px;border-radius:9px;background:var(--ctl-bg);border:var(--ctl-border);font-size:12px">
+          <span style="padding:4px 12px;border-radius:7px;background:var(--panel);color:var(--accent-global,#7c5cff);font-weight:600">Data</span>
+          <span style="padding:4px 12px;border-radius:7px;color:var(--muted)">Structure</span>
+          <span style="padding:4px 12px;border-radius:7px;color:var(--muted)">SQL</span>
+        </div>
+        <div style="flex:1"></div>
+        <div style="display:flex;align-items:center;gap:7px;width:228px;padding:6px 11px;border-radius:9px;background:var(--ctl-bg);border:var(--ctl-border)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+          <span style="flex:1;color:var(--faint);font-size:12.5px">Search…</span>
+          <span style="font-size:10.5px;color:var(--faint);border:1px solid var(--border);border-radius:5px;padding:1px 5px">⌘K</span>
+        </div>
+      </div>
+
+      <!-- BODY -->
+      <div style="flex:1;display:flex;min-height:0;gap:11px">
+
+        <!-- LEFT -->
+        <aside style="width:{{ leftW }};flex-shrink:0;overflow:hidden;transition:width .24s cubic-bezier(.4,0,.2,1);background:var(--rail);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);border-radius:13px">
+          <div style="width:262px;height:100%;display:flex;flex-direction:column">
+
+            <!-- OPEN EDITORS (across connections) -->
+            <div style="flex-shrink:0;padding:9px 8px;border-bottom:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:6px;padding:1px 6px 7px">
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted)">OPEN</span>
+                <span style="font-size:10.5px;color:var(--faint)">{{ editorCount }}</span>
+                <div style="flex:1"></div>
+                <button style="display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer" style-hover="background:var(--hover)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+                <button onClick="{{ toggleL }}" style="display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer" style-hover="background:var(--hover)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+              </div>
+              <sc-for list="{{ editorsView }}" as="e" hint-placeholder-count="3">
+                <div onClick="{{ e.open }}" style="display:flex;align-items:center;gap:8px;padding:7px 8px 7px 10px;border-radius:8px;cursor:pointer;background:{{ e.bg }};color:{{ e.color }};font-weight:{{ e.weight }};box-shadow:{{ e.bar }}" style-hover="background:var(--hover)">
+                  <span style="width:7px;height:7px;border-radius:50%;background:{{ e.dot }};flex-shrink:0" title="{{ e.connName }}"></span>
+                  <sc-if value="{{ e.isTable }}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9.5" x2="21" y2="9.5"></line><line x1="9" y1="9.5" x2="9" y2="20"></line></svg></sc-if>
+                  <sc-if value="{{ e.isQuery }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></sc-if>
+                  <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.name }}</span>
+                  <span style="font-size:10px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:78px">{{ e.connShort }}</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.8" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+                </div>
+              </sc-for>
+            </div>
+
+            <!-- CONNECTIONS TREE -->
+            <div style="flex-shrink:0;display:flex;align-items:center;gap:6px;padding:11px 14px 6px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted)">CONNECTIONS</span>
+              <span style="font-size:10.5px;color:var(--faint)">3</span>
+            </div>
+            <div class="gscroll" style="flex:1;overflow:auto;padding:0 8px 8px">
+              <sc-for list="{{ connTree }}" as="c" hint-placeholder-count="3">
+                <div style="margin-bottom:3px">
+                  <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer" style-hover="background:var(--hover)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate({{ c.rot }});transition:transform .15s"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <span style="width:9px;height:9px;border-radius:50%;background:{{ c.color }};flex-shrink:0;box-shadow:0 0 0 3px color-mix(in srgb,{{ c.color }} 18%,transparent)"></span>
+                    <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</span>
+                    <sc-if value="{{ c.ro }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></sc-if>
+                  </div>
+                  <sc-if value="{{ c.expanded }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding-left:8px">
+                      <sc-for list="{{ c.tables }}" as="t" hint-placeholder-count="4">
+                        <div onClick="{{ t.open }}" style="display:flex;align-items:center;gap:9px;padding:6px 10px 6px 18px;border-radius:8px;cursor:pointer;background:{{ t.bg }};color:{{ t.color }};font-weight:{{ t.weight }};box-shadow:{{ t.bar }}" style-hover="background:var(--hover)">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ t.icon }}" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9.5" x2="21" y2="9.5"></line><line x1="9" y1="9.5" x2="9" y2="20"></line></svg>
+                          <span style="flex:1;font-size:12.5px">{{ t.name }}</span>
+                          <span style="font-size:10px;color:var(--faint);font-family:ui-monospace,Menlo,monospace">{{ t.count }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <div style="display:flex;align-items:center;gap:8px;padding:8px;margin-top:4px;border-radius:8px;cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:500" style-hover="background:var(--hover)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Add connection
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- CENTER -->
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:var(--panel);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);border-radius:13px;overflow:hidden">
+
+          <sc-if value="{{ lc }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ toggleL }}" style="position:absolute;left:8px;top:9px;z-index:6;display:grid;place-items:center;width:26px;height:32px;border:var(--ctl-border);border-radius:7px;background:var(--ctl-bg);color:var(--muted);cursor:pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+          </sc-if>
+
+          <!-- QUERY EDITOR -->
+          <div style="flex-shrink:0;background:var(--panel2);border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 12px 6px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted)">QUERY EDITOR</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:50%;background:{{ chipColor }}"></span>{{ chipName }}</span>
+              <div style="flex:1"></div>
+              <span style="font-size:11px;color:{{ timingColor }};font-family:ui-monospace,Menlo,monospace">{{ timingText }}</span>
+              <button style="padding:5px 9px;border:var(--ctl-border);border-radius:7px;background:var(--ctl-bg);color:var(--muted);font-size:11.5px;font-weight:600;cursor:pointer">Format</button>
+              <button onClick="{{ runQuery }}" style="display:flex;align-items:center;gap:6px;min-width:78px;justify-content:center;padding:5px 12px;border:none;border-radius:7px;background:{{ runBg }};color:#fff;font-size:11.5px;font-weight:600;cursor:pointer">
+                <sc-if value="{{ running }}" hint-placeholder-val="{{ false }}"><span style="width:11px;height:11px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;animation:gspin .7s linear infinite"></span><span>Cancel</span></sc-if>
+                <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"></polygon></svg><span>Run</span></sc-if>
+              </button>
+            </div>
+            <div style="display:flex;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;line-height:1.75;padding:2px 0 11px">
+              <div style="flex-shrink:0;width:42px;text-align:right;padding-right:12px;color:var(--faint);user-select:none"><div>1</div><div>2</div><div>3</div></div>
+              <sc-if value="{{ showUsers }}" hint-placeholder-val="{{ true }}">
+                <div>
+                  <div><span style="color:var(--kw);font-weight:600">select</span> <span style="color:var(--muted)">*</span> <span style="color:var(--kw);font-weight:600">from</span> <span style="color:var(--text)">users</span></div>
+                  <div><span style="color:var(--kw);font-weight:600">where</span> <span style="color:var(--text)">status</span> <span style="color:var(--muted)">=</span> <span style="color:var(--str)">'active'</span></div>
+                  <div><span style="color:var(--kw);font-weight:600">order by</span> <span style="color:var(--text)">created_at</span> <span style="color:var(--kw);font-weight:600">desc</span><span style="color:var(--muted)">;</span></div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ showEvents }}" hint-placeholder-val="{{ false }}">
+                <div>
+                  <div><span style="color:var(--kw);font-weight:600">select</span> <span style="color:var(--muted)">*</span> <span style="color:var(--kw);font-weight:600">from</span> <span style="color:var(--text)">events</span></div>
+                  <div><span style="color:var(--kw);font-weight:600">where</span> <span style="color:var(--text)">ts</span> <span style="color:var(--muted)">&gt;</span> <span style="color:var(--kw);font-weight:600">now</span><span style="color:var(--muted)">() -</span> <span style="color:var(--str)">interval '1 hour'</span></div>
+                  <div><span style="color:var(--kw);font-weight:600">order by</span> <span style="color:var(--text)">ts</span> <span style="color:var(--kw);font-weight:600">desc</span><span style="color:var(--muted)">;</span></div>
+                </div>
+              </sc-if>
+            </div>
+            <div style="height:2px;overflow:hidden;background:transparent">
+              <sc-if value="{{ running }}" hint-placeholder-val="{{ false }}"><div style="width:40%;height:100%;background:linear-gradient(90deg,transparent,var(--accent-global,#7c5cff),transparent);animation:gshimmer 1s ease-in-out infinite"></div></sc-if>
+            </div>
+          </div>
+
+          <!-- RESULTS TOOLBAR -->
+          <div style="flex-shrink:0;display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border:1px dashed var(--bstrong);border-radius:8px;color:var(--muted);font-size:12px;cursor:pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"></path></svg>
+              {{ filterText }}
+            </div>
+            <div style="flex:1"></div>
+            <span style="font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace">{{ pageText }}</span>
+            <div style="display:flex;border:var(--ctl-border);border-radius:8px;overflow:hidden">
+              <button style="display:grid;place-items:center;width:28px;height:28px;border:none;background:var(--ctl-bg);color:var(--faint);cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+              <button style="display:grid;place-items:center;width:28px;height:28px;border:none;border-left:var(--ctl-border);background:var(--ctl-bg);color:var(--text);cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+            </div>
+            <button onClick="{{ runQuery }}" style="display:grid;place-items:center;width:28px;height:28px;border:var(--ctl-border);border-radius:8px;background:var(--ctl-bg);color:var(--muted);cursor:pointer" style-hover="color:var(--text)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a8 8 0 0 1 13.5-5.5L20 8"></path><polyline points="20 3 20 8 15 8"></polyline><path d="M20 13a8 8 0 0 1-13.5 5.5L4 16"></path><polyline points="4 21 4 16 9 16"></polyline></svg></button>
+            <sc-if value="{{ notReadOnly }}" hint-placeholder-val="{{ true }}"><button style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:none;border-radius:8px;background:var(--accent-global,#7c5cff);color:#fff;font-size:12px;font-weight:600;cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Add row</button></sc-if>
+            <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:var(--ctl-border);border-radius:8px;background:var(--ctl-bg);color:var(--muted);font-size:11.5px;font-weight:600"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Read-only</span></sc-if>
+          </div>
+
+          <!-- GRID -->
+          <div style="flex:1;position:relative;min-height:0">
+            <div class="gscroll" style="position:absolute;inset:0;overflow:auto">
+
+              <sc-if value="{{ showUsers }}" hint-placeholder-val="{{ true }}">
+                <div style="display: grid; grid-template-columns: 42px 70px 196px 152px 92px 104px 84px minmax(140px,1fr); position: sticky; top: 0; z-index: 2; -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); border-bottom: 1px solid var(--bstrong); font-size: 11px; color: var(--muted); background-color: #e4e4ff8c">
+                  <div style="display:flex;align-items:center;justify-content:center;height:34px">#</div>
+                  <div style="display:flex;align-items:center;gap:5px;height:34px;padding:0 12px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent-global,#7c5cff)" stroke-width="2"><circle cx="8" cy="9" r="4"></circle><path d="M11 12l7 7"></path><path d="M16 17l2-2"></path></svg><span style="font-weight:600">id</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">int8</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">email</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">text</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">full_name</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">text</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">plan</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">status</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">enum</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">mrr</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">created_at</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">timestamptz</span></div>
+                </div>
+                <sc-for list="{{ userRows }}" as="row" hint-placeholder-count="8">
+                  <div style="display:grid;grid-template-columns:42px 70px 196px 152px 92px 104px 84px minmax(140px,1fr);background:{{ row.bg }};box-shadow:{{ row.bar }};cursor:pointer" onClick="{{ row.pick }}" style-hover="background:var(--hover)">
+                    <div style="display:flex;align-items:center;justify-content:center;gap:4px;height:38px;border-bottom:1px solid var(--grid);color:var(--faint);font-size:11px;font-family:ui-monospace,Menlo,monospace">
+                      <sc-if value="{{ row.rowDirty }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent-global,#7c5cff)"></span></sc-if>
+                      <sc-if value="{{ row.clean }}" hint-placeholder-val="{{ true }}"><span>{{ row.n }}</span></sc-if>
+                    </div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--num);font-size:12.5px;font-family:ui-monospace,Menlo,monospace">{{ row.id }}</div>
+                    <div onDoubleClick="{{ row.editEmail }}" style="display:flex;align-items:center;gap:6px;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--text);font-size:12.5px;min-width:0">
+                      <sc-if value="{{ row.eEmail }}" hint-placeholder-val="{{ false }}"><input class="gedit" ref="{{ inputRef }}" value="{{ editVal }}" onChange="{{ onEditChange }}" onKeyDown="{{ onEditKey }}" onBlur="{{ commitEdit }}" style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid var(--accent-global,#7c5cff);border-radius:6px;padding:3px 7px;color:var(--text);font-size:12.5px"></sc-if>
+                      <sc-if value="{{ row.nEmail }}" hint-placeholder-val="{{ true }}"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.email }}</span><sc-if value="{{ row.dEmail }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent-global,#7c5cff);flex-shrink:0"></span></sc-if></sc-if>
+                    </div>
+                    <div onDoubleClick="{{ row.editName }}" style="display:flex;align-items:center;gap:6px;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--text);font-size:12.5px;min-width:0">
+                      <sc-if value="{{ row.eName }}" hint-placeholder-val="{{ false }}"><input class="gedit" ref="{{ inputRef }}" value="{{ editVal }}" onChange="{{ onEditChange }}" onKeyDown="{{ onEditKey }}" onBlur="{{ commitEdit }}" style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid var(--accent-global,#7c5cff);border-radius:6px;padding:3px 7px;color:var(--text);font-size:12.5px"></sc-if>
+                      <sc-if value="{{ row.nName }}" hint-placeholder-val="{{ true }}"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span><sc-if value="{{ row.dName }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent-global,#7c5cff);flex-shrink:0"></span></sc-if></sc-if>
+                    </div>
+                    <div onDoubleClick="{{ row.editPlan }}" style="display:flex;align-items:center;gap:6px;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);min-width:0">
+                      <sc-if value="{{ row.ePlan }}" hint-placeholder-val="{{ false }}"><input class="gedit" ref="{{ inputRef }}" value="{{ editVal }}" onChange="{{ onEditChange }}" onKeyDown="{{ onEditKey }}" onBlur="{{ commitEdit }}" style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid var(--accent-global,#7c5cff);border-radius:6px;padding:3px 7px;color:var(--text);font-size:12.5px"></sc-if>
+                      <sc-if value="{{ row.nPlan }}" hint-placeholder-val="{{ true }}"><span style="padding:1px 8px;border-radius:999px;background:var(--chip);color:var(--text);font-size:11px">{{ row.plan }}</span><sc-if value="{{ row.dPlan }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent-global,#7c5cff);flex-shrink:0"></span></sc-if></sc-if>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;height:38px;padding:0 12px;border-bottom:1px solid var(--grid)"><span style="width:7px;height:7px;border-radius:50%;background:{{ row.dot }};flex-shrink:0"></span><span style="color:var(--muted);font-size:12px">{{ row.status }}</span></div>
+                    <div onDoubleClick="{{ row.editMrr }}" style="display:flex;align-items:center;gap:6px;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--text);font-size:12.5px;font-family:ui-monospace,Menlo,monospace;min-width:0">
+                      <sc-if value="{{ row.eMrr }}" hint-placeholder-val="{{ false }}"><input class="gedit" ref="{{ inputRef }}" value="{{ editVal }}" onChange="{{ onEditChange }}" onKeyDown="{{ onEditKey }}" onBlur="{{ commitEdit }}" style="width:100%;background:rgba(255,255,255,.1);border:1.5px solid var(--accent-global,#7c5cff);border-radius:6px;padding:3px 7px;color:var(--text);font-size:12.5px;font-family:inherit"></sc-if>
+                      <sc-if value="{{ row.nMrr }}" hint-placeholder-val="{{ true }}"><span style="flex:1">{{ row.mrr }}</span><sc-if value="{{ row.dMrr }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent-global,#7c5cff);flex-shrink:0"></span></sc-if></sc-if>
+                    </div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace">{{ row.created }}</div>
+                  </div>
+                </sc-for>
+              </sc-if>
+
+              <sc-if value="{{ showEvents }}" hint-placeholder-val="{{ false }}">
+                <div style="display:grid;grid-template-columns:42px 118px 216px 92px 96px 84px minmax(150px,1fr);position:sticky;top:0;z-index:2;background:rgba(20,20,32,0.55);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-bottom:1px solid var(--bstrong);font-size:11px;color:var(--muted)">
+                  <div style="display:flex;align-items:center;justify-content:center;height:34px">#</div>
+                  <div style="display:flex;align-items:center;gap:5px;height:34px;padding:0 12px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent-global,#7c5cff)" stroke-width="2"><circle cx="8" cy="9" r="4"></circle><path d="M11 12l7 7"></path><path d="M16 17l2-2"></path></svg><span style="font-weight:600">id</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">text</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">event</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">text</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">user_id</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">int8</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">source</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">country</span></div>
+                  <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">ts</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint)">timestamptz</span></div>
+                </div>
+                <sc-for list="{{ eventRows }}" as="ev" hint-placeholder-count="8">
+                  <div style="display:grid;grid-template-columns:42px 118px 216px 92px 96px 84px minmax(150px,1fr);background:{{ ev.bg }};box-shadow:{{ ev.bar }};cursor:pointer" onClick="{{ ev.pick }}" style-hover="background:var(--hover)">
+                    <div style="display:flex;align-items:center;justify-content:center;height:38px;border-bottom:1px solid var(--grid);color:var(--faint);font-size:11px;font-family:ui-monospace,Menlo,monospace">{{ ev.n }}</div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--num);font-size:12px;font-family:ui-monospace,Menlo,monospace">{{ ev.id }}</div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--text);font-size:12.5px;font-family:ui-monospace,Menlo,monospace">{{ ev.event }}</div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--num);font-size:12.5px;font-family:ui-monospace,Menlo,monospace">{{ ev.uid }}</div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid)"><span style="padding:1px 8px;border-radius:999px;background:var(--chip);color:var(--text);font-size:11px">{{ ev.source }}</span></div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--text);font-size:12.5px">{{ ev.country }}</div>
+                    <div style="display:flex;align-items:center;height:38px;padding:0 12px;border-bottom:1px solid var(--grid);color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace">{{ ev.ts }}</div>
+                  </div>
+                </sc-for>
+              </sc-if>
+
+            </div>
+            <sc-if value="{{ running }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(8,8,16,0.46);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)">
+                <span style="width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.18);border-top-color:var(--accent-global,#7c5cff);animation:gspin .75s linear infinite"></span>
+                <span style="font-size:12.5px;color:rgba(255,255,255,.82);font-family:ui-monospace,Menlo,monospace">Executing query…</span>
+              </div>
+            </sc-if>
+          </div>
+        </main>
+
+        <!-- RIGHT -->
+        <aside style="width:{{ rightW }};flex-shrink:0;overflow:hidden;transition:width .24s cubic-bezier(.4,0,.2,1);background:var(--rail);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);border-radius:13px">
+          <div style="width:320px;height:100%;display:flex;flex-direction:column">
+            <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:9px 12px 9px 14px;border-bottom:1px solid var(--border)">
+              <div style="display:flex;padding:2px;border-radius:8px;background:var(--ctl-bg);border:var(--ctl-border);font-size:11.5px">
+                <span style="padding:4px 11px;border-radius:6px;background:var(--panel);color:var(--text);font-weight:600">Row</span>
+                <span style="padding:4px 11px;border-radius:6px;color:var(--muted)">Cell</span>
+                <span style="padding:4px 11px;border-radius:6px;color:var(--muted)">JSON</span>
+              </div>
+              <button onClick="{{ toggleR }}" style="display:grid;place-items:center;width:26px;height:26px;border:none;border-radius:7px;background:transparent;color:var(--muted);cursor:pointer" style-hover="background:var(--hover)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+            </div>
+            <div style="flex-shrink:0;display:flex;align-items:center;gap:6px;padding:9px 14px;font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace">
+              <span style="width:7px;height:7px;border-radius:50%;background:{{ chipColor }}"></span>
+              <span>{{ activeTable }}</span><span style="color:var(--faint)">·</span><span>id</span><span style="color:var(--faint)">=</span><span style="color:var(--accent-global,#7c5cff);font-weight:600">{{ breadcrumbId }}</span>
+            </div>
+            <div class="gscroll" style="flex:1;overflow:auto;padding:2px 14px 12px">
+              <sc-for list="{{ fields }}" as="f" hint-placeholder-count="8">
+                <div style="margin-bottom:11px">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                    <span style="font-size:12.5px;font-weight:600;color:var(--text)">{{ f.k }}</span>
+                    <span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint);background:var(--chip);padding:1px 6px;border-radius:5px">{{ f.t }}</span>
+                    <sc-if value="{{ f.dirty }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;color:var(--accent-global,#7c5cff);font-weight:600">edited</span></sc-if>
+                  </div>
+                  <div style="padding:8px 11px;border:1.5px solid {{ f.border }};border-radius:8px;background:var(--ctl-bg);font-size:12.5px;color:var(--text);font-family:ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ notReadOnly }}" hint-placeholder-val="{{ true }}">
+              <div style="flex-shrink:0;display:flex;gap:8px;padding:11px 14px;border-top:1px solid var(--border)">
+                <button onClick="{{ revert }}" style="padding:8px 14px;border:var(--ctl-border);border-radius:8px;background:var(--ctl-bg);color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer">Revert</button>
+                <button onClick="{{ saveChanges }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:8px;border:none;border-radius:8px;background:{{ saveBg }};color:{{ saveColor }};font-size:12.5px;font-weight:600;cursor:{{ saveCursor }};transition:background .15s">{{ saveLabel }}</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
+              <div style="flex-shrink:0;display:flex;align-items:center;gap:9px;padding:13px 14px;border-top:1px solid var(--border);color:var(--muted);font-size:12px">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+                Read-only — this is an analytics replica.
+              </div>
+            </sc-if>
+          </div>
+        </aside>
+
+      </div>
+
+      <!-- STATUS BAR -->
+      <div style="flex-shrink:0;display:flex;align-items:center;gap:14px;height:30px;padding:0 14px;background:var(--panel);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);border-radius:11px;font-size:11px;color:var(--muted);font-family:ui-monospace,'SF Mono',Menlo,monospace">
+        <sc-if value="{{ running }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:7px;color:var(--accent-global,#7c5cff)"><span style="width:9px;height:9px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent-global,#7c5cff) 40%,transparent);border-top-color:var(--accent-global,#7c5cff);animation:gspin .7s linear infinite"></span>Running…</div>
+        </sc-if>
+        <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:{{ chipColor }}"></span>{{ connStatus }}</div>
+        </sc-if>
+        <span>{{ connType }}</span>
+        <span style="color:var(--faint)">{{ host }}</span>
+        <div style="flex:1"></div>
+        <span>{{ dirtyStatus }}</span>
+        <span>{{ rowCount }}</span>
+        <span>UTF-8</span>
+        <span style="color:var(--accent-global,#7c5cff)">{{ timingText }}</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#7c5cff&quot;,&quot;options&quot;:[&quot;#7c5cff&quot;,&quot;#6366f1&quot;,&quot;#3b82f6&quot;,&quot;#0ea5e9&quot;,&quot;#10b981&quot;,&quot;#f59e0b&quot;,&quot;#f43f5e&quot;,&quot;#ec4899&quot;],&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Dark&quot;,&quot;options&quot;:[&quot;Dark&quot;,&quot;Light&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  rootRef = React.createRef();
+  inputRef = React.createRef();
+  // multi-connection workspace
+
+  originalUserRows = [
+    { n: 1, id: "1042", email: "maya.chen@hey.com", name: "Maya Chen", plan: "Scale", status: "active", dot: "#22c55e", mrr: "$299", created: "2024-11-02" },
+    { n: 2, id: "1043", email: "t.okafor@loop.io", name: "Tunde Okafor", plan: "Pro", status: "active", dot: "#22c55e", mrr: "$99", created: "2024-11-04" },
+    { n: 3, id: "1051", email: "priya@northwind.dev", name: "Priya Nair", plan: "Free", status: "trialing", dot: "#f59e0b", mrr: "$0", created: "2024-11-08" },
+    { n: 4, id: "1066", email: "j.silva@vertex.app", name: "João Silva", plan: "Pro", status: "active", dot: "#22c55e", mrr: "$99", created: "2024-11-12" },
+    { n: 5, id: "1078", email: "erika.b@hofer.de", name: "Erika Brandt", plan: "Scale", status: "past_due", dot: "#fb923c", mrr: "$299", created: "2024-11-15" },
+    { n: 6, id: "1090", email: "sam@indielabs.co", name: "Sam Whitfield", plan: "Starter", status: "active", dot: "#22c55e", mrr: "$29", created: "2024-11-19" },
+    { n: 7, id: "1104", email: "lena.m@correo.es", name: "Lena Marín", plan: "Pro", status: "churned", dot: "#94a3b8", mrr: "$0", created: "2024-11-23" },
+    { n: 8, id: "1119", email: "dmitri@kvia.io", name: "Dmitri Volkov", plan: "Scale", status: "active", dot: "#22c55e", mrr: "$299", created: "2024-11-27" },
+  ];
+
+  eventData = [
+    { n: 1, id: "evt_9f2a", event: "subscription.created", uid: "1042", source: "web", country: "US", ts: "2026-06-15 22:41:07" },
+    { n: 2, id: "evt_9f2b", event: "login.succeeded", uid: "1043", source: "api", country: "NG", ts: "2026-06-15 22:39:55" },
+    { n: 3, id: "evt_9f2c", event: "invoice.paid", uid: "1066", source: "web", country: "BR", ts: "2026-06-15 22:38:12" },
+    { n: 4, id: "evt_9f2d", event: "seat.added", uid: "1042", source: "web", country: "US", ts: "2026-06-15 22:36:40" },
+    { n: 5, id: "evt_9f2e", event: "login.failed", uid: "1104", source: "api", country: "ES", ts: "2026-06-15 22:35:02" },
+    { n: 6, id: "evt_9f2f", event: "export.requested", uid: "1090", source: "cli", country: "GB", ts: "2026-06-15 22:33:48" },
+    { n: 7, id: "evt_9f30", event: "subscription.updated", uid: "1078", source: "web", country: "DE", ts: "2026-06-15 22:31:19" },
+    { n: 8, id: "evt_9f31", event: "login.succeeded", uid: "1119", source: "api", country: "RU", ts: "2026-06-15 22:30:05" },
+  ];
+
+  conns = [
+    { id: "prod", name: "acme_production", tag: "Production", type: "PostgreSQL 16.2", host: "localhost:5432", color: "#22c55e", ro: false,
+      tables: [{ key: "users", name: "users", count: "48,210" }, { name: "organizations", count: "6,402" }, { name: "subscriptions", count: "7,118" }, { name: "invoices", count: "92,540" }] },
+    { id: "replica", name: "analytics_replica", tag: "Analytics", type: "PostgreSQL · read replica", host: "replica.acme:5432", color: "#2dd4bf", ro: true,
+      tables: [{ key: "events", name: "events", count: "1.2M" }, { name: "sessions", count: "318k" }, { name: "page_views", count: "4.8M" }] },
+    { id: "staging", name: "acme_staging", tag: "Staging", type: "PostgreSQL 16.2", host: "staging.acme.internal:5432", color: "#f59e0b", ro: false,
+      tables: [{ name: "users", count: "12,043" }, { name: "orders", count: "2,191" }] },
+  ];
+
+  editors = [
+    { key: "users", name: "users", kind: "table", connId: "prod", table: "users" },
+    { key: "events", name: "events", kind: "table", connId: "replica", table: "events" },
+    { key: "q1", name: "active_users.sql", kind: "query", connId: "prod", table: "users" },
+  ];
+
+  state = {
+    activeEditor: "users",
+    expanded: { prod: true, replica: true, staging: false },
+    connOpen: false, running: false,
+    selUser: "1042", selEvent: "evt_9f2a",
+    editing: null, editVal: "", dirty: {},
+    userRows: this.originalUserRows.map(r => ({ ...r })),
+    l: false, r: false,
+  };
+
+  componentDidMount() { this.apply(); }
+  componentWillUnmount() { clearTimeout(this.t); }
+  componentDidUpdate(prevProps, prevState) {
+    this.apply();
+    const e = this.state.editing, pe = prevState && prevState.editing;
+    if (e && (!pe || pe.id !== e.id || pe.col !== e.col)) {
+      const el = this.inputRef.current;
+      if (el) { el.focus(); try { el.select(); } catch (_) {} }
+    }
+  }
+
+  apply() {
+    const el = this.rootRef.current;
+    if (!el) return;
+    el.style.setProperty("--accent-global", this.props.accent || "#7c5cff");
+    const light = (this.props.theme || "Dark") === "Light";
+    const P = light
+      ? { "--page-bg": "#e7e5f2", "--winbg": "radial-gradient(130% 130% at 8% -10%,#d9c6ff 0%,transparent 46%),radial-gradient(120% 120% at 108% 6%,#c2ddff 0%,transparent 50%),radial-gradient(120% 130% at 74% 116%,#c4f3e4 0%,transparent 55%),linear-gradient(155deg,#f2eefb,#eaf0fb)", "--panel": "rgba(255,255,255,0.58)", "--panel2": "rgba(255,255,255,0.42)", "--rail": "rgba(255,255,255,0.5)", "--text": "#26262f", "--muted": "rgba(38,38,47,0.6)", "--faint": "rgba(38,38,47,0.4)", "--border": "rgba(255,255,255,0.75)", "--bstrong": "rgba(120,110,170,0.22)", "--grid": "rgba(110,100,150,0.13)", "--hover": "rgba(255,255,255,0.55)", "--chip": "rgba(255,255,255,0.62)", "--sel": "color-mix(in srgb,var(--accent-global,#7c5cff) 16%,transparent)", "--kw": "var(--accent-global,#7c5cff)", "--str": "#1f9d6a", "--num": "#b45309", "--ctl-bg": "rgba(255,255,255,0.5)", "--ctl-border": "1px solid rgba(255,255,255,0.8)" }
+      : { "--page-bg": "#0b0b14", "--winbg": "radial-gradient(130% 130% at 8% -10%,#3c1d72 0%,transparent 46%),radial-gradient(120% 120% at 108% 8%,#123a72 0%,transparent 50%),radial-gradient(120% 130% at 72% 116%,#0c5b59 0%,transparent 55%),linear-gradient(155deg,#0d0d1a,#0a0a14)", "--panel": "rgba(255,255,255,0.055)", "--panel2": "rgba(255,255,255,0.04)", "--rail": "rgba(255,255,255,0.05)", "--text": "#eef0f8", "--muted": "rgba(238,240,248,0.62)", "--faint": "rgba(238,240,248,0.4)", "--border": "rgba(255,255,255,0.10)", "--bstrong": "rgba(255,255,255,0.16)", "--grid": "rgba(255,255,255,0.06)", "--hover": "rgba(255,255,255,0.07)", "--chip": "rgba(255,255,255,0.10)", "--sel": "color-mix(in srgb,var(--accent-global,#7c5cff) 30%,transparent)", "--kw": "#c4b5fd", "--str": "#6ee7b7", "--num": "#fdba74", "--ctl-bg": "rgba(255,255,255,0.06)", "--ctl-border": "1px solid rgba(255,255,255,0.14)" };
+    for (const k in P) el.style.setProperty(k, P[k]);
+  }
+
+  conn(id) { return this.conns.find(c => c.id === id); }
+  activeEd() { return this.editors.find(e => e.key === this.state.activeEditor) || this.editors[0]; }
+
+  toggleConn() { this.setState(s => ({ connOpen: !s.connOpen })); }
+  closeConn() { this.setState({ connOpen: false }); }
+  toggleExpand(id) { this.setState(s => ({ expanded: { ...s.expanded, [id]: !s.expanded[id] } })); }
+  openEditor(key) { this.setState({ activeEditor: key, editing: null, editVal: "", connOpen: false }); }
+  jumpConn(c) {
+    const ed = this.editors.find(e => e.connId === c.id);
+    if (ed) this.openEditor(ed.key); else this.setState({ connOpen: false });
+  }
+
+  runQuery() {
+    if (this.state.running) { clearTimeout(this.t); this.setState({ running: false }); return; }
+    this.setState({ running: true });
+    clearTimeout(this.t);
+    this.t = setTimeout(() => this.setState({ running: false }), 1500);
+  }
+
+  startEdit(id, col, val) {
+    if (this.state.running) return;
+    this.setState({ editing: { id, col }, editVal: String(val), selUser: id });
+  }
+  onEditChange(e) { this.setState({ editVal: e.target.value }); }
+  onEditKey(e) {
+    if (e.key === "Enter") { e.preventDefault(); this.commitEdit(); }
+    else if (e.key === "Escape") { e.preventDefault(); this.setState({ editing: null, editVal: "" }); }
+  }
+  commitEdit() {
+    const { editing, editVal, userRows, dirty } = this.state;
+    if (!editing) return;
+    const col = editing.col;
+    const newRows = userRows.map(r => (r.id === editing.id ? { ...r, [col]: editVal } : r));
+    const orig = this.originalUserRows.find(r => r.id === editing.id)[col];
+    const key = editing.id + "|" + col;
+    const nd = { ...dirty };
+    if (editVal !== orig) nd[key] = true; else delete nd[key];
+    this.setState({ userRows: newRows, dirty: nd, editing: null, editVal: "" });
+  }
+  saveChanges() { if (Object.keys(this.state.dirty).length) this.setState({ dirty: {} }); }
+  revert() { this.setState({ userRows: this.originalUserRows.map(r => ({ ...r })), dirty: {}, editing: null, editVal: "" }); }
+
+  renderVals() {
+    const accent = "var(--accent-global,#7c5cff)";
+    const s = this.state;
+    const ed = this.activeEd();
+    const ac = this.conn(ed.connId);
+    const showUsers = ed.table === "users";
+    const showEvents = ed.table === "events";
+    const readOnly = !!ac.ro;
+    const ds = s.editing;
+    const isEd = (id, col) => !!(ds && ds.id === id && ds.col === col);
+    const isDirty = (id, col) => !!s.dirty[id + "|" + col];
+
+    const userRows = s.userRows.map(r => {
+      const sel = r.id === s.selUser;
+      const rowDirty = ["email", "name", "plan", "mrr"].some(c => isDirty(r.id, c));
+      return {
+        ...r,
+        bg: sel ? "var(--sel)" : "transparent",
+        bar: sel ? "inset 2px 0 0 var(--selbar)" : "inset 0 0 0 transparent",
+        rowDirty, clean: !rowDirty,
+        pick: () => this.setState({ selUser: r.id }),
+        eEmail: isEd(r.id, "email"), nEmail: !isEd(r.id, "email"), dEmail: isDirty(r.id, "email"), editEmail: () => this.startEdit(r.id, "email", r.email),
+        eName: isEd(r.id, "name"), nName: !isEd(r.id, "name"), dName: isDirty(r.id, "name"), editName: () => this.startEdit(r.id, "name", r.name),
+        ePlan: isEd(r.id, "plan"), nPlan: !isEd(r.id, "plan"), dPlan: isDirty(r.id, "plan"), editPlan: () => this.startEdit(r.id, "plan", r.plan),
+        eMrr: isEd(r.id, "mrr"), nMrr: !isEd(r.id, "mrr"), dMrr: isDirty(r.id, "mrr"), editMrr: () => this.startEdit(r.id, "mrr", r.mrr),
+      };
+    });
+
+    const eventRows = this.eventData.map(r => {
+      const sel = r.id === s.selEvent;
+      return { ...r, bg: sel ? "var(--sel)" : "transparent", bar: sel ? "inset 2px 0 0 var(--selbar)" : "inset 0 0 0 transparent", pick: () => this.setState({ selEvent: r.id }) };
+    });
+
+    const editorsView = this.editors.map(e => {
+      const c = this.conn(e.connId);
+      const active = e.key === s.activeEditor;
+      return {
+        ...e, dot: c.color, connName: c.name, connShort: c.name.replace("acme_", "").replace("analytics_", ""),
+        isTable: e.kind === "table", isQuery: e.kind === "query",
+        bg: active ? "var(--sel)" : "transparent",
+        color: active ? accent : "var(--text)",
+        weight: active ? "600" : "500",
+        bar: active ? "inset 2px 0 0 var(--selbar)" : "none",
+        open: () => this.openEditor(e.key),
+      };
+    });
+
+    const connTree = this.conns.map(c => {
+      const expanded = !!s.expanded[c.id];
+      return {
+        ...c, expanded, rot: expanded ? "90deg" : "0deg",
+        toggle: () => this.toggleExpand(c.id),
+        tables: c.tables.map(t => {
+          const isActive = c.id === ac.id && t.name === ed.table;
+          const opener = this.editors.find(x => x.connId === c.id && x.table === t.name && x.kind === "table");
+          return {
+            ...t,
+            bg: isActive ? "var(--sel)" : "transparent",
+            color: isActive ? accent : "var(--text)",
+            weight: isActive ? "600" : "500",
+            bar: isActive ? "inset 2px 0 0 var(--selbar)" : "none",
+            icon: isActive ? accent : "var(--muted)",
+            open: () => { if (opener) this.openEditor(opener.key); },
+          };
+        }),
+      };
+    });
+
+    const connections = this.conns.map(c => ({
+      ...c, active: c.id === ac.id,
+      bg: c.id === ac.id ? "var(--sel)" : "transparent",
+      jump: () => this.jumpConn(c),
+    }));
+
+    let fields, breadcrumbId;
+    if (showEvents) {
+      const sr = this.eventData.find(r => r.id === s.selEvent) || this.eventData[0];
+      breadcrumbId = sr.id;
+      fields = [
+        { k: "id", v: sr.id, t: "text" }, { k: "event", v: sr.event, t: "text" },
+        { k: "user_id", v: sr.uid, t: "int8" }, { k: "source", v: sr.source, t: "text" },
+        { k: "country", v: sr.country, t: "text" }, { k: "ts", v: sr.ts + "+00", t: "timestamptz" },
+      ];
+      fields.forEach(f => { f.dirty = false; f.border = "var(--border)"; });
+    } else {
+      const sr = s.userRows.find(r => r.id === s.selUser) || s.userRows[0];
+      breadcrumbId = sr.id;
+      fields = [
+        { k: "id", v: sr.id, t: "int8", dirty: false },
+        { k: "email", v: sr.email, t: "text", dirty: isDirty(sr.id, "email") },
+        { k: "full_name", v: sr.name, t: "text", dirty: isDirty(sr.id, "name") },
+        { k: "org_id", v: "318", t: "int8", dirty: false },
+        { k: "plan", v: sr.plan, t: "text", dirty: isDirty(sr.id, "plan") },
+        { k: "status", v: sr.status, t: "enum", dirty: false },
+        { k: "mrr", v: String(sr.mrr).replace("$", "") + ".00", t: "numeric", dirty: isDirty(sr.id, "mrr") },
+        { k: "created_at", v: sr.created + " 09:14:22+00", t: "timestamptz", dirty: false },
+      ];
+      fields.forEach(f => { f.border = f.dirty ? accent : "var(--border)"; });
+    }
+
+    const dirtyCount = Object.keys(s.dirty).length;
+    const hasDirty = dirtyCount > 0;
+
+    return {
+      rootRef: this.rootRef, inputRef: this.inputRef,
+      connOpen: s.connOpen, connections, connTree, editorsView, editorCount: this.editors.length,
+      chipName: ac.name, chipTag: ac.tag, chipColor: ac.color,
+      activeTable: ed.table, breadcrumbId,
+      showUsers, showEvents, readOnly, notReadOnly: !readOnly,
+      connType: ac.type, host: ac.host, connStatus: readOnly ? "Connected · read-only" : "Connected",
+      rowCount: showEvents ? "1.2M rows" : "48,210 rows",
+      filterText: showEvents ? "ts > now() - 1h" : "status = 'active'",
+      pageText: showEvents ? "1–8 of 1,204,882" : "1–8 of 48,210",
+      running: s.running, idle: !s.running,
+      runBg: s.running ? "#e0556b" : accent,
+      timingText: s.running ? "running…" : "12 ms",
+      timingColor: s.running ? accent : "var(--muted)",
+      dirtyStatus: showEvents ? "read-only" : (hasDirty ? (dirtyCount + " unsaved") : "no changes"),
+      userRows, eventRows, fields,
+      editVal: s.editVal,
+      onEditChange: e => this.onEditChange(e), onEditKey: e => this.onEditKey(e), commitEdit: () => this.commitEdit(),
+      saveChanges: () => this.saveChanges(), revert: () => this.revert(),
+      saveBg: hasDirty ? accent : "var(--ctl-bg)", saveColor: hasDirty ? "#fff" : "var(--faint)",
+      saveCursor: hasDirty ? "pointer" : "default", saveLabel: hasDirty ? "Save changes · " + dirtyCount : "Save changes",
+      toggleConn: () => this.toggleConn(), closeConn: () => this.closeConn(), runQuery: () => this.runQuery(),
+      leftW: s.l ? "0px" : "262px", rightW: s.r ? "0px" : "320px", lc: s.l,
+      toggleL: () => this.setState(st => ({ l: !st.l })), toggleR: () => this.setState(st => ({ r: !st.r })),
+    };
+  }
+}
+</script>
+</body>
+</html>

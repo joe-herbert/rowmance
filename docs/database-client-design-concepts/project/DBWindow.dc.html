@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  *{box-sizing:border-box}
+  .dbscroll::-webkit-scrollbar{width:11px;height:11px}
+  .dbscroll::-webkit-scrollbar-thumb{background:var(--faint,#b4b4be);border-radius:9px;border:3px solid transparent;background-clip:content-box}
+  .dbscroll::-webkit-scrollbar-thumb:hover{background:var(--muted,#86868f);background-clip:content-box;border:3px solid transparent}
+  .dbscroll::-webkit-scrollbar-track{background:transparent}
+</style>
+</helmet>
+
+<div data-screen-label="{{ screen }}" style="{{ rootStyle }}">
+
+  <!-- ambient backgrounds -->
+  <sc-if value="{{ isAurora }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none">
+      <div style="position:absolute;width:520px;height:520px;border-radius:50%;background:var(--accent-global,#7c5cff);filter:blur(85px);opacity:var(--blob-op,.5);top:-150px;left:-90px"></div>
+      <div style="position:absolute;width:460px;height:460px;border-radius:50%;background:#e64bd6;filter:blur(85px);opacity:var(--blob-op,.5);top:-90px;right:-110px"></div>
+      <div style="position:absolute;width:520px;height:520px;border-radius:50%;background:#3b82f6;filter:blur(95px);opacity:var(--blob-op,.5);bottom:-200px;left:34%"></div>
+      <div style="position:absolute;width:420px;height:420px;border-radius:50%;background:#14b8a6;filter:blur(85px);opacity:var(--blob-op,.5);bottom:-150px;right:4%"></div>
+    </div>
+  </sc-if>
+
+  <!-- content wrapper -->
+  <div style="position:relative;z-index:1;display:flex;flex-direction:column;flex:1;min-height:0;padding:var(--bodypad,0);gap:var(--panegap,0)">
+
+    <!-- TITLE BAR -->
+    <div style="flex-shrink:0;height:46px;display:flex;align-items:center;gap:12px;padding:0 14px 0 16px;background:var(--panel,#fff);-webkit-backdrop-filter:var(--blur,none);backdrop-filter:var(--blur,none);border:var(--pane-edge,none);border-bottom:var(--seam-b,1px solid var(--border,#ececf0));border-radius:var(--pane-radius,0);box-shadow:var(--raise,none)">
+      <div style="display:flex;gap:8px;align-items:center;margin-right:4px">
+        <span style="width:12px;height:12px;border-radius:50%;background:#ff5f57;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)"></span>
+        <span style="width:12px;height:12px;border-radius:50%;background:#febc2e;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)"></span>
+        <span style="width:12px;height:12px;border-radius:50%;background:#28c840;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 11px;border-radius:9px;background:var(--ctl-bg,var(--panel2,#fafafb));border:var(--ctl-border,1px solid var(--border,#ececf0));box-shadow:var(--raise,none)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted,#86868f)" stroke-width="1.5"><ellipse cx="12" cy="5.5" rx="8" ry="3"></ellipse><path d="M4 5.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path><path d="M4 11.5v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path></svg>
+        <span style="font-weight:600;font-size:12.5px;color:var(--text,#1b1b22)">acme_production</span>
+        <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px color-mix(in srgb,#22c55e 22%,transparent)"></span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint,#b4b4be)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      <div style="display:flex;padding:2px;border-radius:9px;background:var(--ctl-bg,var(--panel2,#fafafb));border:var(--ctl-border,1px solid var(--border,#ececf0));box-shadow:var(--inset,none);font-size:12px">
+        <span style="padding:4px 12px;border-radius:7px;background:var(--panel,#fff);color:var(--accent-global,#7c5cff);font-weight:600;box-shadow:var(--raise,0 1px 2px rgba(0,0,0,.06))">Data</span>
+        <span style="padding:4px 12px;border-radius:7px;color:var(--muted,#86868f)">Structure</span>
+        <span style="padding:4px 12px;border-radius:7px;color:var(--muted,#86868f)">SQL</span>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:7px;width:228px;padding:6px 11px;border-radius:9px;background:var(--ctl-bg,var(--panel2,#fafafb));border:var(--ctl-border,1px solid var(--border,#ececf0));box-shadow:var(--inset,none)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--faint,#b4b4be)" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+        <span style="flex:1;color:var(--faint,#b4b4be);font-size:12.5px">Search tables, columns…</span>
+        <span style="font-size:10.5px;color:var(--faint,#b4b4be);border:1px solid var(--border,#ececf0);border-radius:5px;padding:1px 5px">⌘K</span>
+      </div>
+      <button style="display:grid;place-items:center;width:30px;height:30px;border:none;border-radius:8px;background:transparent;color:var(--muted,#86868f);cursor:pointer" style-hover="background:var(--hover,#f5f5f8)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"></line><circle cx="9" cy="8" r="2.4" fill="var(--panel,#fff)"></circle><line x1="4" y1="16" x2="20" y2="16"></line><circle cx="15" cy="16" r="2.4" fill="var(--panel,#fff)"></circle></svg>
+      </button>
+    </div>
+
+    <!-- BODY -->
+    <div style="flex:1;display:flex;min-height:0;gap:var(--panegap,0)">
+
+      <!-- LEFT PANEL -->
+      <aside style="width:{{ leftW }};flex-shrink:0;overflow:hidden;transition:width .24s cubic-bezier(.4,0,.2,1);background:var(--rail,#fbfbfc);-webkit-backdrop-filter:var(--blur,none);backdrop-filter:var(--blur,none);border:var(--pane-edge,none);border-right:var(--seam-r,1px solid var(--border,#ececf0));border-radius:var(--pane-radius,0)">
+        <div style="width:248px;height:100%;display:flex;flex-direction:column">
+          <!-- OPEN EDITORS -->
+          <div style="flex-shrink:0;padding:9px 8px;border-bottom:var(--seam-b,1px solid var(--border,#ececf0))">
+            <div style="display:flex;align-items:center;gap:6px;padding:1px 6px 7px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#86868f)">OPEN</span>
+              <span style="font-size:10.5px;color:var(--faint,#b4b4be)">2</span>
+              <div style="flex:1"></div>
+              <button style="display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--muted,#86868f);cursor:pointer" style-hover="background:var(--hover,#f5f5f8)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </button>
+              <button onClick="{{ toggleL }}" style="display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--muted,#86868f);cursor:pointer" style-hover="background:var(--hover,#f5f5f8)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+            </div>
+            <sc-for list="{{ tabs }}" as="tab" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;cursor:pointer;background:{{ tab.bg }};color:{{ tab.color }};font-weight:{{ tab.weight }};box-shadow:{{ tab.bar }}" style-hover="background:var(--hover,#f5f5f8)">
+                <sc-if value="{{ tab.isTable }}" hint-placeholder-val="{{ true }}">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9.5" x2="21" y2="9.5"></line><line x1="9" y1="9.5" x2="9" y2="20"></line></svg>
+                </sc-if>
+                <sc-if value="{{ tab.isQuery }}" hint-placeholder-val="{{ false }}">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg>
+                </sc-if>
+                <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ tab.name }}</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--faint,#b4b4be)" stroke-width="1.8" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+              </div>
+            </sc-for>
+          </div>
+          <!-- CONNECTION -->
+          <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:11px 14px 9px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#22c55e"></span>
+            <span style="font-weight:600;font-size:12.5px;color:var(--text,#1b1b22)">Production</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint,#b4b4be)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div style="flex-shrink:0;padding:0 12px 10px">
+            <div style="display:flex;align-items:center;gap:7px;padding:6px 10px;border-radius:8px;background:var(--ctl-bg,var(--panel2,#fafafb));border:var(--ctl-border,1px solid var(--border,#ececf0));box-shadow:var(--inset,none)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--faint,#b4b4be)" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+              <span style="color:var(--faint,#b4b4be);font-size:12px">Filter…</span>
+            </div>
+          </div>
+          <div class="dbscroll" style="flex:1;overflow:auto;padding:0 8px 8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 8px 5px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted,#86868f)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#86868f)">TABLES</span>
+              </div>
+              <span style="font-size:10.5px;color:var(--faint,#b4b4be)">7</span>
+            </div>
+            <sc-for list="{{ tables }}" as="t" hint-placeholder-count="7">
+              <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;cursor:pointer;background:{{ t.bg }};color:{{ t.color }};font-weight:{{ t.weight }};box-shadow:{{ t.bar }}" style-hover="background:var(--hover,#f5f5f8)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{{ t.icon }}" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9.5" x2="21" y2="9.5"></line><line x1="9" y1="9.5" x2="9" y2="20"></line></svg>
+                <span style="flex:1;font-size:13px">{{ t.name }}</span>
+                <span style="font-size:10.5px;color:var(--faint,#b4b4be);font-family:ui-monospace,'SF Mono',Menlo,monospace">{{ t.count }}</span>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;gap:6px;padding:9px 8px 5px;margin-top:4px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted,#86868f)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#86868f);flex:1">VIEWS</span>
+              <span style="font-size:10.5px;color:var(--faint,#b4b4be)">12</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 8px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted,#86868f)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#86868f);flex:1">FUNCTIONS</span>
+              <span style="font-size:10.5px;color:var(--faint,#b4b4be)">8</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 8px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted,#86868f)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#86868f);flex:1">ENUMS</span>
+              <span style="font-size:10.5px;color:var(--faint,#b4b4be)">5</span>
+            </div>
+          </div>
+          <div style="flex-shrink:0;padding:10px 12px;border-top:var(--seam-b,1px solid var(--border,#ececf0))">
+            <button style="display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:8px;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:9px;background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--accent-global,#7c5cff);font-weight:600;font-size:12.5px;cursor:pointer;box-shadow:var(--raise,none)" style-hover="filter:brightness(1.02)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              New Query
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- CENTER -->
+      <main style="flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:var(--panel,#fff);-webkit-backdrop-filter:var(--blur,none);backdrop-filter:var(--blur,none);border:var(--pane-edge,none);border-radius:var(--pane-radius,0);overflow:hidden">
+
+        <sc-if value="{{ lc }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ toggleL }}" style="position:absolute;left:8px;top:9px;z-index:5;display:grid;place-items:center;width:26px;height:32px;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:7px;background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--muted,#86868f);cursor:pointer;box-shadow:var(--raise,none)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </sc-if>
+
+        <!-- QUERY EDITOR -->
+        <div style="flex-shrink:0;background:var(--panel2,#fafafb);border-bottom:var(--seam-b,1px solid var(--border,#ececf0))">
+          <div style="display:flex;align-items:center;gap:9px;padding:8px 12px 6px">
+            <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#86868f)">QUERY EDITOR</span>
+            <div style="flex:1"></div>
+            <span style="font-size:11px;color:var(--muted,#86868f);font-family:ui-monospace,'SF Mono',Menlo,monospace">12&nbsp;ms&nbsp;·&nbsp;8&nbsp;rows</span>
+            <button style="padding:5px 9px;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:7px;background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--muted,#86868f);font-size:11.5px;font-weight:600;cursor:pointer;box-shadow:var(--raise,none)">Format</button>
+            <button style="display:flex;align-items:center;gap:6px;padding:5px 12px;border:none;border-radius:7px;background:var(--accent-global,#7c5cff);color:#fff;font-size:11.5px;font-weight:600;cursor:pointer;box-shadow:var(--raise,none)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"></polygon></svg>
+              Run
+            </button>
+          </div>
+          <div style="display:flex;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;line-height:1.75;padding:2px 0 11px">
+            <div style="flex-shrink:0;width:42px;text-align:right;padding-right:12px;color:var(--faint,#b4b4be);user-select:none">
+              <div>1</div><div>2</div><div>3</div>
+            </div>
+            <div>
+              <div><span style="color:var(--kw,#7c5cff);font-weight:600">select</span> <span style="color:var(--muted,#86868f)">*</span> <span style="color:var(--kw,#7c5cff);font-weight:600">from</span> <span style="color:var(--text,#1b1b22)">users</span></div>
+              <div><span style="color:var(--kw,#7c5cff);font-weight:600">where</span> <span style="color:var(--text,#1b1b22)">status</span> <span style="color:var(--muted,#86868f)">=</span> <span style="color:var(--str,#2f9e6d)">'active'</span></div>
+              <div><span style="color:var(--kw,#7c5cff);font-weight:600">order by</span> <span style="color:var(--text,#1b1b22)">created_at</span> <span style="color:var(--kw,#7c5cff);font-weight:600">desc</span><span style="color:var(--muted,#86868f)">;</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RESULTS TOOLBAR -->
+        <div style="flex-shrink:0;display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:var(--seam-b,1px solid var(--border,#ececf0))">
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border:1px dashed var(--bstrong,#e2e2e8);border-radius:8px;color:var(--muted,#86868f);font-size:12px;cursor:pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"></path></svg>
+            Add filter
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:8px;background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--text,#1b1b22);font-size:12px;cursor:pointer;box-shadow:var(--raise,none)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted,#86868f)" stroke-width="1.8" stroke-linecap="round"><line x1="6" y1="9" x2="18" y2="9"></line><line x1="8" y1="13" x2="16" y2="13"></line><line x1="10" y1="17" x2="14" y2="17"></line></svg>
+            created_at ↓
+          </div>
+          <div style="flex:1"></div>
+          <span style="font-size:11.5px;color:var(--muted,#86868f);font-family:ui-monospace,'SF Mono',Menlo,monospace">1–8 of 48,210</span>
+          <div style="display:flex;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:8px;overflow:hidden;box-shadow:var(--raise,none)">
+            <button style="display:grid;place-items:center;width:28px;height:28px;border:none;background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--faint,#b4b4be);cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+            <button style="display:grid;place-items:center;width:28px;height:28px;border:none;border-left:var(--ctl-border,1px solid var(--border,#ececf0));background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--text,#1b1b22);cursor:pointer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+          </div>
+          <button style="display:grid;place-items:center;width:28px;height:28px;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:8px;background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--muted,#86868f);cursor:pointer;box-shadow:var(--raise,none)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a8 8 0 0 1 13.5-5.5L20 8"></path><polyline points="20 3 20 8 15 8"></polyline><path d="M20 13a8 8 0 0 1-13.5 5.5L4 16"></path><polyline points="4 21 4 16 9 16"></polyline></svg></button>
+          <button style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:none;border-radius:8px;background:var(--accent-global,#7c5cff);color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:var(--raise,none)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Add row
+          </button>
+        </div>
+
+        <!-- GRID -->
+        <div class="dbscroll" style="flex:1;overflow:auto;background:var(--panel,#fff)">
+          <div style="display:grid;grid-template-columns:42px 72px 210px 156px 84px 112px 84px minmax(150px,1fr);position:sticky;top:0;z-index:2;background:var(--panel2,#fafafb);-webkit-backdrop-filter:var(--blur,none);backdrop-filter:var(--blur,none);border-bottom:1px solid var(--bstrong,#e2e2e8);font-size:11px;color:var(--muted,#86868f)">
+            <div style="display:flex;align-items:center;justify-content:center;height:34px">#</div>
+            <div style="display:flex;align-items:center;gap:5px;height:34px;padding:0 12px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent-global,#7c5cff)" stroke-width="2"><circle cx="8" cy="9" r="4"></circle><path d="M11 12l7 7"></path><path d="M16 17l2-2"></path></svg><span style="font-weight:600">id</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint,#b4b4be)">int8</span></div>
+            <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">email</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint,#b4b4be)">text</span></div>
+            <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">full_name</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint,#b4b4be)">text</span></div>
+            <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">plan</span></div>
+            <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">status</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint,#b4b4be)">enum</span></div>
+            <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">mrr</span></div>
+            <div style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px"><span style="font-weight:600">created_at</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint,#b4b4be)">timestamptz</span></div>
+          </div>
+          <sc-for list="{{ rows }}" as="row" hint-placeholder-count="8">
+            <div style="display:grid;grid-template-columns:42px 72px 210px 156px 84px 112px 84px minmax(150px,1fr);background:{{ row.bg }};box-shadow:{{ row.bar }}" style-hover="background:var(--hover,#f5f5f8)">
+              <div style="display:flex;align-items:center;justify-content:center;height:37px;border-bottom:1px solid var(--grid,#f1f1f4);color:var(--faint,#b4b4be);font-size:11px;font-family:ui-monospace,Menlo,monospace">{{ row.n }}</div>
+              <div style="display:flex;align-items:center;height:37px;padding:0 12px;border-bottom:1px solid var(--grid,#f1f1f4);color:var(--num,#c2410c);font-size:12.5px;font-family:ui-monospace,Menlo,monospace">{{ row.id }}</div>
+              <div style="display:flex;align-items:center;height:37px;padding:0 12px;border-bottom:1px solid var(--grid,#f1f1f4);color:var(--text,#1b1b22);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.email }}</div>
+              <div style="display:flex;align-items:center;height:37px;padding:0 12px;border-bottom:1px solid var(--grid,#f1f1f4);color:var(--text,#1b1b22);font-size:12.5px">{{ row.name }}</div>
+              <div style="display:flex;align-items:center;height:37px;padding:0 12px;border-bottom:1px solid var(--grid,#f1f1f4)"><span style="padding:1px 8px;border-radius:999px;background:var(--chip,#f2f2f5);color:var(--text,#1b1b22);font-size:11px">{{ row.plan }}</span></div>
+              <div style="display:flex;align-items:center;gap:7px;height:37px;padding:0 12px;border-bottom:1px solid var(--grid,#f1f1f4)"><span style="width:7px;height:7px;border-radius:50%;background:{{ row.dot }};flex-shrink:0"></span><span style="color:var(--muted,#86868f);font-size:12px">{{ row.status }}</span></div>
+              <div style="display:flex;align-items:center;height:37px;padding:0 12px;border-bottom:1px solid var(--grid,#f1f1f4);color:var(--text,#1b1b22);font-size:12.5px;font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums">{{ row.mrr }}</div>
+              <div style="display:flex;align-items:center;height:37px;padding:0 12px;border-bottom:1px solid var(--grid,#f1f1f4);color:var(--muted,#86868f);font-size:12px;font-family:ui-monospace,Menlo,monospace">{{ row.created }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </main>
+
+      <!-- RIGHT PANEL -->
+      <aside style="width:{{ rightW }};flex-shrink:0;overflow:hidden;transition:width .24s cubic-bezier(.4,0,.2,1);background:var(--rail,#fbfbfc);-webkit-backdrop-filter:var(--blur,none);backdrop-filter:var(--blur,none);border:var(--pane-edge,none);border-left:var(--seam-l,1px solid var(--border,#ececf0));border-radius:var(--pane-radius,0)">
+        <div style="width:320px;height:100%;display:flex;flex-direction:column">
+          <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:9px 12px 9px 14px;border-bottom:var(--seam-b,1px solid var(--border,#ececf0))">
+            <div style="display:flex;padding:2px;border-radius:8px;background:var(--ctl-bg,var(--panel2,#fafafb));border:var(--ctl-border,1px solid var(--border,#ececf0));box-shadow:var(--inset,none);font-size:11.5px">
+              <span style="padding:4px 11px;border-radius:6px;background:var(--panel,#fff);color:var(--text,#1b1b22);font-weight:600;box-shadow:var(--raise,0 1px 2px rgba(0,0,0,.06))">Row</span>
+              <span style="padding:4px 11px;border-radius:6px;color:var(--muted,#86868f)">Cell</span>
+              <span style="padding:4px 11px;border-radius:6px;color:var(--muted,#86868f)">JSON</span>
+            </div>
+            <button onClick="{{ toggleR }}" style="display:grid;place-items:center;width:26px;height:26px;border:none;border-radius:7px;background:transparent;color:var(--muted,#86868f);cursor:pointer" style-hover="background:var(--hover,#f5f5f8)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
+          <div style="flex-shrink:0;display:flex;align-items:center;gap:6px;padding:9px 14px;font-size:11.5px;color:var(--muted,#86868f);font-family:ui-monospace,Menlo,monospace">
+            <span>users</span><span style="color:var(--faint,#b4b4be)">·</span><span>id</span><span style="color:var(--faint,#b4b4be)">=</span><span style="color:var(--accent-global,#7c5cff);font-weight:600">1042</span>
+          </div>
+          <div class="dbscroll" style="flex:1;overflow:auto;padding:2px 14px 12px">
+            <sc-for list="{{ fields }}" as="f" hint-placeholder-count="10">
+              <div style="margin-bottom:11px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                  <span style="font-size:12.5px;font-weight:600;color:var(--text,#1b1b22)">{{ f.k }}</span>
+                  <span style="font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--faint,#b4b4be);background:var(--chip,#f2f2f5);padding:1px 6px;border-radius:5px">{{ f.t }}</span>
+                </div>
+                <div style="padding:8px 11px;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:8px;background:var(--ctl-bg,var(--panel2,#fafafb));box-shadow:var(--inset,none);font-size:12.5px;color:var(--text,#1b1b22);font-family:ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="flex-shrink:0;display:flex;gap:8px;padding:11px 14px;border-top:var(--seam-b,1px solid var(--border,#ececf0))">
+            <button style="padding:8px 14px;border:var(--ctl-border,1px solid var(--border,#ececf0));border-radius:8px;background:var(--ctl-bg,var(--panel2,#fafafb));color:var(--muted,#86868f);font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:var(--raise,none)">Revert</button>
+            <button style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--accent-global,#7c5cff);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:var(--raise,none)">Save changes</button>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- STATUS BAR -->
+    <div style="flex-shrink:0;display:flex;align-items:center;gap:14px;height:30px;padding:0 14px;background:var(--panel2,#fafafb);-webkit-backdrop-filter:var(--blur,none);backdrop-filter:var(--blur,none);border:var(--pane-edge,none);border-top:var(--seam-t,1px solid var(--border,#ececf0));border-radius:var(--pane-radius,0);font-size:11px;color:var(--muted,#86868f);font-family:ui-monospace,'SF Mono',Menlo,monospace">
+      <div style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#22c55e"></span>Connected</div>
+      <span>PostgreSQL 16.2</span>
+      <span style="color:var(--faint,#b4b4be)">localhost:5432</span>
+      <div style="flex:1"></div>
+      <span>48,210 rows</span>
+      <div style="display:flex;align-items:center;gap:5px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>main</div>
+      <span>UTF-8</span>
+      <span style="color:var(--accent-global,#7c5cff)">12 ms</span>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:720},&quot;vars&quot;:{&quot;editor&quot;:null,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;treatment&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;flat&quot;,&quot;options&quot;:[&quot;flat&quot;,&quot;neu&quot;,&quot;glass&quot;,&quot;aurora&quot;],&quot;tsType&quot;:&quot;string&quot;},&quot;screen&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Workspace&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;label&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;users&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { l: false, r: false };
+
+  renderVals() {
+    const accent = "var(--accent-global,#7c5cff)";
+    const rows = [
+      { n: 1, id: "1042", email: "maya.chen@hey.com", name: "Maya Chen", plan: "Scale", status: "active", dot: "#22c55e", mrr: "$299", created: "2024-11-02", sel: true },
+      { n: 2, id: "1043", email: "t.okafor@loop.io", name: "Tunde Okafor", plan: "Pro", status: "active", dot: "#22c55e", mrr: "$99", created: "2024-11-04", sel: false },
+      { n: 3, id: "1051", email: "priya@northwind.dev", name: "Priya Nair", plan: "Free", status: "trialing", dot: "#f59e0b", mrr: "$0", created: "2024-11-08", sel: false },
+      { n: 4, id: "1066", email: "j.silva@vertex.app", name: "João Silva", plan: "Pro", status: "active", dot: "#22c55e", mrr: "$99", created: "2024-11-12", sel: false },
+      { n: 5, id: "1078", email: "erika.b@hofer.de", name: "Erika Brandt", plan: "Scale", status: "past_due", dot: "#fb923c", mrr: "$299", created: "2024-11-15", sel: false },
+      { n: 6, id: "1090", email: "sam@indielabs.co", name: "Sam Whitfield", plan: "Starter", status: "active", dot: "#22c55e", mrr: "$29", created: "2024-11-19", sel: false },
+      { n: 7, id: "1104", email: "lena.m@correo.es", name: "Lena Marín", plan: "Pro", status: "churned", dot: "#94a3b8", mrr: "—", created: "2024-11-23", sel: false },
+      { n: 8, id: "1119", email: "dmitri@kvia.io", name: "Dmitri Volkov", plan: "Scale", status: "active", dot: "#22c55e", mrr: "$299", created: "2024-11-27", sel: false },
+    ];
+    rows.forEach(r => {
+      r.bg = r.sel ? "var(--sel,rgba(124,92,255,.09))" : "transparent";
+      r.bar = r.sel ? "inset 2px 0 0 var(--selbar," + "#7c5cff)" : "inset 0 0 0 transparent";
+    });
+
+    const tables = [
+      { name: "users", count: "48,210", active: true },
+      { name: "organizations", count: "6,402", active: false },
+      { name: "subscriptions", count: "7,118", active: false },
+      { name: "invoices", count: "92,540", active: false },
+      { name: "events", count: "1.2M", active: false },
+      { name: "sessions", count: "318k", active: false },
+      { name: "audit_log", count: "88,901", active: false },
+    ];
+    tables.forEach(t => {
+      t.bg = t.active ? "var(--sel,rgba(124,92,255,.09))" : "transparent";
+      t.color = t.active ? accent : "var(--text,#1b1b22)";
+      t.weight = t.active ? "600" : "500";
+      t.bar = t.active ? "inset 2px 0 0 var(--selbar,#7c5cff)" : "none";
+      t.icon = t.active ? accent : "var(--muted,#86868f)";
+    });
+
+    const tabs = [
+      { name: "users", isTable: true, isQuery: false, active: true },
+      { name: "active_users.sql", isTable: false, isQuery: true, active: false },
+    ];
+    tabs.forEach(tab => {
+      tab.bg = tab.active ? "var(--sel,rgba(124,92,255,.09))" : "transparent";
+      tab.color = tab.active ? accent : "var(--text,#1b1b22)";
+      tab.weight = tab.active ? "600" : "500";
+      tab.bar = tab.active ? "inset 2px 0 0 var(--selbar,#7c5cff)" : "none";
+    });
+
+    const fields = [
+      { k: "id", v: "1042", t: "int8" },
+      { k: "email", v: "maya.chen@hey.com", t: "text" },
+      { k: "full_name", v: "Maya Chen", t: "text" },
+      { k: "org_id", v: "318", t: "int8" },
+      { k: "plan", v: "Scale", t: "text" },
+      { k: "status", v: "active", t: "enum" },
+      { k: "mrr", v: "299.00", t: "numeric" },
+      { k: "seats", v: "24", t: "int4" },
+      { k: "created_at", v: "2024-11-02 09:14:22+00", t: "timestamptz" },
+      { k: "last_seen_at", v: "2026-06-15 22:41:07+00", t: "timestamptz" },
+    ];
+
+    const base = "position:relative;overflow:hidden;width:1240px;height:720px;border-radius:14px;background:var(--winbg,var(--bg,#f6f6f8));color:var(--text,#1b1b22);box-shadow:var(--win-shadow,0 30px 60px -24px rgba(20,20,45,.3));border:var(--win-border,1px solid #e2e2e8);display:flex;flex-direction:column;font-family:-apple-system,'SF Pro Text','Segoe UI',Roboto,sans-serif;font-size:13px;";
+
+    return {
+      screen: this.props.screen || "Workspace",
+      rootStyle: base + (this.props.vars || ""),
+      isGlass: this.props.treatment === "glass",
+      isAurora: this.props.treatment === "aurora",
+      rows, tables, tabs, fields,
+      leftW: this.state.l ? "0px" : "248px",
+      rightW: this.state.r ? "0px" : "320px",
+      lc: this.state.l,
+      rc: this.state.r,
+      toggleL: () => this.setState(s => ({ l: !s.l })),
+      toggleR: () => this.setState(s => ({ r: !s.r })),
+    };
+  }
+}
+</script>
+</body>
+</html>
