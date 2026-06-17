@@ -397,8 +397,6 @@
       <span class="tbl-name">{table}</span>
     </span>
 
-    <div class="toolbar-spacer"></div>
-
     <div class="filter-wrapper">
       <label class="filter-label" for="tb-filter">WHERE</label>
       <input
@@ -414,6 +412,8 @@
         aria-label="WHERE filter clause"
       />
     </div>
+
+    <div class="toolbar-spacer"></div>
 
     {#if dtPageInfo !== null}
       <span class="row-range">
