@@ -51,10 +51,10 @@
     --color-scrollbar-thumb: rgba(238, 240, 248, 0.18);
     --color-scrollbar-thumb-hover: rgba(238, 240, 248, 0.32);
 
-    --color-table-row-alt: rgba(255, 255, 255, 0.02);
+    --color-table-row-alt: transparent;
     --color-table-row-hover: rgba(124, 92, 255, 0.10);
     --color-table-row-selected: rgba(124, 92, 255, 0.22);
-    --color-table-header-bg: rgba(10, 10, 20, 0.35);
+    --color-table-header-bg: rgba(20, 20, 32, 0.55);
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
@@ -113,10 +113,10 @@
   --color-scrollbar-thumb: rgba(238, 240, 248, 0.18);
   --color-scrollbar-thumb-hover: rgba(238, 240, 248, 0.32);
 
-  --color-table-row-alt: rgba(255, 255, 255, 0.02);
+  --color-table-row-alt: transparent;
   --color-table-row-hover: rgba(124, 92, 255, 0.10);
   --color-table-row-selected: rgba(124, 92, 255, 0.22);
-  --color-table-header-bg: rgba(10, 10, 20, 0.35);
+  --color-table-header-bg: rgba(20, 20, 32, 0.55);
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);

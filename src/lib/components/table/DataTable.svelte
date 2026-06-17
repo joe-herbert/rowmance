@@ -107,11 +107,9 @@
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
 
-  // Maps display position → original column index. Initialised from columns prop.
   let columnOrder = $state<number[]>(columns.map((_, i) => i));
 
   $effect(() => {
-    // Sync when the columns array itself changes (new query result).
     if (columnOrder.length !== columns.length) {
       columnOrder = columns.map((_, i) => i);
     }
@@ -159,7 +157,7 @@
 
   // ── Sort state ────────────────────────────────────────────────────────────
 
-  let sortColIndex = $state(-1); // index into original columns array
+  let sortColIndex = $state(-1);
   let sortDir = $state<SortDir>('none');
 
   function toggleSort(originalIndex: number): void {
@@ -177,21 +175,14 @@
 
   // ── Filter state ──────────────────────────────────────────────────────────
 
-  // Keyed by original column index
   let filterValues = $state<string[]>(columns.map(() => ''));
 
   $effect(() => {
-    // Resize filterValues when columns change
     const len = columns.length;
     if (filterValues.length !== len) {
       filterValues = columns.map(() => '');
     }
   });
-
-  function clearFilter(originalIndex: number): void {
-    filterValues[originalIndex] = '';
-    pageIndex = 0;
-  }
 
   // ── Column widths ─────────────────────────────────────────────────────────
 
@@ -242,10 +233,8 @@
     processedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
   );
 
-  // Track offset of the current page into processedRows for row key generation
   const pageOffset = $derived(pageIndex * pageSize);
 
-  // Reset to first page when rows or filters change
   $effect(() => {
     rows;
     filterValues.join('|');
@@ -278,12 +267,17 @@
     return pendingChanges.get(rowKey)?.has(colName) ?? false;
   }
 
+  function isRowPending(rowKey: string): boolean {
+    const rowMap = pendingChanges.get(rowKey);
+    return rowMap ? rowMap.size > 0 : false;
+  }
+
   // ── Cell editor state ─────────────────────────────────────────────────────
 
   interface EditTarget {
     rowKey: string;
     colName: string;
-    colIndex: number; // original column index
+    colIndex: number;
     value: CellValue;
     dataType: string;
     top: number;
@@ -347,7 +341,6 @@
   let focusedCell = $state<{ row: number; col: number } | null>(null);
 
   function handleTableKeydown(e: KeyboardEvent): void {
-    // Don't intercept keystrokes when an editor is open or target is an input.
     if (editTarget !== null) return;
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
@@ -402,11 +395,11 @@
 
   function getFocusedCellEl(row: number, col: number): HTMLTableCellElement | null {
     if (!tableContainerEl) return null;
-    // +2 for the two header rows; +1 for the checkbox column
     const tr = tableContainerEl.querySelector<HTMLTableRowElement>(
       `tbody tr:nth-child(${row + 1})`,
     );
     if (!tr) return null;
+    // +2 to skip the row-number column
     return tr.querySelector<HTMLTableCellElement>(`td:nth-child(${col + 2})`);
   }
 
@@ -425,7 +418,18 @@
     return String(value);
   }
 
-  // ── Row selection (checkboxes) ────────────────────────────────────────────
+  // ── Data type categorisation ──────────────────────────────────────────────
+
+  function getDataTypeCategory(dataType: string): 'number' | 'timestamp' | 'boolean' | 'json' | 'text' {
+    const dt = dataType.toLowerCase();
+    if (/^(int|int2|int4|int8|int16|bigint|smallint|float|float4|float8|real|double|numeric|decimal|serial|bigserial|money)/.test(dt)) return 'number';
+    if (/^(timestamp|date|time|interval)/.test(dt)) return 'timestamp';
+    if (/^bool/.test(dt)) return 'boolean';
+    if (/^json/.test(dt)) return 'json';
+    return 'text';
+  }
+
+  // ── Row selection ─────────────────────────────────────────────────────────
 
   let selectedRowKeys = $state<Set<string>>(new Set());
 
@@ -434,6 +438,14 @@
     if (next.has(rowKey)) next.delete(rowKey);
     else next.add(rowKey);
     selectedRowKeys = next;
+  }
+
+  function handleRowClick(e: MouseEvent, rowKey: string): void {
+    if (e.metaKey || e.ctrlKey) {
+      toggleRowSelection(rowKey);
+    } else {
+      selectedRowKeys = new Set([rowKey]);
+    }
   }
 
   // ── Context menu ──────────────────────────────────────────────────────────
@@ -471,7 +483,6 @@
   function copySelectedRowsTabSeparated(): void {
     const lines: string[] = [];
     for (const key of selectedRowKeys) {
-      // Find the row in pageRows that matches this key
       const found = pageRows.find(
         (r, i) => buildRowKey(r, columns, pageOffset + i) === key,
       );
@@ -506,24 +517,9 @@
   <div class="table-scroll">
     <table class="data-table">
       <thead>
-        <!-- Header row -->
         <tr class="header-row">
-          <th class="checkbox-cell header-checkbox-cell" aria-label="Select all">
-            <input
-              type="checkbox"
-              class="row-checkbox"
-              checked={selectedRowKeys.size > 0 && pageRows.every((r, i) => selectedRowKeys.has(buildRowKey(r, columns, pageOffset + i)))}
-              onchange={(e) => {
-                if ((e.target as HTMLInputElement).checked) {
-                  const keys = new Set(pageRows.map((r, i) => buildRowKey(r, columns, pageOffset + i)));
-                  selectedRowKeys = keys;
-                } else {
-                  selectedRowKeys = new Set();
-                }
-              }}
-              aria-label="Select all rows"
-            />
-          </th>
+          <!-- Row number column header -->
+          <th class="rownum-header-cell">#</th>
           {#each visibleColumns as { col, originalIndex }}
             {@const isSorted = sortColIndex === originalIndex}
             {@const isDragging = draggingColName === col.name}
@@ -546,6 +542,13 @@
                 aria-label="Sort by {col.name}"
                 title="Sort by {col.name}"
               >
+                {#if col.isPrimaryKey}
+                  <svg class="pk-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="8" cy="9" r="4"></circle>
+                    <path d="M11 12l7 7"></path>
+                    <path d="M16 17l2-2"></path>
+                  </svg>
+                {/if}
                 <span class="header-name">{col.name}</span>
                 <span class="header-type">{col.dataType}</span>
                 {#if isSorted && sortDir !== 'none'}
@@ -566,38 +569,6 @@
             </th>
           {/each}
         </tr>
-
-        <!-- Filter row -->
-        <tr class="filter-row">
-          <th class="checkbox-cell filter-checkbox-cell"></th>
-          {#each visibleColumns as { col, originalIndex }}
-            <th class="filter-cell">
-              <div class="filter-cell-inner">
-                <input
-                  class="filter-input"
-                  type="text"
-                  placeholder="filter…"
-                  value={filterValues[originalIndex]}
-                  oninput={(e) => {
-                    filterValues[originalIndex] = (e.target as HTMLInputElement).value;
-                    pageIndex = 0;
-                  }}
-                  aria-label="Filter {col.name}"
-                />
-                {#if filterValues[originalIndex]}
-                  <button
-                    class="filter-clear"
-                    onclick={() => clearFilter(originalIndex)}
-                    aria-label="Clear filter for {col.name}"
-                    title="Clear filter"
-                  >
-                    ✕
-                  </button>
-                {/if}
-              </div>
-            </th>
-          {/each}
-        </tr>
       </thead>
 
       <tbody>
@@ -605,30 +576,32 @@
           {@const processedRowIndex = rowIndex}
           {@const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex)}
           {@const isSelected = selectedRowKeys.has(rowKey)}
+          {@const rowDirty = isRowPending(rowKey)}
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <tr
             class="data-row"
-            class:alt={rowIndex % 2 === 1}
             class:row-selected={isSelected}
+            onclick={(e) => handleRowClick(e, rowKey)}
             oncontextmenu={(e) => handleRowContextMenu(e, row, processedRowIndex)}
           >
-            <td class="checkbox-cell data-checkbox-cell">
-              <input
-                type="checkbox"
-                class="row-checkbox"
-                checked={isSelected}
-                onchange={() => toggleRowSelection(rowKey)}
-                onclick={(e) => e.stopPropagation()}
-                aria-label="Select row"
-              />
+            <!-- Row number / dirty indicator -->
+            <td class="rownum-cell">
+              {#if rowDirty}
+                <span class="row-dirty-dot" aria-label="Row has unsaved changes"></span>
+              {:else}
+                <span class="rownum">{pageOffset + rowIndex + 1}</span>
+              {/if}
             </td>
+
             {#each visibleColumns as { col, originalIndex }, colIndex}
               {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
               {@const isPending = hasPendingChange(rowKey, col.name)}
               {@const isFocused = focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
+              {@const typeCategory = getDataTypeCategory(col.dataType)}
               <td
                 class="data-cell"
-                class:cell-pending={isPending}
+                class:cell-number={typeCategory === 'number'}
+                class:cell-timestamp={typeCategory === 'timestamp'}
                 class:cell-editable={editable}
                 class:cell-focused={isFocused}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
@@ -655,6 +628,9 @@
                 {:else}
                   {formatCell(cellValue)}
                 {/if}
+                {#if isPending}
+                  <span class="cell-dirty-dot" aria-label="Unsaved change"></span>
+                {/if}
               </td>
             {/each}
           </tr>
@@ -662,7 +638,7 @@
 
         {#if processedRows.length === 0}
           <tr>
-            <td class="empty-cell" colspan={visibleColumns.length || 1}>
+            <td class="empty-cell" colspan={visibleColumns.length + 1}>
               {rows.length === 0 ? 'No rows to display.' : 'No rows match the current filters.'}
             </td>
           </tr>
@@ -766,47 +742,67 @@
   }
 
   .table-scroll::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 11px;
+    height: 11px;
   }
 
   .table-scroll::-webkit-scrollbar-thumb {
     background: var(--color-scrollbar-thumb);
-    border-radius: var(--radius-sm);
+    border-radius: 9px;
+    border: 3px solid transparent;
+    background-clip: content-box;
   }
 
-  .table-scroll::-webkit-scrollbar-thumb:hover {
-    background: var(--color-scrollbar-thumb-hover);
+  .table-scroll::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .data-table {
     border-collapse: collapse;
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
+    width: 100%;
   }
+
+  /* ── Header ─────────────────────────────────────────────────────────────── */
 
   thead {
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: 2;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
   }
 
-  /* ── Header row ─────────────────────────────────────────────────────────── */
-
   .header-row {
+    height: 34px;
     background: var(--color-table-header-bg);
-    height: var(--table-header-height);
     border-bottom: 1px solid var(--color-border-strong);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+  }
+
+  .rownum-header-cell {
+    width: 42px;
+    min-width: 42px;
+    max-width: 42px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-medium);
+    vertical-align: middle;
+    padding: 0;
+    border-right: 1px solid var(--color-border);
+    box-sizing: border-box;
   }
 
   .header-cell {
     position: relative;
     padding: 0;
-    font-weight: var(--font-weight-medium);
-    font-size: var(--font-size-xs);
+    font-size: 11px;
     text-align: left;
     color: var(--color-text-secondary);
-    background: var(--color-table-header-bg);
+    background: transparent;
     border-right: 1px solid var(--color-border);
     white-space: nowrap;
     overflow: hidden;
@@ -817,20 +813,18 @@
   .header-btn {
     display: flex;
     align-items: center;
-    gap: var(--spacing-1);
-    width: calc(100% - 6px); /* leave room for resize handle */
-    height: 100%;
-    padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
+    gap: 5px;
+    width: calc(100% - 6px);
+    height: 34px;
+    padding: 0 12px;
     background: transparent;
     border: none;
     cursor: pointer;
     text-align: left;
     color: inherit;
     font-size: inherit;
-    font-weight: inherit;
     font-family: inherit;
     transition: background var(--transition-fast);
-    min-height: var(--table-header-height);
     flex-wrap: nowrap;
   }
 
@@ -838,8 +832,13 @@
     background: var(--color-bg-hover);
   }
 
+  .pk-icon {
+    color: var(--color-accent);
+    flex-shrink: 0;
+  }
+
   .header-name {
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-semibold);
     color: var(--color-text-secondary);
     flex-shrink: 1;
     overflow: hidden;
@@ -848,9 +847,10 @@
   }
 
   .header-type {
-    font-weight: var(--font-weight-normal);
+    font-family: var(--font-family-mono);
+    font-size: 9.5px;
     color: var(--color-text-muted);
-    font-size: 10px;
+    font-weight: var(--font-weight-normal);
     flex-shrink: 2;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -889,108 +889,81 @@
     box-shadow: inset 2px 0 0 var(--color-accent);
   }
 
-  /* ── Filter row ─────────────────────────────────────────────────────────── */
-
-  .filter-row {
-    background: var(--color-bg-secondary);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .filter-cell {
-    padding: var(--spacing-1) var(--spacing-1);
-    background: var(--color-bg-secondary);
-    border-right: 1px solid var(--color-border);
-    box-sizing: border-box;
-  }
-
-  .filter-cell-inner {
-    display: flex;
-    align-items: center;
-    position: relative;
-  }
-
-  .filter-input {
-    width: 100%;
-    padding: 2px var(--spacing-1);
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-family: var(--font-family-mono);
-    color: var(--color-text-primary);
-    outline: none;
-    box-sizing: border-box;
-    min-width: 0;
-    transition: border-color var(--transition-fast);
-  }
-
-  .filter-input:focus {
-    border-color: var(--color-accent);
-  }
-
-  .filter-input::placeholder {
-    color: var(--color-text-muted);
-    font-family: var(--font-family-ui);
-    font-style: italic;
-  }
-
-  .filter-clear {
-    position: absolute;
-    right: 2px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    padding: 0;
-    background: var(--color-bg-tertiary);
-    border: none;
-    border-radius: 50%;
-    font-size: 8px;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    line-height: 1;
-    transition: background var(--transition-fast);
-  }
-
-  .filter-clear:hover {
-    background: var(--color-bg-hover);
-    color: var(--color-text-primary);
-  }
-
   /* ── Data rows ──────────────────────────────────────────────────────────── */
 
   .data-row {
-    height: var(--table-row-height);
+    height: 38px;
     border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
     transition: background var(--transition-fast);
   }
 
   .data-row:hover {
-    background: var(--color-table-row-hover);
+    background: var(--color-bg-hover);
   }
 
-  .data-row.alt {
-    background: var(--color-table-row-alt);
+  .data-row.row-selected {
+    background: var(--color-accent-subtle);
+    box-shadow: inset 2px 0 0 var(--color-accent);
   }
 
-  .data-row.alt:hover {
-    background: var(--color-table-row-hover);
+  .data-row.row-selected:hover {
+    background: var(--color-accent-subtle);
   }
+
+  /* ── Row number column ──────────────────────────────────────────────────── */
+
+  .rownum-cell {
+    width: 42px;
+    min-width: 42px;
+    max-width: 42px;
+    text-align: center;
+    vertical-align: middle;
+    border-right: 1px solid var(--color-border);
+    box-sizing: border-box;
+    padding: 0;
+  }
+
+  .rownum {
+    font-size: 11px;
+    font-family: var(--font-family-mono);
+    color: var(--color-text-muted);
+    user-select: none;
+  }
+
+  .row-dirty-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-accent);
+  }
+
+  /* ── Data cells ─────────────────────────────────────────────────────────── */
 
   .data-cell {
-    padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
+    padding: 0 12px;
+    height: 38px;
     border-right: 1px solid var(--color-border);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-sm);
+    font-size: 12.5px;
     vertical-align: middle;
     box-sizing: border-box;
     user-select: text;
+    max-width: 0; /* forces text-overflow to work in table cells */
+  }
+
+  .data-cell.cell-number {
+    font-family: var(--font-family-mono);
+    color: var(--color-editor-number);
+  }
+
+  .data-cell.cell-timestamp {
+    font-family: var(--font-family-mono);
+    color: var(--color-text-secondary);
+    font-size: 12px;
   }
 
   .data-cell.cell-editable {
@@ -1008,18 +981,26 @@
     background: var(--color-accent-subtle);
   }
 
-  .data-cell.cell-pending {
-    background: var(--color-warning-subtle) !important;
+  .cell-dirty-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    flex-shrink: 0;
+    margin-left: 6px;
+    vertical-align: middle;
   }
 
   .null-value {
     color: var(--color-null);
     font-style: italic;
     font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
   }
 
   .empty-value {
-    color: var(--color-null);
+    color: var(--color-text-muted);
     font-style: italic;
     font-size: var(--font-size-xs);
   }
@@ -1089,40 +1070,6 @@
     margin-left: auto;
     color: var(--color-text-muted);
     font-variant-numeric: tabular-nums;
-  }
-
-  /* ── Checkbox column ────────────────────────────────────────────────────── */
-
-  .checkbox-cell {
-    width: 32px;
-    min-width: 32px;
-    max-width: 32px;
-    padding: 0 var(--spacing-1);
-    text-align: center;
-    vertical-align: middle;
-    border-right: 1px solid var(--color-border);
-    box-sizing: border-box;
-  }
-
-  .header-checkbox-cell {
-    background: var(--color-table-header-bg);
-  }
-
-  .filter-checkbox-cell {
-    background: var(--color-bg-secondary);
-  }
-
-  .data-checkbox-cell {
-    background: transparent;
-  }
-
-  .row-checkbox {
-    cursor: pointer;
-    accent-color: var(--color-accent);
-  }
-
-  .data-row.row-selected {
-    background: var(--color-accent-subtle) !important;
   }
 
   /* ── Context menu ───────────────────────────────────────────────────────── */
