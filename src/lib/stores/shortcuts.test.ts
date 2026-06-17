@@ -5,7 +5,7 @@
  * correctly, that overrides are applied, and that keyEventToString normalises
  * keyboard events consistently.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Mock @tauri-apps/api/core before importing the module under test.
 vi.mock('@tauri-apps/api/core', () => ({

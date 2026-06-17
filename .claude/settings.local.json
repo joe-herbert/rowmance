@@ -26,7 +26,8 @@
       "WebFetch(domain:api.anthropic.com)",
       "Bash(cp \"/Users/jherbert/.claude/projects/-Users-jherbert-Documents-Personal-rowmance/360e307f-8c43-4aea-8251-74e4a582a289/tool-results/webfetch-1781623500036-vs5628.bin\" /tmp/design.gz)",
       "Bash(gunzip -f /tmp/design.gz)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(bunx eslint *)"
     ]
   }
 }

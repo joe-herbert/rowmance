@@ -31,7 +31,6 @@
 
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
-  const sidebarFloating = $derived(settings.sidebarFloating);
   const panelStore = usePanels();
   const shortcutsStore = useShortcuts();
 

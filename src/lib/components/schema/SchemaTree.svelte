@@ -369,7 +369,6 @@
                     <ul class="tree-children" role="group">
                       {#each tables as table}
                         <li class="tree-node leaf-node" role="treeitem" aria-selected={false}>
-                          <!-- svelte-ignore a11y_no_static_element_interactions -->
                           <button
                             class="node-row table-node"
                             class:system={isSystemTable(table.name)}
@@ -403,7 +402,6 @@
 
 <!-- Context menu (portal-like, fixed positioning) -->
 {#if contextMenu}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="context-menu"
     role="menu"
@@ -417,7 +415,6 @@
 {/if}
 
 {#if dbContextMenu}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="context-menu"
     role="menu"

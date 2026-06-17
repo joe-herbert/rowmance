@@ -14,7 +14,7 @@
     left: number;
     width: number;
     height: number;
-    onConfirm: (newValue: CellValue) => void;
+    onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
   }
 
@@ -106,7 +106,6 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="cell-editor"
   style="top: {top}px; left: {left}px; width: {width}px; min-height: {height}px;"

@@ -76,6 +76,7 @@ self.onmessage = async (event: MessageEvent<WorkerInput>) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const layouted: any = await elk.layout(graph);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const layoutNodes: LayoutNode[] = ((layouted.children ?? []) as any[]).map((n) => {
       const table = nodes.find((t) => t.name === n.id)!;
       return {
@@ -88,9 +89,11 @@ self.onmessage = async (event: MessageEvent<WorkerInput>) => {
       };
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const layoutEdges: LayoutEdge[] = ((layouted.edges ?? []) as any[]).map((e: any, i: number) => ({
       id: e.id,
       relation: edges[i],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       sections: ((e.sections ?? []) as any[]).map((s: any) => ({
         startPoint: s.startPoint ?? { x: 0, y: 0 },
         endPoint: s.endPoint ?? { x: 0, y: 0 },

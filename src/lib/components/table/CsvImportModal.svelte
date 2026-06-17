@@ -14,7 +14,7 @@
     connectionId: string;
     source?: 'file' | 'clipboard';
     onclose: () => void;
-    onimported?: (rowCount: number) => void;
+    onimported?: (_rowCount: number) => void;
   }
 
   const { connectionId, source = 'file', onclose, onimported }: Props = $props();

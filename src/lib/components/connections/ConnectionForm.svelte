@@ -183,13 +183,6 @@
     }
   }
 
-  async function pickFile(stateRef: { value: string }) {
-    const selected = await openFileDialog({ multiple: false });
-    if (typeof selected === 'string') {
-      stateRef.value = selected;
-    }
-  }
-
   function handleBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) onclose();
   }
@@ -209,11 +202,6 @@
     { id: 'advanced', label: 'Advanced' },
   ];
 
-  // Reactive path holders for file pickers
-  let sshKeyPathRef = $derived({ value: sshKeyPath });
-  let sslCaPathRef = $derived({ value: sslCaPath });
-  let sslCertPathRef = $derived({ value: sslCertPath });
-  let sslKeyPathRef = $derived({ value: sslKeyPath });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

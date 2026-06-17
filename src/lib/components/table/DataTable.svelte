@@ -28,10 +28,10 @@
     readOnly?: boolean;
     hiddenColumns?: Set<string>;
     totalRows?: number | null;
-    onChangePending?: (changes: Map<string, Map<string, CellValue>>) => void;
-    onCellSelect?: (originalColIndex: number, row: CellValue[]) => void;
+    onChangePending?: (_changes: Map<string, Map<string, CellValue>>) => void;
+    onCellSelect?: (_originalColIndex: number, _row: CellValue[]) => void;
     onAddRow?: () => void;
-    onPageInfo?: (info: PageInfo) => void;
+    onPageInfo?: (_info: PageInfo) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -115,12 +115,12 @@
     pageSize = 50,
     pageIndex = $bindable(0),
     editable = false,
-    readOnly = false,
+    readOnly: _readOnly = false,
     hiddenColumns = new Set<string>(),
-    totalRows = null,
+    totalRows: _totalRows = null,
     onChangePending,
     onCellSelect,
-    onAddRow,
+    onAddRow: _onAddRow,
     onPageInfo,
   }: Props = $props();
 
@@ -257,14 +257,6 @@
     filterValues.join('|');
     pageIndex = 0;
   });
-
-  function previousPage(): void {
-    if (pageIndex > 0) pageIndex--;
-  }
-
-  function nextPage(): void {
-    if (pageIndex < pageCount - 1) pageIndex++;
-  }
 
   $effect(() => {
     onPageInfo?.({
@@ -605,7 +597,6 @@
           {@const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex)}
           {@const isSelected = selectedRowKeys.has(rowKey)}
           {@const rowDirty = isRowPending(rowKey)}
-          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <tr
             class="data-row"
             class:row-selected={isSelected}
@@ -676,7 +667,6 @@
 
   <!-- Context menu -->
   {#if contextMenu !== null}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="context-menu"
       role="menu"

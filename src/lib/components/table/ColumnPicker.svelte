@@ -9,7 +9,7 @@
   interface Props {
     columns: ColumnMeta[];
     hiddenColumns: Set<string>;
-    onToggle: (columnName: string) => void;
+    onToggle: (_columnName: string) => void;
     onClose: () => void;
   }
 

@@ -11,7 +11,7 @@
 
   interface Props {
     themeName: string;
-    onrename?: (newName: string) => Promise<void>;
+    onrename?: (_newName: string) => Promise<void>;
   }
 
   const { themeName, onrename }: Props = $props();

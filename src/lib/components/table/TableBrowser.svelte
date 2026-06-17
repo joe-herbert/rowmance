@@ -471,7 +471,6 @@
         </button>
 
         {#if showExportMenu}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="export-menu" role="menu">
             {#each EXPORT_FORMATS as fmt}
               <div class="export-menu-section">
@@ -493,7 +492,6 @@
               </div>
             {/each}
           </div>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="export-backdrop"
             role="presentation"
@@ -517,7 +515,6 @@
       </button>
 
       {#if showImportMenu}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="export-menu" role="menu">
           <div class="export-menu-section">
             <span class="export-format-label">CSV</span>
@@ -554,7 +551,6 @@
             </button>
           </div>
         </div>
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="export-backdrop"
           role="presentation"
@@ -663,7 +659,7 @@
     {connectionId}
     source={importSource}
     onclose={() => (showCsvImport = false)}
-    onimported={(count) => { showCsvImport = false; load(); }}
+    onimported={() => { showCsvImport = false; load(); }}
   />
 {/if}
 

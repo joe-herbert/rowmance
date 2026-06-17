@@ -61,6 +61,23 @@ export default [
     },
   },
   {
-    ignores: ['.svelte-kit/**', 'build/**', 'src-tauri/**'],
+    files: ['vite.config.ts', 'vitest.config.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { project: null },
+      globals: { ...globals.node },
+    },
+    plugins: { '@typescript-eslint': ts },
+    rules: {
+      ...ts.configs.recommended.rules,
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
+    ignores: ['.svelte-kit/**', 'build/**', 'src-tauri/**', '.claude/**', 'docs/**'],
   },
 ];

@@ -135,7 +135,6 @@
         </button>
 
         {#if showExportMenu}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="export-menu" role="menu">
             {#each EXPORT_FORMATS as fmt}
               <div class="export-menu-section">
@@ -157,7 +156,6 @@
               </div>
             {/each}
           </div>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="export-backdrop"
             role="presentation"

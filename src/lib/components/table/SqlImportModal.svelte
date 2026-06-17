@@ -12,7 +12,7 @@
     connectionId: string;
     source?: 'file' | 'clipboard';
     onclose: () => void;
-    onimported?: (statementCount: number) => void;
+    onimported?: (_statementCount: number) => void;
   }
 
   const { connectionId, source = 'file', onclose, onimported }: Props = $props();
@@ -34,7 +34,6 @@
   let errors = $state<string[]>([]);
   let executedCount = $state(0);
   let error = $state<string | null>(null);
-  let loading = $state(false);
 
   let unlisten: UnlistenFn | null = null;
 
@@ -70,8 +69,6 @@
     errors = [];
     error = null;
     progress = null;
-    loading = true;
-
     unlisten = await listen<ProgressEvent>('import-sql-progress', (event) => {
       progress = event.payload;
       if (event.payload.error) {
@@ -91,7 +88,6 @@
       error = errorMessage(err);
       phase = 'pick';
     } finally {
-      loading = false;
       unlisten?.();
       unlisten = null;
     }

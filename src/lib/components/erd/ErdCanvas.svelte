@@ -10,7 +10,7 @@
   import * as erdApi from '$lib/tauri/erd';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { errorMessage } from '$lib/utils/errors';
-  import type { LayoutResult, LayoutNode, LayoutEdge } from './erd-worker';
+  import type { LayoutResult, LayoutEdge } from './erd-worker';
 
   interface Props {
     connectionId: string;
@@ -186,7 +186,6 @@
         <!-- Table nodes -->
         {#each layout.nodes as node (node.id)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <g
             class="erd-node"
             transform="translate({node.x},{node.y})"

@@ -4,10 +4,9 @@
   Receives rawJson and dialect as props.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { zoom as d3zoom, type ZoomBehavior } from 'd3-zoom';
   import { select } from 'd3-selection';
-  import type { ExplainResult } from '$lib/types';
 
   interface Props {
     rawJson: string;
@@ -259,7 +258,7 @@
       role="img"
     >
       <g transform="translate({transform.x},{transform.y}) scale({transform.k})">
-        {#each layoutEdges as edge, i}
+        {#each layoutEdges as edge}
           <line
             class="plan-edge"
             x1={edge.x1}
