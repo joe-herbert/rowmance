@@ -31,6 +31,7 @@
     rowOffset?: number;
     onChangePending?: (_changes: Map<string, Map<string, CellValue>>) => void;
     onCellSelect?: (_originalColIndex: number, _row: CellValue[]) => void;
+    onDeselect?: () => void;
     onAddRow?: () => void;
     onPageInfo?: (_info: PageInfo) => void;
   }
@@ -122,6 +123,7 @@
     rowOffset = 0,
     onChangePending,
     onCellSelect,
+    onDeselect,
     onAddRow: _onAddRow,
     onPageInfo,
   }: Props = $props();
@@ -542,7 +544,10 @@
       <thead>
         <tr class="header-row">
           <!-- Row number column header -->
-          <th class="rownum-header-cell">#</th>
+          <th
+            class="rownum-header-cell"
+            onclick={() => { focusedCell = null; onDeselect?.(); }}
+          >#</th>
           {#each visibleColumns as { col, originalIndex }}
             {@const isSorted = sortColIndex === originalIndex}
             {@const isDragging = draggingColName === col.name}
@@ -607,7 +612,10 @@
             oncontextmenu={(e) => handleRowContextMenu(e, row, processedRowIndex)}
           >
             <!-- Row number / dirty indicator -->
-            <td class="rownum-cell">
+            <td
+              class="rownum-cell"
+              onclick={() => { focusedCell = null; onDeselect?.(); }}
+            >
               {#if rowDirty}
                 <span class="row-dirty-dot" aria-label="Row has unsaved changes"></span>
               {:else}
@@ -790,6 +798,11 @@
     padding: 0;
     border-bottom: 1px solid var(--color-border-strong);
     box-sizing: border-box;
+    cursor: pointer;
+  }
+
+  .rownum-header-cell:hover {
+    color: var(--color-text-primary);
   }
 
   .header-cell {
@@ -918,6 +931,11 @@
     border-bottom: 1px solid var(--color-border);
     box-sizing: border-box;
     padding: 0;
+    cursor: pointer;
+  }
+
+  .rownum-cell:hover .rownum {
+    color: var(--color-text-primary);
   }
 
   .rownum {

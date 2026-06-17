@@ -681,6 +681,7 @@
           {hiddenColumns}
           onChangePending={handleChangePending}
           onCellSelect={handleCellSelect}
+          onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}
         />
       {/key}
@@ -854,7 +855,6 @@
 
   .page-nav-btn--next {
     border-left: 1px solid var(--color-border);
-    color: var(--color-text-primary);
   }
 
   .page-nav-btn:hover:not(:disabled) {
