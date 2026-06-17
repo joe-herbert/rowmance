@@ -11,6 +11,7 @@
   import * as keychainApi from '$lib/tauri/keychain';
   import type { ConnectionProfile, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { portal } from '$lib/utils/portal';
 
   interface Props {
     profile?: ConnectionProfile;
@@ -217,7 +218,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="backdrop" role="dialog" aria-modal="true" aria-label={title} onclick={handleBackdropClick}>
+<div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label={title} onclick={handleBackdropClick}>
   <div class="dialog">
     <header class="dialog-header">
       <h2 class="dialog-title">{title}</h2>
@@ -247,13 +248,24 @@
           <input id="conn-name" class="input" type="text" bind:value={name} placeholder="My Database" required autocomplete="off" />
         </div>
 
-        <div class="field">
-          <label for="conn-type" class="label">Type</label>
-          <select id="conn-type" class="input select" bind:value={dbType} onchange={handleDbTypeChange}>
-            <option value="postgres">PostgreSQL</option>
-            <option value="mysql">MySQL</option>
-            <option value="mariadb">MariaDB</option>
-          </select>
+        <div class="field-row">
+          <div class="field field--grow">
+            <label for="conn-type" class="label">Type</label>
+            <select id="conn-type" class="input select" bind:value={dbType} onchange={handleDbTypeChange}>
+              <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL</option>
+              <option value="mariadb">MariaDB</option>
+            </select>
+          </div>
+          <div class="field field--color">
+            <label for="conn-color" class="label">Colour</label>
+            <div class="color-row">
+              <input id="conn-color" class="color-input" type="color" bind:value={color} />
+              {#if color}
+                <button type="button" class="color-clear" onclick={() => (color = '')} aria-label="Clear colour">Clear</button>
+              {/if}
+            </div>
+          </div>
         </div>
 
         <div class="field-row">
@@ -272,39 +284,30 @@
           <input id="conn-database" class="input" type="text" bind:value={database} placeholder="my_database" required autocomplete="off" />
         </div>
 
-        <div class="field">
-          <label for="conn-username" class="label">Username</label>
-          <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="username" />
-        </div>
-
-        <div class="field">
-          <label for="conn-password" class="label">Password</label>
-          <div class="password-row">
-            <input
-              id="conn-password"
-              class="input"
-              type={showPassword ? 'text' : 'password'}
-              bind:value={password}
-              oninput={() => (passwordDirty = true)}
-              placeholder={isEditing ? '••••••••' : ''}
-              autocomplete="current-password"
-            />
-            <button
-              type="button"
-              class="btn btn--ghost btn--sm btn--icon"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              onclick={() => (showPassword = !showPassword)}
-            >{showPassword ? '🙈' : '👁'}</button>
+        <div class="field-row">
+          <div class="field field--grow">
+            <label for="conn-username" class="label">Username</label>
+            <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="username" />
           </div>
-        </div>
-
-        <div class="field field--color">
-          <label for="conn-color" class="label">Colour</label>
-          <div class="color-row">
-            <input id="conn-color" class="color-input" type="color" bind:value={color} />
-            {#if color}
-              <button type="button" class="color-clear" onclick={() => (color = '')} aria-label="Clear colour">Clear</button>
-            {/if}
+          <div class="field field--grow">
+            <label for="conn-password" class="label">Password</label>
+            <div class="password-row">
+              <input
+                id="conn-password"
+                class="input"
+                type={showPassword ? 'text' : 'password'}
+                bind:value={password}
+                oninput={() => (passwordDirty = true)}
+                placeholder={isEditing ? '••••••••' : ''}
+                autocomplete="current-password"
+              />
+              <button
+                type="button"
+                class="btn btn--ghost btn--sm btn--icon"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onclick={() => (showPassword = !showPassword)}
+              >{showPassword ? '🙈' : '👁'}</button>
+            </div>
           </div>
         </div>
 
@@ -478,9 +481,9 @@
     background: var(--color-bg-overlay);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
-    width: 460px;
+    width: 600px;
     max-width: calc(100vw - var(--spacing-8));
-    max-height: calc(100vh - var(--spacing-8));
+    max-height: calc(100vh - 80px);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
