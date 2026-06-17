@@ -5,6 +5,8 @@
 -->
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { slide, fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import Sidebar from './Sidebar.svelte';
   import SplitPanel from './SplitPanel.svelte';
   import RightSidebar from './RightSidebar.svelte';
@@ -206,7 +208,7 @@
 >
   <!-- Left sidebar (toggleable) -->
   {#if leftVisible}
-    <aside class="left-sidebar" style="width: {leftWidth}px;">
+    <aside class="left-sidebar" style="width: {leftWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
       <Sidebar onClose={toggleLeftSidebar} />
     </aside>
   {/if}
@@ -218,6 +220,7 @@
       onclick={toggleLeftSidebar}
       aria-label="Show left sidebar"
       title="Show left sidebar"
+      transition:fade={{ duration: 150 }}
     >
       ›
     </button>
@@ -256,7 +259,7 @@
 
   <!-- Right sidebar (toggleable) -->
   {#if rightVisible}
-    <aside class="right-sidebar" style="width: {rightWidth}px;">
+    <aside class="right-sidebar" style="width: {rightWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
       <RightSidebar onClose={toggleRightSidebar} />
     </aside>
   {/if}
@@ -268,6 +271,7 @@
       onclick={toggleRightSidebar}
       aria-label="Show right sidebar"
       title="Show right sidebar"
+      transition:fade={{ duration: 150 }}
     >
       ‹
     </button>
