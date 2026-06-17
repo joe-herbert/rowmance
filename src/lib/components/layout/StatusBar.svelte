@@ -70,29 +70,9 @@
 
   <div class="spacer"></div>
 
-  <!-- Right: save/discard + stats -->
+  <!-- Right: stats -->
   {#if dirtyText}
     <span class="item dirty">{dirtyText}</span>
-    {#if statusBar.onDiscard}
-      <button
-        class="action-btn discard"
-        onclick={statusBar.onDiscard}
-        disabled={statusBar.isSaving}
-        aria-label="Discard all pending changes"
-      >
-        Discard
-      </button>
-    {/if}
-    {#if statusBar.onSave}
-      <button
-        class="action-btn save"
-        onclick={statusBar.onSave}
-        disabled={statusBar.isSaving}
-        aria-label="Save pending changes"
-      >
-        {statusBar.isSaving ? 'Saving…' : 'Save'}
-      </button>
-    {/if}
   {/if}
 
   {#if rowCountText}
