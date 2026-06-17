@@ -459,15 +459,15 @@
     {#if currentColumns.length > 0}
       <button
         bind:this={columnPickerAnchorEl}
-        class="toolbar-btn"
+        class="refresh-button"
         onclick={openColumnPicker}
         title="Show/hide columns"
         aria-label="Column visibility"
         aria-expanded={showColumnPicker}
       >
-        Columns
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
         {#if hiddenColumns.size > 0}
-          <span class="badge">{hiddenColumns.size} hidden</span>
+          <span class="badge">{hiddenColumns.size}</span>
         {/if}
       </button>
     {/if}
@@ -498,17 +498,17 @@
     {#if result !== null}
       <div class="export-dropdown">
         <button
-          class="toolbar-btn"
+          class="refresh-button"
           onclick={() => { showExportMenu = !showExportMenu; exportError = null; }}
           aria-expanded={showExportMenu}
           aria-label="Export table data"
           title="Export"
         >
-          Export ▾
-        </button>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>        </button>
 
         {#if showExportMenu}
           <div class="export-menu" role="menu">
+            <div class="export-menu-title">Export</div>
             {#each EXPORT_FORMATS as fmt}
               <div class="export-menu-section">
                 <span class="export-format-label">{fmt.label}</span>
@@ -542,17 +542,18 @@
     <!-- Import dropdown -->
     <div class="export-dropdown">
       <button
-        class="toolbar-btn"
+        class="refresh-button"
         onclick={() => { showImportMenu = !showImportMenu; }}
         aria-expanded={showImportMenu}
         aria-label="Import data"
         title="Import"
       >
-        Import ▾
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </button>
 
       {#if showImportMenu}
         <div class="export-menu" role="menu">
+          <div class="export-menu-title">Import</div>
           <div class="export-menu-section">
             <span class="export-format-label">CSV</span>
             <button
@@ -917,8 +918,11 @@
   }
 
   .refresh-button {
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-1);
+    min-width: 28px;
     width: 28px;
     height: 28px;
     padding: 0;
@@ -1060,6 +1064,16 @@
     z-index: 300;
     min-width: 210px;
     padding: var(--spacing-1) 0;
+  }
+
+  .export-menu-title {
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .export-menu-section {
