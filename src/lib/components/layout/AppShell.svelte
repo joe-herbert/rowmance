@@ -18,6 +18,7 @@
   import { useShortcuts } from '$lib/stores/shortcuts.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
+  import GlobalSearch from '$lib/components/palette/GlobalSearch.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
@@ -187,9 +188,12 @@
   }
 
   let paletteOpen = $state(false);
+  let globalSearchOpen = $state(false);
 
   function openPalette() { paletteOpen = true; }
   function closePalette() { paletteOpen = false; }
+  function openGlobalSearch() { globalSearchOpen = true; }
+  function closeGlobalSearch() { globalSearchOpen = false; }
 
   // On macOS with titleBarStyle:"overlay" the webview fills behind the native traffic
   // lights, so we reserve space to push content clear of them.
@@ -199,7 +203,16 @@
     document.addEventListener('shortcut-action', handleShortcutAction);
     return () => document.removeEventListener('shortcut-action', handleShortcutAction);
   });
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && !paletteOpen) {
+      e.preventDefault();
+      globalSearchOpen = true;
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <a class="skip-link" href="#main-content">Skip to main content</a>
 
@@ -259,13 +272,13 @@
     {/if}
 
     <div class="titlebar-spacer" data-tauri-drag-region></div>
-    <button class="titlebar-btn" onclick={openPalette} title="Command palette (⌘K)" aria-label="Open command palette">
+    <button class="titlebar-btn" onclick={openGlobalSearch} title="Search (⌘F)" aria-label="Open global search">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
         <circle cx="11" cy="11" r="7"></circle>
         <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
       </svg>
       <span class="titlebar-btn-label">Search</span>
-      <kbd>⌘K</kbd>
+      <kbd>⌘F</kbd>
     </button>
     <button class="titlebar-btn titlebar-btn--icon" onclick={openSettings} title="Settings" aria-label="Open settings">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -384,6 +397,10 @@
 
 {#if paletteOpen}
   <CommandPalette onclose={closePalette} />
+{/if}
+
+{#if globalSearchOpen}
+  <GlobalSearch onclose={closeGlobalSearch} />
 {/if}
 
 <style>
