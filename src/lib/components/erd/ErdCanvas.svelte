@@ -4,9 +4,10 @@
   Pan and zoom are handled with d3-zoom.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from 'd3-zoom';
   import { select } from 'd3-selection';
+  import ELK from 'elkjs/lib/elk.bundled.js';
   import * as erdApi from '$lib/tauri/erd';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { errorMessage } from '$lib/utils/errors';
@@ -30,32 +31,81 @@
   // Current transform for pan/zoom
   let transform = $state({ x: 0, y: 0, k: 1 });
 
-  let worker: Worker | null = null;
   let zoomBehaviour: ZoomBehavior<SVGSVGElement, unknown> | null = null;
 
   const NODE_HEADER_HEIGHT = 30;
   const NODE_ROW_HEIGHT = 22;
   const NODE_WIDTH = 200;
 
+  const elk = new ELK();
+
   onMount(async () => {
-    worker = new Worker(new URL('./erd-worker.ts', import.meta.url), { type: 'module' });
-
-    worker.onmessage = (e: MessageEvent) => {
-      if (e.data.ok) {
-        layout = e.data.result as LayoutResult;
-      } else {
-        error = e.data.error;
-      }
-      loading = false;
-    };
-
     try {
       const graph = await erdApi.getErdGraph(connectionId, database);
-      worker.postMessage(graph);
+      const { nodes, edges } = graph;
+
+      const elkNodes = nodes.map((table) => ({
+        id: table.name,
+        width: NODE_WIDTH,
+        height: NODE_HEADER_HEIGHT + table.columns.length * NODE_ROW_HEIGHT,
+      }));
+
+      const elkEdges = edges.map((rel: { constraintName: string; fromTable: string; toTable: string }, i: number) => ({
+        id: `edge-${i}-${rel.constraintName}`,
+        sources: [rel.fromTable],
+        targets: [rel.toTable],
+      }));
+
+      const elkGraph = {
+        id: 'root',
+        layoutOptions: {
+          'org.eclipse.elk.algorithm': 'layered',
+          'org.eclipse.elk.edgeRouting': 'ORTHOGONAL',
+          'org.eclipse.elk.layered.spacing.nodeNodeBetweenLayers': '80',
+          'org.eclipse.elk.spacing.nodeNode': '40',
+        },
+        children: elkNodes,
+        edges: elkEdges,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const layouted: any = await elk.layout(elkGraph);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const layoutNodes = ((layouted.children ?? []) as any[]).map((n) => {
+        const table = nodes.find((t: { name: string }) => t.name === n.id)!;
+        return {
+          id: n.id,
+          x: n.x ?? 0,
+          y: n.y ?? 0,
+          width: n.width ?? NODE_WIDTH,
+          height: n.height ?? NODE_HEADER_HEIGHT + table.columns.length * NODE_ROW_HEIGHT,
+          table,
+        };
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const layoutEdges = ((layouted.edges ?? []) as any[]).map((e: any, i: number) => ({
+        id: e.id,
+        relation: edges[i],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sections: ((e.sections ?? []) as any[]).map((s: any) => ({
+          startPoint: s.startPoint ?? { x: 0, y: 0 },
+          endPoint: s.endPoint ?? { x: 0, y: 0 },
+          bendPoints: s.bendPoints,
+        })),
+      }));
+
+      layout = {
+        nodes: layoutNodes,
+        edges: layoutEdges,
+        width: layouted.width ?? 800,
+        height: layouted.height ?? 600,
+      } as LayoutResult;
     } catch (err) {
       error = errorMessage(err);
-      loading = false;
     }
+    loading = false;
   });
 
   $effect(() => {
@@ -84,10 +134,6 @@
     return () => {
       svg.on('.zoom', null);
     };
-  });
-
-  onDestroy(() => {
-    worker?.terminate();
   });
 
   function openTable(tableName: string) {
