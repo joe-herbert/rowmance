@@ -151,6 +151,23 @@ export function usePanels() {
       focusedIndex = Math.min(focusedIndex, panels.length - 1);
     },
 
+    /**
+     * Close the open item currently shown in the focused panel.
+     * If other open items exist, the next one (or previous if at the end) is shown
+     * in its place — matching the behaviour of clicking × in the sidebar.
+     */
+    closeFocusedItem() {
+      const focused = panels[focusedIndex];
+      if (!focused || focused.content.kind === 'empty') return;
+
+      const itemIndex = openItems.findIndex(i => sameContent(i.content, focused.content));
+      openItems = openItems.filter((_, i) => i !== itemIndex);
+
+      const next = openItems[itemIndex] ?? openItems[itemIndex - 1] ?? null;
+      const nextContent: PanelKind = next ? next.content : { kind: 'empty' };
+      panels = panels.map((p, i) => (i === focusedIndex ? { ...p, content: nextContent } : p));
+    },
+
     /** Split the layout by adding a new panel in the given direction. */
     split(direction: 'right' | 'down', content: PanelKind = { kind: 'empty' }) {
       if (panels.length >= 4) return;

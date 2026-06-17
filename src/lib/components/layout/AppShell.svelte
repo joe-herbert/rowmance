@@ -128,6 +128,9 @@
     if (action === 'NEW_WINDOW') openNewWindow();
     if (action === 'OPEN_SETTINGS') openSettings();
     if (action === 'COMMAND_PALETTE') openPalette();
+    if (action === 'PANEL_CLOSE') panelStore.closeFocusedItem();
+    if (action === 'PANEL_NEXT') panelStore.focusNext();
+    if (action === 'PANEL_PREV') panelStore.focusPrev();
     if (action === 'NEW_QUERY_EDITOR') {
       const focused = panelStore.focusedPanel.content;
       const connectionId = 'connectionId' in focused ? focused.connectionId : null;
