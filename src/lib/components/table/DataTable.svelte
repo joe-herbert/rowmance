@@ -909,6 +909,10 @@
     background: var(--color-bg-hover);
   }
 
+  .data-row:hover .rownum {
+    color: var(--color-text-primary);
+  }
+
   /* box-shadow works on <tr> with border-collapse: separate */
   .data-row.row-selected {
     background: var(--color-accent-subtle);
@@ -932,10 +936,6 @@
     box-sizing: border-box;
     padding: 0;
     cursor: pointer;
-  }
-
-  .rownum-cell:hover .rownum {
-    color: var(--color-text-primary);
   }
 
   .rownum {
