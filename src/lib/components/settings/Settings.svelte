@@ -347,7 +347,6 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    background: var(--color-bg-secondary);
   }
 
   .nav-item {

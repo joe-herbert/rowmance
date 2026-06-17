@@ -11,6 +11,7 @@
   import * as schemaApi from '$lib/tauri/schema';
   import { ask } from '@tauri-apps/plugin-dialog';
   import { errorMessage } from '$lib/utils/errors';
+  import { portal } from '$lib/actions/portal';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
 
   const connectionStore = useConnections();
@@ -42,10 +43,12 @@
   interface TableCtxMenu { x: number; y: number; connectionId: string; database: string; table: TableInfo }
   interface DbCtxMenu    { x: number; y: number; connectionId: string; database: string }
   interface GrpCtxMenu   { x: number; y: number; group: ConnectionGroup }
+  interface ConnCtxMenu  { x: number; y: number; profile: ConnectionProfile }
 
   let tableCtx = $state<TableCtxMenu | null>(null);
   let dbCtx    = $state<DbCtxMenu | null>(null);
   let grpCtx   = $state<GrpCtxMenu | null>(null);
+  let connCtx  = $state<ConnCtxMenu | null>(null);
 
   // ── Connection helpers ────────────────────────────────────────────────────
 
@@ -170,19 +173,67 @@
 
   // ── Context menu helpers ──────────────────────────────────────────────────
 
+  function closeAllCtx() { tableCtx = null; dbCtx = null; grpCtx = null; connCtx = null; }
+
   function showTableCtx(e: MouseEvent, connectionId: string, database: string, table: TableInfo) {
     e.preventDefault();
+    closeAllCtx();
     tableCtx = { x: e.clientX, y: e.clientY, connectionId, database, table };
   }
 
   function showDbCtx(e: MouseEvent, connectionId: string, database: string) {
     e.preventDefault();
+    closeAllCtx();
     dbCtx = { x: e.clientX, y: e.clientY, connectionId, database };
   }
 
   function showGrpCtx(e: MouseEvent, group: ConnectionGroup) {
     e.preventDefault();
+    closeAllCtx();
     grpCtx = { x: e.clientX, y: e.clientY, group };
+  }
+
+  function showConnCtx(e: MouseEvent, profile: ConnectionProfile) {
+    e.preventDefault();
+    closeAllCtx();
+    connCtx = { x: e.clientX, y: e.clientY, profile };
+  }
+
+  async function ctxConnToggleReadOnly() {
+    if (!connCtx) return;
+    const { profile } = connCtx;
+    connCtx = null;
+    await connectionStore.update(profile.id, {
+      name: profile.name,
+      dbType: profile.dbType,
+      host: profile.host,
+      port: profile.port,
+      database: profile.database,
+      username: profile.username,
+      color: profile.color,
+      readOnly: !profile.readOnly,
+      groupId: profile.groupId,
+      sshEnabled: profile.sshEnabled,
+      sshHost: profile.sshHost,
+      sshPort: profile.sshPort,
+      sshUser: profile.sshUser,
+      sshAuthType: profile.sshAuthType,
+      sshKeyPath: profile.sshKeyPath,
+      sslEnabled: profile.sslEnabled,
+      sslCaPath: profile.sslCaPath,
+      sslCertPath: profile.sslCertPath,
+      sslKeyPath: profile.sslKeyPath,
+      poolMin: profile.poolMin,
+      poolMax: profile.poolMax,
+    });
+  }
+
+  async function ctxConnDisconnect() {
+    if (!connCtx) return;
+    const id = connCtx.profile.id;
+    connCtx = null;
+    await connectionStore.disconnect(id);
+    expandedConnections = new Set([...expandedConnections].filter(i => i !== id));
   }
 
   function ctxOpenTable() {
@@ -210,14 +261,11 @@
   }
 
   function handleWindowKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') { tableCtx = null; dbCtx = null; grpCtx = null; if (renamingGroupId) renamingGroupId = null; }
+    if (e.key === 'Escape') { closeAllCtx(); if (renamingGroupId) renamingGroupId = null; }
   }
 
   function handleWindowClick(e: MouseEvent) {
-    const t = e.target as Element | null;
-    if (tableCtx && !t?.closest('.ctx-menu')) tableCtx = null;
-    if (dbCtx    && !t?.closest('.ctx-menu')) dbCtx = null;
-    if (grpCtx   && !t?.closest('.ctx-menu')) grpCtx = null;
+    if (!(e.target as Element | null)?.closest('.ctx-menu')) closeAllCtx();
   }
 
   // ── System database / table detection ────────────────────────────────────
@@ -372,7 +420,8 @@
 
   <div class="conn-item">
     <!-- Main row -->
-    <div class="conn-row" class:connected class:errored>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="conn-row" class:connected class:errored oncontextmenu={(e) => showConnCtx(e, profile)}>
       <!-- Chevron: rotates when expanded -->
       <button
         class="conn-chevron"
@@ -532,7 +581,7 @@
 
 <!-- Context menus -->
 {#if tableCtx}
-  <div class="ctx-menu" role="menu" style="top:{tableCtx.y}px;left:{tableCtx.x}px">
+  <div class="ctx-menu" role="menu" style="top:{tableCtx.y}px;left:{tableCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={ctxOpenTable}>Open Table</button>
     <button class="ctx-item" role="menuitem" onclick={ctxViewDdl}>View DDL</button>
     <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
@@ -540,16 +589,37 @@
 {/if}
 
 {#if dbCtx}
-  <div class="ctx-menu" role="menu" style="top:{dbCtx.y}px;left:{dbCtx.x}px">
+  <div class="ctx-menu" role="menu" style="top:{dbCtx.y}px;left:{dbCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
+    <div class="ctx-sep" role="separator"></div>
+    <button class="ctx-item" role="menuitem" onclick={() => { if (dbCtx) { navigator.clipboard.writeText(dbCtx.database); dbCtx = null; } }}>Copy Name</button>
   </div>
 {/if}
 
 {#if grpCtx}
-  <div class="ctx-menu" role="menu" style="top:{grpCtx.y}px;left:{grpCtx.x}px">
+  <div class="ctx-menu" role="menu" style="top:{grpCtx.y}px;left:{grpCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { newConnectionGroupId = grpCtx.group.id; showAddForm = true; grpCtx = null; } }}>New Connection in Group</button>
     <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { renamingGroupId = grpCtx.group.id; renameValue = grpCtx.group.name; grpCtx = null; } }}>Rename Group</button>
     <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</button>
+  </div>
+{/if}
+
+{#if connCtx}
+  {@const connConnected = isConnected(connCtx.profile.id)}
+  <div class="ctx-menu" role="menu" style="top:{connCtx.y}px;left:{connCtx.x}px" use:portal>
+    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: connCtx.profile.id }); connCtx = null; } }}>New Query Editor</button>
+    <div class="ctx-sep" role="separator"></div>
+    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { editingProfile = connCtx.profile; connCtx = null; } }}>Edit</button>
+    <button class="ctx-item" role="menuitem" onclick={ctxConnToggleReadOnly}>{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</button>
+    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { navigator.clipboard.writeText(connCtx.profile.name); connCtx = null; } }}>Copy Name</button>
+    <div class="ctx-sep" role="separator"></div>
+    {#if connConnected}
+      <button class="ctx-item" role="menuitem" onclick={ctxConnDisconnect}>Disconnect</button>
+    {:else}
+      <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</button>
+    {/if}
+    <div class="ctx-sep" role="separator"></div>
+    <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => { if (connCtx) { deleteConnection(connCtx.profile); connCtx = null; } }}>Delete</button>
   </div>
 {/if}
 
@@ -987,4 +1057,10 @@
 
   .ctx-item:hover { background: var(--color-bg-active); }
   .ctx-item--danger { color: var(--color-danger); }
+
+  .ctx-sep {
+    height: 1px;
+    margin: var(--spacing-1) 0;
+    background: var(--color-border);
+  }
 </style>
