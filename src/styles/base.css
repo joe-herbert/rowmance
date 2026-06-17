@@ -7,6 +7,8 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 html,
@@ -20,7 +22,6 @@ body {
   background: var(--app-background, var(--color-bg-primary));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  user-select: none; /* Desktop app — UI chrome is not selectable. */
 }
 
 /* Scrollbars — floating pill style */
@@ -80,16 +81,19 @@ button {
   color: inherit;
 }
 
-/* Inputs */
+/* Editable content */
 input,
 textarea,
-select {
+select,
+[contenteditable] {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
+  -webkit-user-select: text;
+  user-select: text;
 }
 input:focus,
 textarea:focus,

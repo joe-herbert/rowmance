@@ -944,7 +944,6 @@
     font-size: 12.5px;
     vertical-align: middle;
     box-sizing: border-box;
-    user-select: text;
     max-width: 0;
   }
 
