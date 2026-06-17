@@ -145,7 +145,10 @@
 
 <style>
   .section {
-    flex-shrink: 0;
+    max-height: 50%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     padding: 9px 8px;
     border-bottom: 1px solid var(--color-border);
   }
@@ -199,6 +202,8 @@
   .panel-list {
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .panel-item {
