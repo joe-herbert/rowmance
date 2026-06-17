@@ -117,6 +117,26 @@ pub fn themes_rename(old_name: String, new_name: String) -> Result<ThemeMeta, Ap
 }
 
 #[command]
+pub fn themes_export(name: String, file_path: String) -> Result<(), AppError> {
+    let dir = themes_dir()?;
+    let data = read_in_dir(&dir, &name)?;
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?;
+    std::fs::write(&file_path, json).map_err(|e| AppError::new("IO_ERROR", e.to_string()))
+}
+
+#[command]
+pub fn themes_import(file_path: String) -> Result<ThemeMeta, AppError> {
+    let raw = std::fs::read_to_string(&file_path)
+        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+    let data: ThemeData = serde_json::from_str(&raw)
+        .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?;
+    let dir = themes_dir()?;
+    write_in_dir(&dir, &data.name, &data)?;
+    Ok(ThemeMeta { name: data.name, extends: data.extends })
+}
+
+#[command]
 pub fn themes_duplicate(source: String, new_name: String) -> Result<ThemeMeta, AppError> {
     let dir = themes_dir()?;
     // If source doesn't exist on disk it's a built-in theme; start with empty variables.

@@ -10,6 +10,10 @@
   import * as themesApi from '$lib/tauri/themes';
   import type { AppSettings, ThemeMeta } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { portal } from '$lib/utils/portal';
+  import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
+  import { ALL_THEME_VARS } from './theme-variables';
+  import type { ThemeData } from '$lib/types';
 
   type Section = 'general' | 'editor' | 'keyboard' | 'connections' | 'appearance';
 
@@ -17,16 +21,20 @@
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
 
+  const BUILTIN_THEMES = ['system', 'light', 'dark'];
+
   let userThemes = $state<ThemeMeta[]>([]);
-  let selectedCustomTheme = $state<string | null>(null);
   let themeError = $state<string | null>(null);
   let creatingTheme = $state(false);
   let newThemeName = $state('');
+  let newThemeBase = $state('light');
+  let confirmingDelete = $state(false);
+
+  const isCustomTheme = $derived(!BUILTIN_THEMES.includes(settings.theme));
 
   onMount(async () => {
     try {
       userThemes = await themesApi.themesList();
-      if (userThemes.length > 0) selectedCustomTheme = userThemes[0].name;
     } catch (err) {
       themeError = errorMessage(err);
     }
@@ -34,22 +42,64 @@
 
   function startCreatingTheme() {
     newThemeName = '';
+    const currentBase = BUILTIN_THEMES.includes(settings.theme)
+      ? settings.theme
+      : (userThemes.find((t) => t.name === settings.theme)?.extends ?? 'light');
+    newThemeBase = currentBase === 'system' ? 'light' : currentBase;
+    themeError = null;
     creatingTheme = true;
   }
 
   async function confirmCreateTheme() {
     const name = newThemeName.trim();
     if (!name) return;
-    const base = settings.theme === 'light' ? 'light' : 'dark';
     try {
-      const meta = await themesApi.themesDuplicate(base, name);
+      const variables = await resolveBaseVariables(newThemeBase);
+      const data: ThemeData = { name, extends: newThemeBase, variables };
+      await themesApi.themesWrite(name, data);
+      const meta = { name, extends: newThemeBase };
       userThemes = [...userThemes, meta];
-      selectedCustomTheme = meta.name;
+      await update('theme', name);
       creatingTheme = false;
       newThemeName = '';
     } catch (err) {
       themeError = errorMessage(err);
     }
+  }
+
+  async function resolveBaseVariables(base: string): Promise<Record<string, string>> {
+    // Custom theme: variables are stored in the JSON file on disk.
+    if (!BUILTIN_THEMES.includes(base)) {
+      const data = await themesApi.themesRead(base);
+      return { ...data.variables };
+    }
+
+    // Built-in theme: snapshot computed CSS by temporarily switching data-theme.
+    const root = document.documentElement;
+    const style = root.style;
+
+    // Stash and clear inline custom properties so computed values reflect the
+    // CSS theme file rather than any active custom theme.
+    const stash: Record<string, string> = {};
+    const inlineProps: string[] = [];
+    for (let i = 0; i < style.length; i++) {
+      if (style[i].startsWith('--')) inlineProps.push(style[i]);
+    }
+    inlineProps.forEach((p) => { stash[p] = style.getPropertyValue(p); style.removeProperty(p); });
+
+    const prevTheme = root.getAttribute('data-theme') ?? 'system';
+    root.setAttribute('data-theme', base);
+
+    const computed = getComputedStyle(root);
+    const variables: Record<string, string> = {};
+    for (const v of ALL_THEME_VARS) {
+      variables[v] = computed.getPropertyValue(v).trim();
+    }
+
+    root.setAttribute('data-theme', prevTheme);
+    inlineProps.forEach((p) => style.setProperty(p, stash[p]));
+
+    return variables;
   }
 
   function cancelCreateTheme() {
@@ -58,24 +108,58 @@
   }
 
   async function renameTheme(newName: string) {
-    if (!selectedCustomTheme || newName === selectedCustomTheme) return;
+    const oldName = settings.theme;
+    if (!oldName || newName === oldName) return;
     try {
-      const meta = await themesApi.themesRename(selectedCustomTheme, newName);
-      userThemes = userThemes.map((t) => t.name === selectedCustomTheme ? meta : t);
-      selectedCustomTheme = meta.name;
+      const meta = await themesApi.themesRename(oldName, newName);
+      userThemes = userThemes.map((t) => t.name === oldName ? meta : t);
+      await update('theme', meta.name);
       themeError = null;
     } catch (err) {
       themeError = errorMessage(err);
     }
   }
 
-  async function deleteTheme(name: string) {
+  async function deleteTheme() {
+    const name = settings.theme;
+    if (!name || BUILTIN_THEMES.includes(name)) return;
     try {
       await themesApi.themesDelete(name);
       userThemes = userThemes.filter((t) => t.name !== name);
-      if (selectedCustomTheme === name) {
-        selectedCustomTheme = userThemes[0]?.name ?? null;
+      await update('theme', 'system');
+      confirmingDelete = false;
+    } catch (err) {
+      themeError = errorMessage(err);
+    }
+  }
+
+  async function exportTheme() {
+    const filePath = await saveDialog({
+      defaultPath: `${settings.theme}.json`,
+      filters: [{ name: 'Theme', extensions: ['json'] }],
+    });
+    if (!filePath) return;
+    try {
+      await themesApi.themesExport(settings.theme, filePath);
+    } catch (err) {
+      themeError = errorMessage(err);
+    }
+  }
+
+  async function importTheme() {
+    const filePath = await openDialog({
+      multiple: false,
+      filters: [{ name: 'Theme', extensions: ['json'] }],
+    });
+    if (!filePath || typeof filePath !== 'string') return;
+    try {
+      const meta = await themesApi.themesImport(filePath);
+      if (!userThemes.some((t) => t.name === meta.name)) {
+        userThemes = [...userThemes, meta];
+      } else {
+        userThemes = userThemes.map((t) => t.name === meta.name ? meta : t);
       }
+      await update('theme', meta.name);
     } catch (err) {
       themeError = errorMessage(err);
     }
@@ -85,6 +169,11 @@
     await settingsStore.set(key, value);
   }
 </script>
+
+<svelte:window onkeydown={(e) => {
+  if (e.key === 'Escape' && creatingTheme) cancelCreateTheme();
+  if (e.key === 'Escape' && confirmingDelete) confirmingDelete = false;
+}} />
 
 <div class="settings-page">
   <!-- Sidebar nav -->
@@ -107,22 +196,6 @@
       <h2 class="section-title">General</h2>
 
       <div class="setting-group">
-        <div class="setting-row">
-          <div class="setting-label">
-            <span class="label-text">Theme</span>
-            <span class="label-hint">Appearance of the application</span>
-          </div>
-          <select
-            class="setting-select"
-            value={settings.theme}
-            onchange={(e) => update('theme', (e.currentTarget as HTMLSelectElement).value as AppSettings['theme'])}
-          >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
-
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Page Size</span>
@@ -245,21 +318,39 @@
     {:else if activeSection === 'appearance'}
       <h2 class="section-title">Appearance</h2>
 
+      {#if themeError}
+        <p class="section-description" style="color: var(--color-danger);">{themeError}</p>
+      {/if}
+
       <div class="setting-group">
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Theme</span>
-            <span class="label-hint">Base colour scheme</span>
+            <span class="label-hint">Colour scheme</span>
           </div>
-          <select
-            class="setting-select"
-            value={settings.theme}
-            onchange={(e) => update('theme', (e.currentTarget as HTMLSelectElement).value as AppSettings['theme'])}
-          >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+          <div class="theme-selector-row">
+            <select
+              class="setting-select"
+              value={settings.theme}
+              onchange={(e) => { confirmingDelete = false; update('theme', (e.currentTarget as HTMLSelectElement).value); }}
+              aria-label="Select theme"
+            >
+              <optgroup label="Built-in">
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </optgroup>
+              {#if userThemes.length > 0}
+                <optgroup label="Custom">
+                  {#each userThemes as t (t.name)}
+                    <option value={t.name}>{t.name}</option>
+                  {/each}
+                </optgroup>
+              {/if}
+            </select>
+            <button class="action-btn" onclick={startCreatingTheme}>+ New</button>
+            <button class="action-btn" onclick={importTheme}>Import</button>
+          </div>
         </div>
 
         <div class="setting-row">
@@ -276,61 +367,93 @@
         </div>
       </div>
 
-      <div class="appearance-section-title">Custom Themes</div>
 
-      {#if themeError}
-        <p class="section-description" style="color: var(--color-danger);">{themeError}</p>
-      {/if}
-
-      {#if creatingTheme}
-        <div class="theme-actions">
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            class="setting-input"
-            type="text"
-            placeholder="Theme name"
-            bind:value={newThemeName}
-            onkeydown={(e) => { if (e.key === 'Enter') confirmCreateTheme(); if (e.key === 'Escape') cancelCreateTheme(); }}
-            autofocus
-            aria-label="New theme name"
-          />
-          <button class="action-btn action-btn--primary" onclick={confirmCreateTheme} disabled={!newThemeName.trim()}>Create</button>
-          <button class="action-btn" onclick={cancelCreateTheme}>Cancel</button>
-        </div>
-      {:else}
-        <div class="theme-actions">
-          <button class="action-btn" onclick={startCreatingTheme}>+ New Theme</button>
-          {#if userThemes.length > 0}
-            <select
-              class="setting-select"
-              value={selectedCustomTheme}
-              onchange={(e) => (selectedCustomTheme = (e.currentTarget as HTMLSelectElement).value)}
-              aria-label="Select custom theme to edit"
-            >
-              {#each userThemes as theme (theme.name)}
-                <option value={theme.name}>{theme.name}</option>
-              {/each}
-            </select>
-            {#if selectedCustomTheme}
-              <button
-                class="action-btn action-btn--danger"
-                onclick={() => selectedCustomTheme && deleteTheme(selectedCustomTheme)}
-              >Delete</button>
-            {/if}
-          {/if}
-        </div>
-      {/if}
-
-      {#if selectedCustomTheme}
-        <div class="theme-editor-wrap">
-          <ThemeEditor themeName={selectedCustomTheme} onrename={renameTheme} />
-        </div>
-      {:else if userThemes.length === 0 && !creatingTheme}
-        <p class="section-description">No custom themes yet. Click "+ New Theme" to create one.</p>
+      {#if isCustomTheme}
+        {#key settings.theme}
+          <div class="theme-editor-wrap" style="margin-top: var(--spacing-3);">
+            <ThemeEditor themeName={settings.theme} onrename={renameTheme} ondelete={() => { confirmingDelete = true; }} onexport={exportTheme} />
+          </div>
+        {/key}
       {/if}
     {/if}
   </div>
 </div>
+
+{#if creatingTheme}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label="New theme" tabindex="-1"
+    onclick={(e) => { if (e.target === e.currentTarget) cancelCreateTheme(); }}>
+    <div class="modal">
+      <header class="modal-header">
+        <h2 class="modal-title">New Theme</h2>
+        <button class="close-btn" onclick={cancelCreateTheme} aria-label="Close">✕</button>
+      </header>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label class="modal-label" for="new-theme-base">Base theme</label>
+          <span class="modal-hint">Your new theme starts as a copy of this</span>
+          <select id="new-theme-base" class="setting-select modal-select" bind:value={newThemeBase}>
+            <optgroup label="Built-in">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </optgroup>
+            {#if userThemes.length > 0}
+              <optgroup label="Custom">
+                {#each userThemes as t (t.name)}
+                  <option value={t.name}>{t.name}</option>
+                {/each}
+              </optgroup>
+            {/if}
+          </select>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-label" for="new-theme-name">Theme name</label>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            id="new-theme-name"
+            class="setting-input modal-input"
+            type="text"
+            placeholder="My Theme"
+            bind:value={newThemeName}
+            onkeydown={(e) => { if (e.key === 'Enter') confirmCreateTheme(); }}
+            autofocus
+          />
+        </div>
+
+        {#if themeError}
+          <p class="modal-error">{themeError}</p>
+        {/if}
+      </div>
+
+      <footer class="modal-footer">
+        <button class="action-btn" onclick={cancelCreateTheme}>Cancel</button>
+        <button class="action-btn action-btn--primary" onclick={confirmCreateTheme} disabled={!newThemeName.trim()}>Create</button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
+{#if confirmingDelete}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label="Delete theme" tabindex="-1"
+    onclick={(e) => { if (e.target === e.currentTarget) confirmingDelete = false; }}>
+    <div class="modal">
+      <header class="modal-header">
+        <h2 class="modal-title">Delete Theme</h2>
+        <button class="close-btn" onclick={() => (confirmingDelete = false)} aria-label="Close">✕</button>
+      </header>
+      <div class="modal-body">
+        <p class="modal-confirm-text">Delete <strong>{settings.theme}</strong>? This cannot be undone.</p>
+      </div>
+      <footer class="modal-footer">
+        <button class="action-btn" onclick={() => (confirmingDelete = false)}>Cancel</button>
+        <button class="action-btn action-btn--danger" onclick={deleteTheme}>Delete</button>
+      </footer>
+    </div>
+  </div>
+{/if}
 
 <style>
   .settings-page {
@@ -477,19 +600,10 @@
     accent-color: var(--color-accent);
   }
 
-  .appearance-section-title {
-    font-size: var(--font-size-md);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-top: var(--spacing-4);
-    margin-bottom: var(--spacing-2);
-  }
-
-  .theme-actions {
+  .theme-selector-row {
     display: flex;
     align-items: center;
     gap: var(--spacing-2);
-    margin-bottom: var(--spacing-3);
   }
 
   .action-btn {
@@ -541,5 +655,104 @@
     overflow: hidden;
     max-height: 500px;
     overflow-y: auto;
+  }
+
+  .modal-confirm-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    line-height: 1.5;
+  }
+
+  /* ── New Theme Modal ─────────────────────────────────────────────────────── */
+
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+  }
+
+  .modal {
+    background: var(--color-bg-overlay);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    width: 400px;
+    max-width: calc(100vw - var(--spacing-8));
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-4) var(--spacing-5);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .modal-title {
+    flex: 1;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+  }
+
+  .close-btn {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-md);
+    padding: var(--spacing-1);
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast), background var(--transition-fast);
+  }
+
+  .close-btn:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .modal-body {
+    padding: var(--spacing-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+  }
+
+  .modal-footer {
+    padding: var(--spacing-4) var(--spacing-5);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-2);
+  }
+
+  .modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+  }
+
+  .modal-label {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
+  }
+
+  .modal-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-1);
+  }
+
+  .modal-select,
+  .modal-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .modal-error {
+    font-size: var(--font-size-sm);
+    color: var(--color-danger);
   }
 </style>

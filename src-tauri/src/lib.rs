@@ -122,6 +122,8 @@ pub fn run() {
             commands::themes::themes_delete,
             commands::themes::themes_duplicate,
             commands::themes::themes_rename,
+            commands::themes::themes_export,
+            commands::themes::themes_import,
             // Updater
             commands::updater::updater_check,
             commands::updater::updater_install,

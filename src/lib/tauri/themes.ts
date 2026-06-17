@@ -25,3 +25,11 @@ export async function themesDuplicate(source: string, newName: string): Promise<
 export async function themesRename(oldName: string, newName: string): Promise<ThemeMeta> {
   return invoke<ThemeMeta>('themes_rename', { oldName, newName });
 }
+
+export async function themesExport(name: string, filePath: string): Promise<void> {
+  return invoke<void>('themes_export', { name, filePath });
+}
+
+export async function themesImport(filePath: string): Promise<ThemeMeta> {
+  return invoke<ThemeMeta>('themes_import', { filePath });
+}

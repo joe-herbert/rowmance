@@ -218,7 +218,7 @@ export type SplitMode = 'none' | 'horizontal' | 'vertical' | 'quad';
 // ── Settings ─────────────────────────────────────────────────────────────────
 
 export interface AppSettings {
-  theme: 'light' | 'dark' | 'system';
+  theme: string;
   pageSize: number;
   autoSaveEdits: boolean;
   showGeneratedSql: boolean;

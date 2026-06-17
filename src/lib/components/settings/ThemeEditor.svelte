@@ -8,120 +8,16 @@
   import { syncTrafficLightPosition } from '$lib/tauri/window';
   import type { ThemeData } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { VARIABLE_GROUPS } from './theme-variables';
 
   interface Props {
     themeName: string;
     onrename?: (_newName: string) => Promise<void>;
+    ondelete?: () => void;
+    onexport?: () => void;
   }
 
-  const { themeName, onrename }: Props = $props();
-
-  // Variable groups drawn from the design token structure in variables.css.
-  const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
-    {
-      label: 'Background',
-      vars: [
-        '--app-background',
-        '--glass-blur',
-      ],
-    },
-    {
-      label: 'Panels',
-      vars: [
-        '--panel-spacing',
-        '--panel-radius',
-        '--panel-opacity',
-      ],
-    },
-    {
-      label: 'Colours',
-      vars: [
-        '--color-bg-primary', '--color-bg-secondary', '--color-bg-tertiary',
-        '--color-bg-overlay', '--color-bg-hover', '--color-bg-active',
-        '--color-border', '--color-border-strong',
-        '--color-text-primary', '--color-text-secondary', '--color-text-muted',
-        '--color-text-disabled', '--color-text-on-accent',
-        '--color-accent', '--color-accent-hover', '--color-accent-subtle',
-        '--color-danger', '--color-danger-hover', '--color-danger-subtle',
-        '--color-warning', '--color-warning-subtle',
-        '--color-success', '--color-success-subtle',
-        '--color-null',
-      ],
-    },
-    {
-      label: 'Editor',
-      vars: [
-        '--color-editor-bg', '--color-editor-text',
-        '--color-editor-gutter-bg', '--color-editor-gutter-text',
-        '--color-editor-selection', '--color-editor-active-line',
-        '--color-editor-cursor', '--color-editor-keyword',
-        '--color-editor-string', '--color-editor-number',
-        '--color-editor-comment', '--color-editor-operator',
-        '--color-editor-function', '--color-editor-type',
-        '--color-editor-bracket-match',
-      ],
-    },
-    {
-      label: 'Connections',
-      vars: [
-        '--color-connection-connected',
-        '--color-connection-connecting',
-        '--color-connection-error',
-      ],
-    },
-    {
-      label: 'Scrollbar',
-      vars: [
-        '--color-scrollbar-thumb',
-        '--color-scrollbar-thumb-hover',
-        '--color-scrollbar-track',
-      ],
-    },
-    {
-      label: 'Table',
-      vars: [
-        '--color-table-row-alt',
-        '--color-table-row-hover',
-        '--color-table-row-selected',
-        '--color-table-header-bg',
-      ],
-    },
-    {
-      label: 'Typography',
-      vars: [
-        '--font-family-ui', '--font-family-mono',
-        '--font-size-xs', '--font-size-sm', '--font-size-md',
-        '--font-size-lg', '--font-size-xl',
-        '--font-weight-normal', '--font-weight-medium', '--font-weight-semibold',
-        '--line-height-tight', '--line-height-normal',
-      ],
-    },
-    {
-      label: 'Spacing',
-      vars: [
-        '--spacing-1', '--spacing-2', '--spacing-3', '--spacing-4',
-        '--spacing-5', '--spacing-6', '--spacing-8',
-      ],
-    },
-    {
-      label: 'Radius',
-      vars: [
-        '--radius-sm', '--radius-md', '--radius-lg', '--radius-xl',
-      ],
-    },
-    {
-      label: 'Shadows',
-      vars: [
-        '--shadow-sm', '--shadow-md', '--shadow-lg', '--shadow-overlay',
-      ],
-    },
-    {
-      label: 'Transitions',
-      vars: [
-        '--transition-fast', '--transition-md', '--transition-slow',
-      ],
-    },
-  ];
+  const { themeName, onrename, ondelete, onexport }: Props = $props();
 
   let themeData = $state<ThemeData | null>(null);
   let loadError = $state<string | null>(null);
@@ -205,24 +101,34 @@
     <div class="editor-loading">Loading…</div>
   {:else}
     <div class="editor-meta">
-      {#if onrename}
-        <input
-          class="theme-name-input"
-          type="text"
-          bind:value={editingName}
-          onblur={commitRename}
-          onkeydown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); if (e.key === 'Escape') { editingName = themeName; (e.currentTarget as HTMLInputElement).blur(); } }}
-          aria-label="Theme name"
-        />
-      {:else}
-        <span class="theme-name">{themeData.name}</span>
-      {/if}
-      <span class="theme-extends">extends: {themeData.extends}</span>
-      {#if renameError}
-        <span class="save-error">{renameError}</span>
-      {:else if saveError}
-        <span class="save-error">{saveError}</span>
-      {/if}
+      <div class="editor-meta-left">
+        {#if onrename}
+          <input
+            class="theme-name-input"
+            type="text"
+            bind:value={editingName}
+            onblur={commitRename}
+            onkeydown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); if (e.key === 'Escape') { editingName = themeName; (e.currentTarget as HTMLInputElement).blur(); } }}
+            aria-label="Theme name"
+          />
+        {:else}
+          <span class="theme-name">{themeData.name}</span>
+        {/if}
+        <span class="theme-extends">based on: {themeData.extends}</span>
+        {#if renameError}
+          <span class="save-error">{renameError}</span>
+        {:else if saveError}
+          <span class="save-error">{saveError}</span>
+        {/if}
+      </div>
+      <div class="editor-meta-actions">
+        {#if onexport}
+          <button class="meta-btn" onclick={onexport} aria-label="Export theme">Export</button>
+        {/if}
+        {#if ondelete}
+          <button class="meta-btn meta-btn--danger" onclick={ondelete} aria-label="Delete theme">Delete</button>
+        {/if}
+      </div>
     </div>
 
     {#each VARIABLE_GROUPS as group}
@@ -289,9 +195,52 @@
   .editor-meta {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--spacing-3);
     padding-bottom: var(--spacing-2);
     border-bottom: 1px solid var(--color-border);
+  }
+
+  .editor-meta-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .editor-meta-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    flex-shrink: 0;
+  }
+
+  .meta-btn {
+    height: 24px;
+    padding: 0 var(--spacing-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .meta-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .meta-btn--danger {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
+  .meta-btn--danger:hover {
+    background: var(--color-danger-subtle);
   }
 
   .theme-name {
