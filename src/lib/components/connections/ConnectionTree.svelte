@@ -422,13 +422,13 @@
   <div class="conn-item">
     <!-- Main row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="conn-row" class:connected class:errored oncontextmenu={(e) => showConnCtx(e, profile)}>
+    <div class="conn-row" class:connected class:errored oncontextmenu={(e) => showConnCtx(e, profile)} onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)}>
       <div class="conn-row-left">
         <!-- Chevron: rotates when expanded -->
         <button
           class="conn-chevron"
           class:open={expanded}
-          onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)}
+          onclick={(e) => { e.stopPropagation(); connected ? toggleExpand(profile.id) : handleConnect(profile); }}
           aria-label="{expanded ? 'Collapse' : 'Expand'} {profile.name}"
           disabled={connecting}
         >
@@ -452,7 +452,7 @@
         <!-- Name -->
         <button
           class="conn-name"
-          onclick={() => connected ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id }) : handleConnect(profile)}
+          onclick={(e) => { e.stopPropagation(); connected ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id }) : handleConnect(profile); }}
           title={profile.host}
         >{profile.name}</button>
 
@@ -734,7 +734,7 @@
     gap: 8px;
     padding: 7px 8px;
     border-radius: 8px;
-    cursor: default;
+    cursor: pointer;
     transition: background var(--transition-fast);
     position: relative;
   }
@@ -772,7 +772,6 @@
     transition: transform var(--transition-fast);
   }
 
-  .conn-chevron:hover { color: var(--color-text-primary); background: var(--color-bg-active); }
   .conn-chevron:disabled { opacity: 0.5; cursor: default; }
 
   .color-dot {
