@@ -120,6 +120,7 @@
   // ── DB type + SQL helpers ─────────────────────────────────────────────────
 
   let dbType = $derived(connections.getById(connectionId)?.dbType ?? 'mysql');
+  let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
 
   function quoteIdentifier(name: string): string {
     return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;
@@ -398,7 +399,7 @@
 </script>
 
 <div class="table-browser" bind:this={tableBrowserEl}>
-  <div class="toolbar">
+  <div class="toolbar" style={connectionColor ? `border-bottom: 2px solid ${connectionColor};` : undefined}>
     <span
       class="table-name"
       title={`Click to copy ${database}.${table}`}
