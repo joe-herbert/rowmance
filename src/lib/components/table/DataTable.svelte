@@ -11,14 +11,27 @@
   type CellValue = string | number | boolean | null;
   type SortDir = 'asc' | 'desc' | 'none';
 
+  export interface PageInfo {
+    pageIndex: number;
+    pageCount: number;
+    pageOffset: number;
+    pageRowsLength: number;
+    processedRowsLength: number;
+  }
+
   interface Props {
     columns: ColumnMeta[];
     rows: CellValue[][];
     pageSize?: number;
+    pageIndex?: number;
     editable?: boolean;
+    readOnly?: boolean;
     hiddenColumns?: Set<string>;
+    totalRows?: number | null;
     onChangePending?: (changes: Map<string, Map<string, CellValue>>) => void;
     onCellSelect?: (originalColIndex: number, row: CellValue[]) => void;
+    onAddRow?: () => void;
+    onPageInfo?: (info: PageInfo) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -100,10 +113,15 @@
     columns,
     rows,
     pageSize = 50,
+    pageIndex = $bindable(0),
     editable = false,
+    readOnly = false,
     hiddenColumns = new Set<string>(),
+    totalRows = null,
     onChangePending,
     onCellSelect,
+    onAddRow,
+    onPageInfo,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -227,8 +245,6 @@
 
   // ── Pagination ────────────────────────────────────────────────────────────
 
-  let pageIndex = $state(0);
-
   const pageCount = $derived(Math.max(1, Math.ceil(processedRows.length / pageSize)));
   const pageRows = $derived(
     processedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
@@ -249,6 +265,16 @@
   function nextPage(): void {
     if (pageIndex < pageCount - 1) pageIndex++;
   }
+
+  $effect(() => {
+    onPageInfo?.({
+      pageIndex,
+      pageCount,
+      pageOffset,
+      pageRowsLength: pageRows.length,
+      processedRowsLength: processedRows.length,
+    });
+  });
 
   // ── Pending changes ───────────────────────────────────────────────────────
 
@@ -515,6 +541,7 @@
   onclick={dismissContextMenu}
   onkeydown={(e) => { handleContextMenuKeydown(e); handleTableKeydown(e); }}
 >
+
   <div class="table-scroll">
     <table class="data-table">
       <thead>
@@ -597,19 +624,18 @@
             {#each visibleColumns as { col, originalIndex }, colIndex}
               {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
               {@const isPending = hasPendingChange(rowKey, col.name)}
-              {@const isFocused = focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
               <td
                 class="data-cell"
                 class:cell-number={typeCategory === 'number'}
                 class:cell-timestamp={typeCategory === 'timestamp'}
                 class:cell-editable={editable}
-                class:cell-focused={isFocused}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
                 onfocus={() => {
                   focusedCell = { row: rowIndex, col: colIndex };
+                  selectedRowKeys = new Set([rowKey]);
                   onCellSelect?.(originalIndex, row);
                 }}
                 title={editable ? 'Double-click or press Enter to edit' : undefined}
@@ -693,36 +719,6 @@
     />
   {/if}
 
-  <div class="pagination-bar">
-    <button
-      class="page-btn"
-      onclick={previousPage}
-      disabled={pageIndex === 0}
-      aria-label="Previous page"
-    >
-      ←
-    </button>
-
-    <span class="page-label">
-      Page {pageIndex + 1} of {pageCount}
-    </span>
-
-    <button
-      class="page-btn"
-      onclick={nextPage}
-      disabled={pageIndex >= pageCount - 1}
-      aria-label="Next page"
-    >
-      →
-    </button>
-
-    <span class="row-count">
-      {processedRows.length.toLocaleString()}
-      {processedRows.length !== rows.length
-        ? ` / ${rows.length.toLocaleString()} rows (filtered)`
-        : ` row${rows.length !== 1 ? 's' : ''}`}
-    </span>
-  </div>
 </div>
 
 <style>
@@ -733,8 +729,9 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: var(--color-bg-primary);
   }
+
+  /* ── Table scroll ────────────────────────────────────────────────────────── */
 
   .table-scroll {
     flex: 1;
@@ -759,11 +756,14 @@
     background: transparent;
   }
 
+  /* border-collapse: separate + border-spacing: 0 lets box-shadow work on <tr> */
   .data-table {
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
   }
 
   /* ── Header ─────────────────────────────────────────────────────────────── */
@@ -784,6 +784,7 @@
     color: var(--color-text-secondary);
   }
 
+  /* No border between # and first column — no border-right anywhere */
   .rownum-header-cell {
     width: 42px;
     min-width: 42px;
@@ -794,7 +795,7 @@
     font-weight: var(--font-weight-medium);
     vertical-align: middle;
     padding: 0;
-    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border-strong);
     box-sizing: border-box;
   }
 
@@ -805,7 +806,7 @@
     text-align: left;
     color: var(--color-text-secondary);
     background: transparent;
-    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border-strong);
     white-space: nowrap;
     overflow: hidden;
     box-sizing: border-box;
@@ -894,8 +895,6 @@
   /* ── Data rows ──────────────────────────────────────────────────────────── */
 
   .data-row {
-    height: 38px;
-    border-bottom: 1px solid var(--color-border);
     cursor: pointer;
     transition: background var(--transition-fast);
   }
@@ -904,6 +903,7 @@
     background: var(--color-bg-hover);
   }
 
+  /* box-shadow works on <tr> with border-collapse: separate */
   .data-row.row-selected {
     background: var(--color-accent-subtle);
     box-shadow: inset 2px 0 0 var(--color-accent);
@@ -919,9 +919,10 @@
     width: 42px;
     min-width: 42px;
     max-width: 42px;
+    height: 38px;
     text-align: center;
     vertical-align: middle;
-    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
     box-sizing: border-box;
     padding: 0;
   }
@@ -946,7 +947,7 @@
   .data-cell {
     padding: 0 12px;
     height: 38px;
-    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -954,7 +955,7 @@
     vertical-align: middle;
     box-sizing: border-box;
     user-select: text;
-    max-width: 0; /* forces text-overflow to work in table cells */
+    max-width: 0;
   }
 
   .data-cell.cell-number {
@@ -972,15 +973,9 @@
     cursor: default;
   }
 
-  .data-cell.cell-editable:hover {
-    background: var(--color-bg-hover);
-  }
-
-  .data-cell.cell-focused,
+  /* No cell-level focus ring — row selection handles the visual feedback */
   .data-cell:focus {
-    outline: 2px solid var(--color-accent);
-    outline-offset: -2px;
-    background: var(--color-accent-subtle);
+    outline: none;
   }
 
   .cell-dirty-dot {
@@ -1024,54 +1019,6 @@
     text-align: center;
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
-  }
-
-  /* ── Pagination bar ─────────────────────────────────────────────────────── */
-
-  .pagination-bar {
-    flex: 0 0 var(--statusbar-height);
-    min-height: var(--statusbar-height);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: 0 var(--spacing-3);
-    background: var(--color-bg-secondary);
-    border-top: 1px solid var(--color-border);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
-  }
-
-  .page-btn {
-    padding: 0 var(--spacing-2);
-    height: calc(var(--statusbar-height) - var(--spacing-1) * 2);
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-primary);
-    cursor: pointer;
-    transition: background var(--transition-fast);
-    line-height: 1;
-  }
-
-  .page-btn:hover:not(:disabled) {
-    background: var(--color-bg-active);
-  }
-
-  .page-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .page-label {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
-  }
-
-  .row-count {
-    margin-left: auto;
-    color: var(--color-text-muted);
-    font-variant-numeric: tabular-nums;
   }
 
   /* ── Context menu ───────────────────────────────────────────────────────── */

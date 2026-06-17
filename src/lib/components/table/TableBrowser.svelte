@@ -6,7 +6,7 @@
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import type { QueryResult, ColumnMeta } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
-  import DataTable from '$lib/components/table/DataTable.svelte';
+  import DataTable, { type PageInfo } from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
   import CsvImportModal from '$lib/components/table/CsvImportModal.svelte';
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
@@ -304,6 +304,16 @@
     });
   }
 
+  // ── DataTable pagination state ─────────────────────────────────────────────
+
+  let dtPageIndex = $state(0);
+  let dtPageInfo = $state<PageInfo | null>(null);
+
+  function handleDtPageInfo(info: PageInfo): void {
+    dtPageInfo = info;
+    dtPageIndex = info.pageIndex;
+  }
+
   // ── Table browser ref (for focus detection) ────────────────────────────────
 
   let tableBrowserEl = $state<HTMLElement | null>(null);
@@ -337,16 +347,12 @@
     }
   }
 
-  // Page navigation functions for keyboard shortcuts — delegate to DataTable page state
-  // by dispatching click events on the pagination buttons if they exist.
   function nextTablePage(): void {
-    const btn = tableBrowserEl?.querySelector<HTMLButtonElement>('.page-btn[aria-label="Next page"]');
-    if (btn && !btn.disabled) btn.click();
+    if (dtPageInfo && dtPageIndex < dtPageInfo.pageCount - 1) dtPageIndex++;
   }
 
   function prevTablePage(): void {
-    const btn = tableBrowserEl?.querySelector<HTMLButtonElement>('.page-btn[aria-label="Previous page"]');
-    if (btn && !btn.disabled) btn.click();
+    if (dtPageIndex > 0) dtPageIndex--;
   }
 
   $effect(() => {
@@ -380,6 +386,38 @@
         aria-label="WHERE filter clause"
       />
     </div>
+
+    {#if dtPageInfo !== null}
+      <span class="row-range">
+        {dtPageInfo.pageRowsLength === 0
+          ? '0'
+          : (dtPageInfo.pageOffset + 1).toLocaleString()}–{Math.min(dtPageInfo.pageOffset + dtPageInfo.pageRowsLength, dtPageInfo.processedRowsLength).toLocaleString()}
+        of {dtPageInfo.processedRowsLength.toLocaleString()}
+      </span>
+
+      <div class="page-nav-group">
+        <button
+          class="page-nav-btn"
+          onclick={prevTablePage}
+          disabled={dtPageIndex === 0}
+          aria-label="Previous page"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <button
+          class="page-nav-btn page-nav-btn--next"
+          onclick={nextTablePage}
+          disabled={dtPageIndex >= dtPageInfo.pageCount - 1}
+          aria-label="Next page"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    {/if}
 
     {#if currentColumns.length > 0}
       <button
@@ -533,7 +571,12 @@
       title="Refresh"
       aria-label="Refresh table data"
     >
-      ↺
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11a8 8 0 0 1 13.5-5.5L20 8"></path>
+        <polyline points="20 3 20 8 15 8"></polyline>
+        <path d="M20 13a8 8 0 0 1-13.5 5.5L4 16"></path>
+        <polyline points="4 21 4 16 9 16"></polyline>
+      </svg>
     </button>
   </div>
 
@@ -588,10 +631,12 @@
           columns={result.columns}
           rows={result.rows}
           pageSize={PAGE_SIZE}
+          bind:pageIndex={dtPageIndex}
           editable={true}
           {hiddenColumns}
           onChangePending={handleChangePending}
           onCellSelect={handleCellSelect}
+          onPageInfo={handleDtPageInfo}
         />
       {/key}
     {:else}
@@ -638,7 +683,6 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: var(--color-bg-primary);
   }
 
   .toolbar {
@@ -649,7 +693,6 @@
     align-items: center;
     gap: var(--spacing-2);
     padding: 0 var(--spacing-3);
-    background: var(--color-bg-secondary);
     border-bottom: 1px solid var(--color-border);
     overflow: visible;
     position: relative;
@@ -732,6 +775,49 @@
     font-family: var(--font-family-ui);
   }
 
+  .row-range {
+    font-size: 11.5px;
+    color: var(--color-text-secondary);
+    font-family: var(--font-family-mono);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .page-nav-group {
+    display: flex;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .page-nav-btn {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .page-nav-btn--next {
+    border-left: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+  }
+
+  .page-nav-btn:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .page-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
   .toolbar-btn {
     display: flex;
     align-items: center;
@@ -740,7 +826,7 @@
     padding: 0 var(--spacing-2);
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+    border-radius: 8px;
     font-size: var(--font-size-xs);
     font-family: var(--font-family-ui);
     color: var(--color-text-secondary);
@@ -796,23 +882,20 @@
   }
 
   .refresh-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--spacing-6);
-    height: var(--spacing-6);
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
     padding: 0;
-    background: transparent;
+    background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-md);
+    border-radius: 8px;
     color: var(--color-text-secondary);
     cursor: pointer;
     transition:
       background var(--transition-fast),
       color var(--transition-fast);
     flex-shrink: 0;
-    line-height: 1;
   }
 
   .refresh-button:hover:not(:disabled) {
@@ -821,7 +904,7 @@
   }
 
   .refresh-button:disabled {
-    opacity: 0.4;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 

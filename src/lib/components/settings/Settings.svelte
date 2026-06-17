@@ -337,7 +337,6 @@
     display: flex;
     height: 100%;
     overflow: hidden;
-    background: var(--color-bg-primary);
   }
 
   .settings-nav {
@@ -407,7 +406,6 @@
     justify-content: space-between;
     gap: var(--spacing-4);
     padding: var(--spacing-3) var(--spacing-4);
-    background: var(--color-bg-primary);
     border-bottom: 1px solid var(--color-border);
   }
 

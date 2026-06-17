@@ -401,7 +401,6 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     overflow: hidden;
-    background: var(--color-bg-primary);
   }
 
   .relation-title {

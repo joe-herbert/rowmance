@@ -362,7 +362,6 @@
     justify-content: space-between;
     gap: var(--spacing-3);
     padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-bg-primary);
     border-bottom: 1px solid var(--color-border);
     min-height: 36px;
   }
