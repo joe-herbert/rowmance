@@ -13,6 +13,7 @@
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
+  import { useToast } from '$lib/stores/toast.svelte';
 
   interface Props {
     connectionId: string;
@@ -27,6 +28,7 @@
   const connections = useConnections();
   const cellSelectionStore = useCellSelection();
   const statusBar = useStatusBar();
+  const toast = useToast();
 
   const PAGE_SIZE = 50;
 
@@ -397,7 +399,14 @@
 
 <div class="table-browser" bind:this={tableBrowserEl}>
   <div class="toolbar">
-    <span class="table-name" title={`${database}.${table}`}>
+    <span
+      class="table-name"
+      title={`Click to copy ${database}.${table}`}
+      role="button"
+      tabindex="0"
+      onclick={() => navigator.clipboard.writeText(`${database}.${table}`).then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'))}
+      onkeydown={(e) => e.key === 'Enter' && navigator.clipboard.writeText(`${database}.${table}`).then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'))}
+    >
       <span class="db-name">{database}</span>
       <span class="separator">.</span>
       <span class="tbl-name">{table}</span>
@@ -744,6 +753,8 @@
     flex-shrink: 0;
     max-width: 220px;
     overflow: hidden;
+    cursor: pointer;
+    user-select: none;
   }
 
   .db-name {
@@ -751,12 +762,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-family: var(--font-family-mono);
   }
 
   .separator {
     color: var(--color-text-muted);
     margin: 0 1px;
     flex-shrink: 0;
+    font-family: var(--font-family-mono);
   }
 
   .tbl-name {
