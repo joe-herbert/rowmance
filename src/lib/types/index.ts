@@ -199,7 +199,7 @@ export interface UpdateCheckResult { available: boolean; version: string | null;
 // ── Panels ───────────────────────────────────────────────────────────────────
 
 export type PanelKind =
-  | { kind: 'query_editor'; connectionId: string; initialSql?: string }
+  | { kind: 'query_editor'; connectionId: string; initialSql?: string; editorId?: string }
   | { kind: 'table_browser'; connectionId: string; database: string; table: string; initialFilter?: string }
   | { kind: 'ddl_viewer'; connectionId: string; database: string; objectName: string; objectType: 'table' | 'view' }
   | { kind: 'erd'; connectionId: string; database: string }

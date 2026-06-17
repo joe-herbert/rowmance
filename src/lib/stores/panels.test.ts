@@ -85,7 +85,12 @@ describe('usePanels', () => {
   it('openInFocused updates the focused panel content', () => {
     const store = usePanels();
     store.openInFocused({ kind: 'query_editor', connectionId: 'conn-1' });
-    expect(store.panels[0].content).toEqual({ kind: 'query_editor', connectionId: 'conn-1' });
+    const content = store.panels[0].content;
+    expect(content.kind).toBe('query_editor');
+    if (content.kind === 'query_editor') {
+      expect(content.connectionId).toBe('conn-1');
+      expect(content.editorId).toBeTruthy();
+    }
   });
 
   it('openInFocused accepts an erd panel kind', () => {

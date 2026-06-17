@@ -43,7 +43,7 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
     case 'settings':
       return true;
     case 'query_editor':
-      return false;
+      return b.kind === 'query_editor' && !!a.editorId && a.editorId === b.editorId;
     case 'empty':
       return true;
   }
@@ -113,6 +113,10 @@ export function usePanels() {
      * - query_editor always adds a new entry (each session is distinct).
      */
     openInFocused(content: PanelKind) {
+      // Stamp a unique editorId on query_editor content so sameContent can match instances.
+      if (content.kind === 'query_editor' && !content.editorId) {
+        content = { ...content, editorId: createId() };
+      }
       if (content.kind !== 'empty') {
         // If already visible in some panel, just focus it
         const existingPanelIdx = panels.findIndex(p => sameContent(p.content, content));
