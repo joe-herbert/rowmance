@@ -146,6 +146,135 @@ pub async fn list_columns(
         .collect())
 }
 
+#[derive(Debug, Serialize)]
+pub struct IndexInfo {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub unique: bool,
+    #[serde(rename = "indexType")]
+    pub index_type: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ForeignKeyInfo {
+    #[serde(rename = "constraintName")]
+    pub constraint_name: String,
+    pub columns: Vec<String>,
+    #[serde(rename = "referencedTable")]
+    pub referenced_table: String,
+    #[serde(rename = "referencedColumns")]
+    pub referenced_columns: Vec<String>,
+    #[serde(rename = "onDelete")]
+    pub on_delete: String,
+    #[serde(rename = "onUpdate")]
+    pub on_update: String,
+}
+
+/// List all indexes for a given table.
+pub async fn list_indexes(
+    pool: &MySqlPool,
+    database: &str,
+    table: &str,
+) -> Result<Vec<IndexInfo>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        index_name: Option<String>,
+        column_name: Option<String>,
+        non_unique: Option<i64>,
+        index_type: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            CAST(INDEX_NAME AS CHAR) AS index_name,
+            CAST(COLUMN_NAME AS CHAR) AS column_name,
+            NON_UNIQUE AS non_unique,
+            CAST(INDEX_TYPE AS CHAR) AS index_type
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+        ORDER BY INDEX_NAME, SEQ_IN_INDEX
+        "#,
+    )
+    .bind(database)
+    .bind(table)
+    .fetch_all(pool)
+    .await?;
+
+    let mut map: std::collections::BTreeMap<String, IndexInfo> = std::collections::BTreeMap::new();
+    for r in rows {
+        let name = r.index_name.unwrap_or_default();
+        let col = r.column_name.unwrap_or_default();
+        let entry = map.entry(name.clone()).or_insert_with(|| IndexInfo {
+            name: name.clone(),
+            columns: vec![],
+            unique: r.non_unique == Some(0),
+            index_type: r.index_type.unwrap_or_else(|| "BTREE".to_owned()),
+        });
+        entry.columns.push(col);
+    }
+    Ok(map.into_values().collect())
+}
+
+/// List all foreign keys for a given table.
+pub async fn list_foreign_keys(
+    pool: &MySqlPool,
+    database: &str,
+    table: &str,
+) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        constraint_name: Option<String>,
+        column_name: Option<String>,
+        referenced_table: Option<String>,
+        referenced_column: Option<String>,
+        on_delete: Option<String>,
+        on_update: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            CAST(kcu.CONSTRAINT_NAME      AS CHAR) AS constraint_name,
+            CAST(kcu.COLUMN_NAME          AS CHAR) AS column_name,
+            CAST(kcu.REFERENCED_TABLE_NAME AS CHAR) AS referenced_table,
+            CAST(kcu.REFERENCED_COLUMN_NAME AS CHAR) AS referenced_column,
+            CAST(rc.DELETE_RULE           AS CHAR) AS on_delete,
+            CAST(rc.UPDATE_RULE           AS CHAR) AS on_update
+        FROM information_schema.KEY_COLUMN_USAGE kcu
+        JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+          ON rc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+         AND rc.CONSTRAINT_NAME   = kcu.CONSTRAINT_NAME
+        WHERE kcu.TABLE_SCHEMA = ?
+          AND kcu.TABLE_NAME   = ?
+          AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+        ORDER BY kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
+        "#,
+    )
+    .bind(database)
+    .bind(table)
+    .fetch_all(pool)
+    .await?;
+
+    let mut map: std::collections::BTreeMap<String, ForeignKeyInfo> = std::collections::BTreeMap::new();
+    for r in rows {
+        let name = r.constraint_name.unwrap_or_default();
+        let col = r.column_name.unwrap_or_default();
+        let ref_col = r.referenced_column.unwrap_or_default();
+        let entry = map.entry(name.clone()).or_insert_with(|| ForeignKeyInfo {
+            constraint_name: name.clone(),
+            columns: vec![],
+            referenced_table: r.referenced_table.unwrap_or_default(),
+            referenced_columns: vec![],
+            on_delete: r.on_delete.unwrap_or_else(|| "NO ACTION".to_owned()),
+            on_update: r.on_update.unwrap_or_else(|| "NO ACTION".to_owned()),
+        });
+        entry.columns.push(col);
+        entry.referenced_columns.push(ref_col);
+    }
+    Ok(map.into_values().collect())
+}
+
 /// Return the CREATE TABLE / CREATE VIEW DDL for an object.
 pub async fn get_ddl(pool: &MySqlPool, table: &str) -> Result<String, RowmanceError> {
     // SHOW CREATE TABLE works for both tables and views in MySQL/MariaDB.

@@ -6,9 +6,11 @@
 <script lang="ts">
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import * as historyApi from '$lib/tauri/history';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
-  import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder } from '$lib/types';
+  import * as schemaApi from '$lib/tauri/schema';
+  import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
 
@@ -22,6 +24,7 @@
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
+  const cellSelectionStore = useCellSelection();
 
   let activePanel = $state<ActivePanel>('history');
 
@@ -32,16 +35,92 @@
       activePanel = panel;
       if (panel === 'history') loadHistory();
       if (panel === 'saved') loadSavedQueries();
+      if (panel === 'column') columnInspectorKey = null;
+      if (panel === 'table-info') tableInfoKey = null;
     }
   }
 
   // ── Relations panel ───────────────────────────────────────────────────────
 
-  // ── Column Inspector placeholder ──────────────────────────────────────────────
-  // Future: receive selected column via event or store; for now, shows a hint.
+  // ── Column Inspector ─────────────────────────────────────────────────────────
 
-  // ── Table Info placeholder ────────────────────────────────────────────────────
-  // Future: receive focused table and run a quick schema query to show stats.
+  let columnInfoLoading = $state(false);
+  let columnInfoError = $state<string | null>(null);
+  let columnInfoData = $state<ColumnInfo | null>(null);
+  let columnIndexes = $state<IndexInfo[]>([]);
+  let columnForeignKeys = $state<ForeignKeyInfo[]>([]);
+  let columnInspectorKey = $state<string | null>(null);
+
+  $effect(() => {
+    const sel = cellSelectionStore.current;
+    if (activePanel !== 'column') return;
+    const key = sel ? `${sel.connectionId}:${sel.database}:${sel.table}:${sel.columnName}` : null;
+    if (key === columnInspectorKey) return;
+    columnInspectorKey = key;
+
+    if (!sel) {
+      columnInfoData = null;
+      columnIndexes = [];
+      columnForeignKeys = [];
+      return;
+    }
+
+    columnInfoLoading = true;
+    columnInfoError = null;
+    Promise.all([
+      schemaApi.listColumns(sel.connectionId, sel.database, sel.table),
+      schemaApi.listIndexes(sel.connectionId, sel.database, sel.table),
+      schemaApi.listForeignKeys(sel.connectionId, sel.database, sel.table),
+    ]).then(([cols, idxs, fks]) => {
+      columnInfoData = cols.find((c) => c.name === sel.columnName) ?? null;
+      columnIndexes = idxs.filter((idx) => idx.columns.includes(sel.columnName));
+      columnForeignKeys = fks.filter((fk) => fk.columns.includes(sel.columnName));
+      columnInfoLoading = false;
+    }).catch((err) => {
+      columnInfoError = errorMessage(err);
+      columnInfoLoading = false;
+    });
+  });
+
+  // ── Table Info ───────────────────────────────────────────────────────────────
+
+  let tableInfoLoading = $state(false);
+  let tableInfoError = $state<string | null>(null);
+  let tableColumns = $state<ColumnInfo[]>([]);
+  let tableIndexes = $state<IndexInfo[]>([]);
+  let tableForeignKeys = $state<ForeignKeyInfo[]>([]);
+  let tableInfoKey = $state<string | null>(null);
+
+  $effect(() => {
+    const sel = cellSelectionStore.current;
+    if (activePanel !== 'table-info') return;
+    const key = sel ? `${sel.connectionId}:${sel.database}:${sel.table}` : null;
+    if (key === tableInfoKey) return;
+    tableInfoKey = key;
+
+    if (!sel) {
+      tableColumns = [];
+      tableIndexes = [];
+      tableForeignKeys = [];
+      return;
+    }
+
+    tableInfoLoading = true;
+    tableInfoError = null;
+    Promise.all([
+      schemaApi.listColumns(sel.connectionId, sel.database, sel.table),
+      schemaApi.listIndexes(sel.connectionId, sel.database, sel.table),
+      schemaApi.listForeignKeys(sel.connectionId, sel.database, sel.table),
+    ]).then(([cols, idxs, fks]) => {
+      tableColumns = cols;
+      tableIndexes = idxs;
+      tableForeignKeys = fks;
+      tableInfoLoading = false;
+    }).catch((err) => {
+      tableInfoError = errorMessage(err);
+      tableInfoLoading = false;
+    });
+  });
 
   // ── Query History ─────────────────────────────────────────────────────────────
 
@@ -494,9 +573,66 @@
         <div class="panel-toolbar">
           <span class="panel-title">Column Inspector</span>
         </div>
-        <div class="placeholder-panel">
-          <p>Click a column in the schema tree to inspect it.</p>
-        </div>
+        {#if !cellSelectionStore.current}
+          <div class="placeholder-panel"><p>Select a cell in a table to inspect its column.</p></div>
+        {:else if columnInfoLoading}
+          <div class="loading-row">Loading…</div>
+        {:else if columnInfoError}
+          <div class="error-row">{columnInfoError}</div>
+        {:else if !columnInfoData}
+          <div class="placeholder-panel"><p>Column not found.</p></div>
+        {:else}
+          {@const sel = cellSelectionStore.current}
+          <div class="context-bar">
+            <span class="ctx-table">{sel!.table}</span><span class="ctx-dot">.</span><span class="ctx-col">{columnInfoData.name}</span>
+          </div>
+          <div class="info-section">
+            <div class="info-section-title">Properties</div>
+            <dl class="info-dl">
+              <div class="info-row"><dt>Type</dt><dd class="mono">{columnInfoData.dataType}</dd></div>
+              <div class="info-row"><dt>Nullable</dt><dd>{columnInfoData.nullable ? 'Yes' : 'No'}</dd></div>
+              {#if columnInfoData.defaultValue !== null}
+                <div class="info-row"><dt>Default</dt><dd class="mono">{columnInfoData.defaultValue}</dd></div>
+              {/if}
+              {#if columnInfoData.isPrimaryKey}
+                <div class="info-row"><dt>Primary Key</dt><dd class="badge-pk">PK</dd></div>
+              {/if}
+              {#if columnInfoData.isAutoIncrement}
+                <div class="info-row"><dt>Auto Increment</dt><dd>Yes</dd></div>
+              {/if}
+              {#if columnInfoData.isForeignKey}
+                <div class="info-row"><dt>Foreign Key</dt><dd>Yes</dd></div>
+              {/if}
+              {#if columnInfoData.comment}
+                <div class="info-row"><dt>Comment</dt><dd>{columnInfoData.comment}</dd></div>
+              {/if}
+            </dl>
+          </div>
+          {#if columnIndexes.length > 0}
+            <div class="info-section">
+              <div class="info-section-title">Indexes</div>
+              {#each columnIndexes as idx (idx.name)}
+                <div class="tag-row">
+                  <span class="tag-name mono">{idx.name}</span>
+                  {#if idx.unique}<span class="tag-badge">UNIQUE</span>{/if}
+                  <span class="tag-type">{idx.indexType}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if columnForeignKeys.length > 0}
+            <div class="info-section">
+              <div class="info-section-title">Foreign Keys</div>
+              {#each columnForeignKeys as fk (fk.constraintName)}
+                <div class="fk-card">
+                  <div class="fk-name mono">{fk.constraintName}</div>
+                  <div class="fk-ref">→ <span class="mono">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span></div>
+                  <div class="fk-actions">ON DELETE {fk.onDelete} · ON UPDATE {fk.onUpdate}</div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/if}
       </div>
 
     {:else if activePanel === 'table-info'}
@@ -504,9 +640,68 @@
         <div class="panel-toolbar">
           <span class="panel-title">Table Info</span>
         </div>
-        <div class="placeholder-panel">
-          <p>Open a table from the schema tree to see its details here.</p>
-        </div>
+        {#if !cellSelectionStore.current}
+          <div class="placeholder-panel"><p>Select a cell in a table to see its details.</p></div>
+        {:else if tableInfoLoading}
+          <div class="loading-row">Loading…</div>
+        {:else if tableInfoError}
+          <div class="error-row">{tableInfoError}</div>
+        {:else}
+          {@const sel = cellSelectionStore.current}
+          <div class="context-bar">
+            <span class="ctx-table">{sel!.table}</span>
+            <span class="ctx-sub">{sel!.database}</span>
+          </div>
+          {#if tableColumns.length > 0}
+            <div class="info-section">
+              <div class="info-section-title">Columns ({tableColumns.length})</div>
+              <table class="col-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th title="Nullable">N</th>
+                    <th title="Primary Key">PK</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each tableColumns as col (col.name)}
+                    <tr class:selected-col={col.name === sel!.columnName}>
+                      <td class="mono">{col.name}</td>
+                      <td class="mono type-cell">{col.dataType}</td>
+                      <td class="center-cell">{col.nullable ? '✓' : ''}</td>
+                      <td class="center-cell">{col.isPrimaryKey ? '✓' : ''}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+          {#if tableIndexes.length > 0}
+            <div class="info-section">
+              <div class="info-section-title">Indexes ({tableIndexes.length})</div>
+              {#each tableIndexes as idx (idx.name)}
+                <div class="tag-row">
+                  <span class="tag-name mono">{idx.name}</span>
+                  {#if idx.unique}<span class="tag-badge">UNIQUE</span>{/if}
+                  <span class="tag-type">{idx.columns.join(', ')}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if tableForeignKeys.length > 0}
+            <div class="info-section">
+              <div class="info-section-title">Foreign Keys ({tableForeignKeys.length})</div>
+              {#each tableForeignKeys as fk (fk.constraintName)}
+                <div class="fk-card">
+                  <div class="fk-name mono">{fk.constraintName}</div>
+                  <div class="fk-ref"><span class="mono">{fk.columns.join(', ')}</span> → <span class="mono">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span></div>
+                  <div class="fk-actions">ON DELETE {fk.onDelete} · ON UPDATE {fk.onUpdate}</div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/if}
       </div>
 
     {:else if activePanel === 'relations'}
@@ -915,6 +1110,198 @@
     color: var(--color-text-muted);
     font-style: italic;
     line-height: var(--line-height-normal);
+  }
+
+  /* ── Column Inspector / Table Info shared ────────────────────────────────── */
+
+  .context-bar {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 1px;
+    padding: var(--spacing-2);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .ctx-table {
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .ctx-dot {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .ctx-col {
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-accent);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .ctx-sub {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-left: var(--spacing-1);
+  }
+
+  .info-section {
+    border-bottom: 1px solid var(--color-border);
+    padding: var(--spacing-2) 0;
+  }
+
+  .info-section-title {
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 0 var(--spacing-2) var(--spacing-1);
+  }
+
+  .info-dl {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0 var(--spacing-2);
+  }
+
+  .info-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-2);
+  }
+
+  .info-row dt {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    min-width: 90px;
+    flex-shrink: 0;
+  }
+
+  .info-row dd {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-primary);
+  }
+
+  .mono {
+    font-family: var(--font-family-mono);
+  }
+
+  .badge-pk {
+    font-size: 10px;
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .tag-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: 2px var(--spacing-2);
+    font-size: var(--font-size-xs);
+  }
+
+  .tag-name {
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+  }
+
+  .tag-badge {
+    font-size: 10px;
+    background: var(--color-success-subtle);
+    color: var(--color-success);
+    border-radius: var(--radius-sm);
+    padding: 1px 4px;
+    font-weight: var(--font-weight-semibold);
+    flex-shrink: 0;
+  }
+
+  .tag-type {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .fk-card {
+    margin: 0 var(--spacing-2) var(--spacing-1);
+    padding: var(--spacing-1) var(--spacing-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-secondary);
+  }
+
+  .fk-name {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fk-ref {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-primary);
+    margin-top: 1px;
+  }
+
+  .fk-actions {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    margin-top: 1px;
+  }
+
+  .col-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-xs);
+  }
+
+  .col-table th {
+    padding: 3px var(--spacing-2);
+    background: var(--color-table-header-bg);
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-medium);
+    font-size: 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .col-table td {
+    padding: 3px var(--spacing-2);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    vertical-align: middle;
+  }
+
+  .col-table tr.selected-col td {
+    background: var(--color-accent-subtle);
+    color: var(--color-text-primary);
+  }
+
+  .type-cell {
+    color: var(--color-text-muted);
+    max-width: 70px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .center-cell {
+    text-align: center;
+    color: var(--color-accent);
   }
 
   .relations-tabpanel {

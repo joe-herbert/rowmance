@@ -165,6 +165,157 @@ pub async fn list_columns(
         .collect())
 }
 
+#[derive(Debug, Serialize)]
+pub struct IndexInfo {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub unique: bool,
+    #[serde(rename = "indexType")]
+    pub index_type: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ForeignKeyInfo {
+    #[serde(rename = "constraintName")]
+    pub constraint_name: String,
+    pub columns: Vec<String>,
+    #[serde(rename = "referencedTable")]
+    pub referenced_table: String,
+    #[serde(rename = "referencedColumns")]
+    pub referenced_columns: Vec<String>,
+    #[serde(rename = "onDelete")]
+    pub on_delete: String,
+    #[serde(rename = "onUpdate")]
+    pub on_update: String,
+}
+
+/// List all indexes for a given table in the given schema.
+pub async fn list_indexes(
+    pool: &PgPool,
+    schema: &str,
+    table: &str,
+) -> Result<Vec<IndexInfo>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        index_name: Option<String>,
+        column_name: Option<String>,
+        is_unique: Option<bool>,
+        index_type: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            i.relname AS index_name,
+            a.attname AS column_name,
+            ix.indisunique AS is_unique,
+            am.amname AS index_type
+        FROM pg_index ix
+        JOIN pg_class t  ON t.oid  = ix.indrelid
+        JOIN pg_class i  ON i.oid  = ix.indexrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN pg_am am    ON am.oid = i.relam
+        JOIN pg_attribute a ON a.attrelid = t.oid
+            AND a.attnum = ANY(ix.indkey)
+        WHERE n.nspname = $1 AND t.relname = $2
+        ORDER BY i.relname, array_position(ix.indkey, a.attnum)
+        "#,
+    )
+    .bind(schema)
+    .bind(table)
+    .fetch_all(pool)
+    .await?;
+
+    let mut map: std::collections::BTreeMap<String, IndexInfo> = std::collections::BTreeMap::new();
+    for r in rows {
+        let name = r.index_name.unwrap_or_default();
+        let col = r.column_name.unwrap_or_default();
+        let entry = map.entry(name.clone()).or_insert_with(|| IndexInfo {
+            name: name.clone(),
+            columns: vec![],
+            unique: r.is_unique.unwrap_or(false),
+            index_type: r.index_type.unwrap_or_else(|| "btree".to_owned()),
+        });
+        entry.columns.push(col);
+    }
+    Ok(map.into_values().collect())
+}
+
+/// List all foreign keys for a given table in the given schema.
+pub async fn list_foreign_keys(
+    pool: &PgPool,
+    schema: &str,
+    table: &str,
+) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        constraint_name: Option<String>,
+        column_name: Option<String>,
+        referenced_table: Option<String>,
+        referenced_column: Option<String>,
+        on_delete: Option<String>,
+        on_update: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            c.conname AS constraint_name,
+            a.attname AS column_name,
+            rt.relname AS referenced_table,
+            ra.attname AS referenced_column,
+            CASE c.confdeltype
+                WHEN 'a' THEN 'NO ACTION'
+                WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'
+                WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT'
+            END AS on_delete,
+            CASE c.confupdtype
+                WHEN 'a' THEN 'NO ACTION'
+                WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'
+                WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT'
+            END AS on_update
+        FROM pg_constraint c
+        JOIN pg_class t  ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN pg_class rt ON rt.oid = c.confrelid
+        JOIN pg_attribute a  ON a.attrelid = c.conrelid  AND a.attnum = ANY(c.conkey)
+        JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = ANY(c.confkey)
+        WHERE c.contype = 'f'
+          AND n.nspname = $1
+          AND t.relname = $2
+        ORDER BY c.conname,
+                 array_position(c.conkey,  a.attnum),
+                 array_position(c.confkey, ra.attnum)
+        "#,
+    )
+    .bind(schema)
+    .bind(table)
+    .fetch_all(pool)
+    .await?;
+
+    let mut map: std::collections::BTreeMap<String, ForeignKeyInfo> = std::collections::BTreeMap::new();
+    for r in rows {
+        let name = r.constraint_name.unwrap_or_default();
+        let col = r.column_name.unwrap_or_default();
+        let ref_col = r.referenced_column.unwrap_or_default();
+        let entry = map.entry(name.clone()).or_insert_with(|| ForeignKeyInfo {
+            constraint_name: name.clone(),
+            columns: vec![],
+            referenced_table: r.referenced_table.unwrap_or_default(),
+            referenced_columns: vec![],
+            on_delete: r.on_delete.unwrap_or_else(|| "NO ACTION".to_owned()),
+            on_update: r.on_update.unwrap_or_else(|| "NO ACTION".to_owned()),
+        });
+        entry.columns.push(col);
+        entry.referenced_columns.push(ref_col);
+    }
+    Ok(map.into_values().collect())
+}
+
 /// Return the DDL for a table or view using pg_get_tabledef-compatible approach.
 pub async fn get_ddl(pool: &PgPool, schema: &str, table: &str) -> Result<String, RowmanceError> {
     let row = sqlx::query_scalar::<_, String>(
