@@ -128,6 +128,15 @@
     }
   }
 
+  const focusedContent = $derived(panelStore.focusedPanel?.content);
+
+  function isTableActive(connectionId: string, database: string, tableName: string): boolean {
+    return focusedContent?.kind === 'table_browser' &&
+      focusedContent.connectionId === connectionId &&
+      focusedContent.database === database &&
+      focusedContent.table === tableName;
+  }
+
   function openTable(connectionId: string, database: string, table: string) {
     panelStore.openInFocused({ kind: 'table_browser', connectionId, database, table });
   }
@@ -494,6 +503,7 @@
                     <button
                       class="table-row"
                       class:system-item={isSystemTable(table.name)}
+                      class:active={isTableActive(profile.id, database, table.name)}
                       onclick={() => openTable(profile.id, database, table.name)}
                       oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
                       title={table.name}
@@ -868,6 +878,8 @@
   }
 
   .table-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+  .table-row.active { background: var(--color-accent-subtle); color: var(--color-accent); box-shadow: inset 2px 0 0 var(--color-accent); }
+  .table-row.active:hover { background: var(--color-accent-subtle); }
 
   .table-icon { flex-shrink: 0; }
   .table-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
