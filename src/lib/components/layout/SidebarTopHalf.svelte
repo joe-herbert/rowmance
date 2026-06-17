@@ -94,13 +94,11 @@
           onkeydown={(e) => e.key === 'Enter' && panelStore.showItem(item)}
           tabindex="0"
         >
-          {#if item.content.kind !== 'settings'}
-            <span
-              class="conn-dot"
-              style={connInfo?.color ? `background:${connInfo.color}` : undefined}
-              aria-hidden="true"
-            ></span>
-          {/if}
+          <span
+            class="conn-dot"
+            style={connInfo?.color ? `background:${connInfo.color}` : (item.content.kind === 'settings' ? 'background:transparent' : undefined)}
+            aria-hidden="true"
+          ></span>
           <span class="panel-icon" aria-hidden="true">
             {#if item.content.kind === 'table_browser'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
