@@ -916,7 +916,10 @@
   /* box-shadow works on <tr> with border-collapse: separate */
   .data-row.row-selected {
     background: var(--color-accent-subtle);
-    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+
+  .data-row.row-selected .rownum-cell {
+    border-left: 2px solid var(--color-accent);
   }
 
   .data-row.row-selected:hover {
