@@ -1,0 +1,211 @@
+<!--
+  StatusBar — fixed footer bar showing connection context, query timing,
+  and save/discard actions when there are pending table edits.
+-->
+<script lang="ts">
+  import { useStatusBar } from '$lib/stores/statusBar.svelte';
+  import { useConnections } from '$lib/stores/connections.svelte';
+  import { usePanels } from '$lib/stores/panels.svelte';
+
+  const statusBar = useStatusBar();
+  const connectionStore = useConnections();
+  const panelStore = usePanels();
+
+  const focusedConnection = $derived.by(() => {
+    const content = panelStore.focusedPanel?.content;
+    if (!content || !('connectionId' in content)) return null;
+    return connectionStore.getById(content.connectionId) ?? null;
+  });
+
+  const connColor = $derived(focusedConnection?.color ?? 'var(--color-text-muted)');
+  const connName = $derived(focusedConnection?.name ?? null);
+  const connType = $derived(
+    focusedConnection
+      ? focusedConnection.dbType === 'postgres'
+        ? 'PostgreSQL'
+        : focusedConnection.dbType === 'mysql'
+        ? 'MySQL'
+        : 'MariaDB'
+      : null
+  );
+  const host = $derived(
+    focusedConnection ? `${focusedConnection.host}:${focusedConnection.port}` : null
+  );
+
+  const timingText = $derived(
+    statusBar.lastQueryMs !== null
+      ? statusBar.lastQueryMs < 1000
+        ? `${statusBar.lastQueryMs}ms`
+        : `${(statusBar.lastQueryMs / 1000).toFixed(1)}s`
+      : null
+  );
+
+  const rowCountText = $derived(
+    statusBar.rowCount !== null ? `${statusBar.rowCount.toLocaleString()} rows` : null
+  );
+
+  const dirtyText = $derived(
+    statusBar.pendingCount > 0
+      ? `${statusBar.pendingCount} unsaved change${statusBar.pendingCount !== 1 ? 's' : ''}`
+      : null
+  );
+</script>
+
+<div class="status-bar" role="status" aria-label="Status bar">
+  <!-- Left: connection info -->
+  <div class="left">
+    {#if connName}
+      <span class="conn-status">
+        <span class="conn-dot" style="background: {connColor};" aria-hidden="true"></span>
+        <span class="conn-name">{connName}</span>
+      </span>
+    {/if}
+    {#if connType}
+      <span class="item">{connType}</span>
+    {/if}
+    {#if host}
+      <span class="item faint">{host}</span>
+    {/if}
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- Right: save/discard + stats -->
+  {#if dirtyText}
+    <span class="item dirty">{dirtyText}</span>
+    {#if statusBar.onDiscard}
+      <button
+        class="action-btn discard"
+        onclick={statusBar.onDiscard}
+        disabled={statusBar.isSaving}
+        aria-label="Discard all pending changes"
+      >
+        Discard
+      </button>
+    {/if}
+    {#if statusBar.onSave}
+      <button
+        class="action-btn save"
+        onclick={statusBar.onSave}
+        disabled={statusBar.isSaving}
+        aria-label="Save pending changes"
+      >
+        {statusBar.isSaving ? 'Saving…' : 'Save'}
+      </button>
+    {/if}
+  {/if}
+
+  {#if rowCountText}
+    <span class="item">{rowCountText}</span>
+  {/if}
+
+  <span class="item faint">UTF-8</span>
+
+  {#if timingText}
+    <span class="item accent">{timingText}</span>
+  {/if}
+</div>
+
+<style>
+  .status-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 30px;
+    padding: 0 14px;
+    background: var(--color-bg-primary);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border);
+    border-radius: var(--panel-radius);
+    font-size: 11px;
+    font-family: var(--font-family-mono);
+    color: var(--color-text-muted);
+    opacity: var(--panel-opacity);
+  }
+
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .conn-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .conn-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .conn-name {
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .item {
+    color: var(--color-text-muted);
+  }
+
+  .faint {
+    color: var(--color-text-faint, var(--color-text-muted));
+    opacity: 0.7;
+  }
+
+  .dirty {
+    color: var(--color-accent);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-xs);
+  }
+
+  .accent {
+    color: var(--color-accent);
+  }
+
+  .action-btn {
+    height: 22px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-family: var(--font-family-ui);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    transition: background var(--transition-fast), opacity var(--transition-fast);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .action-btn.discard {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+  }
+
+  .action-btn.discard:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .action-btn.save {
+    background: var(--color-accent);
+    border: none;
+    color: #fff;
+  }
+
+  .action-btn.save:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+</style>

@@ -10,6 +10,7 @@
   import Sidebar from './Sidebar.svelte';
   import SplitPanel from './SplitPanel.svelte';
   import RightSidebar from './RightSidebar.svelte';
+  import StatusBar from './StatusBar.svelte';
   import Toast from '$lib/components/ui/Toast.svelte';
   import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -277,6 +278,8 @@
     </button>
   {/if}
 </div>
+
+  <StatusBar />
 </div>
 
 <Toast />

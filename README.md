@@ -18,7 +18,7 @@ Rowmance provides a split-panel workspace with a query editor, table browser, sc
 |---|---|
 | [Rust toolchain](https://rustup.rs/) | stable (1.78+) |
 | [Bun](https://bun.sh/) | v1.0+ |
-| macOS | 12+, or Linux / Windows 10+ |
+| macOS | 12+, Windows 10+ or Linux (untested) |
 
 Additional Rust components (installed automatically by `make install`):
 

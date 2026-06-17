@@ -12,18 +12,21 @@
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { useStatusBar } from '$lib/stores/statusBar.svelte';
 
   interface Props {
     connectionId: string;
     database: string;
     table: string;
     initialFilter?: string;
+    isFocused?: boolean;
   }
 
-  let { connectionId, database, table, initialFilter }: Props = $props();
+  let { connectionId, database, table, initialFilter, isFocused = false }: Props = $props();
 
   const connections = useConnections();
   const cellSelectionStore = useCellSelection();
+  const statusBar = useStatusBar();
 
   const PAGE_SIZE = 50;
 
@@ -130,14 +133,19 @@
     return base;
   }
 
+  let lastQueryMs = $state<number | null>(null);
+
   async function load(): Promise<void> {
     isLoading = true;
     error = null;
+    const t0 = performance.now();
     try {
       result = await executeQuery(connectionId, buildSql(), page, PAGE_SIZE);
       if (result.error) {
         error = result.error;
         result = null;
+      } else {
+        lastQueryMs = Math.round(performance.now() - t0);
       }
     } catch (err) {
       error = errorMessage(err);
@@ -358,6 +366,26 @@
   $effect(() => {
     window.addEventListener('shortcut-action', handleShortcutAction);
     return () => window.removeEventListener('shortcut-action', handleShortcutAction);
+  });
+
+  // Register this panel's state with the status bar when focused.
+  $effect(() => {
+    if (!isFocused) return;
+    const rowCount = dtPageInfo ? dtPageInfo.processedRowsLength : null;
+    statusBar.update({
+      pendingCount,
+      rowCount,
+      lastQueryMs,
+      isSaving,
+      onSave: pendingCount > 0 ? saveChanges : null,
+      onDiscard: pendingCount > 0 ? discardChanges : null,
+    });
+  });
+
+  $effect(() => {
+    return () => {
+      if (isFocused) statusBar.clear();
+    };
   });
 </script>
 

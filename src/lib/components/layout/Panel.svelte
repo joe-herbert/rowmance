@@ -7,6 +7,7 @@
   import type { PanelState } from '$lib/types';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useStatusBar } from '$lib/stores/statusBar.svelte';
   import QueryEditor from '$lib/components/editor/QueryEditor.svelte';
   import TableBrowser from '$lib/components/table/TableBrowser.svelte';
   import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
@@ -23,8 +24,16 @@
   const { index, panel, isFocused }: Props = $props();
   const panelStore = usePanels();
   const connectionStore = useConnections();
+  const statusBar = useStatusBar();
 
   const hasConnections = $derived(connectionStore.profiles.length > 0);
+
+  // When a non-table panel gains focus, clear any stale status bar state.
+  $effect(() => {
+    if (isFocused && panel.content.kind !== 'table_browser') {
+      statusBar.clear();
+    }
+  });
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -47,6 +56,7 @@
         database={panel.content.database}
         table={panel.content.table}
         initialFilter={panel.content.initialFilter}
+        {isFocused}
       />
     {/key}
   {:else if panel.content.kind === 'ddl_viewer'}
