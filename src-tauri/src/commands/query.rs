@@ -1,6 +1,6 @@
 /// Tauri commands for executing SQL queries against remote databases.
 use serde::{Deserialize, Serialize};
-use sqlx::{Column, Row, TypeInfo};
+use sqlx::{Column, Executor, Row, Statement, TypeInfo};
 use std::sync::Arc;
 use tauri::State;
 
@@ -438,7 +438,20 @@ async fn execute_mysql(
                 })
                 .collect()
         } else {
-            vec![]
+            match pool.prepare(&paginated).await {
+                Ok(stmt) => stmt
+                    .columns()
+                    .iter()
+                    .map(|c| ColumnMeta {
+                        name: c.name().to_owned(),
+                        data_type: format_mysql_type(c.type_info()),
+                        nullable: true,
+                        is_primary_key: false,
+                        is_foreign_key: false,
+                    })
+                    .collect(),
+                Err(_) => vec![],
+            }
         };
 
         let data: Vec<Vec<serde_json::Value>> = rows
@@ -488,7 +501,20 @@ async fn execute_postgres(
                 })
                 .collect()
         } else {
-            vec![]
+            match pool.prepare(&paginated).await {
+                Ok(stmt) => stmt
+                    .columns()
+                    .iter()
+                    .map(|c| ColumnMeta {
+                        name: c.name().to_owned(),
+                        data_type: c.type_info().name().to_lowercase(),
+                        nullable: true,
+                        is_primary_key: false,
+                        is_foreign_key: false,
+                    })
+                    .collect(),
+                Err(_) => vec![],
+            }
         };
 
         let data: Vec<Vec<serde_json::Value>> = rows
