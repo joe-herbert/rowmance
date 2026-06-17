@@ -624,6 +624,7 @@
                 class:cell-number={typeCategory === 'number'}
                 class:cell-timestamp={typeCategory === 'timestamp'}
                 class:cell-editable={editable}
+                class:cell-focused={focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
@@ -887,7 +888,7 @@
   /* ── Data rows ──────────────────────────────────────────────────────────── */
 
   .data-row {
-    cursor: pointer;
+    cursor: default;
     transition: background var(--transition-fast);
   }
 
@@ -961,12 +962,15 @@
   }
 
   .data-cell.cell-editable {
-    cursor: default;
+    cursor: pointer;
   }
 
-  /* No cell-level focus ring — row selection handles the visual feedback */
   .data-cell:focus {
     outline: none;
+  }
+
+  .data-cell.cell-focused {
+    background-color: color-mix(in srgb, var(--color-accent) 15%, transparent);
   }
 
   .cell-dirty-dot {
