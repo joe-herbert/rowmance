@@ -284,6 +284,7 @@
 
       {#if creatingTheme}
         <div class="theme-actions">
+          <!-- svelte-ignore a11y_autofocus -->
           <input
             class="setting-input"
             type="text"

@@ -49,22 +49,27 @@
     tick().then(syncTrafficLightPosition);
   });
 
-  onMount(async () => {
+  onMount(() => {
     shortcutsStore.load(settings.shortcutPreset);
 
     if (settings.autoUpdateCheck) {
-      try {
-        const result = await updaterApi.updaterCheck();
+      updaterApi.updaterCheck().then((result) => {
         if (result.available && result.version) {
           pendingUpdate = { version: result.version, notes: result.notes };
         }
-      } catch {
+      }).catch(() => {
         // Update check failures are silently swallowed to avoid disrupting startup.
-      }
+      });
     }
 
-    const unlisten = await listen('menu:open-settings', openSettings);
-    return unlisten;
+    let unlistenFn: (() => void) | undefined;
+    listen('menu:open-settings', openSettings).then((unlisten) => {
+      unlistenFn = unlisten;
+    });
+
+    return () => {
+      unlistenFn?.();
+    };
   });
 
   async function installUpdate() {
@@ -136,9 +141,12 @@
   // On macOS with titleBarStyle:"overlay" the webview fills behind the native traffic
   // lights, so we reserve space to push content clear of them.
   const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
-</script>
 
-<svelte:document on:shortcut-action={handleShortcutAction} />
+  $effect(() => {
+    document.addEventListener('shortcut-action', handleShortcutAction);
+    return () => document.removeEventListener('shortcut-action', handleShortcutAction);
+  });
+</script>
 
 <a class="skip-link" href="#main-content">Skip to main content</a>
 

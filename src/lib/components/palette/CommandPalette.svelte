@@ -33,7 +33,7 @@
     | { kind: 'saved_query'; id: string; name: string; sql: string; connectionId: string | null }
     | { kind: 'new_editor'; connectionId: string; connectionName: string };
 
-  const allItems = $derived<ResultItem[]>(() => {
+  const allItems = $derived.by<ResultItem[]>(() => {
     const items: ResultItem[] = [];
 
     // Actions
@@ -70,8 +70,8 @@
   type ConnectionItem = Extract<ResultItem, { kind: 'new_editor' }>;
   type SavedQueryItem = Extract<ResultItem, { kind: 'saved_query' }>;
 
-  const fuseActions = $derived(() => {
-    const items = allItems().filter((i): i is ActionItem => i.kind === 'action');
+  const fuseActions = $derived.by(() => {
+    const items = allItems.filter((i): i is ActionItem => i.kind === 'action');
     return new Fuse(items, {
       keys: ['label', 'shortcut'],
       threshold: 0.4,
@@ -79,8 +79,8 @@
     });
   });
 
-  const fuseConnections = $derived(() => {
-    const items = allItems().filter((i): i is ConnectionItem => i.kind === 'new_editor');
+  const fuseConnections = $derived.by(() => {
+    const items = allItems.filter((i): i is ConnectionItem => i.kind === 'new_editor');
     return new Fuse(items, {
       keys: ['connectionName'],
       threshold: 0.4,
@@ -88,8 +88,8 @@
     });
   });
 
-  const fuseSavedQueries = $derived(() => {
-    const items = allItems().filter((i): i is SavedQueryItem => i.kind === 'saved_query');
+  const fuseSavedQueries = $derived.by(() => {
+    const items = allItems.filter((i): i is SavedQueryItem => i.kind === 'saved_query');
     // Truncate sql to 100 chars for indexing (add a derived field)
     const withSnippet = items.map((sq) => ({ ...sq, sqlSnippet: sq.sql.slice(0, 100) }));
     const fuse = new Fuse(withSnippet, {
@@ -100,25 +100,25 @@
     return { fuse, items };
   });
 
-  const filtered = $derived<ResultItem[]>(() => {
+  const filtered = $derived.by<ResultItem[]>(() => {
     const q = query.trim();
-    if (!q) return allItems().slice(0, 20);
+    if (!q) return allItems.slice(0, 20);
 
     const results: ResultItem[] = [];
 
     // Actions
-    for (const r of fuseActions().search(q)) {
+    for (const r of fuseActions.search(q)) {
       results.push(r.item);
     }
 
     // Connections
-    for (const r of fuseConnections().search(q)) {
+    for (const r of fuseConnections.search(q)) {
       results.push(r.item);
     }
 
     // Saved queries — results include the enriched item with sqlSnippet;
     // reconstruct as SavedQueryItem by omitting the extra field.
-    const { fuse: sqFuse } = fuseSavedQueries();
+    const { fuse: sqFuse } = fuseSavedQueries;
     for (const r of sqFuse.search(q)) {
       const { sqlSnippet: _unused, ...original } = r.item;
       results.push(original as SavedQueryItem);
@@ -190,7 +190,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    const items = filtered();
+    const items = filtered;
     if (e.key === 'Escape') {
       onclose();
     } else if (e.key === 'ArrowDown') {
@@ -223,9 +223,9 @@
     showCategory: boolean;
   }
 
-  const groupedItems = $derived<GroupedItem[]>(() => {
+  const groupedItems = $derived.by<GroupedItem[]>(() => {
     let lastCat = '';
-    return filtered().map((item) => {
+    return filtered.map((item) => {
       const cat = itemCategory(item);
       const showCategory = cat !== lastCat;
       lastCat = cat;
@@ -237,7 +237,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="backdrop" role="dialog" aria-modal="true" aria-label="Command Palette" onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}>
+<div class="backdrop" role="dialog" aria-modal="true" aria-label="Command Palette" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}>
   <div class="palette" use:focusTrap>
     <div class="search-row">
       <span class="search-icon" aria-hidden="true">⌘</span>
@@ -256,7 +256,7 @@
     </div>
 
     <ul id="palette-list" class="results-list" role="listbox">
-      {#each groupedItems() as { item, showCategory }, i (i)}
+      {#each groupedItems as { item, showCategory }, i (i)}
         {#if showCategory}
           <li class="category-label" role="presentation">
             {itemCategory(item)}

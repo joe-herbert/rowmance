@@ -74,22 +74,22 @@
     }
   }
 
-  onMount(async () => {
-    await loadDdl();
+  onMount(() => {
+    loadDdl().then(() => {
+      if (!editorContainer) return;
 
-    if (!editorContainer) return;
+      const state = EditorState.create({
+        doc: ddlText,
+        extensions: [
+          buildTheme(),
+          syntaxHighlighting(defaultHighlightStyle),
+          sqlLang(),
+          EditorState.readOnly.of(true),
+        ],
+      });
 
-    const state = EditorState.create({
-      doc: ddlText,
-      extensions: [
-        buildTheme(),
-        syntaxHighlighting(defaultHighlightStyle),
-        sqlLang(),
-        EditorState.readOnly.of(true),
-      ],
+      editorView = new EditorView({ state, parent: editorContainer });
     });
-
-    editorView = new EditorView({ state, parent: editorContainer });
 
     return () => {
       editorView?.destroy();

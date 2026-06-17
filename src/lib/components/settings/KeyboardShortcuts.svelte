@@ -154,12 +154,6 @@
     align-items: center;
   }
 
-  .col-controls td {
-    display: flex;
-    gap: var(--spacing-2);
-    align-items: center;
-  }
-
   .kbd {
     display: inline-block;
     padding: 1px var(--spacing-2);

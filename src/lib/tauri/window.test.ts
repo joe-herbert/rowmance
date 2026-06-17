@@ -18,13 +18,13 @@ describe('openNewWindow', () => {
     openNewWindow();
     expect(MockWebviewWindow).toHaveBeenCalledOnce();
     const [, options] = MockWebviewWindow.mock.calls[0];
-    expect(options.url).toBe('/');
+    expect(options!.url).toBe('/');
   });
 
   it('sets title to "rowmance"', () => {
     openNewWindow();
     const [, options] = MockWebviewWindow.mock.calls[0];
-    expect(options.title).toBe('rowmance');
+    expect(options!.title).toBe('rowmance');
   });
 
   it('uses a unique label on every call', () => {
@@ -40,7 +40,7 @@ describe('openNewWindow', () => {
   it('sets default dimensions', () => {
     openNewWindow();
     const [, options] = MockWebviewWindow.mock.calls[0];
-    expect(options.width).toBe(800);
-    expect(options.height).toBe(600);
+    expect(options!.width).toBe(800);
+    expect(options!.height).toBe(600);
   });
 });

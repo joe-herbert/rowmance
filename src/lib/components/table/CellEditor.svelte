@@ -3,7 +3,7 @@
   Positioned absolutely relative to the DataTable container.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -48,12 +48,12 @@
 
   // For boolean: cycle null → true → false → null
   let boolState = $state<boolean | null>(
-    typeof value === 'boolean' ? value : value === null ? null : null,
+    untrack(() => typeof value === 'boolean' ? value : null),
   );
 
   // For text/date: string representation
   let textValue = $state<string>(
-    value === null ? '' : typeof value === 'boolean' ? String(value) : String(value),
+    untrack(() => value === null ? '' : String(value)),
   );
 
   let inputEl = $state<HTMLInputElement | null>(null);
@@ -112,6 +112,7 @@
   style="top: {top}px; left: {left}px; width: {width}px; min-height: {height}px;"
   role="dialog"
   aria-label="Edit cell"
+  tabindex="-1"
   onkeydown={handleKeydown}
 >
   {#if inputType === 'boolean'}

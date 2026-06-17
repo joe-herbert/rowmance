@@ -5,6 +5,7 @@
   Passwords are stored in the OS keychain, not SQLite.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import { useConnections } from '$lib/stores/connections.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
@@ -34,40 +35,40 @@
 
   // ── Basic fields ──────────────────────────────────────────────────────────────
 
-  let name = $state(profile?.name ?? '');
-  let dbType = $state<DbType>(profile?.dbType ?? 'postgres');
-  let host = $state(profile?.host ?? 'localhost');
-  let port = $state(profile?.port ?? DEFAULT_PORTS['postgres']);
-  let database = $state(profile?.database ?? '');
-  let username = $state(profile?.username ?? '');
+  let name = $state(untrack(() => profile?.name ?? ''));
+  let dbType = $state<DbType>(untrack(() => profile?.dbType ?? 'postgres'));
+  let host = $state(untrack(() => profile?.host ?? 'localhost'));
+  let port = $state(untrack(() => profile?.port ?? DEFAULT_PORTS['postgres']));
+  let database = $state(untrack(() => profile?.database ?? ''));
+  let username = $state(untrack(() => profile?.username ?? ''));
   let password = $state('');
   let passwordDirty = $state(false);
   let showPassword = $state(false);
-  let color = $state(profile?.color ?? '');
-  let readOnly = $state(profile?.readOnly ?? false);
+  let color = $state(untrack(() => profile?.color ?? ''));
+  let readOnly = $state(untrack(() => profile?.readOnly ?? false));
 
   // ── SSH fields ────────────────────────────────────────────────────────────────
 
-  let sshEnabled = $state(profile?.sshEnabled ?? false);
-  let sshHost = $state(profile?.sshHost ?? '');
-  let sshPort = $state(profile?.sshPort ?? 22);
-  let sshUser = $state(profile?.sshUser ?? '');
-  let sshAuthType = $state<'password' | 'key'>(profile?.sshAuthType ?? 'password');
-  let sshKeyPath = $state(profile?.sshKeyPath ?? '');
+  let sshEnabled = $state(untrack(() => profile?.sshEnabled ?? false));
+  let sshHost = $state(untrack(() => profile?.sshHost ?? ''));
+  let sshPort = $state(untrack(() => profile?.sshPort ?? 22));
+  let sshUser = $state(untrack(() => profile?.sshUser ?? ''));
+  let sshAuthType = $state<'password' | 'key'>(untrack(() => profile?.sshAuthType ?? 'password'));
+  let sshKeyPath = $state(untrack(() => profile?.sshKeyPath ?? ''));
   let sshPassword = $state('');
   let showSshPassword = $state(false);
 
   // ── SSL fields ────────────────────────────────────────────────────────────────
 
-  let sslEnabled = $state(profile?.sslEnabled ?? false);
-  let sslCaPath = $state(profile?.sslCaPath ?? '');
-  let sslCertPath = $state(profile?.sslCertPath ?? '');
-  let sslKeyPath = $state(profile?.sslKeyPath ?? '');
+  let sslEnabled = $state(untrack(() => profile?.sslEnabled ?? false));
+  let sslCaPath = $state(untrack(() => profile?.sslCaPath ?? ''));
+  let sslCertPath = $state(untrack(() => profile?.sslCertPath ?? ''));
+  let sslKeyPath = $state(untrack(() => profile?.sslKeyPath ?? ''));
 
   // ── Advanced fields ───────────────────────────────────────────────────────────
 
-  let poolMin = $state(profile?.poolMin ?? 1);
-  let poolMax = $state(profile?.poolMax ?? 5);
+  let poolMin = $state(untrack(() => profile?.poolMin ?? 1));
+  let poolMax = $state(untrack(() => profile?.poolMax ?? 5));
 
   // ── Status ────────────────────────────────────────────────────────────────────
 
@@ -78,11 +79,11 @@
   );
   let saveError = $state<string | null>(null);
 
-  const isEditing = profile !== undefined;
-  const title = isEditing ? 'Edit Connection' : 'New Connection';
+  const isEditing = $derived(profile !== undefined);
+  const title = $derived(isEditing ? 'Edit Connection' : 'New Connection');
 
   $effect(() => {
-    if (!isEditing) return;
+    if (!profile) return;
     keychainApi.keychainRetrieve(profile.id, 'db_password').then((v) => {
       if (v) password = v;
     });
@@ -139,7 +140,7 @@
       let savedId: string;
 
       if (isEditing) {
-        const updated = await connectionStore.update(profile.id, input);
+        const updated = await connectionStore.update(profile!.id, input);
         savedId = updated.id;
       } else {
         const created = await connectionStore.create(input);
@@ -164,7 +165,7 @@
       if (isEditing && !password) {
         // No new password entered — test with the stored keychain credentials so the
         // result accurately reflects what connecting from the sidebar will do.
-        testResult = await connectionsApi.testConnection(profile.id, undefined);
+        testResult = await connectionsApi.testConnection(profile!.id, undefined);
       } else {
         testResult = await connectionsApi.testConnectionUnsaved(buildInput(), password || undefined);
       }
@@ -218,7 +219,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label={title} onclick={handleBackdropClick}>
+<div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label={title} tabindex="-1" onclick={handleBackdropClick}>
   <div class="dialog">
     <header class="dialog-header">
       <h2 class="dialog-title">{title}</h2>
@@ -582,12 +583,6 @@
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
-  }
-
-  .label-hint {
-    font-weight: var(--font-weight-normal);
-    color: var(--color-text-muted);
-    margin-left: var(--spacing-1);
   }
 
   .input {

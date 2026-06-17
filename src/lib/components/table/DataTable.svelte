@@ -4,6 +4,7 @@
   inline cell editing with pending-change tracking.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
   import CellEditor from './CellEditor.svelte';
 
@@ -107,7 +108,7 @@
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
 
-  let columnOrder = $state<number[]>(columns.map((_, i) => i));
+  let columnOrder = $state<number[]>(untrack(() => columns.map((_, i) => i)));
 
   $effect(() => {
     if (columnOrder.length !== columns.length) {
@@ -175,7 +176,7 @@
 
   // ── Filter state ──────────────────────────────────────────────────────────
 
-  let filterValues = $state<string[]>(columns.map(() => ''));
+  let filterValues = $state<string[]>(untrack(() => columns.map(() => '')));
 
   $effect(() => {
     const len = columns.length;
@@ -186,7 +187,7 @@
 
   // ── Column widths ─────────────────────────────────────────────────────────
 
-  let colWidths = $state<number[]>(columns.map(() => 120));
+  let colWidths = $state<number[]>(untrack(() => columns.map(() => 120)));
 
   $effect(() => {
     const len = columns.length;
@@ -653,6 +654,7 @@
     <div
       class="context-menu"
       role="menu"
+      tabindex="-1"
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
       onclick={(e) => e.stopPropagation()}
       onkeydown={handleContextMenuKeydown}

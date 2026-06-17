@@ -313,6 +313,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
           {#if renamingGroupId === group.id}
+            <!-- svelte-ignore a11y_autofocus -->
             <input
               class="rename-input"
               type="text"

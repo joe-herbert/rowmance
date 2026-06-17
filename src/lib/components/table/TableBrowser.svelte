@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { executeQuery, updateRows } from '$lib/tauri/query';
   import type { RowChange } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
@@ -27,8 +28,8 @@
   const PAGE_SIZE = 50;
 
   let page = $state(1);
-  let filterValue = $state(initialFilter ?? '');
-  let pendingFilter = $state(initialFilter ?? '');
+  let filterValue = $state(untrack(() => initialFilter ?? ''));
+  let pendingFilter = $state(untrack(() => initialFilter ?? ''));
   let result = $state<QueryResult | null>(null);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -347,9 +348,12 @@
     const btn = tableBrowserEl?.querySelector<HTMLButtonElement>('.page-btn[aria-label="Previous page"]');
     if (btn && !btn.disabled) btn.click();
   }
-</script>
 
-<svelte:window on:shortcut-action={handleShortcutAction} />
+  $effect(() => {
+    window.addEventListener('shortcut-action', handleShortcutAction);
+    return () => window.removeEventListener('shortcut-action', handleShortcutAction);
+  });
+</script>
 
 <div class="table-browser" bind:this={tableBrowserEl}>
   <div class="toolbar">

@@ -150,7 +150,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="backdrop" role="dialog" aria-modal="true" aria-label="Import CSV" onclick={handleBackdrop}>
+<div class="backdrop" role="dialog" aria-modal="true" aria-label="Import CSV" tabindex="-1" onclick={handleBackdrop}>
   <div class="modal">
     <header class="modal-header">
       <h2 class="modal-title">Import CSV</h2>

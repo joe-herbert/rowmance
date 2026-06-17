@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import {
     EditorView,
     keymap,
@@ -55,7 +55,7 @@
 
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
   let editorView = $state<EditorView | undefined>(undefined);
-  let sqlText = $state(initialSql);
+  let sqlText = $state(untrack(() => initialSql));
   let result = $state<QueryResult | null>(null);
   let isRunning = $state(false);
   let transactionActive = $state(false);
@@ -304,7 +304,7 @@
     if (!editorView) return;
     const dialect = sqlDialect();
     try {
-      const formatted = sqlFormat(sqlText, { language: dialect as Parameters<typeof sqlFormat>[1]['language'] });
+      const formatted = sqlFormat(sqlText, { language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'] });
       editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
       });

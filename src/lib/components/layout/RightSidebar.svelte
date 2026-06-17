@@ -225,7 +225,7 @@
   });
 
   // Group queries by folderId.
-  const queriesByFolder = $derived<Map<string | null, SavedQuery[]>>(() => {
+  const queriesByFolder = $derived.by<Map<string | null, SavedQuery[]>>(() => {
     const map = new Map<string | null, SavedQuery[]>();
     for (const q of savedQueries) {
       const key = q.folderId;
@@ -423,12 +423,12 @@
         {:else}
           <ul class="saved-list" role="tree" aria-label="Saved queries">
             <!-- Unfiled queries -->
-            {#if (queriesByFolder().get(null) ?? []).length > 0}
-              <li class="folder-node" role="treeitem">
+            {#if (queriesByFolder.get(null) ?? []).length > 0}
+              <li class="folder-node" role="treeitem" aria-selected={false}>
                 <span class="folder-label muted">Unfiled</span>
                 <ul class="folder-children" role="group">
-                  {#each queriesByFolder().get(null) ?? [] as query (query.id)}
-                    <li class="query-node" role="treeitem">
+                  {#each queriesByFolder.get(null) ?? [] as query (query.id)}
+                    <li class="query-node" role="treeitem" aria-selected={false}>
                       <button
                         class="query-btn"
                         onclick={() => openSavedQuery(query)}
@@ -446,9 +446,9 @@
 
             <!-- Folders -->
             {#each savedFolders as folder (folder.id)}
-              {@const folderQueries = queriesByFolder().get(folder.id) ?? []}
+              {@const folderQueries = queriesByFolder.get(folder.id) ?? []}
               {@const isOpen = expandedFolders.has(folder.id)}
-              <li class="folder-node" role="treeitem" aria-expanded={isOpen}>
+              <li class="folder-node" role="treeitem" aria-expanded={isOpen} aria-selected={false}>
                 <button
                   class="folder-btn"
                   onclick={() => toggleFolder(folder.id)}
@@ -466,7 +466,7 @@
                 {#if isOpen && folderQueries.length > 0}
                   <ul class="folder-children" role="group">
                     {#each folderQueries as query (query.id)}
-                      <li class="query-node" role="treeitem">
+                      <li class="query-node" role="treeitem" aria-selected={false}>
                         <button
                           class="query-btn"
                           onclick={() => openSavedQuery(query)}

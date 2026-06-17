@@ -79,7 +79,7 @@
     return items;
   }
 
-  const searchResults = $derived<SearchItem[]>(() => {
+  const searchResults = $derived.by<SearchItem[]>(() => {
     if (!searchQuery.trim()) return [];
     const items = buildSearchItems(connectionStore.profiles, schemaCache);
     if (items.length === 0) return [];
