@@ -18,9 +18,10 @@
     profile?: ConnectionProfile;
     groupId?: string | null;
     onclose: () => void;
+    ondelete?: () => void;
   }
 
-  const { profile, groupId, onclose }: Props = $props();
+  const { profile, groupId, onclose, ondelete }: Props = $props();
 
   const connectionStore = useConnections();
 
@@ -432,14 +433,26 @@
       {/if}
 
       <div class="actions">
-        <button
-          type="button"
-          class="btn btn--ghost"
-          onclick={handleTest}
-          disabled={testing || saving || !isValid}
-        >
-          {testing ? 'Testing…' : 'Test Connection'}
-        </button>
+        <div class="actions-left">
+          {#if isEditing && ondelete}
+            <button
+              type="button"
+              class="btn btn--danger"
+              onclick={ondelete}
+              disabled={saving || testing}
+            >
+              Delete
+            </button>
+          {/if}
+          <button
+            type="button"
+            class="btn btn--ghost"
+            onclick={handleTest}
+            disabled={testing || saving || !isValid}
+          >
+            {testing ? 'Testing…' : 'Test Connection'}
+          </button>
+        </div>
         <div class="actions-right">
           <button type="button" class="btn btn--ghost" onclick={onclose}>Cancel</button>
           <button
@@ -689,15 +702,31 @@
   .actions {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     padding-top: var(--spacing-2);
     border-top: 1px solid var(--color-border);
     margin-top: var(--spacing-1);
   }
 
+  .actions-left {
+    display: flex;
+    gap: var(--spacing-2);
+  }
+
   .actions-right {
     display: flex;
     gap: var(--spacing-2);
-    margin-left: auto;
+  }
+
+  .btn--danger {
+    background: transparent;
+    color: var(--color-danger, #e53e3e);
+    border: 1px solid var(--color-danger, #e53e3e);
+  }
+
+  .btn--danger:not(:disabled):hover {
+    background: var(--color-danger, #e53e3e);
+    color: #fff;
   }
 
   .btn {

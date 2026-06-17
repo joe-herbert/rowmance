@@ -67,13 +67,14 @@
     if (isConnected(profile.id)) toggleExpand(profile.id);
   }
 
-  async function deleteConnection(profile: ConnectionProfile) {
-    if (!await ask(`Delete "${profile.name}"? This cannot be undone.`, { title: 'Delete Connection', kind: 'warning' })) return;
+  async function deleteConnection(profile: ConnectionProfile): Promise<boolean> {
+    if (!await ask(`Delete "${profile.name}"? This cannot be undone.`, { title: 'Delete Connection', kind: 'warning' })) return false;
     if (connectionStore.isActive(profile.id)) await connectionStore.disconnect(profile.id);
     try {
       await connectionsApi.deleteConnection(profile.id);
       await connectionStore.load();
     } catch { /* ignore */ }
+    return true;
   }
 
   // ── Schema helpers ────────────────────────────────────────────────────────
@@ -475,19 +476,6 @@
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
         </button>
-        <button
-          class="action-btn action-btn--danger"
-          onclick={(e) => { e.stopPropagation(); deleteConnection(profile); }}
-          title="Delete connection"
-          aria-label="Delete {profile.name}"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-            <path d="M10 11v6"></path><path d="M14 11v6"></path>
-            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-          </svg>
-        </button>
       </div>
     </div>
 
@@ -634,6 +622,7 @@
   <ConnectionForm
     profile={editingProfile}
     onclose={() => (editingProfile = undefined)}
+    ondelete={async () => { if (editingProfile && await deleteConnection(editingProfile)) editingProfile = undefined; }}
   />
 {/if}
 
