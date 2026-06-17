@@ -28,6 +28,7 @@
     readOnly?: boolean;
     hiddenColumns?: Set<string>;
     totalRows?: number | null;
+    rowOffset?: number;
     onChangePending?: (_changes: Map<string, Map<string, CellValue>>) => void;
     onCellSelect?: (_originalColIndex: number, _row: CellValue[]) => void;
     onAddRow?: () => void;
@@ -118,6 +119,7 @@
     readOnly: _readOnly = false,
     hiddenColumns = new Set<string>(),
     totalRows: _totalRows = null,
+    rowOffset = 0,
     onChangePending,
     onCellSelect,
     onAddRow: _onAddRow,
@@ -245,7 +247,8 @@
 
   // ── Pagination ────────────────────────────────────────────────────────────
 
-  const pageCount = $derived(Math.max(1, Math.ceil(processedRows.length / pageSize)));
+  const totalCount = $derived(_totalRows ?? processedRows.length);
+  const pageCount = $derived(Math.max(1, Math.ceil(totalCount / pageSize)));
   const pageRows = $derived(
     processedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
   );
@@ -264,7 +267,7 @@
       pageCount,
       pageOffset,
       pageRowsLength: pageRows.length,
-      processedRowsLength: processedRows.length,
+      processedRowsLength: totalCount,
     });
   });
 
@@ -608,7 +611,7 @@
               {#if rowDirty}
                 <span class="row-dirty-dot" aria-label="Row has unsaved changes"></span>
               {:else}
-                <span class="rownum">{pageOffset + rowIndex + 1}</span>
+                <span class="rownum">{rowOffset + pageOffset + rowIndex + 1}</span>
               {/if}
             </td>
 

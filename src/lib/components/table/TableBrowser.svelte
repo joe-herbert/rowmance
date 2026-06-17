@@ -140,7 +140,7 @@
     error = null;
     const t0 = performance.now();
     try {
-      result = await executeQuery(connectionId, buildSql(), page, PAGE_SIZE);
+      result = await executeQuery(connectionId, buildSql(), untrack(() => page), PAGE_SIZE);
       if (result.error) {
         error = result.error;
         result = null;
@@ -356,11 +356,17 @@
   }
 
   function nextTablePage(): void {
-    if (dtPageInfo && dtPageIndex < dtPageInfo.pageCount - 1) dtPageIndex++;
+    if (dtPageInfo && page < dtPageInfo.pageCount) {
+      page++;
+      load();
+    }
   }
 
   function prevTablePage(): void {
-    if (dtPageIndex > 0) dtPageIndex--;
+    if (page > 1) {
+      page--;
+      load();
+    }
   }
 
   $effect(() => {
@@ -417,9 +423,12 @@
 
     {#if dtPageInfo !== null}
       <span class="row-range">
-        {dtPageInfo.pageRowsLength === 0
-          ? '0'
-          : (dtPageInfo.pageOffset + 1).toLocaleString()}–{Math.min(dtPageInfo.pageOffset + dtPageInfo.pageRowsLength, dtPageInfo.processedRowsLength).toLocaleString()}
+        {#if dtPageInfo.pageRowsLength === 0}
+          0
+        {:else}
+          {@const pageOffset = (page - 1) * PAGE_SIZE}
+          {(pageOffset + 1).toLocaleString()}–{Math.min(pageOffset + dtPageInfo.pageRowsLength, dtPageInfo.processedRowsLength).toLocaleString()}
+        {/if}
         of {dtPageInfo.processedRowsLength.toLocaleString()}
       </span>
 
@@ -427,7 +436,7 @@
         <button
           class="page-nav-btn"
           onclick={prevTablePage}
-          disabled={dtPageIndex === 0}
+          disabled={page === 1}
           aria-label="Previous page"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -437,7 +446,7 @@
         <button
           class="page-nav-btn page-nav-btn--next"
           onclick={nextTablePage}
-          disabled={dtPageIndex >= dtPageInfo.pageCount - 1}
+          disabled={page >= dtPageInfo.pageCount}
           aria-label="Next page"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -654,6 +663,8 @@
         <DataTable
           columns={result.columns}
           rows={result.rows}
+          totalRows={result.totalRows}
+          rowOffset={(page - 1) * PAGE_SIZE}
           pageSize={PAGE_SIZE}
           bind:pageIndex={dtPageIndex}
           editable={true}

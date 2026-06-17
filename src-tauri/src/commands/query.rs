@@ -419,6 +419,13 @@ async fn execute_mysql(
     let is_select = sql.trim().to_uppercase().starts_with("SELECT");
 
     if is_select {
+        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
+        let total_rows: Option<i64> = sqlx::query(&count_sql)
+            .fetch_one(pool)
+            .await
+            .ok()
+            .and_then(|row| row.try_get::<i64, _>(0).ok());
+
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(pool)
@@ -463,7 +470,7 @@ async fn execute_mysql(
             })
             .collect();
 
-        Ok((columns, data, None, None))
+        Ok((columns, data, total_rows, None))
     } else {
         let result = sqlx::query(sql)
             .execute(pool)
@@ -482,6 +489,13 @@ async fn execute_postgres(
     let is_select = sql.trim().to_uppercase().starts_with("SELECT");
 
     if is_select {
+        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
+        let total_rows: Option<i64> = sqlx::query(&count_sql)
+            .fetch_one(pool)
+            .await
+            .ok()
+            .and_then(|row| row.try_get::<i64, _>(0).ok());
+
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(pool)
@@ -522,7 +536,7 @@ async fn execute_postgres(
             .map(|row| (0..row.len()).map(|i| pg_value_to_json(row, i)).collect())
             .collect();
 
-        Ok((columns, data, None, None))
+        Ok((columns, data, total_rows, None))
     } else {
         let result = sqlx::query(sql)
             .execute(pool)
