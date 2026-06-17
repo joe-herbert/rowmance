@@ -29,6 +29,7 @@ export type ShortcutAction =
   | 'TOGGLE_RIGHT_SIDEBAR'
   | 'TABLE_SAVE_CHANGES'
   | 'TABLE_DISCARD_CHANGES'
+  | 'TABLE_EDIT_IN_MODAL'
   | 'PAGE_NEXT'
   | 'PAGE_PREV'
   | 'COMMAND_PALETTE'
@@ -151,6 +152,13 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Escape',
     jetbrains: 'Escape',
     vim: 'u',
+  },
+  {
+    action: 'TABLE_EDIT_IN_MODAL',
+    label: 'Edit Cell in Modal',
+    vscode: 'Shift+Enter',
+    jetbrains: 'Shift+Enter',
+    vim: 'Shift+Enter',
   },
   {
     action: 'PAGE_NEXT',

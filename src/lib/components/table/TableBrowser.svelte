@@ -121,6 +121,7 @@
 
   let dbType = $derived(connections.getById(connectionId)?.dbType ?? 'mysql');
   let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
+  let connectionReadOnly = $derived(connections.getById(connectionId)?.readOnly ?? false);
 
   function quoteIdentifier(name: string): string {
     return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;
@@ -678,7 +679,7 @@
           rowOffset={(page - 1) * PAGE_SIZE}
           pageSize={PAGE_SIZE}
           bind:pageIndex={dtPageIndex}
-          editable={true}
+          editable={!connectionReadOnly}
           {hiddenColumns}
           onChangePending={handleChangePending}
           onCellSelect={handleCellSelect}

@@ -9,16 +9,18 @@
 
   interface Props {
     value: CellValue;
+    originalValue: CellValue;
     dataType: string;
     top: number;
     left: number;
     width: number;
     height: number;
+    containerHeight: number;
     onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
   }
 
-  let { value, dataType, top, left, width, height, onConfirm, onCancel }: Props = $props();
+  let { value, originalValue, dataType, top, left, width, height, containerHeight, onConfirm, onCancel }: Props = $props();
 
   // ── Pure helpers (also exported for tests) ──────────────────────────────────
 
@@ -57,12 +59,38 @@
   );
 
   let inputEl = $state<HTMLInputElement | null>(null);
+  let cellEditorEl = $state<HTMLDivElement | null>(null);
+  let actionsEl = $state<HTMLDivElement | null>(null);
+
+  // Height of the actions bar — used to decide above/below placement
+  const ACTIONS_HEIGHT = 28;
+  const ACTIONS_GAP = 3;
+
+  const actionsTop = $derived(
+    top + height + ACTIONS_GAP + ACTIONS_HEIGHT > containerHeight
+      ? top - ACTIONS_GAP - ACTIONS_HEIGHT
+      : top + height + ACTIONS_GAP,
+  );
+
+  const actionsCenter = $derived(left + width / 2);
 
   onMount(() => {
     if (inputEl) {
       inputEl.focus();
       inputEl.select();
     }
+
+    function handlePointerDown(e: PointerEvent): void {
+      const target = e.target as Node;
+      if (
+        cellEditorEl && cellEditorEl.contains(target) ||
+        actionsEl && actionsEl.contains(target)
+      ) return;
+      onCancel();
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
   });
 
   function cycleBool(): void {
@@ -78,9 +106,9 @@
       // Empty text — keep as empty string, not null (user can click Set NULL for that)
       onConfirm('');
     } else if (inputType === 'text') {
-      // Try to coerce numbers back if the original was a number
+      // Try to coerce numbers back if the original DB value was a number
       const asNum = Number(textValue);
-      if (typeof value === 'number' && !isNaN(asNum) && textValue.trim() !== '') {
+      if (typeof originalValue === 'number' && !isNaN(asNum) && textValue.trim() !== '') {
         onConfirm(asNum);
       } else {
         onConfirm(textValue);
@@ -107,8 +135,9 @@
 </script>
 
 <div
+  bind:this={cellEditorEl}
   class="cell-editor"
-  style="top: {top}px; left: {left}px; width: {width}px; min-height: {height}px;"
+  style="top: {top}px; left: {left}px; width: {width}px; height: {height}px;"
   role="dialog"
   aria-label="Edit cell"
   tabindex="-1"
@@ -132,6 +161,10 @@
       class="editor-input"
       type="datetime-local"
       bind:value={textValue}
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
       aria-label="Edit datetime value"
     />
   {:else if inputType === 'date'}
@@ -140,6 +173,10 @@
       class="editor-input"
       type="date"
       bind:value={textValue}
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
       aria-label="Edit date value"
     />
   {:else}
@@ -148,28 +185,37 @@
       class="editor-input"
       type="text"
       bind:value={textValue}
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
       aria-label="Edit cell value"
     />
   {/if}
+</div>
 
-  <div class="editor-actions">
-    {#if inputType !== 'boolean'}
-      <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)">✓</button>
-    {:else}
-      <button class="action-btn confirm-btn" onclick={() => onConfirm(boolState)} title="Confirm"
-        >✓</button
-      >
-    {/if}
-    <button
-      class="action-btn null-btn"
-      onclick={() => onConfirm(null)}
-      title="Set to NULL"
-      aria-label="Set to NULL"
-    >
-      NULL
-    </button>
-    <button class="action-btn cancel-btn" onclick={onCancel} title="Cancel (Escape)">✕</button>
-  </div>
+<div
+  bind:this={actionsEl}
+  class="editor-actions"
+  style="top: {actionsTop}px; left: {actionsCenter}px; transform: translateX(-50%);"
+  role="toolbar"
+  aria-label="Edit actions"
+  onkeydown={handleKeydown}
+>
+  {#if inputType !== 'boolean'}
+    <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)">✓</button>
+  {:else}
+    <button class="action-btn confirm-btn" onclick={() => onConfirm(boolState)} title="Confirm">✓</button>
+  {/if}
+  <button
+    class="action-btn null-btn"
+    onclick={() => onConfirm(null)}
+    title="Set to NULL"
+    aria-label="Set to NULL"
+  >
+    NULL
+  </button>
+  <button class="action-btn cancel-btn" onclick={onCancel} title="Cancel (Escape)">✕</button>
 </div>
 
 <style>
@@ -178,13 +224,12 @@
     z-index: 100;
     display: flex;
     align-items: stretch;
-    gap: 0;
     background: var(--color-bg-overlay);
     border: 1px solid var(--color-accent);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
-    overflow: hidden;
     box-sizing: border-box;
+    overflow: hidden;
   }
 
   .editor-input {
@@ -197,12 +242,14 @@
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
     min-width: 0;
+    width: 100%;
     height: 100%;
     box-sizing: border-box;
   }
 
   .bool-toggle {
     flex: 1;
+    width: 100%;
     padding: 0 var(--spacing-3);
     background: var(--color-bg-tertiary);
     border: none;
@@ -232,9 +279,16 @@
   }
 
   .editor-actions {
+    position: absolute;
+    z-index: 100;
     display: flex;
     align-items: stretch;
-    border-left: 1px solid var(--color-border);
+    height: 28px;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
   }
 
   .action-btn {

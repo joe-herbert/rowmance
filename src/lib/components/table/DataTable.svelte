@@ -4,9 +4,11 @@
   inline cell editing with pending-change tracking.
 -->
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, onMount } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
+  import { portal } from '$lib/actions/portal';
   import CellEditor from './CellEditor.svelte';
+  import CellEditorModal from './CellEditorModal.svelte';
 
   type CellValue = string | number | boolean | null;
   type SortDir = 'asc' | 'desc' | 'none';
@@ -117,7 +119,7 @@
     pageSize = 50,
     pageIndex = $bindable(0),
     editable = false,
-    readOnly: _readOnly = false,
+    readOnly = false,
     hiddenColumns = new Set<string>(),
     totalRows: _totalRows = null,
     rowOffset = 0,
@@ -303,14 +305,17 @@
     colName: string;
     colIndex: number;
     value: CellValue;
+    originalValue: CellValue;
     dataType: string;
     top: number;
     left: number;
     width: number;
     height: number;
+    containerHeight: number;
   }
 
   let editTarget = $state<EditTarget | null>(null);
+  let modalTarget = $state<EditTarget | null>(null);
   let tableContainerEl = $state<HTMLDivElement | null>(null);
 
   function handleCellDblClick(
@@ -319,7 +324,7 @@
     processedRowIndex: number,
     originalColIndex: number,
   ): void {
-    if (!editable) return;
+    if (!editable || readOnly) return;
     const col = columns[originalColIndex];
     if (!col) return;
 
@@ -335,30 +340,133 @@
       colName: col.name,
       colIndex: originalColIndex,
       value: currentValue,
+      originalValue: row[originalColIndex],
       dataType: col.dataType,
       top: tdRect.top - containerRect.top,
       left: tdRect.left - containerRect.left,
       width: Math.max(tdRect.width, 160),
       height: tdRect.height,
+      containerHeight: containerRect.height,
     };
+  }
+
+  function openModalEditor(
+    row: CellValue[],
+    processedRowIndex: number,
+    originalColIndex: number,
+  ): void {
+    if (!editable || readOnly) return;
+    const col = columns[originalColIndex];
+    if (!col) return;
+    const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex);
+    const currentValue = getPendingValue(rowKey, col.name, row[originalColIndex]);
+    modalTarget = {
+      rowKey,
+      colName: col.name,
+      colIndex: originalColIndex,
+      value: currentValue,
+      originalValue: row[originalColIndex],
+      dataType: col.dataType,
+      top: 0,
+      left: 0,
+      width: 0,
+      height: 0,
+      containerHeight: 0,
+    };
+  }
+
+  function cellValuesEqual(a: CellValue, b: CellValue): boolean {
+    if (a === b) return true;
+    if (a === null || b === null) return false;
+    if (typeof a === 'number' && typeof b === 'string') {
+      const n = Number(b);
+      return b.trim() !== '' && !isNaN(n) && n === a;
+    }
+    if (typeof b === 'number' && typeof a === 'string') {
+      const n = Number(a);
+      return a.trim() !== '' && !isNaN(n) && n === b;
+    }
+    return false;
   }
 
   function confirmEdit(newValue: CellValue): void {
     if (!editTarget) return;
-    const { rowKey, colName } = editTarget;
+    const { rowKey, colName, originalValue } = editTarget;
 
     const updated = new Map(pendingChanges);
-    if (!updated.has(rowKey)) updated.set(rowKey, new Map());
-    updated.get(rowKey)!.set(colName, newValue);
+
+    if (cellValuesEqual(newValue, originalValue)) {
+      const rowMap = updated.get(rowKey);
+      if (rowMap) {
+        rowMap.delete(colName);
+        if (rowMap.size === 0) updated.delete(rowKey);
+      }
+    } else {
+      if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+      updated.get(rowKey)!.set(colName, newValue);
+    }
 
     pendingChanges = updated;
     onChangePending?.(pendingChanges);
     editTarget = null;
+    refocusCell();
   }
 
   function cancelEdit(): void {
     editTarget = null;
+    refocusCell();
   }
+
+  function confirmModalEdit(newValue: CellValue): void {
+    if (!modalTarget) return;
+    const { rowKey, colName, originalValue } = modalTarget;
+    const updated = new Map(pendingChanges);
+    if (cellValuesEqual(newValue, originalValue)) {
+      const rowMap = updated.get(rowKey);
+      if (rowMap) {
+        rowMap.delete(colName);
+        if (rowMap.size === 0) updated.delete(rowKey);
+      }
+    } else {
+      if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+      updated.get(rowKey)!.set(colName, newValue);
+    }
+    pendingChanges = updated;
+    onChangePending?.(pendingChanges);
+    modalTarget = null;
+    refocusCell();
+  }
+
+  function cancelModalEdit(): void {
+    modalTarget = null;
+    refocusCell();
+  }
+
+  function refocusCell(): void {
+    if (!focusedCell) return;
+    scrollFocusedCellIntoView(focusedCell);
+  }
+
+  // ── Shortcut: TABLE_EDIT_IN_MODAL ────────────────────────────────────────
+
+  onMount(() => {
+    function handleShortcutAction(e: Event): void {
+      const action = (e as CustomEvent<{ action: string }>).detail?.action;
+      if (action !== 'TABLE_EDIT_IN_MODAL') return;
+      if (!editable || readOnly) return;
+      if (!focusedCell) return;
+      if (!tableContainerEl?.contains(document.activeElement)) return;
+
+      const { row, col } = focusedCell;
+      const { originalIndex } = visibleColumns[col] ?? {};
+      if (originalIndex === undefined) return;
+      const row_data = pageRows[row];
+      if (row_data) openModalEditor(row_data, row, originalIndex);
+    }
+
+    window.addEventListener('shortcut-action', handleShortcutAction);
+    return () => window.removeEventListener('shortcut-action', handleShortcutAction);
+  });
 
   // ── Keyboard cell navigation ──────────────────────────────────────────────
 
@@ -479,18 +587,56 @@
     y: number;
     rowKey: string;
     row: CellValue[];
+    colName: string | null;
   }
 
   let contextMenu = $state<ContextMenu | null>(null);
 
-  function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number): void {
+  function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number, colName: string | null = null): void {
     e.preventDefault();
     const rowKey = buildRowKey(row, columns, pageOffset + rowIndex);
-    contextMenu = { x: e.clientX, y: e.clientY, rowKey, row };
+    contextMenu = { x: e.clientX, y: e.clientY, rowKey, row, colName };
   }
 
   function dismissContextMenu(): void {
     contextMenu = null;
+  }
+
+  function discardCellEdit(): void {
+    if (!contextMenu?.colName) return;
+    const { rowKey, colName } = contextMenu;
+    const updated = new Map(pendingChanges);
+    const rowMap = updated.get(rowKey);
+    if (rowMap) {
+      rowMap.delete(colName);
+      if (rowMap.size === 0) updated.delete(rowKey);
+    }
+    pendingChanges = updated;
+    onChangePending?.(pendingChanges);
+    dismissContextMenu();
+  }
+
+  function openModalFromContextMenu(): void {
+    if (!contextMenu?.colName) return;
+    const { row, rowKey, colName } = contextMenu;
+    const rowIndex = pageRows.findIndex(
+      (r, i) => buildRowKey(r, columns, pageOffset + i) === rowKey,
+    );
+    if (rowIndex < 0) { dismissContextMenu(); return; }
+    const originalColIndex = columns.findIndex((c) => c.name === colName);
+    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    const currentValue = getPendingValue(rowKey, colName, row[originalColIndex]);
+    const col = columns[originalColIndex];
+    modalTarget = {
+      rowKey,
+      colName,
+      colIndex: originalColIndex,
+      value: currentValue,
+      originalValue: row[originalColIndex],
+      dataType: col.dataType,
+      top: 0, left: 0, width: 0, height: 0, containerHeight: 0,
+    };
+    dismissContextMenu();
   }
 
   function copyRowTabSeparated(row: CellValue[]): void {
@@ -527,7 +673,13 @@
   function handleContextMenuKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') dismissContextMenu();
   }
+
+  function handleWindowClick(e: MouseEvent): void {
+    if (!(e.target as Element | null)?.closest('.context-menu')) dismissContextMenu();
+  }
 </script>
+
+<svelte:window onclick={handleWindowClick} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -535,8 +687,13 @@
   class="data-table-wrapper"
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
-  onclick={dismissContextMenu}
   onkeydown={(e) => { handleContextMenuKeydown(e); handleTableKeydown(e); }}
+  onfocusout={(e) => {
+    if (!tableContainerEl?.contains(e.relatedTarget as Node | null)) {
+      focusedCell = null;
+      selectedRowKeys = new Set();
+    }
+  }}
 >
 
   <div class="table-scroll">
@@ -631,11 +788,12 @@
                 class="data-cell"
                 class:cell-number={typeCategory === 'number'}
                 class:cell-timestamp={typeCategory === 'timestamp'}
-                class:cell-editable={editable}
+                class:cell-editable={editable && !readOnly}
                 class:cell-focused={focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
+                oncontextmenu={(e) => { e.stopPropagation(); handleRowContextMenu(e, row, processedRowIndex, col.name); }}
                 onfocus={() => {
                   focusedCell = { row: rowIndex, col: colIndex };
                   selectedRowKeys = new Set([rowKey]);
@@ -685,7 +843,28 @@
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
       onclick={(e) => e.stopPropagation()}
       onkeydown={handleContextMenuKeydown}
+      use:portal
     >
+      {#if contextMenu.colName && editable && !readOnly}
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => openModalFromContextMenu()}
+        >
+          Edit in modal
+        </button>
+        <div class="context-menu-separator"></div>
+      {/if}
+      {#if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
+        <button
+          class="context-menu-item context-menu-item-danger"
+          role="menuitem"
+          onclick={() => discardCellEdit()}
+        >
+          Discard edit
+        </button>
+        <div class="context-menu-separator"></div>
+      {/if}
       {#if selectedRowKeys.size > 1}
         <button
           class="context-menu-item"
@@ -710,17 +889,31 @@
   {#if editTarget !== null}
     <CellEditor
       value={editTarget.value}
+      originalValue={editTarget.originalValue}
       dataType={editTarget.dataType}
       top={editTarget.top}
       left={editTarget.left}
       width={editTarget.width}
       height={editTarget.height}
+      containerHeight={editTarget.containerHeight}
       onConfirm={confirmEdit}
       onCancel={cancelEdit}
     />
   {/if}
 
 </div>
+
+<!-- Modal cell editor (portal, full-screen) -->
+{#if modalTarget !== null}
+  <CellEditorModal
+    value={modalTarget.value}
+    originalValue={modalTarget.originalValue}
+    colName={modalTarget.colName}
+    dataType={modalTarget.dataType}
+    onConfirm={confirmModalEdit}
+    onCancel={cancelModalEdit}
+  />
+{/if}
 
 <style>
   .data-table-wrapper {
@@ -962,7 +1155,7 @@
     padding: 0 12px;
     height: 38px;
     border-bottom: 1px solid var(--color-border);
-    white-space: nowrap;
+    white-space: pre;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 12.5px;
@@ -1042,6 +1235,8 @@
   .context-menu {
     position: fixed;
     background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-overlay);
@@ -1066,5 +1261,19 @@
 
   .context-menu-item:hover {
     background: var(--color-bg-hover);
+  }
+
+  .context-menu-item-danger {
+    color: var(--color-danger);
+  }
+
+  .context-menu-item-danger:hover {
+    background: var(--color-danger-subtle);
+  }
+
+  .context-menu-separator {
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--spacing-1) 0;
   }
 </style>
