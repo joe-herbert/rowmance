@@ -423,45 +423,47 @@
     <!-- Main row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="conn-row" class:connected class:errored oncontextmenu={(e) => showConnCtx(e, profile)}>
-      <!-- Chevron: rotates when expanded -->
-      <button
-        class="conn-chevron"
-        class:open={expanded}
-        onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)}
-        aria-label="{expanded ? 'Collapse' : 'Expand'} {profile.name}"
-        disabled={connecting}
-      >
-        {#if connecting}
-          <span class="spin-ring" aria-hidden="true"></span>
-        {:else}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"></polyline>
+      <div class="conn-row-left">
+        <!-- Chevron: rotates when expanded -->
+        <button
+          class="conn-chevron"
+          class:open={expanded}
+          onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)}
+          aria-label="{expanded ? 'Collapse' : 'Expand'} {profile.name}"
+          disabled={connecting}
+        >
+          {#if connecting}
+            <span class="spin-ring" aria-hidden="true"></span>
+          {:else}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          {/if}
+        </button>
+
+        <!-- Color dot with glow -->
+        <span
+          class="color-dot"
+          class:dim={!connected && !connecting}
+          style="background:{color};{connected ? `box-shadow:0 0 0 3px color-mix(in srgb,${color} 18%,transparent)` : ''}"
+          aria-hidden="true"
+        ></span>
+
+        <!-- Name -->
+        <button
+          class="conn-name"
+          onclick={() => connected ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id }) : handleConnect(profile)}
+          title={profile.host}
+        >{profile.name}</button>
+
+        <!-- Lock icon if read-only -->
+        {#if profile.readOnly}
+          <svg class="lock-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
+            <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+            <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
           </svg>
         {/if}
-      </button>
-
-      <!-- Color dot with glow -->
-      <span
-        class="color-dot"
-        class:dim={!connected && !connecting}
-        style="background:{color};{connected ? `box-shadow:0 0 0 3px color-mix(in srgb,${color} 18%,transparent)` : ''}"
-        aria-hidden="true"
-      ></span>
-
-      <!-- Name -->
-      <button
-        class="conn-name"
-        onclick={() => connected ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id }) : handleConnect(profile)}
-        title={profile.host}
-      >{profile.name}</button>
-
-      <!-- Lock icon if read-only -->
-      {#if profile.readOnly}
-        <svg class="lock-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
-          <rect x="5" y="11" width="14" height="9" rx="2"></rect>
-          <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
-        </svg>
-      {/if}
+      </div>
 
       <!-- Hover actions -->
       <div class="conn-actions">
@@ -741,6 +743,13 @@
     background: var(--color-bg-hover);
   }
 
+  .conn-row-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+
   .conn-chevron {
     display: flex;
     align-items: center;
@@ -777,7 +786,7 @@
   .color-dot.dim { opacity: 0.4; }
 
   .conn-name {
-    flex: 1;
+    flex: 0 1 auto;
     font-size: 12.5px;
     font-weight: 600;
     color: var(--color-text-primary);
@@ -805,6 +814,7 @@
     opacity: 0;
     flex-shrink: 0;
     transition: opacity var(--transition-fast);
+    flex: 0;
   }
 
   .conn-row:hover .conn-actions { opacity: 1; }

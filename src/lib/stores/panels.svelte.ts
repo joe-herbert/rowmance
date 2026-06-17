@@ -34,6 +34,8 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
   switch (a.kind) {
     case 'table_browser':
       return b.kind === 'table_browser' && a.connectionId === b.connectionId && a.database === b.database && a.table === b.table;
+    case 'table_structure':
+      return b.kind === 'table_structure' && a.connectionId === b.connectionId && a.database === b.database && a.table === b.table;
     case 'ddl_viewer':
       return b.kind === 'ddl_viewer' && a.connectionId === b.connectionId && a.database === b.database && a.objectName === b.objectName;
     case 'erd':
@@ -128,6 +130,22 @@ export function usePanels() {
         if (!openItems.find(item => sameContent(item.content, content))) {
           openItems = [...openItems, { id: createId(), content }];
         }
+      }
+      panels = panels.map((p, i) => (i === focusedIndex ? { ...p, content } : p));
+    },
+
+    /**
+     * Replace the focused panel's content and update its open item entry in-place.
+     * Used when switching view modes (Data / Structure / SQL) so the open list
+     * shows one item for the table rather than accumulating entries.
+     */
+    replaceInFocused(content: PanelKind) {
+      const currentContent = panels[focusedIndex].content;
+      const itemIndex = openItems.findIndex(item => sameContent(item.content, currentContent));
+      if (itemIndex !== -1) {
+        openItems = openItems.map((item, i) => i === itemIndex ? { ...item, content } : item);
+      } else {
+        openItems = [...openItems, { id: createId(), content }];
       }
       panels = panels.map((p, i) => (i === focusedIndex ? { ...p, content } : p));
     },

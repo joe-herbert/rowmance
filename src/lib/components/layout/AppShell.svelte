@@ -16,6 +16,7 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useShortcuts } from '$lib/stores/shortcuts.svelte';
+  import { useConnections } from '$lib/stores/connections.svelte';
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
@@ -36,6 +37,53 @@
   const settings = $derived(settingsStore.settings);
   const panelStore = usePanels();
   const shortcutsStore = useShortcuts();
+  const connectionsStore = useConnections();
+
+  // ── Active connection + view mode (derived from focused panel) ────────────
+
+  const focusedContent = $derived(panelStore.focusedPanel.content);
+
+  const activeConnection = $derived.by(() => {
+    const c = focusedContent;
+    if ('connectionId' in c) return connectionsStore.getById(c.connectionId) ?? null;
+    return null;
+  });
+
+  type ViewMode = 'data' | 'structure' | 'sql';
+
+  const activeView = $derived.by((): ViewMode | null => {
+    switch (focusedContent.kind) {
+      case 'table_browser': return 'data';
+      case 'table_structure': return 'structure';
+      case 'ddl_viewer': return 'sql';
+      default: return null;
+    }
+  });
+
+  function switchView(mode: ViewMode) {
+    const c = focusedContent;
+    if (!('connectionId' in c)) return;
+    const { connectionId } = c;
+
+    let database: string | null = null;
+    let table: string | null = null;
+    if (c.kind === 'table_browser') { database = c.database; table = c.table; }
+    else if (c.kind === 'table_structure') { database = c.database; table = c.table; }
+    else if (c.kind === 'ddl_viewer') { database = c.database; table = c.objectName; }
+    if (!database || !table) return;
+
+    if (mode === 'data') {
+      panelStore.replaceInFocused({ kind: 'table_browser', connectionId, database, table });
+    } else if (mode === 'structure') {
+      panelStore.replaceInFocused({ kind: 'table_structure', connectionId, database, table });
+    } else {
+      panelStore.replaceInFocused({ kind: 'ddl_viewer', connectionId, database, objectName: table, objectType: 'table' });
+    }
+  }
+
+  const hasTableContext = $derived(
+    focusedContent.kind === 'table_browser' || focusedContent.kind === 'table_structure' || focusedContent.kind === 'ddl_viewer'
+  );
 
   function openSettings() {
     panelStore.openInFocused({ kind: 'settings' });
@@ -163,8 +211,54 @@
     {#if isMacOS}
       <div class="traffic-lights-spacer" aria-hidden="true"></div>
     {/if}
-    <span class="app-title">Rowmance</span>
-    <div class="titlebar-spacer"></div>
+
+    {#if activeConnection}
+      <div
+        class="conn-chip"
+        style="border-left-color: {activeConnection.color ?? 'var(--color-accent)'}"
+        data-tauri-drag-region="false"
+      >
+        <span
+          class="conn-chip-dot"
+          style="background: {activeConnection.color ?? 'var(--color-accent)'}; box-shadow: 0 0 0 3px color-mix(in srgb, {activeConnection.color ?? 'var(--color-accent)'} 26%, transparent)"
+        ></span>
+        <span class="conn-chip-name">{activeConnection.name}</span>
+        <span class="conn-chip-tag">{activeConnection.dbType}</span>
+        {#if activeConnection.readOnly}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
+            <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+            <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+          </svg>
+        {/if}
+      </div>
+    {:else}
+      <span class="app-title">Rowmance</span>
+    {/if}
+
+    {#if activeView !== null}
+      <div class="view-switcher" data-tauri-drag-region="false" role="group" aria-label="View mode">
+        <button
+          class="view-btn"
+          class:view-btn--active={activeView === 'data'}
+          onclick={() => switchView('data')}
+          title="Data view"
+        >Data</button>
+        <button
+          class="view-btn"
+          class:view-btn--active={activeView === 'structure'}
+          onclick={() => switchView('structure')}
+          title="Structure view"
+        >Structure</button>
+        <button
+          class="view-btn"
+          class:view-btn--active={activeView === 'sql'}
+          onclick={() => switchView('sql')}
+          title="DDL"
+        >SQL</button>
+      </div>
+    {/if}
+
+    <div class="titlebar-spacer" data-tauri-drag-region></div>
     <button class="titlebar-btn" onclick={openPalette} title="Command palette (⌘K)" aria-label="Open command palette">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
         <circle cx="11" cy="11" r="7"></circle>
@@ -358,6 +452,96 @@
 
   .titlebar-spacer {
     flex: 1;
+  }
+
+  /* ── Connection chip ───────────────────────────────────────────────────── */
+
+  .conn-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px 4px 8px;
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-left-width: 3px;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-xs);
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .conn-chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .conn-chip-name {
+    font-weight: var(--font-weight-semibold);
+    font-size: 12.5px;
+    color: var(--color-text-primary);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .conn-chip-tag {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    background: var(--color-bg-tertiary, var(--color-bg-hover));
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: var(--font-weight-medium);
+  }
+
+  /* ── View switcher ─────────────────────────────────────────────────────── */
+
+  .view-switcher {
+    display: flex;
+    padding: 2px;
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .view-btn {
+    padding: 4px 12px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    white-space: nowrap;
+  }
+
+  .view-btn:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .view-btn--active {
+    background: var(--color-bg-primary);
+    color: var(--color-accent);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .view-btn--active:hover {
+    background: var(--color-bg-primary);
+  }
+
+  .view-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .titlebar-btn {

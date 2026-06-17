@@ -11,6 +11,7 @@
   import QueryEditor from '$lib/components/editor/QueryEditor.svelte';
   import TableBrowser from '$lib/components/table/TableBrowser.svelte';
   import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
+  import TableStructure from '$lib/components/schema/TableStructure.svelte';
   import ErdCanvas from '$lib/components/erd/ErdCanvas.svelte';
   import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
   import Settings from '$lib/components/settings/Settings.svelte';
@@ -59,6 +60,12 @@
         {isFocused}
       />
     {/key}
+  {:else if panel.content.kind === 'table_structure'}
+    <TableStructure
+      connectionId={panel.content.connectionId}
+      database={panel.content.database}
+      table={panel.content.table}
+    />
   {:else if panel.content.kind === 'ddl_viewer'}
     <DdlViewer
       connectionId={panel.content.connectionId}
