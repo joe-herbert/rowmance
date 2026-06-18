@@ -739,7 +739,7 @@
     const dt = dataType.toLowerCase();
     if (/^(int|int2|int4|int8|int16|bigint|smallint|float|float4|float8|real|double|numeric|decimal|serial|bigserial|money)/.test(dt)) return 'number';
     if (/^(timestamp|date|time|interval)/.test(dt)) return 'timestamp';
-    if (/^bool/.test(dt)) return 'boolean';
+    if (/^bool/.test(dt) || dt === 'tinyint(1)') return 'boolean';
     if (/^json/.test(dt)) return 'json';
     return 'text';
   }
@@ -1040,7 +1040,7 @@
                       <span class="null-value">NULL</span>
                     {:else if cellValue === ''}
                       <span class="empty-value">EMPTY</span>
-                    {:else if typeof cellValue === 'boolean'}
+                    {:else if typeCategory === 'boolean' && (typeof cellValue === 'boolean' || typeof cellValue === 'number')}
                       <span
                         class="bool-value"
                         class:bool-true={cellValue}

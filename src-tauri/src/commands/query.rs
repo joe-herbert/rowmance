@@ -398,7 +398,7 @@ fn format_mysql_type(type_info: &sqlx::mysql::MySqlTypeInfo) -> String {
     let debug = format!("{type_info:?}");
     if let Some(size) = parse_max_size(&debug) {
         match base.as_str() {
-            "varchar" | "char" | "varbinary" | "binary" | "bit" => {
+            "varchar" | "char" | "varbinary" | "binary" | "bit" | "tinyint" => {
                 return format!("{base}({size})");
             }
             _ => {}
@@ -566,7 +566,22 @@ async fn execute_postgres(
 /// Convert a MySQL column value to a JSON-serialisable form.
 /// Falls back to a string representation for types that don't map cleanly.
 fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::Value {
-    // Try common types in order of likelihood.
+    use sqlx::Column;
+    // For bool / tinyint(1) columns, decode as bool before trying numeric types.
+    // Without this, try_get::<i64> succeeds for tinyint(1) and returns 0/1 instead of false/true.
+    let col = &row.columns()[idx];
+    let type_name = col.type_info().name().to_lowercase();
+    let debug = format!("{:?}", col.type_info());
+    let is_bool_col = type_name == "boolean"
+        || (type_name == "tinyint" && parse_max_size(&debug) == Some(1));
+    if is_bool_col {
+        if let Ok(v) = row.try_get::<Option<bool>, _>(idx) {
+            return v
+                .map(serde_json::Value::Bool)
+                .unwrap_or(serde_json::Value::Null);
+        }
+    }
+
     if let Ok(v) = row.try_get::<Option<i64>, _>(idx) {
         return v
             .map(serde_json::Value::from)
