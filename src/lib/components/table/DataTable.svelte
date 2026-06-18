@@ -1262,8 +1262,12 @@
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
-                oncontextmenu={(e) => { e.stopPropagation(); handleRowContextMenu(e, row, processedRowIndex, col.name); }}
+                oncontextmenu={(e) => { e.stopPropagation(); if (!isCellInSelection(rowIndex, colIndex)) { anchorCell = { row: rowIndex, col: colIndex }; focusedCell = { row: rowIndex, col: colIndex }; } handleRowContextMenu(e, row, processedRowIndex, col.name); }}
                 onmousedown={(e) => {
+                  if (e.button === 2 || (e.button === 0 && e.ctrlKey)) {
+                    if (isCellInSelection(rowIndex, colIndex)) skipNextFocusReset = true;
+                    return;
+                  }
                   if (e.button !== 0) return;
                   if (e.shiftKey && focusedCell) {
                     skipNextFocusReset = true;
