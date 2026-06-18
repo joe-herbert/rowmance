@@ -22,6 +22,16 @@
         {:else}ℹ{/if}
       </span>
       <span class="toast-message">{toast.message}</span>
+      {#if toast.type === 'error'}
+        <button
+          class="toast-copy"
+          onclick={() => navigator.clipboard.writeText(toast.message)}
+          aria-label="Copy error message"
+          title="Copy"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      {/if}
       <button
         class="toast-dismiss"
         onclick={() => toastStore.dismiss(toast.id)}
@@ -104,6 +114,29 @@
     color: var(--color-text-primary);
     line-height: var(--line-height-normal);
     word-break: break-word;
+  }
+
+  .toast-copy {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.7;
+    transition: color var(--transition-fast), background var(--transition-fast), opacity var(--transition-fast);
+  }
+
+  .toast-copy:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+    opacity: 1;
   }
 
   .toast-dismiss {

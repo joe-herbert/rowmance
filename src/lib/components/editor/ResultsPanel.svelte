@@ -4,6 +4,9 @@
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { errorMessage } from '$lib/utils/errors';
+  import { useToast } from '$lib/stores/toast.svelte';
+
+  const toast = useToast();
 
   interface Props {
     result: QueryResult | null;
@@ -119,7 +122,12 @@
     </div>
   {:else if result.error !== null}
     <div class="error-box" role="alert">
-      <span class="error-label">Error</span>
+      <div class="error-header">
+        <span class="error-label">Error</span>
+        <button class="error-copy" onclick={() => navigator.clipboard.writeText(result!.error!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy error">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
       <span class="error-message">{result.error}</span>
     </div>
   {:else if hasData}
@@ -183,7 +191,12 @@
       {/if}
 
       {#if exportError}
-        <span class="export-error">{exportError}</span>
+        <div class="export-error-wrap">
+          <span class="export-error">{exportError}</span>
+          <button class="export-error-copy" onclick={() => navigator.clipboard.writeText(exportError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
       {/if}
     </div>
 
@@ -250,12 +263,36 @@
     gap: var(--spacing-1);
   }
 
+  .error-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
   .error-label {
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
     color: var(--color-danger);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  .error-copy {
+    display: flex;
+    align-items: center;
+    padding: 2px var(--spacing-1);
+    background: transparent;
+    border: none;
+    color: var(--color-danger);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    opacity: 0.6;
+    transition: opacity var(--transition-fast), background var(--transition-fast);
+  }
+
+  .error-copy:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
   }
 
   .error-message {
@@ -458,12 +495,39 @@
     color: var(--color-text-primary);
   }
 
+  .export-error-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-1);
+    flex: 1;
+    min-width: 0;
+  }
+
   .export-error {
     font-size: var(--font-size-xs);
     color: var(--color-danger);
+    font-family: var(--font-family-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+
+  .export-error-copy {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 2px var(--spacing-1);
+    background: transparent;
+    border: none;
+    color: var(--color-danger);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    opacity: 0.7;
+    transition: opacity var(--transition-fast), background var(--transition-fast);
+  }
+
+  .export-error-copy:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
   }
 </style>

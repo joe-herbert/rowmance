@@ -695,6 +695,9 @@
     <div class="save-error-bar" role="alert">
       <span class="save-error-label">Export failed:</span>
       <span class="save-error-message">{exportError}</span>
+      <button class="save-error-copy" onclick={() => navigator.clipboard.writeText(exportError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
       <button class="save-error-close" onclick={() => (exportError = null)} aria-label="Dismiss">✕</button>
     </div>
   {/if}
@@ -703,9 +706,10 @@
     <div class="save-error-bar" role="alert">
       <span class="save-error-label">Save failed:</span>
       <span class="save-error-message">{saveError}</span>
-      <button class="save-error-close" onclick={() => (saveError = null)} aria-label="Dismiss">
-        ✕
+      <button class="save-error-copy" onclick={() => navigator.clipboard.writeText(saveError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       </button>
+      <button class="save-error-close" onclick={() => (saveError = null)} aria-label="Dismiss">✕</button>
     </div>
   {/if}
 
@@ -730,7 +734,12 @@
       </div>
     {:else if error !== null}
       <div class="error-box" role="alert">
-        <span class="error-label">Error</span>
+        <div class="error-header">
+          <span class="error-label">Error</span>
+          <button class="error-copy" onclick={() => navigator.clipboard.writeText(error!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy error">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
         <span class="error-message">{error}</span>
       </div>
     {:else if result !== null}
@@ -1030,9 +1039,9 @@
   .save-error-bar {
     flex-shrink: 0;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: var(--spacing-2);
-    padding: var(--spacing-1) var(--spacing-3);
+    padding: var(--spacing-2) var(--spacing-3);
     background: var(--color-danger-subtle);
     border-bottom: 1px solid var(--color-danger);
     font-size: var(--font-size-xs);
@@ -1047,10 +1056,28 @@
   .save-error-message {
     color: var(--color-danger);
     font-family: var(--font-family-mono);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     flex: 1;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .save-error-copy {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 2px var(--spacing-1);
+    background: transparent;
+    border: none;
+    color: var(--color-danger);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    opacity: 0.7;
+    transition: opacity var(--transition-fast), background var(--transition-fast);
+  }
+
+  .save-error-copy:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
   }
 
   .save-error-close {
@@ -1066,7 +1093,7 @@
   }
 
   .save-error-close:hover {
-    background: var(--color-danger-subtle);
+    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
   }
 
   /* ── No-PK warning bar ──────────────────────────────────────────────────── */
@@ -1143,12 +1170,36 @@
     gap: var(--spacing-1);
   }
 
+  .error-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
   .error-label {
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
     color: var(--color-danger);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  .error-copy {
+    display: flex;
+    align-items: center;
+    padding: 2px var(--spacing-1);
+    background: transparent;
+    border: none;
+    color: var(--color-danger);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    opacity: 0.6;
+    transition: opacity var(--transition-fast), background var(--transition-fast);
+  }
+
+  .error-copy:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
   }
 
   .error-message {
