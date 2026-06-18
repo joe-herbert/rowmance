@@ -130,6 +130,7 @@
       pendingChanges = new Map();
       tableKey++;
       await load();
+      toast.addToast('Changes saved', 'success', 2000);
     } catch (err) {
       saveError = errorMessage(err);
     } finally {
