@@ -716,6 +716,22 @@
     const colCount = visibleColumns.length;
     if (rowCount === 0 || colCount === 0) return;
 
+    if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+      e.preventDefault();
+      copySelection();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'x') {
+      e.preventDefault();
+      cutSelection();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+      e.preventDefault();
+      pasteFromClipboard();
+      return;
+    }
+
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
       e.preventDefault();
     }
@@ -855,11 +871,14 @@
   }
 
   let contextMenu = $state<ContextMenu | null>(null);
+  let contextMenuClipboardHasContent = $state(false);
 
   function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number, colName: string | null = null): void {
     e.preventDefault();
     const rowKey = buildRowKey(row, columns, pageOffset + rowIndex);
     contextMenu = { x: e.clientX, y: e.clientY, rowKey, row, colName };
+    contextMenuClipboardHasContent = false;
+    navigator.clipboard.readText().then((t) => { contextMenuClipboardHasContent = t.length > 0; }).catch(() => {});
   }
 
   function dismissContextMenu(): void {
@@ -950,6 +969,137 @@
     pendingChanges = updated;
     onChangePending?.(pendingChanges, originalRows);
     dismissContextMenu();
+  }
+
+  // ── Copy / Cut / Paste ───────────────────────────────────────────────────
+
+  function getSelectionRange(): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
+    if (!focusedCell) return null;
+    const anchor = anchorCell ?? focusedCell;
+    return {
+      minRow: Math.min(anchor.row, focusedCell.row),
+      maxRow: Math.max(anchor.row, focusedCell.row),
+      minCol: Math.min(anchor.col, focusedCell.col),
+      maxCol: Math.max(anchor.col, focusedCell.col),
+    };
+  }
+
+  function selectionIsMultiCell(): boolean {
+    const r = getSelectionRange();
+    if (!r) return false;
+    return r.minRow !== r.maxRow || r.minCol !== r.maxCol;
+  }
+
+  function getSelectionText(): string {
+    const range = getSelectionRange();
+    if (!range) return '';
+    const { minRow, maxRow, minCol, maxCol } = range;
+    const lines: string[] = [];
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowData = pageRows[r];
+      if (!rowData) continue;
+      const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+      const cells: string[] = [];
+      for (let c = minCol; c <= maxCol; c++) {
+        const { originalIndex } = visibleColumns[c];
+        const col = columns[originalIndex];
+        const val = getPendingValue(rowKey, col.name, rowData[originalIndex]);
+        cells.push(val === null ? '' : String(val));
+      }
+      lines.push(cells.join('\t'));
+    }
+    return lines.join('\n');
+  }
+
+  function copySelection(): void {
+    const text = getSelectionText();
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+
+  function applyPendingChange(rowKey: string, colName: string, originalValue: CellValue, newValue: CellValue): void {
+    const isNewRow = rowKey.startsWith('__new__');
+    const updated = new Map(pendingChanges);
+    if (isNewRow) {
+      if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+      updated.get(rowKey)!.set(colName, newValue);
+    } else if (cellValuesEqual(newValue, originalValue)) {
+      const rowMap = updated.get(rowKey);
+      if (rowMap) {
+        rowMap.delete(colName);
+        if (rowMap.size === 0) {
+          updated.delete(rowKey);
+          const nextOrig = new Map(originalRows);
+          nextOrig.delete(rowKey);
+          originalRows = nextOrig;
+        }
+      }
+    } else {
+      if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+      updated.get(rowKey)!.set(colName, newValue);
+    }
+    pendingChanges = updated;
+  }
+
+  function cutSelection(): void {
+    if (!editable || readOnly) return;
+    const range = getSelectionRange();
+    if (!range) return;
+    copySelection();
+    const { minRow, maxRow, minCol, maxCol } = range;
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowData = pageRows[r];
+      if (!rowData) continue;
+      const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+      if (!originalRows.has(rowKey)) {
+        const next = new Map(originalRows);
+        next.set(rowKey, [...rowData]);
+        originalRows = next;
+      }
+      for (let c = minCol; c <= maxCol; c++) {
+        const { originalIndex } = visibleColumns[c];
+        const col = columns[originalIndex];
+        if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
+      }
+    }
+    onChangePending?.(pendingChanges, originalRows);
+  }
+
+  async function pasteFromClipboard(): Promise<void> {
+    if (!editable || readOnly) return;
+    if (!focusedCell) return;
+    let text: string;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      return;
+    }
+    if (!text) return;
+    const range = getSelectionRange();
+    if (!range) return;
+    // Flatten clipboard into a linear list, looped across selected cells
+    const clipValues = text.split('\n').flatMap((line) => line.split('\t'));
+    if (clipValues.length === 0) return;
+    const { minRow, maxRow, minCol, maxCol } = range;
+    let clipIndex = 0;
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowData = pageRows[r];
+      if (!rowData) continue;
+      const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+      if (!originalRows.has(rowKey)) {
+        const next = new Map(originalRows);
+        next.set(rowKey, [...rowData]);
+        originalRows = next;
+      }
+      for (let c = minCol; c <= maxCol; c++) {
+        const { originalIndex } = visibleColumns[c];
+        const col = columns[originalIndex];
+        if (!col) continue;
+        const pasteValue = clipValues[clipIndex % clipValues.length];
+        clipIndex++;
+        applyPendingChange(rowKey, col.name, rowData[originalIndex], pasteValue === '' ? null : pasteValue);
+      }
+    }
+    onChangePending?.(pendingChanges, originalRows);
   }
 
   function copyRowTabSeparated(row: CellValue[]): void {
@@ -1255,6 +1405,33 @@
           >
             Discard edit
           </button>
+          <div class="context-menu-separator"></div>
+        {/if}
+        {#if focusedCell !== null}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => { copySelection(); dismissContextMenu(); }}
+          >
+            {selectionIsMultiCell() ? 'Copy selection' : 'Copy cell'}
+          </button>
+          {#if editable && !readOnly}
+            <button
+              class="context-menu-item"
+              role="menuitem"
+              onclick={() => { cutSelection(); dismissContextMenu(); }}
+            >
+              {selectionIsMultiCell() ? 'Cut selection' : 'Cut cell'}
+            </button>
+            <button
+              class="context-menu-item"
+              role="menuitem"
+              disabled={!contextMenuClipboardHasContent}
+              onclick={() => { pasteFromClipboard(); dismissContextMenu(); }}
+            >
+              Paste
+            </button>
+          {/if}
           <div class="context-menu-separator"></div>
         {/if}
         {#if selectedRowKeys.size > 1}
