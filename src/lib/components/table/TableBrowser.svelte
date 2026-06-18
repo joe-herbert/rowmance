@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import { executeQuery, updateRows, insertRow } from '$lib/tauri/query';
   import type { RowChange } from '$lib/tauri/query';
-  import { listColumns } from '$lib/tauri/schema';
+  import { listColumns, listIndexes } from '$lib/tauri/schema';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import type { QueryResult, ColumnMeta } from '$lib/types';
@@ -193,9 +193,10 @@
     error = null;
     const t0 = performance.now();
     try {
-      const [queryResult, schemaColumns] = await Promise.all([
+      const [queryResult, schemaColumns, indexes] = await Promise.all([
         executeQuery(connectionId, buildSql(), untrack(() => page), PAGE_SIZE),
         listColumns(connectionId, database, table).catch(() => []),
+        listIndexes(connectionId, database, table).catch(() => []),
       ]);
 
       if (queryResult.error) {
@@ -204,6 +205,9 @@
       } else {
         if (schemaColumns.length > 0) {
           const schemaMap = new Map(schemaColumns.map((c) => [c.name, c]));
+          const uniqueColNames = new Set(
+            indexes.filter((idx) => idx.unique).flatMap((idx) => idx.columns),
+          );
           queryResult.columns = queryResult.columns.map((col) => {
             const s = schemaMap.get(col.name);
             return {
@@ -213,6 +217,7 @@
               isForeignKey: s?.isForeignKey ?? false,
               defaultValue: s?.defaultValue ?? null,
               isAutoIncrement: s?.isAutoIncrement ?? false,
+              isUnique: uniqueColNames.has(col.name),
             };
           });
         }

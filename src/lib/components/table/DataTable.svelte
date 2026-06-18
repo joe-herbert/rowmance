@@ -13,6 +13,9 @@
   type CellValue = string | number | boolean | null;
   type SortDir = 'asc' | 'desc' | 'none';
 
+  // Ensures only one context menu is open across all DataTable instances at a time.
+  let activeMenuDismiss: (() => void) | null = null;
+
   export interface PageInfo {
     pageIndex: number;
     pageCount: number;
@@ -37,6 +40,9 @@
     onAddRow?: () => void;
     addRowTrigger?: number;
     onPageInfo?: (_info: PageInfo) => void;
+    tableName?: string;
+    onDeleteRow?: (_row: CellValue[], _rowKey: string) => void;
+    onCloneRow?: (_row: CellValue[]) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -130,6 +136,9 @@
     onAddRow,
     addRowTrigger = 0,
     onPageInfo,
+    tableName,
+    onDeleteRow,
+    onCloneRow,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -872,17 +881,28 @@
 
   let contextMenu = $state<ContextMenu | null>(null);
   let contextMenuClipboardHasContent = $state(false);
+  // Snapshots of selection state at menu-open time, so re-renders from focus/blur don't alter the menu.
+  let contextMenuSnapshotHasFocus = $state(false);
+  let contextMenuSnapshotIsMultiCell = $state(false);
+  let contextMenuSnapshotIsMultiCol = $state(false);
 
   function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number, colName: string | null = null): void {
     e.preventDefault();
+    activeMenuDismiss?.();
     const rowKey = buildRowKey(row, columns, pageOffset + rowIndex);
     contextMenu = { x: e.clientX, y: e.clientY, rowKey, row, colName };
+    contextMenuSnapshotHasFocus = focusedCell !== null;
+    contextMenuSnapshotIsMultiCell = selectionIsMultiCell();
+    const range = getSelectionRange();
+    contextMenuSnapshotIsMultiCol = range ? range.minCol !== range.maxCol : false;
+    activeMenuDismiss = () => { contextMenu = null; };
     contextMenuClipboardHasContent = false;
     navigator.clipboard.readText().then((t) => { contextMenuClipboardHasContent = t.length > 0; }).catch(() => {});
   }
 
   function dismissContextMenu(): void {
     contextMenu = null;
+    if (activeMenuDismiss) activeMenuDismiss = null;
   }
 
   function discardCellEdit(): void {
@@ -902,6 +922,23 @@
     pendingChanges = updated;
     onChangePending?.(pendingChanges, originalRows);
     dismissContextMenu();
+  }
+
+  function openInlineEditFromContextMenu(): void {
+    if (!contextMenu?.colName) return;
+    const { row, rowKey, colName } = contextMenu;
+    const rowIndex = pageRows.findIndex(
+      (r, i) => buildRowKey(r, columns, pageOffset + i) === rowKey,
+    );
+    if (rowIndex < 0) { dismissContextMenu(); return; }
+    const originalColIndex = columns.findIndex((c) => c.name === colName);
+    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    const visColIndex = visibleColumns.findIndex((vc) => vc.originalIndex === originalColIndex);
+    if (visColIndex < 0) { dismissContextMenu(); return; }
+
+    dismissContextMenu();
+    const fakeEvent = { currentTarget: getFocusedCellEl(rowIndex, visColIndex) } as unknown as MouseEvent;
+    handleCellDblClick(fakeEvent, row, rowIndex, originalColIndex);
   }
 
   function openModalFromContextMenu(): void {
@@ -1133,6 +1170,145 @@
     dismissContextMenu();
   }
 
+  function setSelectionNull(): void {
+    if (!editable || readOnly) return;
+    const range = getSelectionRange();
+    if (!range) return;
+    const { minRow, maxRow, minCol, maxCol } = range;
+    for (let r = minRow; r <= maxRow; r++) {
+      const rowData = pageRows[r];
+      if (!rowData) continue;
+      const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+      if (!originalRows.has(rowKey)) {
+        const next = new Map(originalRows);
+        next.set(rowKey, [...rowData]);
+        originalRows = next;
+      }
+      for (let c = minCol; c <= maxCol; c++) {
+        const { originalIndex } = visibleColumns[c];
+        const col = columns[originalIndex];
+        if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
+      }
+    }
+    onChangePending?.(pendingChanges, originalRows);
+    dismissContextMenu();
+  }
+
+  function getContextRows(): { row: CellValue[]; rowKey: string }[] {
+    if (selectedRowKeys.size > 1) {
+      return pageRows
+        .map((r, i) => ({ row: r, rowKey: buildRowKey(r, columns, pageOffset + i) }))
+        .filter(({ rowKey }) => selectedRowKeys.has(rowKey));
+    }
+    if (!contextMenu) return [];
+    return [{ row: contextMenu.row, rowKey: contextMenu.rowKey }];
+  }
+
+  function getContextColRange(): { originalIndex: number; col: ColumnMeta }[] {
+    const range = getSelectionRange();
+    if (range) {
+      const cols: { originalIndex: number; col: ColumnMeta }[] = [];
+      for (let c = range.minCol; c <= range.maxCol; c++) {
+        const { originalIndex } = visibleColumns[c];
+        cols.push({ originalIndex, col: columns[originalIndex] });
+      }
+      return cols;
+    }
+    return visibleColumns.map(({ originalIndex }) => ({ originalIndex, col: columns[originalIndex] }));
+  }
+
+  function copyColumnNames(): void {
+    const range = getSelectionRange();
+    let names: string[];
+    if (range) {
+      names = [];
+      for (let c = range.minCol; c <= range.maxCol; c++) {
+        names.push(visibleColumns[c].col.name);
+      }
+    } else {
+      names = visibleColumns.map(({ col }) => col.name);
+    }
+    navigator.clipboard.writeText(names.join(', ')).catch(() => {});
+    dismissContextMenu();
+  }
+
+  function sqlEscape(val: CellValue): string {
+    if (val === null) return 'NULL';
+    if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+    return `'${String(val).replace(/'/g, "''")}'`;
+  }
+
+  function copyAsJson(): void {
+    const contextRows = getContextRows();
+    const cols = getContextColRange();
+    const objects = contextRows.map(({ row, rowKey }) =>
+      Object.fromEntries(
+        cols.map(({ originalIndex, col }) => [
+          col.name,
+          getPendingValue(rowKey, col.name, row[originalIndex]),
+        ]),
+      ),
+    );
+    navigator.clipboard.writeText(JSON.stringify(objects.length === 1 ? objects[0] : objects, null, 2)).catch(() => {});
+    dismissContextMenu();
+  }
+
+  function copyAsSql(): void {
+    const contextRows = getContextRows();
+    const cols = getContextColRange();
+    const tbl = tableName ?? 'table_name';
+    const colList = cols.map(({ col }) => `"${col.name}"`).join(', ');
+    const statements = contextRows.map(({ row, rowKey }) => {
+      const vals = cols.map(({ originalIndex, col }) =>
+        sqlEscape(getPendingValue(rowKey, col.name, row[originalIndex])),
+      ).join(', ');
+      return `INSERT INTO "${tbl}" (${colList}) VALUES (${vals});`;
+    });
+    navigator.clipboard.writeText(statements.join('\n')).catch(() => {});
+    dismissContextMenu();
+  }
+
+  function copyAsCsv(): void {
+    const contextRows = getContextRows();
+    const cols = getContextColRange();
+    const csvEscape = (v: CellValue) => {
+      if (v === null) return '';
+      const s = String(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = cols.map(({ col }) => csvEscape(col.name)).join(',');
+    const dataLines = contextRows.map(({ row, rowKey }) =>
+      cols.map(({ originalIndex, col }) => csvEscape(getPendingValue(rowKey, col.name, row[originalIndex]))).join(','),
+    );
+    navigator.clipboard.writeText([header, ...dataLines].join('\n')).catch(() => {});
+    dismissContextMenu();
+  }
+
+  function cloneRow(): void {
+    if (!contextMenu) return;
+    const { row } = contextMenu;
+    const id = nextNewRowId++;
+    const key = `__new__${id}`;
+    pendingNewRows = [...pendingNewRows, { key }];
+    const rowMap = new Map<string, CellValue>();
+    columns.forEach((col, i) => {
+      rowMap.set(col.name, (col.isPrimaryKey || col.isUnique) ? null : (row[i] ?? null));
+    });
+    const updated = new Map(pendingChanges);
+    updated.set(key, rowMap);
+    pendingChanges = updated;
+    onChangePending?.(pendingChanges, originalRows);
+    onCloneRow?.(row);
+    dismissContextMenu();
+  }
+
+  function deleteRow(): void {
+    if (!contextMenu || !onDeleteRow) return;
+    const { row, rowKey } = contextMenu;
+    onDeleteRow(row, rowKey);
+    dismissContextMenu();
+  }
+
   function handleContextMenuKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') dismissContextMenu();
   }
@@ -1339,7 +1515,7 @@
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleNewRowCellDblClick(e, newRow.key, currentValue, col, originalIndex)}
-                oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: col.name, isNewRow: true }; }}
+                oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: col.name, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}
                 onfocus={() => { focusedCell = null; }}
               >
                 <div class="cell-inner">
@@ -1381,6 +1557,7 @@
       tabindex="-1"
       style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
       onclick={(e) => e.stopPropagation()}
+      onmousedown={(e) => e.preventDefault()}
       onkeydown={handleContextMenuKeydown}
       use:portal
     >
@@ -1393,7 +1570,14 @@
           Delete new row
         </button>
       {:else}
-        {#if contextMenu.colName && editable && !readOnly}
+        {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => openInlineEditFromContextMenu()}
+          >
+            Edit
+          </button>
           <button
             class="context-menu-item"
             role="menuitem"
@@ -1401,6 +1585,17 @@
           >
             Edit in modal
           </button>
+        {/if}
+        {#if editable && !readOnly}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => setSelectionNull()}
+          >
+            Set as null
+          </button>
+        {/if}
+        {#if editable && !readOnly}
           <div class="context-menu-separator"></div>
         {/if}
         {#if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
@@ -1413,13 +1608,13 @@
           </button>
           <div class="context-menu-separator"></div>
         {/if}
-        {#if focusedCell !== null}
+        {#if contextMenuSnapshotHasFocus}
           <button
             class="context-menu-item"
             role="menuitem"
             onclick={() => { copySelection(); dismissContextMenu(); }}
           >
-            {selectionIsMultiCell() ? 'Copy selection' : 'Copy cell'}
+            {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
           </button>
           {#if editable && !readOnly}
             <button
@@ -1427,7 +1622,7 @@
               role="menuitem"
               onclick={() => { cutSelection(); dismissContextMenu(); }}
             >
-              {selectionIsMultiCell() ? 'Cut selection' : 'Cut cell'}
+              {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
             </button>
             <button
               class="context-menu-item"
@@ -1440,6 +1635,35 @@
           {/if}
           <div class="context-menu-separator"></div>
         {/if}
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => copyColumnNames()}
+        >
+          {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
+        </button>
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => copyAsJson()}
+        >
+          Copy as JSON
+        </button>
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => copyAsSql()}
+        >
+          Copy as SQL
+        </button>
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => copyAsCsv()}
+        >
+          Copy as CSV
+        </button>
+        <div class="context-menu-separator"></div>
         {#if selectedRowKeys.size > 1}
           <button
             class="context-menu-item"
@@ -1456,6 +1680,25 @@
           >
             Copy row (tab-separated)
           </button>
+        {/if}
+        {#if editable && !readOnly}
+          <div class="context-menu-separator"></div>
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => cloneRow()}
+          >
+            Clone row
+          </button>
+          {#if onDeleteRow}
+            <button
+              class="context-menu-item context-menu-item-danger"
+              role="menuitem"
+              onclick={() => deleteRow()}
+            >
+              Delete row
+            </button>
+          {/if}
         {/if}
       {/if}
     </div>
