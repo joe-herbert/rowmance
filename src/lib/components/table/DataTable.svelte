@@ -31,7 +31,7 @@
     hiddenColumns?: Set<string>;
     totalRows?: number | null;
     rowOffset?: number;
-    onChangePending?: (_changes: Map<string, Map<string, CellValue>>) => void;
+    onChangePending?: (_changes: Map<string, Map<string, CellValue>>, _originalRows: Map<string, CellValue[]>) => void;
     onCellSelect?: (_originalColIndex: number, _row: CellValue[]) => void;
     onDeselect?: () => void;
     onAddRow?: () => void;
@@ -278,6 +278,9 @@
   // ── Pending changes ───────────────────────────────────────────────────────
 
   let pendingChanges = $state<Map<string, Map<string, CellValue>>>(new Map());
+  // Snapshot of each row's DB values at the time of its first edit — used to
+  // build all-columns WHERE clauses for tables without a primary key.
+  let originalRows = $state<Map<string, CellValue[]>>(new Map());
 
   function getPendingValue(
     rowKey: string,
@@ -331,6 +334,12 @@
     const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex);
     const currentValue = getPendingValue(rowKey, col.name, row[originalColIndex]);
 
+    if (!originalRows.has(rowKey)) {
+      const next = new Map(originalRows);
+      next.set(rowKey, [...row]);
+      originalRows = next;
+    }
+
     const td = e.currentTarget as HTMLTableCellElement;
     const containerRect = tableContainerEl!.getBoundingClientRect();
     const tdRect = td.getBoundingClientRect();
@@ -360,6 +369,13 @@
     if (!col) return;
     const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex);
     const currentValue = getPendingValue(rowKey, col.name, row[originalColIndex]);
+
+    if (!originalRows.has(rowKey)) {
+      const next = new Map(originalRows);
+      next.set(rowKey, [...row]);
+      originalRows = next;
+    }
+
     modalTarget = {
       rowKey,
       colName: col.name,
@@ -399,7 +415,12 @@
       const rowMap = updated.get(rowKey);
       if (rowMap) {
         rowMap.delete(colName);
-        if (rowMap.size === 0) updated.delete(rowKey);
+        if (rowMap.size === 0) {
+          updated.delete(rowKey);
+          const nextOrig = new Map(originalRows);
+          nextOrig.delete(rowKey);
+          originalRows = nextOrig;
+        }
       }
     } else {
       if (!updated.has(rowKey)) updated.set(rowKey, new Map());
@@ -407,7 +428,7 @@
     }
 
     pendingChanges = updated;
-    onChangePending?.(pendingChanges);
+    onChangePending?.(pendingChanges, originalRows);
     editTarget = null;
     refocusCell();
   }
@@ -425,14 +446,19 @@
       const rowMap = updated.get(rowKey);
       if (rowMap) {
         rowMap.delete(colName);
-        if (rowMap.size === 0) updated.delete(rowKey);
+        if (rowMap.size === 0) {
+          updated.delete(rowKey);
+          const nextOrig = new Map(originalRows);
+          nextOrig.delete(rowKey);
+          originalRows = nextOrig;
+        }
       }
     } else {
       if (!updated.has(rowKey)) updated.set(rowKey, new Map());
       updated.get(rowKey)!.set(colName, newValue);
     }
     pendingChanges = updated;
-    onChangePending?.(pendingChanges);
+    onChangePending?.(pendingChanges, originalRows);
     modalTarget = null;
     refocusCell();
   }
@@ -609,10 +635,15 @@
     const rowMap = updated.get(rowKey);
     if (rowMap) {
       rowMap.delete(colName);
-      if (rowMap.size === 0) updated.delete(rowKey);
+      if (rowMap.size === 0) {
+        updated.delete(rowKey);
+        const nextOrig = new Map(originalRows);
+        nextOrig.delete(rowKey);
+        originalRows = nextOrig;
+      }
     }
     pendingChanges = updated;
-    onChangePending?.(pendingChanges);
+    onChangePending?.(pendingChanges, originalRows);
     dismissContextMenu();
   }
 
@@ -627,6 +658,13 @@
     if (originalColIndex < 0) { dismissContextMenu(); return; }
     const currentValue = getPendingValue(rowKey, colName, row[originalColIndex]);
     const col = columns[originalColIndex];
+
+    if (!originalRows.has(rowKey)) {
+      const next = new Map(originalRows);
+      next.set(rowKey, [...row]);
+      originalRows = next;
+    }
+
     modalTarget = {
       rowKey,
       colName,

@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { executeQuery, updateRows } from '$lib/tauri/query';
   import type { RowChange } from '$lib/tauri/query';
+  import { listColumns } from '$lib/tauri/schema';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import type { QueryResult, ColumnMeta } from '$lib/types';
@@ -43,20 +44,45 @@
 
   type CellValue = string | number | boolean | null;
   let pendingChanges = $state<Map<string, Map<string, CellValue>>>(new Map());
+  let originalRows = $state<Map<string, CellValue[]>>(new Map());
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
+
+  // ── No-PK warning banner ──────────────────────────────────────────────────
+
+  const NO_PK_WARN_KEY = 'rowmance_no_pk_warn_dismissed';
+  let noPkWarnDismissed = $state(localStorage.getItem(NO_PK_WARN_KEY) === 'true');
+
+  const tableHasNoPk = $derived(
+    result !== null &&
+    result.columns.length > 0 &&
+    result.columns.every((c) => !c.isPrimaryKey),
+  );
+
+  const showNoPkWarning = $derived(tableHasNoPk && !connectionReadOnly && !noPkWarnDismissed);
+
+  function dismissNoPkWarning(): void {
+    noPkWarnDismissed = true;
+  }
+
+  function dismissNoPkWarningForever(): void {
+    localStorage.setItem(NO_PK_WARN_KEY, 'true');
+    noPkWarnDismissed = true;
+  }
 
   // Key to force DataTable to fully reset (clears pending changes displayed)
   let tableKey = $state(0);
 
   const pendingCount = $derived(pendingChanges.size);
 
-  function handleChangePending(changes: Map<string, Map<string, CellValue>>): void {
+  function handleChangePending(changes: Map<string, Map<string, CellValue>>, rows: Map<string, CellValue[]>): void {
     pendingChanges = changes;
+    originalRows = rows;
   }
 
   function discardChanges(): void {
     pendingChanges = new Map();
+    originalRows = new Map();
     tableKey++;
   }
 
@@ -67,22 +93,29 @@
 
     try {
       const pkColumns = result.columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
+      const hasPk = pkColumns.length > 0;
 
       const rowChanges: RowChange[] = [];
 
       for (const [rowKey, colMap] of pendingChanges) {
-        // Build primary keys from the row key
-        // rowKey is either the PK values joined with | or the row index
         const primaryKeys: Record<string, unknown> = {};
 
-        if (pkColumns.length > 0) {
-          const parts = rowKey.split('|');
-          pkColumns.forEach((pkCol, i) => {
-            primaryKeys[pkCol] = parts[i] ?? null;
+        if (hasPk) {
+          const origRow = originalRows.get(rowKey);
+          if (!origRow) continue;
+          pkColumns.forEach((pkCol) => {
+            const idx = result!.columns.findIndex((c) => c.name === pkCol);
+            primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
           });
         } else {
-          // No PK — use _rowIndex as a hint; server may not support this
-          primaryKeys['_rowIndex'] = rowKey;
+          // No PK: identify the row by all its original column values.
+          // The backend will use IS NULL for null values and = ? for non-null,
+          // with LIMIT 1 (MySQL) as a safety guard against duplicate rows.
+          const origRow = originalRows.get(rowKey);
+          if (!origRow) continue;
+          result.columns.forEach((col, i) => {
+            primaryKeys[col.name] = origRow[i] ?? null;
+          });
         }
 
         const changes: Record<string, unknown> = {};
@@ -144,11 +177,25 @@
     error = null;
     const t0 = performance.now();
     try {
-      result = await executeQuery(connectionId, buildSql(), untrack(() => page), PAGE_SIZE);
-      if (result.error) {
-        error = result.error;
+      const [queryResult, schemaColumns] = await Promise.all([
+        executeQuery(connectionId, buildSql(), untrack(() => page), PAGE_SIZE),
+        listColumns(connectionId, database, table).catch(() => []),
+      ]);
+
+      if (queryResult.error) {
+        error = queryResult.error;
         result = null;
       } else {
+        if (schemaColumns.length > 0) {
+          const pkSet = new Set(schemaColumns.filter((c) => c.isPrimaryKey).map((c) => c.name));
+          const fkSet = new Set(schemaColumns.filter((c) => c.isForeignKey).map((c) => c.name));
+          queryResult.columns = queryResult.columns.map((col) => ({
+            ...col,
+            isPrimaryKey: pkSet.has(col.name),
+            isForeignKey: fkSet.has(col.name),
+          }));
+        }
+        result = queryResult;
         lastQueryMs = Math.round(performance.now() - t0);
       }
     } catch (err) {
@@ -182,8 +229,10 @@
     filterValue = initialFilter ?? '';
     pendingFilter = initialFilter ?? '';
     pendingChanges = new Map();
+    originalRows = new Map();
     hiddenColumns = new Set();
     showColumnPicker = false;
+    noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
     load();
   });
 
@@ -660,6 +709,20 @@
     </div>
   {/if}
 
+  {#if showNoPkWarning}
+    <div class="no-pk-warning-bar" role="alert">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <span class="no-pk-warning-text">
+        This table has no primary key. Edits are matched by all column values — avoid editing tables with duplicate rows.
+      </span>
+      <button class="no-pk-warning-btn" onclick={dismissNoPkWarning}>OK</button>
+      <button class="no-pk-warning-btn" onclick={dismissNoPkWarningForever}>Don't show again</button>
+    </div>
+  {/if}
+
   <div class="content">
     {#if isLoading}
       <div class="loading">
@@ -1004,6 +1067,48 @@
 
   .save-error-close:hover {
     background: var(--color-danger-subtle);
+  }
+
+  /* ── No-PK warning bar ──────────────────────────────────────────────────── */
+
+  .no-pk-warning-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-1) var(--spacing-3);
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 12%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 40%, transparent);
+    font-size: var(--font-size-xs);
+    color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--color-text-primary));
+  }
+
+  .no-pk-warning-bar svg {
+    flex-shrink: 0;
+    color: var(--color-warning, #f59e0b);
+  }
+
+  .no-pk-warning-text {
+    flex: 1;
+    font-family: var(--font-family-ui);
+  }
+
+  .no-pk-warning-btn {
+    flex-shrink: 0;
+    padding: 2px var(--spacing-2);
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 50%, transparent);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    color: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast);
+  }
+
+  .no-pk-warning-btn:hover {
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 20%, transparent);
   }
 
   /* ── Content area ────────────────────────────────────────────────────────── */

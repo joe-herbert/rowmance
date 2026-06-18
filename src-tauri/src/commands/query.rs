@@ -164,25 +164,37 @@ pub async fn query_update_rows(
                     .keys()
                     .map(|col| format!("{} = ?", quote_mysql(col)))
                     .collect();
-                let where_clause: Vec<String> = change
-                    .primary_keys
-                    .keys()
-                    .map(|col| format!("{} = ?", quote_mysql(col)))
-                    .collect();
 
+                // Collect WHERE entries once so iteration order is consistent between
+                // clause generation and binding.
+                let where_pairs: Vec<(&String, &serde_json::Value)> =
+                    change.primary_keys.iter().collect();
+                let mut where_parts: Vec<String> = Vec::new();
+                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                for (col, val) in &where_pairs {
+                    if val.is_null() {
+                        where_parts.push(format!("{} IS NULL", quote_mysql(col)));
+                    } else {
+                        where_parts.push(format!("{} = ?", quote_mysql(col)));
+                        where_bind.push(val);
+                    }
+                }
+
+                // LIMIT 1 guards against accidentally updating multiple rows on
+                // tables without a primary key (all-column WHERE match).
                 let sql = format!(
-                    "UPDATE {}.{} SET {} WHERE {}",
+                    "UPDATE {}.{} SET {} WHERE {} LIMIT 1",
                     quote_mysql(&database),
                     quote_mysql(&table),
                     set_clause.join(", "),
-                    where_clause.join(" AND ")
+                    where_parts.join(" AND ")
                 );
 
                 let mut q = sqlx::query(&sql);
                 for val in change.changes.values() {
                     q = bind_mysql_value(q, val);
                 }
-                for val in change.primary_keys.values() {
+                for val in where_bind {
                     q = bind_mysql_value(q, val);
                 }
 
@@ -210,29 +222,34 @@ pub async fn query_update_rows(
                         s
                     })
                     .collect();
-                let where_clause: Vec<String> = change
-                    .primary_keys
-                    .keys()
-                    .map(|col| {
-                        let s = format!("{} = ${}", quote_postgres(col), param_idx);
+
+                let where_pairs: Vec<(&String, &serde_json::Value)> =
+                    change.primary_keys.iter().collect();
+                let mut where_parts: Vec<String> = Vec::new();
+                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                for (col, val) in &where_pairs {
+                    if val.is_null() {
+                        where_parts.push(format!("{} IS NULL", quote_postgres(col)));
+                    } else {
+                        where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx));
                         param_idx += 1;
-                        s
-                    })
-                    .collect();
+                        where_bind.push(val);
+                    }
+                }
 
                 let sql = format!(
                     "UPDATE {}.{} SET {} WHERE {}",
                     quote_postgres(&database),
                     quote_postgres(&table),
                     set_clause.join(", "),
-                    where_clause.join(" AND ")
+                    where_parts.join(" AND ")
                 );
 
                 let mut q = sqlx::query(&sql);
                 for val in change.changes.values() {
                     q = bind_pg_value(q, val);
                 }
-                for val in change.primary_keys.values() {
+                for val in where_bind {
                     q = bind_pg_value(q, val);
                 }
 
