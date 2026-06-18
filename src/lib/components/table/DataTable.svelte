@@ -4,7 +4,7 @@
   inline cell editing with pending-change tracking.
 -->
 <script lang="ts">
-  import { untrack, onMount } from 'svelte';
+  import { untrack, onMount, tick } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
   import { portal } from '$lib/actions/portal';
   import CellEditor from './CellEditor.svelte';
@@ -211,13 +211,144 @@
 
   // ── Column widths ─────────────────────────────────────────────────────────
 
+  function computeDefaultColWidths(cols: ColumnMeta[], dataRows: CellValue[][], container: HTMLElement): number[] {
+    type FontStyle = { fontFamily: string; fontSize: string; fontWeight: string; fontStyle: string; letterSpacing: string };
+
+    function getElFontStyle(selector: string): FontStyle | null {
+      const el = container.querySelector<HTMLElement>(selector);
+      if (!el) return null;
+      const s = getComputedStyle(el);
+      return { fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight, fontStyle: s.fontStyle, letterSpacing: s.letterSpacing };
+    }
+
+    function applyFont(span: HTMLSpanElement, fs: FontStyle): void {
+      span.style.fontFamily = fs.fontFamily;
+      span.style.fontSize = fs.fontSize;
+      span.style.fontWeight = fs.fontWeight;
+      span.style.fontStyle = fs.fontStyle;
+      span.style.letterSpacing = fs.letterSpacing;
+    }
+
+    const nameStyle = getElFontStyle('.header-name');
+    const typeStyle = getElFontStyle('.header-type');
+    const textCellStyle = getElFontStyle('.data-cell:not(.cell-number):not(.cell-timestamp) .cell-content');
+    const numCellStyle = getElFontStyle('.cell-number .cell-content');
+    const tsCellStyle = getElFontStyle('.cell-timestamp .cell-content');
+
+    const colCellStyles = cols.map(col => {
+      const cat = getDataTypeCategory(col.dataType);
+      return cat === 'number' ? numCellStyle : cat === 'timestamp' ? tsCellStyle : textCellStyle;
+    });
+
+    // Build all measurement spans in one batch, read widths after a single layout pass
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:-9999px;top:-9999px;pointer-events:none;';
+    document.body.appendChild(probe);
+
+    type Entry = { span: HTMLSpanElement; col: number; kind: 'name' | 'type' | 'cell' };
+    const entries: Entry[] = [];
+
+    function addSpan(text: string, fs: FontStyle | null, col: number, kind: 'name' | 'type' | 'cell'): void {
+      const span = document.createElement('span');
+      span.style.whiteSpace = 'nowrap';
+      if (fs) applyFont(span, fs);
+      span.textContent = text;
+      probe.appendChild(span);
+      entries.push({ span, col, kind });
+    }
+
+    cols.forEach((col, i) => {
+      addSpan(col.name, nameStyle, i, 'name');
+      if (col.dataType) addSpan(col.dataType, typeStyle, i, 'type');
+    });
+
+    for (const row of dataRows) {
+      for (let i = 0; i < cols.length; i++) {
+        const val = row[i];
+        if (val != null) addSpan(String(val), colCellStyles[i], i, 'cell');
+      }
+    }
+
+    // Single layout pass: first getBoundingClientRect triggers layout for all
+    const nameWidths = new Float64Array(cols.length);
+    const typeWidths = new Float64Array(cols.length);
+    const maxCellWidths = new Float64Array(cols.length);
+
+    for (const { span, col, kind } of entries) {
+      const w = span.getBoundingClientRect().width;
+      if (kind === 'name') nameWidths[col] = w;
+      else if (kind === 'type') typeWidths[col] = w;
+      else if (w > maxCellWidths[col]) maxCellWidths[col] = w;
+    }
+
+    document.body.removeChild(probe);
+
+    // Measure actual overhead from rendered elements rather than hardcoding
+    let cellOverhead = 24;
+    const dataCellEl = container.querySelector<HTMLElement>('.data-cell');
+    if (dataCellEl) {
+      const s = getComputedStyle(dataCellEl);
+      cellOverhead = parseFloat(s.paddingLeft) + parseFloat(s.paddingRight);
+    }
+
+    // Measure base overhead from any header cell (cell width minus label width)
+    // and separately measure the extra overhead a PK icon adds, by comparing
+    // a PK header cell directly against a non-PK one.
+    const allHeaderCells = Array.from(container.querySelectorAll<HTMLElement>('.header-cell'));
+    const pkHeaderCell = allHeaderCells.find(el => el.querySelector('.pk-icon')) ?? null;
+    const nonPkHeaderCell = allHeaderCells.find(el => !el.querySelector('.pk-icon')) ?? null;
+
+    function headerOverheadOf(cell: HTMLElement | null): number {
+      if (!cell) return 30;
+      const label = cell.querySelector<HTMLElement>('.header-label');
+      if (!label) return 30;
+      return cell.getBoundingClientRect().width - label.getBoundingClientRect().width;
+    }
+
+    const headerBaseOverhead = headerOverheadOf(nonPkHeaderCell ?? pkHeaderCell);
+    const pkHeaderOverhead = pkHeaderCell ? headerOverheadOf(pkHeaderCell) : headerBaseOverhead;
+    const pkIconOverhead = pkHeaderOverhead - headerBaseOverhead;
+
+    return cols.map((col, i) => {
+      // ceil individual measurements so fractional pixels don't trigger ellipsis
+      const nameW = Math.ceil(nameWidths[i]);
+      const typeW = col.dataType ? Math.ceil(typeWidths[i]) + 4 : 0;
+      const pkExtra = col.isPrimaryKey ? pkIconOverhead : 0;
+      const headerWidth = Math.ceil(nameW + typeW + headerBaseOverhead + pkExtra);
+      const contentWidth = Math.ceil(maxCellWidths[i] + cellOverhead);
+      return Math.min(Math.max(contentWidth, headerWidth), 300);
+    });
+  }
+
   let colWidths = $state<number[]>(untrack(() => columns.map(() => 120)));
 
   $effect(() => {
-    const len = columns.length;
-    if (colWidths.length !== len) {
-      colWidths = columns.map(() => 120);
+    const cols = columns;
+    const dataRows = rows;
+    if (colWidths.length !== cols.length) {
+      tick().then(() => {
+        if (tableContainerEl) colWidths = computeDefaultColWidths(cols, dataRows, tableContainerEl);
+      });
     }
+  });
+
+  onMount(async () => {
+    if (!tableContainerEl) return;
+    colWidths = computeDefaultColWidths(columns, rows, tableContainerEl);
+
+    await tick();
+
+    // Verify: if any header label is still overflowing after the computed widths are applied,
+    // expand that column by exactly the overflow amount. This catches any subpixel or
+    // font-rendering gap between probe measurements and actual browser layout.
+    const headerCells = tableContainerEl.querySelectorAll<HTMLElement>('.header-cell');
+    headerCells.forEach((cell, domIndex) => {
+      const label = cell.querySelector<HTMLElement>('.header-label');
+      if (!label || label.scrollWidth <= label.clientWidth) return;
+      const origIdx = visibleColumns[domIndex]?.originalIndex ?? -1;
+      if (origIdx < 0) return;
+      colWidths[origIdx] = Math.min(colWidths[origIdx] + (label.scrollWidth - label.clientWidth) + 1, 300);
+    });
   });
 
   let resizingColIndex = $state<number | null>(null);
@@ -814,8 +945,10 @@
                     <path d="M16 17l2-2"></path>
                   </svg>
                 {/if}
-                <span class="header-name">{col.name}</span>
-                <span class="header-type">{col.dataType}</span>
+                <span class="header-label">
+                  <span class="header-name">{col.name}</span>
+                  <span class="header-type">{col.dataType}</span>
+                </span>
                 {#if isSorted && sortDir !== 'none'}
                   <span class="sort-indicator" aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}>
                     {sortDir === 'asc' ? '▲' : '▼'}
@@ -1144,13 +1277,17 @@
     flex-shrink: 0;
   }
 
-  .header-name {
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-secondary);
-    flex-shrink: 1;
+  .header-label {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .header-name {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
   }
 
   .header-type {
@@ -1158,10 +1295,7 @@
     font-size: 9.5px;
     color: var(--color-text-muted);
     font-weight: var(--font-weight-normal);
-    flex-shrink: 2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    margin-left: 4px;
   }
 
   .sort-indicator {
