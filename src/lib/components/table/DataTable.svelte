@@ -901,24 +901,28 @@
                   onCellSelect?.(originalIndex, row);
                 }}
               >
-                {#if cellValue === null}
-                  <span class="null-value">NULL</span>
-                {:else if cellValue === ''}
-                  <span class="empty-value">EMPTY</span>
-                {:else if typeof cellValue === 'boolean'}
-                  <span
-                    class="bool-value"
-                    class:bool-true={cellValue}
-                    class:bool-false={!cellValue}
-                  >
-                    {cellValue ? '✓' : '✗'}
+                <div class="cell-inner">
+                  <span class="cell-content">
+                    {#if cellValue === null}
+                      <span class="null-value">NULL</span>
+                    {:else if cellValue === ''}
+                      <span class="empty-value">EMPTY</span>
+                    {:else if typeof cellValue === 'boolean'}
+                      <span
+                        class="bool-value"
+                        class:bool-true={cellValue}
+                        class:bool-false={!cellValue}
+                      >
+                        {cellValue ? '✓' : '✗'}
+                      </span>
+                    {:else}
+                      {formatCell(cellValue)}
+                    {/if}
                   </span>
-                {:else}
-                  {formatCell(cellValue)}
-                {/if}
-                {#if isPending}
-                  <span class="cell-dirty-dot" aria-label="Unsaved change"></span>
-                {/if}
+                  {#if isPending}
+                    <span class="cell-dirty-dot" aria-label="Unsaved change"></span>
+                  {/if}
+                </div>
               </td>
             {/each}
           </tr>
@@ -1256,13 +1260,25 @@
     padding: 0 12px;
     height: 38px;
     border-bottom: 1px solid var(--color-border);
-    white-space: pre;
-    overflow: hidden;
-    text-overflow: ellipsis;
     font-size: 12.5px;
     vertical-align: middle;
     box-sizing: border-box;
     max-width: 0;
+    overflow: hidden;
+  }
+
+  .cell-inner {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    height: 100%;
+  }
+
+  .cell-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+    min-width: 0;
   }
 
   .data-cell.cell-number {
@@ -1299,14 +1315,13 @@
   }
 
   .cell-dirty-dot {
+    flex-shrink: 0;
     display: inline-block;
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: var(--color-accent);
-    flex-shrink: 0;
-    margin-left: 6px;
-    vertical-align: middle;
+    margin-left: 5px;
   }
 
   .null-value {
