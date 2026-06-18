@@ -127,7 +127,7 @@
     onChangePending,
     onCellSelect,
     onDeselect,
-    onAddRow: _onAddRow,
+    onAddRow,
     addRowTrigger = 0,
     onPageInfo,
   }: Props = $props();
@@ -1010,7 +1010,7 @@
   }}
 >
 
-  <div class="table-scroll" class:selecting={isDraggingSelection}>
+  <div class="table-scroll" class:selecting={isDraggingSelection} ondblclick={(e) => { if (editable && !readOnly && !(e.target as Element).closest('tr')) onAddRow?.(); }}>
     <table class="data-table">
       <thead>
         <tr class="header-row">

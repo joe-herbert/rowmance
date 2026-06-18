@@ -789,6 +789,7 @@
           editable={!connectionReadOnly}
           {hiddenColumns}
           {addRowTrigger}
+          onAddRow={() => addRowTrigger++}
           onChangePending={handleChangePending}
           onCellSelect={handleCellSelect}
           onDeselect={() => cellSelectionStore.set(null)}
