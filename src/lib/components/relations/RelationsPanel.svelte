@@ -374,6 +374,7 @@
     color: var(--color-danger);
     background: var(--color-danger-subtle);
     border-radius: var(--radius-sm);
+    user-select: text;
   }
 
   .section-header {
@@ -436,6 +437,7 @@
     padding: var(--spacing-2);
     font-size: var(--font-size-xs);
     color: var(--color-danger);
+    user-select: text;
   }
 
   .row-count-hint {

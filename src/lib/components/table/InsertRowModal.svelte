@@ -265,6 +265,7 @@
 
   .error-msg {
     flex: 1;
+    user-select: text;
   }
 
   .error-close {

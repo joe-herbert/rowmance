@@ -1096,6 +1096,7 @@
     flex: 1;
     white-space: pre-wrap;
     word-break: break-word;
+    user-select: text;
   }
 
   .save-error-copy {
@@ -1245,6 +1246,7 @@
     font-family: var(--font-family-mono);
     white-space: pre-wrap;
     word-break: break-word;
+    user-select: text;
   }
 
   /* ── Column picker positioner ────────────────────────────────────────────── */

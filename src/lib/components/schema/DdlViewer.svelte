@@ -268,6 +268,7 @@
     max-width: 300px;
     line-height: var(--line-height-normal);
     word-break: break-word;
+    user-select: text;
   }
 
   .retry-btn {

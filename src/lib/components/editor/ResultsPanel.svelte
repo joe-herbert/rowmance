@@ -301,6 +301,7 @@
     font-family: var(--font-family-mono);
     white-space: pre-wrap;
     word-break: break-word;
+    user-select: text;
   }
 
   .table-wrapper {
