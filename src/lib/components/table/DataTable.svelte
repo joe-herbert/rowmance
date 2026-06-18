@@ -1250,6 +1250,7 @@
               {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
               {@const isPending = hasPendingChange(rowKey, col.name)}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
+              {@const isRequiredEmpty = isPending && cellValue === null && !col.nullable && !col.isAutoIncrement && col.defaultValue == null}
               <td
                 class="data-cell"
                 class:cell-number={typeCategory === 'number'}
@@ -1257,6 +1258,7 @@
                 class:cell-editable={editable && !readOnly}
                 class:cell-selected={isCellInSelection(rowIndex, colIndex)}
                 class:cell-focused={focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
+                class:cell-required-empty={isRequiredEmpty}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
