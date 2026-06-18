@@ -687,6 +687,11 @@ fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::V
             .map(serde_json::Value::String)
             .unwrap_or(serde_json::Value::Null);
     }
+    if let Ok(v) = row.try_get::<Option<serde_json::Value>, _>(idx) {
+        return v
+            .map(|j| serde_json::Value::String(j.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
     serde_json::Value::Null
 }
 
@@ -715,6 +720,11 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
     if let Ok(v) = row.try_get::<Option<String>, _>(idx) {
         return v
             .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<serde_json::Value>, _>(idx) {
+        return v
+            .map(|j| serde_json::Value::String(j.to_string()))
             .unwrap_or(serde_json::Value::Null);
     }
     serde_json::Value::Null
