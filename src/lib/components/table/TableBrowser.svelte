@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { executeQuery, updateRows } from '$lib/tauri/query';
+  import { executeQuery, updateRows, insertRow } from '$lib/tauri/query';
   import type { RowChange } from '$lib/tauri/query';
   import { listColumns } from '$lib/tauri/schema';
   import { useConnections } from '$lib/stores/connections.svelte';
@@ -96,8 +96,20 @@
       const hasPk = pkColumns.length > 0;
 
       const rowChanges: RowChange[] = [];
+      const insertValues: Record<string, unknown>[] = [];
 
       for (const [rowKey, colMap] of pendingChanges) {
+        if (rowKey.startsWith('__new__')) {
+          const vals: Record<string, unknown> = Object.fromEntries(colMap);
+          for (const col of result.columns) {
+            if (col.name in vals) continue;
+            if (col.isAutoIncrement) continue;
+            if (col.nullable && col.defaultValue == null) vals[col.name] = null;
+          }
+          if (Object.keys(vals).length > 0) insertValues.push(vals);
+          continue;
+        }
+
         const primaryKeys: Record<string, unknown> = {};
 
         if (hasPk) {
@@ -127,6 +139,9 @@
       }
 
       await updateRows(connectionId, database, table, rowChanges);
+      for (const values of insertValues) {
+        await insertRow(connectionId, database, table, values);
+      }
       pendingChanges = new Map();
       tableKey++;
       await load();
@@ -188,13 +203,18 @@
         result = null;
       } else {
         if (schemaColumns.length > 0) {
-          const pkSet = new Set(schemaColumns.filter((c) => c.isPrimaryKey).map((c) => c.name));
-          const fkSet = new Set(schemaColumns.filter((c) => c.isForeignKey).map((c) => c.name));
-          queryResult.columns = queryResult.columns.map((col) => ({
-            ...col,
-            isPrimaryKey: pkSet.has(col.name),
-            isForeignKey: fkSet.has(col.name),
-          }));
+          const schemaMap = new Map(schemaColumns.map((c) => [c.name, c]));
+          queryResult.columns = queryResult.columns.map((col) => {
+            const s = schemaMap.get(col.name);
+            return {
+              ...col,
+              nullable: s ? s.nullable : col.nullable,
+              isPrimaryKey: s?.isPrimaryKey ?? false,
+              isForeignKey: s?.isForeignKey ?? false,
+              defaultValue: s?.defaultValue ?? null,
+              isAutoIncrement: s?.isAutoIncrement ?? false,
+            };
+          });
         }
         result = queryResult;
         lastQueryMs = Math.round(performance.now() - t0);
@@ -234,6 +254,7 @@
     hiddenColumns = new Set();
     showColumnPicker = false;
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
+    untrack(() => { tableKey++; });
     load();
   });
 
@@ -272,6 +293,7 @@
   let showCsvImport = $state(false);
   let showSqlImport = $state(false);
   let importSource = $state<'file' | 'clipboard'>('file');
+  let addRowTrigger = $state(0);
 
   const EXPORT_FORMATS: { label: string; format: ExportFormat; needsTableName: boolean }[] = [
     { label: 'CSV', format: 'csv', needsTableName: false },
@@ -555,6 +577,18 @@
       </button>
     {/if}
 
+    <!-- Insert row button -->
+    {#if result !== null && !connectionReadOnly}
+      <button
+        class="refresh-button"
+        onclick={() => addRowTrigger++}
+        title="Insert new row"
+        aria-label="Insert new row"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    {/if}
+
     <!-- Export dropdown -->
     {#if result !== null}
       <div class="export-dropdown">
@@ -754,6 +788,7 @@
           bind:pageIndex={dtPageIndex}
           editable={!connectionReadOnly}
           {hiddenColumns}
+          {addRowTrigger}
           onChangePending={handleChangePending}
           onCellSelect={handleCellSelect}
           onDeselect={() => cellSelectionStore.set(null)}

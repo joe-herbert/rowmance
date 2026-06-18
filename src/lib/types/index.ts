@@ -87,6 +87,8 @@ export interface ColumnMeta {
   nullable: boolean;
   isPrimaryKey: boolean;
   isForeignKey: boolean;
+  defaultValue?: string | null;
+  isAutoIncrement?: boolean;
 }
 
 /** A single query result set returned from the backend. */

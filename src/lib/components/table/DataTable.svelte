@@ -35,6 +35,7 @@
     onCellSelect?: (_originalColIndex: number, _row: CellValue[]) => void;
     onDeselect?: () => void;
     onAddRow?: () => void;
+    addRowTrigger?: number;
     onPageInfo?: (_info: PageInfo) => void;
   }
 
@@ -127,6 +128,7 @@
     onCellSelect,
     onDeselect,
     onAddRow: _onAddRow,
+    addRowTrigger = 0,
     onPageInfo,
   }: Props = $props();
 
@@ -413,6 +415,57 @@
   // build all-columns WHERE clauses for tables without a primary key.
   let originalRows = $state<Map<string, CellValue[]>>(new Map());
 
+  let pendingNewRows = $state<{ key: string }[]>([]);
+  let nextNewRowId = 0;
+
+  $effect(() => {
+    const trigger = addRowTrigger;
+    if (trigger === 0) return;
+
+    untrack(() => {
+      const id = nextNewRowId++;
+      const key = `__new__${id}`;
+      pendingNewRows = [...pendingNewRows, { key }];
+
+      const updated = new Map(pendingChanges);
+      updated.set(key, new Map());
+      pendingChanges = updated;
+      onChangePending?.(pendingChanges, originalRows);
+
+      tick().then(() => {
+        if (!tableContainerEl) return;
+        const scrollEl = tableContainerEl.querySelector('.table-scroll') as HTMLElement | null;
+        if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+
+        const firstVisCol = visibleColumns[0];
+        if (!firstVisCol) return;
+
+        const newRowEl = tableContainerEl.querySelector(`[data-new-row-key="${key}"]`);
+        if (!newRowEl) return;
+        const firstTd = newRowEl.querySelectorAll('.data-cell')[0] as HTMLTableCellElement | undefined;
+        if (!firstTd) return;
+
+        const containerRect = tableContainerEl.getBoundingClientRect();
+        const tdRect = firstTd.getBoundingClientRect();
+
+        focusedCell = null;
+        editTarget = {
+          rowKey: key,
+          colName: firstVisCol.col.name,
+          colIndex: firstVisCol.originalIndex,
+          value: null,
+          originalValue: null,
+          dataType: firstVisCol.col.dataType,
+          top: tdRect.top - containerRect.top,
+          left: tdRect.left - containerRect.left,
+          width: Math.max(tdRect.width, 160),
+          height: tdRect.height,
+          containerHeight: containerRect.height,
+        };
+      });
+    });
+  });
+
   function getPendingValue(
     rowKey: string,
     colName: string,
@@ -539,29 +592,35 @@
   function confirmEdit(newValue: CellValue): void {
     if (!editTarget) return;
     const { rowKey, colName, originalValue } = editTarget;
+    const isNewRow = rowKey.startsWith('__new__');
 
     const updated = new Map(pendingChanges);
 
-    if (cellValuesEqual(newValue, originalValue)) {
-      const rowMap = updated.get(rowKey);
-      if (rowMap) {
-        rowMap.delete(colName);
-        if (rowMap.size === 0) {
-          updated.delete(rowKey);
-          const nextOrig = new Map(originalRows);
-          nextOrig.delete(rowKey);
-          originalRows = nextOrig;
-        }
-      }
-    } else {
+    if (isNewRow) {
       if (!updated.has(rowKey)) updated.set(rowKey, new Map());
       updated.get(rowKey)!.set(colName, newValue);
+    } else {
+      if (cellValuesEqual(newValue, originalValue)) {
+        const rowMap = updated.get(rowKey);
+        if (rowMap) {
+          rowMap.delete(colName);
+          if (rowMap.size === 0) {
+            updated.delete(rowKey);
+            const nextOrig = new Map(originalRows);
+            nextOrig.delete(rowKey);
+            originalRows = nextOrig;
+          }
+        }
+      } else {
+        if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+        updated.get(rowKey)!.set(colName, newValue);
+      }
     }
 
     pendingChanges = updated;
     onChangePending?.(pendingChanges, originalRows);
     editTarget = null;
-    refocusCell();
+    if (!isNewRow) refocusCell();
   }
 
   function cancelEdit(): void {
@@ -572,26 +631,32 @@
   function confirmModalEdit(newValue: CellValue): void {
     if (!modalTarget) return;
     const { rowKey, colName, originalValue } = modalTarget;
+    const isNewRow = rowKey.startsWith('__new__');
     const updated = new Map(pendingChanges);
-    if (cellValuesEqual(newValue, originalValue)) {
-      const rowMap = updated.get(rowKey);
-      if (rowMap) {
-        rowMap.delete(colName);
-        if (rowMap.size === 0) {
-          updated.delete(rowKey);
-          const nextOrig = new Map(originalRows);
-          nextOrig.delete(rowKey);
-          originalRows = nextOrig;
-        }
-      }
-    } else {
+    if (isNewRow) {
       if (!updated.has(rowKey)) updated.set(rowKey, new Map());
       updated.get(rowKey)!.set(colName, newValue);
+    } else {
+      if (cellValuesEqual(newValue, originalValue)) {
+        const rowMap = updated.get(rowKey);
+        if (rowMap) {
+          rowMap.delete(colName);
+          if (rowMap.size === 0) {
+            updated.delete(rowKey);
+            const nextOrig = new Map(originalRows);
+            nextOrig.delete(rowKey);
+            originalRows = nextOrig;
+          }
+        }
+      } else {
+        if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+        updated.get(rowKey)!.set(colName, newValue);
+      }
     }
     pendingChanges = updated;
     onChangePending?.(pendingChanges, originalRows);
     modalTarget = null;
-    refocusCell();
+    if (!isNewRow) refocusCell();
   }
 
   function cancelModalEdit(): void {
@@ -786,6 +851,7 @@
     rowKey: string;
     row: CellValue[];
     colName: string | null;
+    isNewRow?: boolean;
   }
 
   let contextMenu = $state<ContextMenu | null>(null);
@@ -846,6 +912,43 @@
       dataType: col.dataType,
       top: 0, left: 0, width: 0, height: 0, containerHeight: 0,
     };
+    dismissContextMenu();
+  }
+
+  function handleNewRowCellDblClick(
+    e: MouseEvent,
+    newRowKey: string,
+    currentValue: CellValue,
+    col: ColumnMeta,
+    originalColIndex: number,
+  ): void {
+    if (!editable || readOnly) return;
+    const td = e.currentTarget as HTMLTableCellElement;
+    const containerRect = tableContainerEl!.getBoundingClientRect();
+    const tdRect = td.getBoundingClientRect();
+
+    focusedCell = null;
+    editTarget = {
+      rowKey: newRowKey,
+      colName: col.name,
+      colIndex: originalColIndex,
+      value: currentValue,
+      originalValue: currentValue,
+      dataType: col.dataType,
+      top: tdRect.top - containerRect.top,
+      left: tdRect.left - containerRect.left,
+      width: Math.max(tdRect.width, 160),
+      height: tdRect.height,
+      containerHeight: containerRect.height,
+    };
+  }
+
+  function deleteNewRow(key: string): void {
+    pendingNewRows = pendingNewRows.filter((r) => r.key !== key);
+    const updated = new Map(pendingChanges);
+    updated.delete(key);
+    pendingChanges = updated;
+    onChangePending?.(pendingChanges, originalRows);
     dismissContextMenu();
   }
 
@@ -1061,6 +1164,48 @@
           </tr>
         {/each}
 
+        {#each pendingNewRows as newRow}
+          <tr class="data-row new-row" data-new-row-key={newRow.key}>
+            <td class="rownum-cell">
+              <span class="new-row-indicator" aria-label="New row">+</span>
+            </td>
+            {#each visibleColumns as { col, originalIndex }}
+              {@const isExplicitlySet = pendingChanges.get(newRow.key)?.has(col.name) ?? false}
+              {@const currentValue = pendingChanges.get(newRow.key)?.get(col.name) ?? null}
+              {@const isRequiredEmpty = !col.nullable && !col.isAutoIncrement && col.defaultValue == null && !isExplicitlySet}
+              {@const typeCategory = getDataTypeCategory(col.dataType)}
+              <td
+                class="data-cell"
+                class:cell-number={typeCategory === 'number'}
+                class:cell-timestamp={typeCategory === 'timestamp'}
+                class:cell-editable={editable && !readOnly}
+                class:cell-required-empty={isRequiredEmpty}
+                style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
+                tabindex="0"
+                ondblclick={(e) => handleNewRowCellDblClick(e, newRow.key, currentValue, col, originalIndex)}
+                oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: col.name, isNewRow: true }; }}
+                onfocus={() => { focusedCell = null; }}
+              >
+                <div class="cell-inner">
+                  <span class="cell-content">
+                    {#if currentValue === null}
+                      <span class="null-value">NULL</span>
+                    {:else if currentValue === ''}
+                      <span class="empty-value">EMPTY</span>
+                    {:else if typeCategory === 'boolean' && (typeof currentValue === 'boolean' || typeof currentValue === 'number')}
+                      <span class="bool-value" class:bool-true={currentValue} class:bool-false={!currentValue}>
+                        {currentValue ? '✓' : '✗'}
+                      </span>
+                    {:else}
+                      {formatCell(currentValue)}
+                    {/if}
+                  </span>
+                </div>
+              </td>
+            {/each}
+          </tr>
+        {/each}
+
         {#if processedRows.length === 0}
           <tr>
             <td class="empty-cell" colspan={visibleColumns.length + 1}>
@@ -1083,42 +1228,52 @@
       onkeydown={handleContextMenuKeydown}
       use:portal
     >
-      {#if contextMenu.colName && editable && !readOnly}
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => openModalFromContextMenu()}
-        >
-          Edit in modal
-        </button>
-        <div class="context-menu-separator"></div>
-      {/if}
-      {#if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
+      {#if contextMenu.isNewRow}
         <button
           class="context-menu-item context-menu-item-danger"
           role="menuitem"
-          onclick={() => discardCellEdit()}
+          onclick={() => deleteNewRow(contextMenu!.rowKey)}
         >
-          Discard edit
-        </button>
-        <div class="context-menu-separator"></div>
-      {/if}
-      {#if selectedRowKeys.size > 1}
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copySelectedRowsTabSeparated()}
-        >
-          Copy {selectedRowKeys.size} selected rows (tab-separated)
+          Delete new row
         </button>
       {:else}
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copyRowTabSeparated(contextMenu!.row)}
-        >
-          Copy row (tab-separated)
-        </button>
+        {#if contextMenu.colName && editable && !readOnly}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => openModalFromContextMenu()}
+          >
+            Edit in modal
+          </button>
+          <div class="context-menu-separator"></div>
+        {/if}
+        {#if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
+          <button
+            class="context-menu-item context-menu-item-danger"
+            role="menuitem"
+            onclick={() => discardCellEdit()}
+          >
+            Discard edit
+          </button>
+          <div class="context-menu-separator"></div>
+        {/if}
+        {#if selectedRowKeys.size > 1}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => copySelectedRowsTabSeparated()}
+          >
+            Copy {selectedRowKeys.size} selected rows (tab-separated)
+          </button>
+        {:else}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => copyRowTabSeparated(contextMenu!.row)}
+          >
+            Copy row (tab-separated)
+          </button>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -1535,5 +1690,27 @@
     height: 1px;
     background: var(--color-border);
     margin: var(--spacing-1) 0;
+  }
+
+  /* ── New row (pending insert) ───────────────────────────────────────────── */
+
+  .new-row {
+    background: color-mix(in srgb, var(--color-success, #22c55e) 5%, transparent);
+  }
+
+  .new-row:hover {
+    background: color-mix(in srgb, var(--color-success, #22c55e) 10%, transparent);
+  }
+
+  .new-row-indicator {
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-success, #22c55e);
+    user-select: none;
+  }
+
+  .cell-required-empty {
+    background: color-mix(in srgb, var(--color-danger, #ef4444) 12%, transparent);
+    box-shadow: inset 2px 0 0 var(--color-danger, #ef4444);
   }
 </style>

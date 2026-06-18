@@ -41,6 +41,15 @@ export async function updateRows(
   return invoke<UpdateResult>('query_update_rows', { connectionId, database, table, changes });
 }
 
+export async function insertRow(
+  connectionId: string,
+  database: string,
+  table: string,
+  values: Record<string, unknown>,
+): Promise<void> {
+  return invoke<void>('query_insert_row', { connectionId, database, table, values });
+}
+
 export async function explainQuery(connectionId: string, sql: string): Promise<ExplainResult> {
   return invoke<ExplainResult>('query_explain', { connectionId, sql });
 }

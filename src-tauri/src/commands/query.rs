@@ -267,6 +267,91 @@ pub async fn query_update_rows(
     })
 }
 
+/// Insert a new row into a table.
+#[tauri::command]
+pub async fn query_insert_row(
+    sqlite: State<'_, sqlx::SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+    table: String,
+    values: std::collections::HashMap<String, serde_json::Value>,
+) -> Result<(), AppError> {
+    let profile_row = sqlx::query!(
+        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    match &profile_row {
+        Some(row) if row.read_only != 0 => {
+            return Err(AppError::new(
+                "READ_ONLY_VIOLATION",
+                "This connection is in read-only mode — mutating statements are not allowed",
+            ));
+        }
+        None => {
+            return Err(AppError::new(
+                "CONNECTION_NOT_FOUND",
+                format!("No connection with id {connection_id}"),
+            ));
+        }
+        _ => {}
+    }
+
+    if values.is_empty() {
+        return Err(AppError::new("INVALID_INPUT", "No values provided for insert"));
+    }
+
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+
+    // Collect columns and values in a stable order.
+    let cols: Vec<(&String, &serde_json::Value)> = values.iter().collect();
+
+    match pool_ref.value() {
+        RemotePool::MySql(pool) => {
+            let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_mysql(c)).collect();
+            let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+            let sql = format!(
+                "INSERT INTO {}.{} ({}) VALUES ({})",
+                quote_mysql(&database),
+                quote_mysql(&table),
+                col_list.join(", "),
+                placeholders.join(", ")
+            );
+            let mut q = sqlx::query(&sql);
+            for (_, val) in &cols {
+                q = bind_mysql_value(q, val);
+            }
+            q.execute(pool)
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        }
+        RemotePool::Postgres(pool) => {
+            let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_postgres(c)).collect();
+            let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
+            let sql = format!(
+                "INSERT INTO {}.{} ({}) VALUES ({})",
+                quote_postgres(&database),
+                quote_postgres(&table),
+                col_list.join(", "),
+                placeholders.join(", ")
+            );
+            let mut q = sqlx::query(&sql);
+            for (_, val) in &cols {
+                q = bind_pg_value(q, val);
+            }
+            q.execute(pool)
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Enforce read-only mode by checking the leading SQL keyword.
 fn is_mutating_statement(sql: &str) -> bool {
     let keyword = sql.split_whitespace().next().unwrap_or("").to_uppercase();
