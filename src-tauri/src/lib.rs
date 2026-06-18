@@ -11,7 +11,7 @@ mod lib_sql;
 use connections::pool_manager::ConnectionManager;
 use connections::ssh_tunnel::SshTunnelManager;
 use tauri::{Emitter, Manager};
-use tauri::menu::{Menu, MenuItem, Submenu};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,7 +23,16 @@ pub fn run() {
         .setup(|app| {
             let settings_item = MenuItem::with_id(app, "settings", "Settings", true, Some("cmd+,"))?;
             let app_submenu = Submenu::with_items(app, "Rowmance", true, &[&settings_item])?;
-            let menu = Menu::with_items(app, &[&app_submenu])?;
+            let edit_submenu = Submenu::with_items(app, "Edit", true, &[
+                &PredefinedMenuItem::undo(app, None)?,
+                &PredefinedMenuItem::redo(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::cut(app, None)?,
+                &PredefinedMenuItem::copy(app, None)?,
+                &PredefinedMenuItem::paste(app, None)?,
+                &PredefinedMenuItem::select_all(app, None)?,
+            ])?;
+            let menu = Menu::with_items(app, &[&app_submenu, &edit_submenu])?;
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
                 if event.id() == "settings" {
