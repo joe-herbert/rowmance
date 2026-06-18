@@ -497,6 +497,19 @@
   // ── Keyboard cell navigation ──────────────────────────────────────────────
 
   let focusedCell = $state<{ row: number; col: number } | null>(null);
+  let anchorCell = $state<{ row: number; col: number } | null>(null);
+  let isDraggingSelection = $state(false);
+  // Non-reactive flag: prevents onfocus from resetting anchor during programmatic focus
+  let skipNextFocusReset = false;
+
+  function isCellInSelection(row: number, col: number): boolean {
+    if (!anchorCell || !focusedCell) return false;
+    const minRow = Math.min(anchorCell.row, focusedCell.row);
+    const maxRow = Math.max(anchorCell.row, focusedCell.row);
+    const minCol = Math.min(anchorCell.col, focusedCell.col);
+    const maxCol = Math.max(anchorCell.col, focusedCell.col);
+    return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
+  }
 
   function handleTableKeydown(e: KeyboardEvent): void {
     if (editTarget !== null) return;
@@ -513,13 +526,17 @@
 
     if (!focusedCell) {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        focusedCell = { row: 0, col: 0 };
-        scrollFocusedCellIntoView(focusedCell);
+        const newCell = { row: 0, col: 0 };
+        anchorCell = newCell;
+        focusedCell = newCell;
+        skipNextFocusReset = true;
+        scrollFocusedCellIntoView(newCell);
       }
       return;
     }
 
     let { row, col } = focusedCell;
+    const isArrow = ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(e.key);
 
     if (e.key === 'ArrowDown') {
       row = Math.min(row + 1, rowCount - 1);
@@ -541,14 +558,23 @@
       return;
     } else if (e.key === 'Escape') {
       cancelEdit();
+      anchorCell = null;
       focusedCell = null;
       return;
     } else {
       return;
     }
 
-    focusedCell = { row, col };
-    scrollFocusedCellIntoView(focusedCell);
+    if (isArrow) {
+      if (e.shiftKey) {
+        if (!anchorCell) anchorCell = focusedCell;
+      } else {
+        anchorCell = { row, col };
+      }
+      focusedCell = { row, col };
+      skipNextFocusReset = true;
+      scrollFocusedCellIntoView(focusedCell);
+    }
   }
 
   function getFocusedCellEl(row: number, col: number): HTMLTableCellElement | null {
@@ -590,6 +616,21 @@
   // ── Row selection ─────────────────────────────────────────────────────────
 
   let selectedRowKeys = $state<Set<string>>(new Set());
+
+  $effect(() => {
+    if (anchorCell && focusedCell) {
+      const minRow = Math.min(anchorCell.row, focusedCell.row);
+      const maxRow = Math.max(anchorCell.row, focusedCell.row);
+      const newKeys = new Set<string>();
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowData = pageRows[r];
+        if (rowData) newKeys.add(buildRowKey(rowData, columns, pageOffset + r));
+      }
+      selectedRowKeys = newKeys;
+    } else {
+      selectedRowKeys = new Set();
+    }
+  });
 
   function toggleRowSelection(rowKey: string): void {
     const next = new Set(selectedRowKeys);
@@ -717,7 +758,7 @@
   }
 </script>
 
-<svelte:window onclick={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} onmouseup={() => { isDraggingSelection = false; }} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -728,13 +769,14 @@
   onkeydown={(e) => { handleContextMenuKeydown(e); handleTableKeydown(e); }}
   onfocusout={(e) => {
     if (!tableContainerEl?.contains(e.relatedTarget as Node | null)) {
+      anchorCell = null;
       focusedCell = null;
-      selectedRowKeys = new Set();
+      isDraggingSelection = false;
     }
   }}
 >
 
-  <div class="table-scroll">
+  <div class="table-scroll" class:selecting={isDraggingSelection}>
     <table class="data-table">
       <thead>
         <tr class="header-row">
@@ -827,14 +869,35 @@
                 class:cell-number={typeCategory === 'number'}
                 class:cell-timestamp={typeCategory === 'timestamp'}
                 class:cell-editable={editable && !readOnly}
+                class:cell-selected={isCellInSelection(rowIndex, colIndex)}
                 class:cell-focused={focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
                 oncontextmenu={(e) => { e.stopPropagation(); handleRowContextMenu(e, row, processedRowIndex, col.name); }}
+                onmousedown={(e) => {
+                  if (e.button !== 0) return;
+                  if (e.shiftKey && focusedCell) {
+                    skipNextFocusReset = true;
+                    focusedCell = { row: rowIndex, col: colIndex };
+                  } else {
+                    skipNextFocusReset = true;
+                    anchorCell = { row: rowIndex, col: colIndex };
+                    focusedCell = { row: rowIndex, col: colIndex };
+                    isDraggingSelection = true;
+                  }
+                }}
+                onmouseenter={() => {
+                  if (isDraggingSelection) focusedCell = { row: rowIndex, col: colIndex };
+                }}
                 onfocus={() => {
+                  if (skipNextFocusReset) {
+                    skipNextFocusReset = false;
+                    onCellSelect?.(originalIndex, row);
+                    return;
+                  }
+                  anchorCell = { row: rowIndex, col: colIndex };
                   focusedCell = { row: rowIndex, col: colIndex };
-                  selectedRowKeys = new Set([rowKey]);
                   onCellSelect?.(originalIndex, row);
                 }}
               >
@@ -1221,8 +1284,18 @@
     outline: none;
   }
 
+  .data-cell.cell-selected {
+    background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  }
+
   .data-cell.cell-focused {
-    background-color: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    background-color: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+    outline-offset: -1px;
+  }
+
+  .table-scroll.selecting {
+    user-select: none;
   }
 
   .cell-dirty-dot {
