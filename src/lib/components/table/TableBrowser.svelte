@@ -83,6 +83,7 @@
   function discardChanges(): void {
     pendingChanges = new Map();
     originalRows = new Map();
+    addRowTrigger = 0;
     tableKey++;
   }
 
@@ -143,6 +144,7 @@
         await insertRow(connectionId, database, table, values);
       }
       pendingChanges = new Map();
+      addRowTrigger = 0;
       tableKey++;
       await load();
       toast.addToast('Changes saved', 'success', 2000);
