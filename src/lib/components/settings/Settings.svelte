@@ -238,6 +238,21 @@
             onchange={(e) => update('historyMaxEntries', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
           />
         </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Click Outside Cell Edit</span>
+            <span class="label-hint">What happens when you click outside an active cell editor</span>
+          </div>
+          <select
+            class="setting-select"
+            value={settings.clickOutsideEdit}
+            onchange={(e) => update('clickOutsideEdit', (e.currentTarget as HTMLSelectElement).value as 'discard' | 'confirm')}
+          >
+            <option value="discard">Discard changes</option>
+            <option value="confirm">Keep changes</option>
+          </select>
+        </div>
       </div>
 
     {:else if activeSection === 'editor'}

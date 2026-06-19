@@ -234,6 +234,7 @@ export interface AppSettings {
   transactionMode: boolean;
   historyMaxEntries: number;
   sidebarFloating: boolean;
+  clickOutsideEdit: 'discard' | 'confirm';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -250,6 +251,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   transactionMode: false,
   historyMaxEntries: 500,
   sidebarFloating: false,
+  clickOutsideEdit: 'discard',
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

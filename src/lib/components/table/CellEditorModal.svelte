@@ -4,6 +4,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { portal } from '$lib/actions/portal';
+  import { useSettings } from '$lib/stores/settings.svelte';
 
   function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'text' {
     const lower = dt.toLowerCase();
@@ -25,6 +26,8 @@
   }
 
   let { value, originalValue, colName, dataType, onConfirm, onCancel }: Props = $props();
+
+  const { settings } = useSettings();
 
   const inputType = $derived(getInputType(dataType));
 
@@ -78,7 +81,12 @@
   }
 
   function handleBackdropPointerDown(e: PointerEvent): void {
-    if (e.target === e.currentTarget) onCancel();
+    if (e.target !== e.currentTarget) return;
+    if (settings.clickOutsideEdit === 'confirm') {
+      confirmEdit();
+    } else {
+      onCancel();
+    }
   }
 
   function boolLabel(v: boolean | null): string {

@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -21,6 +22,8 @@
   }
 
   let { value, originalValue, dataType, top, left, width, height, containerHeight, onConfirm, onCancel }: Props = $props();
+
+  const { settings } = useSettings();
 
   // ── Pure helpers (also exported for tests) ──────────────────────────────────
 
@@ -86,7 +89,11 @@
         cellEditorEl && cellEditorEl.contains(target) ||
         actionsEl && actionsEl.contains(target)
       ) return;
-      onCancel();
+      if (settings.clickOutsideEdit === 'confirm') {
+        confirmEdit();
+      } else {
+        onCancel();
+      }
     }
 
     document.addEventListener('pointerdown', handlePointerDown);
