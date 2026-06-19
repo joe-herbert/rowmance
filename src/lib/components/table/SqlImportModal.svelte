@@ -6,6 +6,7 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import * as importApi from '$lib/tauri/import';
   import Modal from '$lib/components/Modal.svelte';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { errorMessage } from '$lib/utils/errors';
 
@@ -142,7 +143,7 @@
             <label class="option-label" for="stop-on-error">
               Stop on first error
             </label>
-            <input id="stop-on-error" type="checkbox" bind:checked={stopOnError} />
+            <Checkbox id="stop-on-error" bind:checked={stopOnError} />
           </div>
 
           {#if error}

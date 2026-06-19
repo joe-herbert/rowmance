@@ -5,6 +5,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
 
   interface Props {
     columns: ColumnMeta[];
@@ -46,10 +47,9 @@
     {#each columns as col (col.name)}
       {@const hidden = hiddenColumns.has(col.name)}
       <li class="column-row" role="listitem">
-        <label class="column-label">
-          <input
-            class="column-checkbox"
-            type="checkbox"
+        <div class="column-label">
+          <Checkbox
+            size="sm"
             checked={!hidden}
             onchange={() => onToggle(col.name)}
             aria-label="Show {col.name}"
@@ -62,7 +62,7 @@
           {#if col.isForeignKey}
             <span class="badge fk-badge" title="Foreign key">FK</span>
           {/if}
-        </label>
+        </div>
       </li>
     {/each}
   </ul>
@@ -149,14 +149,6 @@
 
   .column-label:hover {
     background: var(--color-bg-hover);
-  }
-
-  .column-checkbox {
-    flex-shrink: 0;
-    width: 14px;
-    height: 14px;
-    accent-color: var(--color-accent);
-    cursor: pointer;
   }
 
   .column-name {

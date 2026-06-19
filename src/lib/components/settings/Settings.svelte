@@ -12,6 +12,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
@@ -234,11 +235,9 @@
             <span class="label-text">Transaction Mode</span>
             <span class="label-hint">Show transaction toolbar in query editor</span>
           </div>
-          <input
-            type="checkbox"
-            class="setting-checkbox"
+          <Checkbox
             checked={settings.transactionMode}
-            onchange={(e) => update('transactionMode', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(c) => update('transactionMode', c)}
           />
         </div>
 
@@ -294,11 +293,9 @@
             <span class="label-text">Line Wrap</span>
             <span class="label-hint">Wrap long lines in the editor</span>
           </div>
-          <input
-            type="checkbox"
-            class="setting-checkbox"
+          <Checkbox
             checked={settings.editorLineWrap}
-            onchange={(e) => update('editorLineWrap', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(c) => update('editorLineWrap', c)}
           />
         </div>
 
@@ -375,11 +372,9 @@
             <span class="label-text">Floating Sidebars</span>
             <span class="label-hint">Sidebars overlay the main content instead of pushing it</span>
           </div>
-          <input
-            type="checkbox"
-            class="setting-checkbox"
+          <Checkbox
             checked={settings.sidebarFloating}
-            onchange={(e) => update('sidebarFloating', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(c) => update('sidebarFloating', c)}
           />
         </div>
       </div>
@@ -581,12 +576,6 @@
     border-color: var(--color-accent);
   }
 
-  .setting-checkbox {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-    accent-color: var(--color-accent);
-  }
 
   .theme-selector-row {
     display: flex;

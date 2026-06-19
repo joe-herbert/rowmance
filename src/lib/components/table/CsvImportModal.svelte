@@ -9,6 +9,7 @@
   import * as importApi from '$lib/tauri/import';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import type { InferredColumn } from '$lib/tauri/import';
   import { errorMessage } from '$lib/utils/errors';
 
@@ -195,7 +196,7 @@
             </div>
             <div class="setting-row setting-row--inline">
               <label class="label" for="import-create">Create new table</label>
-              <input id="import-create" type="checkbox" bind:checked={createTable} />
+              <Checkbox id="import-create" bind:checked={createTable} />
             </div>
           </div>
 

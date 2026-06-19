@@ -14,6 +14,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
 
   interface Props {
     profile?: ConnectionProfile;
@@ -342,7 +343,7 @@
 
         <div class="field field--inline">
           <label for="conn-readonly" class="label">Read-only</label>
-          <input id="conn-readonly" type="checkbox" bind:checked={readOnly} />
+          <Checkbox id="conn-readonly" bind:checked={readOnly} />
         </div>
 
       <!-- SSH tab -->
@@ -352,7 +353,7 @@
         {:else}
         <div class="field field--inline">
           <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
-          <input id="ssh-enabled" type="checkbox" bind:checked={sshEnabled} />
+          <Checkbox id="ssh-enabled" bind:checked={sshEnabled} />
         </div>
 
         {#if sshEnabled}
@@ -416,7 +417,7 @@
         {:else}
         <div class="field field--inline">
           <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
-          <input id="ssl-enabled" type="checkbox" bind:checked={sslEnabled} />
+          <Checkbox id="ssl-enabled" bind:checked={sslEnabled} />
         </div>
 
         {#if sslEnabled}
@@ -462,7 +463,7 @@
 
         <div class="field field--inline">
           <label for="adv-readonly" class="label">Read-only Mode</label>
-          <input id="adv-readonly" type="checkbox" bind:checked={readOnly} />
+          <Checkbox id="adv-readonly" bind:checked={readOnly} />
         </div>
       {/if}
 
