@@ -10,7 +10,7 @@
   import * as themesApi from '$lib/tauri/themes';
   import type { AppSettings, ThemeMeta } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
-  import { portal } from '$lib/utils/portal';
+  import Modal from '$lib/components/Modal.svelte';
   import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
@@ -395,9 +395,7 @@
 </div>
 
 {#if creatingTheme}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label="New theme" tabindex="-1"
-    onclick={(e) => { if (e.target === e.currentTarget) cancelCreateTheme(); }}>
+  <Modal zindex={300} label="New theme" onbackdropclick={cancelCreateTheme}>
     <div class="modal">
       <header class="modal-header">
         <h2 class="modal-title">New Theme</h2>
@@ -447,13 +445,11 @@
         <button class="action-btn action-btn--primary" onclick={confirmCreateTheme} disabled={!newThemeName.trim()}>Create</button>
       </footer>
     </div>
-  </div>
+  </Modal>
 {/if}
 
 {#if confirmingDelete}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label="Delete theme" tabindex="-1"
-    onclick={(e) => { if (e.target === e.currentTarget) confirmingDelete = false; }}>
+  <Modal zindex={300} label="Delete theme" onbackdropclick={() => (confirmingDelete = false)}>
     <div class="modal">
       <header class="modal-header">
         <h2 class="modal-title">Delete Theme</h2>
@@ -467,7 +463,7 @@
         <button class="action-btn action-btn--danger" onclick={deleteTheme}>Delete</button>
       </footer>
     </div>
-  </div>
+  </Modal>
 {/if}
 
 <style>
@@ -679,16 +675,6 @@
   }
 
   /* ── New Theme Modal ─────────────────────────────────────────────────────── */
-
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 300;
-  }
 
   .modal {
     background: var(--color-bg-overlay);

@@ -16,6 +16,7 @@
 
   /* ── Glass effect ───────────────────────────────────────────────────────── */
   --glass-blur: blur(22px) saturate(160%);
+  --modal-backdrop-blur: 4px;
 
   /* ── Colour palette ─────────────────────────────────────────────────────── */
   --color-bg-primary: rgba(255, 255, 255, 0.58);

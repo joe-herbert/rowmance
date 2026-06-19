@@ -3,8 +3,8 @@
 -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { portal } from '$lib/actions/portal';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import Modal from '$lib/components/Modal.svelte';
 
   function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'text' {
     const lower = dt.toLowerCase();
@@ -80,8 +80,7 @@
     }
   }
 
-  function handleBackdropPointerDown(e: PointerEvent): void {
-    if (e.target !== e.currentTarget) return;
+  function handleBackdropClick(): void {
     if (settings.clickOutsideEdit === 'confirm') {
       confirmEdit();
     } else {
@@ -95,19 +94,13 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="modal-backdrop"
-  onpointerdown={handleBackdropPointerDown}
-  onkeydown={handleKeydown}
-  use:portal
->
+<Modal zindex={500} label="Edit {colName}" onbackdropclick={handleBackdropClick}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={modalEl}
     class="modal-dialog"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Edit {colName}"
+    role="presentation"
+    onkeydown={handleKeydown}
   >
     <header class="modal-header">
       <span class="modal-title">{colName}</span>
@@ -170,21 +163,9 @@
       </div>
     </footer>
   </div>
-</div>
+</Modal>
 
 <style>
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 500;
-    background: rgba(0, 0, 0, 0.55);
-    -webkit-backdrop-filter: blur(2px);
-    backdrop-filter: blur(2px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
   .modal-dialog {
     background: var(--color-bg-overlay);
     border: 1px solid var(--color-border-strong);

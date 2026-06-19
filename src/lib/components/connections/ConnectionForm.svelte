@@ -12,7 +12,7 @@
   import * as keychainApi from '$lib/tauri/keychain';
   import type { ConnectionProfile, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
-  import { portal } from '$lib/utils/portal';
+  import Modal from '$lib/components/Modal.svelte';
 
   interface Props {
     profile?: ConnectionProfile;
@@ -206,10 +206,6 @@
     }
   }
 
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) onclose();
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
   }
@@ -233,8 +229,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="backdrop" use:portal role="dialog" aria-modal="true" aria-label={title} tabindex="-1" onclick={handleBackdropClick}>
+<Modal zindex={200} label={title} onbackdropclick={onclose}>
   <div class="dialog">
     <header class="dialog-header">
       <h2 class="dialog-title">{title}</h2>
@@ -511,19 +506,9 @@
       </div>
     </form>
   </div>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 200;
-  }
-
   .dialog {
     background: var(--color-bg-overlay);
     border-radius: var(--radius-lg);

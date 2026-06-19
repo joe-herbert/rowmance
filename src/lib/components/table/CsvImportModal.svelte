@@ -7,6 +7,7 @@
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import { onMount } from 'svelte';
   import * as importApi from '$lib/tauri/import';
+  import Modal from '$lib/components/Modal.svelte';
   import type { InferredColumn } from '$lib/tauri/import';
   import { errorMessage } from '$lib/utils/errors';
 
@@ -138,10 +139,6 @@
     }
   }
 
-  function handleBackdrop(e: MouseEvent) {
-    if (e.target === e.currentTarget) onclose();
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
   }
@@ -149,8 +146,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="backdrop" role="dialog" aria-modal="true" aria-label="Import CSV" tabindex="-1" onclick={handleBackdrop}>
+<Modal zindex={300} label="Import CSV" onbackdropclick={onclose}>
   <div class="modal">
     <header class="modal-header">
       <h2 class="modal-title">Import CSV</h2>
@@ -277,19 +273,9 @@
       {/if}
     </footer>
   </div>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 300;
-  }
-
   .modal {
     background: var(--color-bg-overlay);
     border-radius: var(--radius-lg);

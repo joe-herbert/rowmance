@@ -1,7 +1,7 @@
 export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
   {
     label: 'Background',
-    vars: ['--app-background', '--glass-blur'],
+    vars: ['--app-background', '--glass-blur', '--modal-backdrop-blur'],
   },
   {
     label: 'Panels',
