@@ -13,6 +13,7 @@
   import type { ConnectionProfile, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import Modal from '$lib/components/Modal.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
 
   interface Props {
     profile?: ConnectionProfile;
@@ -262,12 +263,18 @@
         <div class="field-row">
           <div class="field field--grow">
             <label for="conn-type" class="label">Type</label>
-            <select id="conn-type" class="input select" bind:value={dbType} onchange={handleDbTypeChange}>
-              <option value="postgres">PostgreSQL</option>
-              <option value="mysql">MySQL</option>
-              <option value="mariadb">MariaDB</option>
-              <option value="sqlite">SQLite</option>
-            </select>
+            <Select
+              id="conn-type"
+              bind:value={dbType}
+              options={[
+                { value: 'postgres', label: 'PostgreSQL' },
+                { value: 'mysql', label: 'MySQL' },
+                { value: 'mariadb', label: 'MariaDB' },
+                { value: 'sqlite', label: 'SQLite' },
+              ]}
+              size="md"
+              onchange={handleDbTypeChange}
+            />
           </div>
           <div class="field field--color">
             <label for="conn-color" class="label">Colour</label>
@@ -367,10 +374,12 @@
 
           <div class="field">
             <label for="ssh-auth" class="label">Authentication</label>
-            <select id="ssh-auth" class="input select" bind:value={sshAuthType}>
-              <option value="password">Password</option>
-              <option value="key">Private Key</option>
-            </select>
+            <Select
+              id="ssh-auth"
+              bind:value={sshAuthType}
+              options={[{ value: 'password', label: 'Password' }, { value: 'key', label: 'Private Key' }]}
+              size="md"
+            />
           </div>
 
           {#if sshAuthType === 'password'}
@@ -634,15 +643,6 @@
   .input:focus {
     border-color: var(--color-accent);
     box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
-  }
-
-  .select {
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right var(--spacing-2) center;
-    padding-right: var(--spacing-6);
-    cursor: pointer;
   }
 
   .file-row {

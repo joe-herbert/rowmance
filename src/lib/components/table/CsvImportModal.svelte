@@ -8,6 +8,7 @@
   import { onMount } from 'svelte';
   import * as importApi from '$lib/tauri/import';
   import Modal from '$lib/components/Modal.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
   import type { InferredColumn } from '$lib/tauri/import';
   import { errorMessage } from '$lib/utils/errors';
 
@@ -220,11 +221,12 @@
                       />
                     </td>
                     <td>
-                      <select class="col-type-select" bind:value={col.inferredType} aria-label="Column {i + 1} type">
-                        {#each DB_TYPES as t}
-                          <option value={t.toLowerCase()}>{t}</option>
-                        {/each}
-                      </select>
+                      <Select
+                        bind:value={col.inferredType}
+                        options={DB_TYPES.map(t => ({ value: t.toLowerCase(), label: t }))}
+                        aria-label="Column {i + 1} type"
+                        size="xs"
+                      />
                     </td>
                     <td class="sample-cell">
                       {preview.previewRows[0]?.[i] ?? ''}
@@ -476,16 +478,6 @@
     color: var(--color-text-primary);
     outline: none;
     font-family: var(--font-family-mono);
-  }
-
-  .col-type-select {
-    padding: 2px var(--spacing-2);
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-primary);
-    outline: none;
   }
 
   .sample-cell {

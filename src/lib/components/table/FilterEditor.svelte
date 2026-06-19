@@ -238,6 +238,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
+  import Select from '$lib/components/ui/Select.svelte';
 
   interface Props {
     columns: ColumnMeta[];
@@ -448,27 +449,25 @@
                       autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
                     />
                   {:else}
-                    <select
-                      class="fe-select fe-select--col"
+                    <Select
                       value={rule.column}
-                      onchange={(e) => updateRuleColumn(group.id, rule.id, (e.target as HTMLSelectElement).value)}
+                      options={columns.map(col => ({ value: col.name, label: col.name }))}
+                      onchange={(v) => updateRuleColumn(group.id, rule.id, v)}
                       aria-label="Column"
-                    >
-                      {#each columns as col (col.name)}
-                        <option value={col.name}>{col.name}</option>
-                      {/each}
-                    </select>
+                      size="xs"
+                      mono
+                      style="flex:1; min-width:0; width:100%"
+                    />
 
-                    <select
-                      class="fe-select fe-select--op"
+                    <Select
                       value={rule.operator}
-                      onchange={(e) => updateRuleOperator(group.id, rule.id, (e.target as HTMLSelectElement).value as FilterOperator)}
+                      options={OPERATORS.map(op => ({ value: op, label: op }))}
+                      onchange={(v) => updateRuleOperator(group.id, rule.id, v as FilterOperator)}
                       aria-label="Operator"
-                    >
-                      {#each OPERATORS as op}
-                        <option value={op}>{op}</option>
-                      {/each}
-                    </select>
+                      size="xs"
+                      mono
+                      style="width:100px; flex-shrink:0"
+                    />
 
                     {#if needsValue(rule.operator)}
                       <input
@@ -735,23 +734,6 @@
     text-align: center;
     user-select: none;
   }
-
-  .fe-select {
-    padding: 3px var(--spacing-1);
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-family: var(--font-family-mono);
-    color: var(--color-text-primary);
-    outline: none;
-    cursor: pointer;
-    transition: border-color var(--transition-fast);
-  }
-
-  .fe-select:focus { border-color: var(--color-accent); }
-  .fe-select--col { flex: 1; min-width: 0; }
-  .fe-select--op { flex-shrink: 0; width: 100px; }
 
   .fe-value-input {
     flex: 1;

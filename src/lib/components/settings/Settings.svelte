@@ -11,6 +11,7 @@
   import type { AppSettings, ThemeMeta } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import Modal from '$lib/components/Modal.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
   import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
@@ -31,6 +32,23 @@
   let confirmingDelete = $state(false);
 
   const isCustomTheme = $derived(!BUILTIN_THEMES.includes(settings.theme));
+
+  const themeOptions = $derived([
+    { group: 'Built-in', options: [
+      { value: 'system', label: 'System' },
+      { value: 'light', label: 'Light' },
+      { value: 'dark', label: 'Dark' },
+    ]},
+    ...(userThemes.length > 0 ? [{ group: 'Custom', options: userThemes.map(t => ({ value: t.name, label: t.name })) }] : []),
+  ]);
+
+  const themeBaseOptions = $derived([
+    { group: 'Built-in', options: [
+      { value: 'light', label: 'Light' },
+      { value: 'dark', label: 'Dark' },
+    ]},
+    ...(userThemes.length > 0 ? [{ group: 'Custom', options: userThemes.map(t => ({ value: t.name, label: t.name })) }] : []),
+  ]);
 
   onMount(async () => {
     try {
@@ -244,14 +262,11 @@
             <span class="label-text">Click Outside Cell Edit</span>
             <span class="label-hint">What happens when you click outside an active cell editor</span>
           </div>
-          <select
-            class="setting-select"
+          <Select
             value={settings.clickOutsideEdit}
-            onchange={(e) => update('clickOutsideEdit', (e.currentTarget as HTMLSelectElement).value as 'discard' | 'confirm')}
-          >
-            <option value="discard">Discard changes</option>
-            <option value="confirm">Keep changes</option>
-          </select>
+            options={[{ value: 'discard', label: 'Discard changes' }, { value: 'confirm', label: 'Keep changes' }]}
+            onchange={(v) => update('clickOutsideEdit', v as 'discard' | 'confirm')}
+          />
         </div>
       </div>
 
@@ -344,25 +359,12 @@
             <span class="label-hint">Colour scheme</span>
           </div>
           <div class="theme-selector-row">
-            <select
-              class="setting-select"
+            <Select
               value={settings.theme}
-              onchange={(e) => { confirmingDelete = false; update('theme', (e.currentTarget as HTMLSelectElement).value); }}
+              options={themeOptions}
               aria-label="Select theme"
-            >
-              <optgroup label="Built-in">
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </optgroup>
-              {#if userThemes.length > 0}
-                <optgroup label="Custom">
-                  {#each userThemes as t (t.name)}
-                    <option value={t.name}>{t.name}</option>
-                  {/each}
-                </optgroup>
-              {/if}
-            </select>
+              onchange={(v) => { confirmingDelete = false; update('theme', v); }}
+            />
             <button class="action-btn" onclick={startCreatingTheme}>+ New</button>
             <button class="action-btn" onclick={importTheme}>Import</button>
           </div>
@@ -406,19 +408,11 @@
         <div class="modal-field">
           <label class="modal-label" for="new-theme-base">Base theme</label>
           <span class="modal-hint">Your new theme starts as a copy of this</span>
-          <select id="new-theme-base" class="setting-select modal-select" bind:value={newThemeBase}>
-            <optgroup label="Built-in">
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </optgroup>
-            {#if userThemes.length > 0}
-              <optgroup label="Custom">
-                {#each userThemes as t (t.name)}
-                  <option value={t.name}>{t.name}</option>
-                {/each}
-              </optgroup>
-            {/if}
-          </select>
+          <Select
+            id="new-theme-base"
+            bind:value={newThemeBase}
+            options={themeBaseOptions}
+          />
         </div>
 
         <div class="modal-field">
@@ -587,23 +581,6 @@
     border-color: var(--color-accent);
   }
 
-  .setting-select {
-    height: 28px;
-    padding: 0 var(--spacing-5) 0 var(--spacing-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-bg-secondary);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family-ui);
-    outline: none;
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right var(--spacing-2) center;
-  }
-
   .setting-checkbox {
     width: 16px;
     height: 16px;
@@ -746,7 +723,6 @@
     margin-bottom: var(--spacing-1);
   }
 
-  .modal-select,
   .modal-input {
     width: 100%;
     box-sizing: border-box;

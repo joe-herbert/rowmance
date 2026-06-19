@@ -13,6 +13,7 @@
   import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
 
   type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
 
@@ -394,15 +395,12 @@
       <div id="panel-history" role="tabpanel" aria-label="Query History">
         <div class="panel-toolbar">
           {#if activeProfiles.length > 1}
-            <select
-              class="connection-select"
+            <Select
               bind:value={selectedHistoryConnectionId}
+              options={activeProfiles.map(p => ({ value: p.id, label: p.name }))}
               aria-label="Select connection"
-            >
-              {#each activeProfiles as profile (profile.id)}
-                <option value={profile.id}>{profile.name}</option>
-              {/each}
-            </select>
+              size="xs"
+            />
           {:else if activeProfiles.length === 1}
             <span class="connection-label">{activeProfiles[0].name}</span>
           {:else}
@@ -817,16 +815,6 @@
 
   .toolbar-gap {
     flex: 1;
-  }
-
-  .connection-select {
-    font-size: var(--font-size-xs);
-    padding: 2px var(--spacing-1);
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-text-primary);
-    max-width: 130px;
   }
 
   .connection-label {
