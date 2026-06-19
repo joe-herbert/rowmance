@@ -46,6 +46,9 @@ pub async fn schema_list_databases(
         RemotePool::Postgres(pool) => crate::connections::postgres::list_databases(pool)
             .await
             .map_err(AppError::from),
+        RemotePool::Sqlite(pool) => crate::connections::sqlite::list_databases(pool)
+            .await
+            .map_err(AppError::from),
     }
 }
 
@@ -73,6 +76,19 @@ pub async fn schema_list_tables(
         }
         RemotePool::Postgres(pool) => {
             let tables = crate::connections::postgres::list_tables(pool, &database)
+                .await
+                .map_err(AppError::from)?;
+            Ok(tables
+                .into_iter()
+                .map(|t| TableInfo {
+                    name: t.name,
+                    table_type: t.table_type,
+                    row_count: t.row_count,
+                })
+                .collect())
+        }
+        RemotePool::Sqlite(pool) => {
+            let tables = crate::connections::sqlite::list_tables(pool, &database)
                 .await
                 .map_err(AppError::from)?;
             Ok(tables
@@ -117,6 +133,24 @@ pub async fn schema_list_columns(
         }
         RemotePool::Postgres(pool) => {
             let cols = crate::connections::postgres::list_columns(pool, &database, &table)
+                .await
+                .map_err(AppError::from)?;
+            Ok(cols
+                .into_iter()
+                .map(|c| ColumnInfo {
+                    name: c.name,
+                    data_type: c.data_type,
+                    nullable: c.nullable,
+                    default_value: c.default_value,
+                    is_primary_key: c.is_primary_key,
+                    is_auto_increment: c.is_auto_increment,
+                    is_foreign_key: c.is_foreign_key,
+                    comment: c.comment,
+                })
+                .collect())
+        }
+        RemotePool::Sqlite(pool) => {
+            let cols = crate::connections::sqlite::list_columns(pool, &database, &table)
                 .await
                 .map_err(AppError::from)?;
             Ok(cols
@@ -198,6 +232,20 @@ pub async fn schema_list_indexes(
                 })
                 .collect())
         }
+        RemotePool::Sqlite(pool) => {
+            let rows = crate::connections::sqlite::list_indexes(pool, &database, &table)
+                .await
+                .map_err(AppError::from)?;
+            Ok(rows
+                .into_iter()
+                .map(|r| IndexInfo {
+                    name: r.name,
+                    columns: r.columns,
+                    unique: r.unique,
+                    index_type: r.index_type,
+                })
+                .collect())
+        }
     }
 }
 
@@ -243,6 +291,22 @@ pub async fn schema_list_foreign_keys(
                 })
                 .collect())
         }
+        RemotePool::Sqlite(pool) => {
+            let rows = crate::connections::sqlite::list_foreign_keys(pool, &database, &table)
+                .await
+                .map_err(AppError::from)?;
+            Ok(rows
+                .into_iter()
+                .map(|r| ForeignKeyInfo {
+                    constraint_name: r.constraint_name,
+                    columns: r.columns,
+                    referenced_table: r.referenced_table,
+                    referenced_columns: r.referenced_columns,
+                    on_delete: r.on_delete,
+                    on_update: r.on_update,
+                })
+                .collect())
+        }
     }
 }
 
@@ -265,5 +329,8 @@ pub async fn schema_get_ddl(
                 .await
                 .map_err(AppError::from)
         }
+        RemotePool::Sqlite(pool) => crate::connections::sqlite::get_ddl(pool, &object_name)
+            .await
+            .map_err(AppError::from),
     }
 }

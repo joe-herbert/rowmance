@@ -371,6 +371,17 @@ pub async fn connections_test(
                 .await
                 .map(|_| ())
         }
+        "sqlite" => {
+            use sqlx::sqlite::SqliteConnectOptions;
+            let opts = SqliteConnectOptions::new()
+                .filename(&row.host)
+                .create_if_missing(true);
+            sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(opts)
+                .await
+                .map(|_| ())
+        }
         _ => {
             return Ok(ConnectionTestResult {
                 success: false,
@@ -425,6 +436,17 @@ pub async fn connections_test_unsaved(
             sqlx::postgres::PgPoolOptions::new()
                 .max_connections(1)
                 .connect(&url)
+                .await
+                .map(|_| ())
+        }
+        "sqlite" => {
+            use sqlx::sqlite::SqliteConnectOptions;
+            let opts = SqliteConnectOptions::new()
+                .filename(&input.host)
+                .create_if_missing(true);
+            sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(opts)
                 .await
                 .map(|_| ())
         }

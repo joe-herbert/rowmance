@@ -264,6 +264,49 @@ async fn csv_execute_from_text(
                 inserted += 1;
             }
         }
+        RemotePool::Sqlite(pool) => {
+            if create_table {
+                let col_defs: Vec<String> = effective_columns
+                    .iter()
+                    .map(|(name, db_type)| {
+                        format!("\"{}\" {}", name.replace('"', "\"\""), db_type)
+                    })
+                    .collect();
+                let ddl = format!(
+                    "CREATE TABLE IF NOT EXISTS \"{}\" ({})",
+                    table_name.replace('"', "\"\""),
+                    col_defs.join(", ")
+                );
+                sqlx::query(&ddl)
+                    .execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
+
+            let col_names: Vec<String> = effective_columns
+                .iter()
+                .map(|(n, _)| format!("\"{}\"", n.replace('"', "\"\"")))
+                .collect();
+            let placeholders: Vec<&str> = vec!["?"; col_names.len()];
+
+            let sql = format!(
+                "INSERT INTO \"{}\" ({}) VALUES ({})",
+                table_name.replace('"', "\"\""),
+                col_names.join(", "),
+                placeholders.join(", ")
+            );
+
+            for record in &all_records {
+                let mut q = sqlx::query(&sql);
+                for field in record {
+                    q = q.bind(field.as_str());
+                }
+                q.execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                inserted += 1;
+            }
+        }
     }
 
     Ok(inserted)
@@ -322,6 +365,7 @@ async fn sql_execute_from_text(
         let result = match pool_ref.value() {
             RemotePool::MySql(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
             RemotePool::Postgres(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
+            RemotePool::Sqlite(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
         };
 
         let error = result.err().map(|e| e.to_string());

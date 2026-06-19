@@ -64,6 +64,11 @@ fn quote_postgres(ident: &str) -> String {
     format!("\"{}\"", ident.replace('"', "\"\""))
 }
 
+/// Quote an identifier for SQLite (double-quotes, ANSI SQL).
+fn quote_sqlite(ident: &str) -> String {
+    format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
 /// Bind a JSON value to a SQLx MySQL query.
 fn bind_mysql_value<'q>(
     query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
@@ -93,6 +98,28 @@ fn bind_pg_value<'q>(
 ) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
     match value {
         serde_json::Value::String(s) => query.bind(s.clone()),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                query.bind(i)
+            } else if let Some(f) = n.as_f64() {
+                query.bind(f)
+            } else {
+                query.bind(n.to_string())
+            }
+        }
+        serde_json::Value::Bool(b) => query.bind(*b),
+        serde_json::Value::Null => query.bind(Option::<String>::None),
+        other => query.bind(other.to_string()),
+    }
+}
+
+/// Bind a JSON value to a SQLx SQLite query.
+fn bind_sqlite_value<'q>(
+    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    value: &'q serde_json::Value,
+) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+    match value {
+        serde_json::Value::String(s) => query.bind(s.as_str()),
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 query.bind(i)
@@ -260,6 +287,53 @@ pub async fn query_update_rows(
                 total_updated += result.rows_affected();
             }
         }
+        RemotePool::Sqlite(pool) => {
+            for change in &changes {
+                if change.changes.is_empty() || change.primary_keys.is_empty() {
+                    continue;
+                }
+
+                let set_clause: Vec<String> = change
+                    .changes
+                    .keys()
+                    .map(|col| format!("{} = ?", quote_sqlite(col)))
+                    .collect();
+
+                let where_pairs: Vec<(&String, &serde_json::Value)> =
+                    change.primary_keys.iter().collect();
+                let mut where_parts: Vec<String> = Vec::new();
+                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                for (col, val) in &where_pairs {
+                    if val.is_null() {
+                        where_parts.push(format!("{} IS NULL", quote_sqlite(col)));
+                    } else {
+                        where_parts.push(format!("{} = ?", quote_sqlite(col)));
+                        where_bind.push(val);
+                    }
+                }
+
+                let sql = format!(
+                    "UPDATE {} SET {} WHERE {}",
+                    quote_sqlite(&table),
+                    set_clause.join(", "),
+                    where_parts.join(" AND ")
+                );
+
+                let mut q = sqlx::query(&sql);
+                for val in change.changes.values() {
+                    q = bind_sqlite_value(q, val);
+                }
+                for val in where_bind {
+                    q = bind_sqlite_value(q, val);
+                }
+
+                let result = q
+                    .execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                total_updated += result.rows_affected();
+            }
+        }
     }
 
     Ok(UpdateResult {
@@ -347,6 +421,23 @@ pub async fn query_insert_row(
                 .await
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         }
+        RemotePool::Sqlite(pool) => {
+            let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_sqlite(c)).collect();
+            let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+            let sql = format!(
+                "INSERT INTO {} ({}) VALUES ({})",
+                quote_sqlite(&table),
+                col_list.join(", "),
+                placeholders.join(", ")
+            );
+            let mut q = sqlx::query(&sql);
+            for (_, val) in &cols {
+                q = bind_sqlite_value(q, val);
+            }
+            q.execute(pool)
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        }
     }
 
     Ok(())
@@ -408,6 +499,7 @@ pub async fn query_execute(
     let result = match pool_ref.value() {
         RemotePool::MySql(pool) => execute_mysql(pool, &sql, page_size, offset).await,
         RemotePool::Postgres(pool) => execute_postgres(pool, &sql, page_size, offset).await,
+        RemotePool::Sqlite(pool) => execute_sqlite(pool, &sql, page_size, offset).await,
     };
 
     let duration_ms = start.elapsed().as_millis() as u64;
@@ -648,6 +740,97 @@ async fn execute_postgres(
     }
 }
 
+async fn execute_sqlite(
+    pool: &sqlx::SqlitePool,
+    sql: &str,
+    page_size: u32,
+    offset: u32,
+) -> ExecuteResult {
+    let is_select = sql.trim().to_uppercase().starts_with("SELECT");
+
+    if is_select {
+        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
+        let total_rows: Option<i64> = sqlx::query(&count_sql)
+            .fetch_one(pool)
+            .await
+            .ok()
+            .and_then(|row| row.try_get::<i64, _>(0).ok());
+
+        let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
+        let rows = sqlx::query(&paginated)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let columns = if let Some(first) = rows.first() {
+            first
+                .columns()
+                .iter()
+                .map(|c| ColumnMeta {
+                    name: c.name().to_owned(),
+                    data_type: c.type_info().name().to_lowercase(),
+                    nullable: true,
+                    is_primary_key: false,
+                    is_foreign_key: false,
+                })
+                .collect()
+        } else {
+            match pool.prepare(&paginated).await {
+                Ok(stmt) => stmt
+                    .columns()
+                    .iter()
+                    .map(|c| ColumnMeta {
+                        name: c.name().to_owned(),
+                        data_type: c.type_info().name().to_lowercase(),
+                        nullable: true,
+                        is_primary_key: false,
+                        is_foreign_key: false,
+                    })
+                    .collect(),
+                Err(_) => vec![],
+            }
+        };
+
+        let data: Vec<Vec<serde_json::Value>> = rows
+            .iter()
+            .map(|row| (0..row.len()).map(|i| sqlite_value_to_json(row, i)).collect())
+            .collect();
+
+        Ok((columns, data, total_rows, None))
+    } else {
+        let result = sqlx::query(sql)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok((vec![], vec![], None, Some(result.rows_affected())))
+    }
+}
+
+/// Convert a SQLite column value to a JSON-serialisable form.
+fn sqlite_value_to_json(row: &sqlx::sqlite::SqliteRow, idx: usize) -> serde_json::Value {
+    if let Ok(v) = row.try_get::<Option<i64>, _>(idx) {
+        return v
+            .map(serde_json::Value::from)
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<f64>, _>(idx) {
+        return v
+            .and_then(|f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<bool>, _>(idx) {
+        return v
+            .map(serde_json::Value::Bool)
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<String>, _>(idx) {
+        return v
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null);
+    }
+    serde_json::Value::Null
+}
+
 /// Convert a MySQL column value to a JSON-serialisable form.
 /// Falls back to a string representation for types that don't map cleanly.
 fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::Value {
@@ -782,6 +965,28 @@ pub async fn query_explain(
                 raw_json: serde_json::to_string(&plans)
                     .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?,
                 dialect: "postgres".to_string(),
+            })
+        }
+        RemotePool::Sqlite(pool) => {
+            let explain_sql = format!("EXPLAIN QUERY PLAN {sql}");
+            let rows = sqlx::query(&explain_sql)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            let plans: Vec<serde_json::Value> = rows
+                .iter()
+                .map(|row| {
+                    use sqlx::Row;
+                    let id: i64 = row.try_get("id").unwrap_or(0);
+                    let parent: i64 = row.try_get("parent").unwrap_or(0);
+                    let detail: String = row.try_get("detail").unwrap_or_default();
+                    serde_json::json!({ "id": id, "parent": parent, "detail": detail })
+                })
+                .collect();
+            Ok(ExplainResult {
+                raw_json: serde_json::to_string(&plans)
+                    .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?,
+                dialect: "sqlite".to_string(),
             })
         }
     }

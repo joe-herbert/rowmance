@@ -2,7 +2,7 @@
 
 // ── Database connections ────────────────────────────────────────────────────
 
-export type DbType = 'mysql' | 'mariadb' | 'postgres';
+export type DbType = 'mysql' | 'mariadb' | 'postgres' | 'sqlite';
 
 /** A connection profile as stored in the local SQLite database. */
 export interface ConnectionProfile {

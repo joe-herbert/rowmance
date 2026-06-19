@@ -29,6 +29,7 @@
     mysql: 3306,
     mariadb: 3306,
     postgres: 5432,
+    sqlite: 0,
   };
 
   type Tab = 'basic' | 'ssh' | 'ssl' | 'advanced';
@@ -45,6 +46,8 @@
   let password = $state('');
   let passwordDirty = $state(false);
   let showPassword = $state(false);
+  // SQLite file path — stored in `host` on the profile.
+  let filePath = $state(untrack(() => profile?.dbType === 'sqlite' ? (profile?.host ?? '') : ''));
   let color = $state(untrack(() => profile?.color ?? ''));
   let readOnly = $state(untrack(() => profile?.readOnly ?? false));
 
@@ -96,6 +99,25 @@
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   function buildInput() {
+    if (dbType === 'sqlite') {
+      return {
+        name: name.trim(),
+        dbType: 'sqlite' as DbType,
+        host: filePath.trim(),
+        port: 0,
+        database: '',
+        username: '',
+        color: color || null,
+        readOnly,
+        groupId: profile?.groupId ?? groupId ?? null,
+        sshEnabled: false,
+        sshHost: null, sshPort: null, sshUser: null, sshAuthType: null, sshKeyPath: null,
+        sslEnabled: false,
+        sslCaPath: null, sslCertPath: null, sslKeyPath: null,
+        poolMin,
+        poolMax,
+      };
+    }
     return {
       name: name.trim(),
       dbType,
@@ -193,7 +215,11 @@
   }
 
   const isValid = $derived(
-    name.trim() !== '' && host.trim() !== '' && database.trim() !== '' && username.trim() !== '',
+    name.trim() !== '' && (
+      dbType === 'sqlite'
+        ? filePath.trim() !== ''
+        : host.trim() !== '' && database.trim() !== '' && username.trim() !== ''
+    )
   );
 
   const tabs: { id: Tab; label: string }[] = [
@@ -245,6 +271,7 @@
               <option value="postgres">PostgreSQL</option>
               <option value="mysql">MySQL</option>
               <option value="mariadb">MariaDB</option>
+              <option value="sqlite">SQLite</option>
             </select>
           </div>
           <div class="field field--color">
@@ -258,48 +285,58 @@
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field field--grow">
-            <label for="conn-host" class="label">Host</label>
-            <input id="conn-host" class="input" type="text" bind:value={host} placeholder="localhost" required autocomplete="off" />
-          </div>
-          <div class="field field--port">
-            <label for="conn-port" class="label">Port</label>
-            <input id="conn-port" class="input" type="number" bind:value={port} min="1" max="65535" required />
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="conn-database" class="label">Database</label>
-          <input id="conn-database" class="input" type="text" bind:value={database} placeholder="my_database" required autocomplete="off" />
-        </div>
-
-        <div class="field-row">
-          <div class="field field--grow">
-            <label for="conn-username" class="label">Username</label>
-            <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="username" />
-          </div>
-          <div class="field field--grow">
-            <label for="conn-password" class="label">Password</label>
-            <div class="password-row">
-              <input
-                id="conn-password"
-                class="input"
-                type={showPassword ? 'text' : 'password'}
-                bind:value={password}
-                oninput={() => (passwordDirty = true)}
-                placeholder={isEditing ? '••••••••' : ''}
-                autocomplete="current-password"
-              />
-              <button
-                type="button"
-                class="btn btn--ghost btn--sm btn--icon"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                onclick={() => (showPassword = !showPassword)}
-              >{showPassword ? '🙈' : '👁'}</button>
+        {#if dbType === 'sqlite'}
+          <div class="field">
+            <label for="conn-file" class="label">File Path</label>
+            <div class="file-row">
+              <input id="conn-file" class="input" type="text" bind:value={filePath} placeholder="/path/to/database.db" autocomplete="off" />
+              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') filePath = p; }); }}>Browse</button>
             </div>
           </div>
-        </div>
+        {:else}
+          <div class="field-row">
+            <div class="field field--grow">
+              <label for="conn-host" class="label">Host</label>
+              <input id="conn-host" class="input" type="text" bind:value={host} placeholder="localhost" required autocomplete="off" />
+            </div>
+            <div class="field field--port">
+              <label for="conn-port" class="label">Port</label>
+              <input id="conn-port" class="input" type="number" bind:value={port} min="1" max="65535" required />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="conn-database" class="label">Database</label>
+            <input id="conn-database" class="input" type="text" bind:value={database} placeholder="my_database" required autocomplete="off" />
+          </div>
+
+          <div class="field-row">
+            <div class="field field--grow">
+              <label for="conn-username" class="label">Username</label>
+              <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="username" />
+            </div>
+            <div class="field field--grow">
+              <label for="conn-password" class="label">Password</label>
+              <div class="password-row">
+                <input
+                  id="conn-password"
+                  class="input"
+                  type={showPassword ? 'text' : 'password'}
+                  bind:value={password}
+                  oninput={() => (passwordDirty = true)}
+                  placeholder={isEditing ? '••••••••' : ''}
+                  autocomplete="current-password"
+                />
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--sm btn--icon"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onclick={() => (showPassword = !showPassword)}
+                >{showPassword ? '🙈' : '👁'}</button>
+              </div>
+            </div>
+          </div>
+        {/if}
 
         <div class="field field--inline">
           <label for="conn-readonly" class="label">Read-only</label>
@@ -308,6 +345,9 @@
 
       <!-- SSH tab -->
       {:else if activeTab === 'ssh'}
+        {#if dbType === 'sqlite'}
+          <p class="tab-hint">SSH tunnelling is not available for SQLite connections.</p>
+        {:else}
         <div class="field field--inline">
           <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
           <input id="ssh-enabled" type="checkbox" bind:checked={sshEnabled} />
@@ -363,9 +403,13 @@
         {:else}
           <p class="tab-hint">Enable SSH tunnelling to connect through a bastion host.</p>
         {/if}
+        {/if}
 
       <!-- SSL tab -->
       {:else if activeTab === 'ssl'}
+        {#if dbType === 'sqlite'}
+          <p class="tab-hint">SSL/TLS is not available for SQLite connections.</p>
+        {:else}
         <div class="field field--inline">
           <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
           <input id="ssl-enabled" type="checkbox" bind:checked={sslEnabled} />
@@ -397,6 +441,7 @@
           </div>
         {:else}
           <p class="tab-hint">Enable SSL/TLS to encrypt the connection to the database server.</p>
+        {/if}
         {/if}
 
       <!-- Advanced tab -->

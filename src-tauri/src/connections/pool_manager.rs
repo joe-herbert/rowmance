@@ -8,17 +8,19 @@ use dashmap::DashMap;
 use sqlx::{
     mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::error::RowmanceError;
 
-/// Unified handle for a pool that may be either MySQL/MariaDB or PostgreSQL.
+/// Unified handle for a pool that may be MySQL/MariaDB, PostgreSQL, or SQLite.
 #[derive(Debug)]
 pub enum RemotePool {
     MySql(sqlx::MySqlPool),
     Postgres(sqlx::PgPool),
+    Sqlite(sqlx::SqlitePool),
 }
 
 /// Thread-safe registry of active remote pools.
@@ -122,6 +124,19 @@ impl ConnectionManager {
                     .await?;
                 RemotePool::Postgres(p)
             }
+            "sqlite" => {
+                // For SQLite, `host` holds the file path (or `:memory:`).
+                // No user/password/SSL needed.
+                let opts = SqliteConnectOptions::new()
+                    .filename(host)
+                    .create_if_missing(true);
+                let p = SqlitePoolOptions::new()
+                    .min_connections(pool_min)
+                    .max_connections(pool_max)
+                    .connect_with(opts)
+                    .await?;
+                RemotePool::Sqlite(p)
+            }
             other => {
                 return Err(RowmanceError::ConnectionNotFound(format!(
                     "Unknown db_type: {other}"
@@ -139,6 +154,7 @@ impl ConnectionManager {
             match pool {
                 RemotePool::MySql(p) => p.close().await,
                 RemotePool::Postgres(p) => p.close().await,
+                RemotePool::Sqlite(p) => p.close().await,
             }
         }
     }

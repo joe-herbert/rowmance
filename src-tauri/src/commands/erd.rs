@@ -51,6 +51,7 @@ pub async fn erd_get_graph(
     match pool_ref.value() {
         RemotePool::MySql(pool) => get_graph_mysql(pool, &database).await,
         RemotePool::Postgres(pool) => get_graph_postgres(pool, &database).await,
+        RemotePool::Sqlite(pool) => get_graph_sqlite(pool).await,
     }
 }
 
@@ -221,6 +222,99 @@ async fn get_graph_postgres(pool: &sqlx::PgPool, schema: &str) -> Result<ErdGrap
     }));
 
     Ok(ErdGraph { nodes, edges })
+}
+
+async fn get_graph_sqlite(pool: &sqlx::SqlitePool) -> Result<ErdGraph, AppError> {
+    #[derive(sqlx::FromRow)]
+    struct TableRow {
+        name: String,
+    }
+
+    let tables = sqlx::query_as::<_, TableRow>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    let mut nodes: Vec<ErdTable> = Vec::new();
+    let mut all_fk_edges: Vec<ErdRelation> = Vec::new();
+
+    for table in &tables {
+        #[derive(sqlx::FromRow)]
+        struct ColRow {
+            name: String,
+            #[sqlx(rename = "type")]
+            data_type: String,
+            pk: i64,
+        }
+
+        let col_sql = format!("PRAGMA table_info(\"{}\")", table.name.replace('"', "\"\""));
+        let cols = sqlx::query_as::<_, ColRow>(&col_sql)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+
+        let columns: Vec<ErdColumn> = cols
+            .into_iter()
+            .map(|c| ErdColumn {
+                name: c.name,
+                data_type: c.data_type,
+                is_primary_key: c.pk != 0,
+            })
+            .collect();
+
+        nodes.push(ErdTable {
+            name: table.name.clone(),
+            columns,
+        });
+
+        #[derive(sqlx::FromRow)]
+        struct FkRow {
+            id: i64,
+            #[sqlx(rename = "table")]
+            ref_table: String,
+            #[sqlx(rename = "from")]
+            from_col: String,
+            #[sqlx(rename = "to")]
+            to_col: Option<String>,
+        }
+
+        let fk_sql = format!(
+            "PRAGMA foreign_key_list(\"{}\")",
+            table.name.replace('"', "\"\"")
+        );
+        let fk_rows = sqlx::query_as::<_, FkRow>(&fk_sql)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+
+        let mut fk_map: std::collections::BTreeMap<i64, (String, Vec<String>, Vec<String>)> =
+            std::collections::BTreeMap::new();
+        for r in fk_rows {
+            let entry = fk_map
+                .entry(r.id)
+                .or_insert_with(|| (r.ref_table.clone(), vec![], vec![]));
+            entry.1.push(r.from_col);
+            if let Some(to) = r.to_col {
+                entry.2.push(to);
+            }
+        }
+        for (id, (ref_table, from_cols, to_cols)) in fk_map {
+            all_fk_edges.push(ErdRelation {
+                from_table: table.name.clone(),
+                from_columns: from_cols,
+                to_table: ref_table,
+                to_columns: to_cols,
+                constraint_name: format!("fk_{}_{}", table.name, id),
+            });
+        }
+    }
+
+    Ok(ErdGraph {
+        nodes,
+        edges: all_fk_edges,
+    })
 }
 
 /// Fold an ordered iterator of (table_name, column) pairs into ErdTable nodes,
