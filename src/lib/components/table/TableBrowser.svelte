@@ -9,6 +9,15 @@
   import { errorMessage } from '$lib/utils/errors';
   import DataTable, { type PageInfo } from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
+  import FilterEditor, {
+    type FilterEditorState,
+    type FilterRule,
+    emptyFilterState,
+    filterStateIsActive,
+    activeRuleCount,
+    buildWhereClause,
+    parseSqlConditions,
+  } from '$lib/components/table/FilterEditor.svelte';
   import CsvImportModal from '$lib/components/table/CsvImportModal.svelte';
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
@@ -34,8 +43,17 @@
   const PAGE_SIZE = 50;
 
   let page = $state(1);
-  let filterValue = $state(untrack(() => initialFilter ?? ''));
-  let pendingFilter = $state(untrack(() => initialFilter ?? ''));
+  let filterEditorState = $state<FilterEditorState>(
+    untrack(() =>
+      initialFilter?.trim()
+        ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: initialFilter }
+        : emptyFilterState(),
+    ),
+  );
+  let showFilterEditor = $state(false);
+  let filterButtonEl = $state<HTMLButtonElement | null>(null);
+  let filterEditorTop = $state(0);
+  let filterEditorLeft = $state(0);
   let result = $state<QueryResult | null>(null);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -213,10 +231,79 @@
     const quotedDb = quoteIdentifier(database);
     const quotedTable = quoteIdentifier(table);
     let base = `SELECT * FROM ${quotedDb}.${quotedTable}`;
-    if (filterValue.trim()) {
-      base += ` WHERE ${filterValue.trim()}`;
+    const where = buildWhereClause(filterEditorState, quoteIdentifier);
+    if (where) {
+      base += ` WHERE ${where}`;
     }
     return base;
+  }
+
+  function isRuleActive(rule: FilterRule): boolean {
+    if (rule.rawSql !== undefined) return rule.rawSql.trim() !== '';
+    return rule.column !== '' && (rule.operator === 'IS NULL' || rule.operator === 'IS NOT NULL' || rule.value.trim() !== '');
+  }
+
+  function formatRuleText(rule: FilterRule): string {
+    if (rule.rawSql !== undefined) return rule.rawSql;
+    if (rule.operator === 'IS NULL' || rule.operator === 'IS NOT NULL') return `${rule.column} ${rule.operator}`;
+    if (rule.operator === 'IN') return `${rule.column} IN (${rule.value})`;
+    return `${rule.column} ${rule.operator} ${rule.value}`;
+  }
+
+  function tryStripOuterParens(s: string): string | null {
+    const t = s.trim();
+    if (!t.startsWith('(') || !t.endsWith(')')) return null;
+    let depth = 0;
+    for (let i = 0; i < t.length - 1; i++) {
+      if (t[i] === '(') depth++;
+      else if (t[i] === ')') depth--;
+      if (depth === 0) return null;
+    }
+    return t.slice(1, -1).trim();
+  }
+
+  type SummaryGroup = { keyword: string; bordered: boolean; rules: { conjunction: string; text: string; first: boolean }[] };
+
+  const filterSummaryBlocks = $derived.by((): SummaryGroup[] => {
+    if (filterEditorState.mode === 'sql') {
+      return parseSqlConditions(filterEditorState.sql).map((part) => {
+        const inner = tryStripOuterParens(part.condition);
+        if (inner) {
+          const innerParts = parseSqlConditions(inner);
+          if (innerParts.length > 1) {
+            return {
+              keyword: part.keyword,
+              bordered: true,
+              rules: innerParts.map((ip, ri) => ({ conjunction: ip.keyword, text: ip.condition, first: ri === 0 })),
+            };
+          }
+        }
+        return { keyword: part.keyword, bordered: false, rules: [{ conjunction: '', text: part.condition, first: true }] };
+      });
+    }
+    const activeGroups = filterEditorState.groups
+      .map((g) => ({ ...g, active: g.rules.filter(isRuleActive) }))
+      .filter((g) => g.active.length > 0);
+    const multi = activeGroups.length > 1;
+    return activeGroups.map((g, gi) => ({
+      keyword: gi === 0 ? 'WHERE' : filterEditorState.groupJunction,
+      bordered: multi && g.active.length > 1,
+      rules: g.active.map((r, ri) => ({ conjunction: g.conjunction, text: formatRuleText(r), first: ri === 0 })),
+    }));
+  });
+
+  function openFilterEditor(): void {
+    if (filterButtonEl) {
+      const rect = filterButtonEl.getBoundingClientRect();
+      filterEditorTop = rect.bottom + 4;
+      filterEditorLeft = Math.max(4, rect.right - 360);
+    }
+    showFilterEditor = true;
+  }
+
+  function portal(node: HTMLElement): { destroy(): void } {
+    document.body.appendChild(node);
+    return { destroy() { node.remove(); } };
   }
 
   let lastQueryMs = $state<number | null>(null);
@@ -265,14 +352,6 @@
     }
   }
 
-  function handleFilterKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Enter') {
-      filterValue = pendingFilter;
-      page = 1;
-      load();
-    }
-  }
-
   function handleRefresh(): void {
     load();
   }
@@ -285,16 +364,17 @@
     const _filter = initialFilter;
 
     page = 1;
-    filterValue = initialFilter ?? '';
-    pendingFilter = initialFilter ?? '';
+    filterEditorState = initialFilter?.trim()
+      ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: initialFilter }
+      : emptyFilterState();
+    showFilterEditor = false;
     pendingChanges = new Map();
     originalRows = new Map();
     pendingDeletedRows = new Map();
     hiddenColumns = new Set();
     showColumnPicker = false;
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
-    untrack(() => { tableKey++; });
-    load();
+    untrack(() => { tableKey++; load(); });
   });
 
   // Column picker position
@@ -525,21 +605,23 @@
       <span class="tbl-name">{table}</span>
     </span>
 
-    <div class="filter-wrapper">
-      <label class="filter-label" for="tb-filter">WHERE</label>
-      <input
-        id="tb-filter"
-        class="filter-input"
-        type="text"
-        placeholder="condition… (press Enter)"
-        value={pendingFilter}
-        oninput={(e) => {
-          pendingFilter = (e.target as HTMLInputElement).value;
-        }}
-        onkeydown={handleFilterKeydown}
-        aria-label="WHERE filter clause"
-      />
-    </div>
+    <button
+      bind:this={filterButtonEl}
+      class="refresh-button"
+      class:refresh-button--labeled={filterStateIsActive(filterEditorState)}
+      class:filter-active={filterStateIsActive(filterEditorState)}
+      onclick={openFilterEditor}
+      title="Filters"
+      aria-label="Filters"
+      aria-expanded={showFilterEditor}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      {#if filterStateIsActive(filterEditorState)}
+        <span class="badge">
+          {activeRuleCount(filterEditorState)}
+        </span>
+      {/if}
+    </button>
 
     <div class="toolbar-spacer"></div>
 
@@ -582,6 +664,7 @@
       <button
         bind:this={columnPickerAnchorEl}
         class="refresh-button"
+        class:refresh-button--labeled={hiddenColumns.size > 0}
         onclick={openColumnPicker}
         title="Show/hide columns"
         aria-label="Column visibility"
@@ -748,6 +831,26 @@
     </button>
   </div>
 
+  {#if filterStateIsActive(filterEditorState)}
+    <button
+      class="filter-summary-bar"
+      onclick={openFilterEditor}
+      title="Click to edit filters"
+      aria-label="Edit active filters"
+    >
+      {#each filterSummaryBlocks as grp}
+        <span class="fsb-group" class:fsb-group--bordered={grp.bordered}>
+          {#each grp.rules as rule}
+            <span class="fsb-line">
+              <span class="fsb-kw">{rule.first ? grp.keyword : rule.conjunction}</span>
+              <span class="fsb-text">{rule.text}</span>
+            </span>
+          {/each}
+        </span>
+      {/each}
+    </button>
+  {/if}
+
   {#if showTableNameInput}
     <div class="table-name-export-bar">
       <label class="table-name-label" for="tb-export-table-name">Table name for SQL INSERT:</label>
@@ -853,6 +956,22 @@
       />
     </div>
   {/if}
+
+  {#if showFilterEditor}
+    <div use:portal class="filter-positioner" style="top: {filterEditorTop}px; left: {filterEditorLeft}px;">
+      <FilterEditor
+        columns={currentColumns}
+        value={filterEditorState}
+        {dbType}
+        onApply={(newState) => {
+          filterEditorState = newState;
+          page = 1;
+          load();
+        }}
+        onClose={() => (showFilterEditor = false)}
+      />
+    </div>
+  {/if}
 </div>
 
 {#if showCsvImport}
@@ -934,46 +1053,6 @@
 
   .toolbar-spacer {
     flex: 1;
-  }
-
-  .filter-wrapper {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-1);
-  }
-
-  .filter-label {
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-muted);
-    font-family: var(--font-family-mono);
-    flex-shrink: 0;
-    user-select: none;
-  }
-
-  .filter-input {
-    width: 200px;
-    padding: var(--spacing-1) var(--spacing-2);
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-family: var(--font-family-mono);
-    color: var(--color-text-primary);
-    outline: none;
-    transition:
-      border-color var(--transition-fast),
-      width var(--transition-md);
-  }
-
-  .filter-input:focus {
-    border-color: var(--color-accent);
-    width: 280px;
-  }
-
-  .filter-input::placeholder {
-    color: var(--color-text-muted);
-    font-family: var(--font-family-ui);
   }
 
   .row-range {
@@ -1101,6 +1180,11 @@
     flex-shrink: 0;
   }
 
+  .refresh-button--labeled {
+    width: auto;
+    padding: 0 var(--spacing-2);
+  }
+
   .refresh-button:hover:not(:disabled) {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
@@ -1109,6 +1193,89 @@
   .refresh-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .refresh-button.filter-active {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
+
+  /* ── Filter summary bar ─────────────────────────────────────────────────── */
+
+  .filter-summary-bar {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: var(--spacing-1) var(--spacing-3);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    font-family: inherit;
+    transition: background var(--transition-fast);
+  }
+
+  .filter-summary-bar:hover {
+    background: var(--color-bg-hover);
+  }
+
+  .fsb-group {
+    display: contents;
+  }
+
+  .fsb-group--bordered {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    border-left: 2px solid var(--color-accent);
+    padding-left: var(--spacing-2);
+  }
+
+  .fsb-group--bordered .fsb-line {
+    display: grid;
+    grid-template-columns: 3em 1fr;
+    align-items: baseline;
+    gap: var(--spacing-1);
+  }
+
+  .fsb-group--bordered .fsb-line:first-child .fsb-kw {
+    text-align: left;
+  }
+
+  .fsb-group--bordered .fsb-line:not(:first-child) .fsb-kw {
+    text-align: right;
+  }
+
+  .fsb-line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-2);
+    line-height: 1.5;
+  }
+
+  .fsb-kw {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    font-family: var(--font-family-mono);
+    color: var(--color-accent);
+    min-width: 3.5em;
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .fsb-text {
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 
   /* ── Save error bar ──────────────────────────────────────────────────────── */
@@ -1294,6 +1461,11 @@
   .picker-positioner {
     position: absolute;
     z-index: 200;
+  }
+
+  :global(.filter-positioner) {
+    position: fixed;
+    z-index: 1000;
   }
 
   /* ── Export ─────────────────────────────────────────────────────────────── */
