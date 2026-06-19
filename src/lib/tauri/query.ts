@@ -41,6 +41,19 @@ export async function updateRows(
   return invoke<UpdateResult>('query_update_rows', { connectionId, database, table, changes });
 }
 
+export interface RowDelete {
+  primaryKeys: Record<string, unknown>;
+}
+
+export async function deleteRows(
+  connectionId: string,
+  database: string,
+  table: string,
+  rows: RowDelete[],
+): Promise<UpdateResult> {
+  return invoke<UpdateResult>('query_delete_rows', { connectionId, database, table, rows });
+}
+
 export async function insertRow(
   connectionId: string,
   database: string,

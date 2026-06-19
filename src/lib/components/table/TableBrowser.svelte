@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { executeQuery, updateRows, insertRow } from '$lib/tauri/query';
-  import type { RowChange } from '$lib/tauri/query';
+  import { executeQuery, updateRows, insertRow, deleteRows } from '$lib/tauri/query';
+  import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes } from '$lib/tauri/schema';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
@@ -45,6 +45,8 @@
   type CellValue = string | number | boolean | null;
   let pendingChanges = $state<Map<string, Map<string, CellValue>>>(new Map());
   let originalRows = $state<Map<string, CellValue[]>>(new Map());
+  // rowKey → original row snapshot, used to build DELETE WHERE clauses on save
+  let pendingDeletedRows = $state<Map<string, CellValue[]>>(new Map());
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
 
@@ -73,16 +75,21 @@
   // Key to force DataTable to fully reset (clears pending changes displayed)
   let tableKey = $state(0);
 
-  const pendingCount = $derived(pendingChanges.size);
+  const pendingCount = $derived(pendingChanges.size + pendingDeletedRows.size);
 
   function handleChangePending(changes: Map<string, Map<string, CellValue>>, rows: Map<string, CellValue[]>): void {
     pendingChanges = changes;
     originalRows = rows;
   }
 
+  function handleDeleteRowsPending(deletedRows: Map<string, CellValue[]>): void {
+    pendingDeletedRows = deletedRows;
+  }
+
   function discardChanges(): void {
     pendingChanges = new Map();
     originalRows = new Map();
+    pendingDeletedRows = new Map();
     addRowTrigger = 0;
     tableKey++;
   }
@@ -110,6 +117,9 @@
           if (Object.keys(vals).length > 0) insertValues.push(vals);
           continue;
         }
+
+        // Skip updates for rows that are also pending deletion (delete wins)
+        if (pendingDeletedRows.has(rowKey)) continue;
 
         const primaryKeys: Record<string, unknown> = {};
 
@@ -139,11 +149,32 @@
         rowChanges.push({ primaryKeys, changes });
       }
 
+      const deleteChanges: RowDelete[] = [];
+      for (const [rowKey, origRow] of pendingDeletedRows) {
+        if (rowKey.startsWith('__new__')) continue;
+        const primaryKeys: Record<string, unknown> = {};
+        if (hasPk) {
+          pkColumns.forEach((pkCol) => {
+            const idx = result!.columns.findIndex((c) => c.name === pkCol);
+            primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
+          });
+        } else {
+          result.columns.forEach((col, i) => {
+            primaryKeys[col.name] = origRow[i] ?? null;
+          });
+        }
+        deleteChanges.push({ primaryKeys });
+      }
+
       await updateRows(connectionId, database, table, rowChanges);
       for (const values of insertValues) {
         await insertRow(connectionId, database, table, values);
       }
+      if (deleteChanges.length > 0) {
+        await deleteRows(connectionId, database, table, deleteChanges);
+      }
       pendingChanges = new Map();
+      pendingDeletedRows = new Map();
       addRowTrigger = 0;
       tableKey++;
       await load();
@@ -258,6 +289,7 @@
     pendingFilter = initialFilter ?? '';
     pendingChanges = new Map();
     originalRows = new Map();
+    pendingDeletedRows = new Map();
     hiddenColumns = new Set();
     showColumnPicker = false;
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
@@ -798,6 +830,7 @@
           {addRowTrigger}
           onAddRow={() => addRowTrigger++}
           onChangePending={handleChangePending}
+          onDeleteRowsPending={handleDeleteRowsPending}
           onCellSelect={handleCellSelect}
           onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}

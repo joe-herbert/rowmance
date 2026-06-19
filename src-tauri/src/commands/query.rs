@@ -135,6 +135,164 @@ fn bind_sqlite_value<'q>(
     }
 }
 
+/// A row to delete, identified by its primary key column values.
+#[derive(Deserialize, Debug)]
+pub struct RowDelete {
+    #[serde(rename = "primaryKeys")]
+    pub primary_keys: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Execute a batch of row-level DELETE statements.
+#[tauri::command]
+pub async fn query_delete_rows(
+    sqlite: State<'_, sqlx::SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+    table: String,
+    rows: Vec<RowDelete>,
+) -> Result<UpdateResult, AppError> {
+    let profile_row = sqlx::query!(
+        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    let is_read_only = match &profile_row {
+        Some(row) => row.read_only != 0,
+        None => {
+            return Err(AppError::new(
+                "CONNECTION_NOT_FOUND",
+                format!("No connection with id {connection_id}"),
+            ))
+        }
+    };
+
+    if is_read_only {
+        return Err(AppError::new(
+            "READ_ONLY_VIOLATION",
+            "This connection is in read-only mode — mutating statements are not allowed",
+        ));
+    }
+
+    if rows.is_empty() {
+        return Ok(UpdateResult { updated_count: 0 });
+    }
+
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+    let mut total_deleted: u64 = 0;
+
+    match pool_ref.value() {
+        RemotePool::MySql(pool) => {
+            for row_del in &rows {
+                if row_del.primary_keys.is_empty() {
+                    continue;
+                }
+                let where_pairs: Vec<(&String, &serde_json::Value)> =
+                    row_del.primary_keys.iter().collect();
+                let mut where_parts: Vec<String> = Vec::new();
+                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                for (col, val) in &where_pairs {
+                    if val.is_null() {
+                        where_parts.push(format!("{} IS NULL", quote_mysql(col)));
+                    } else {
+                        where_parts.push(format!("{} = ?", quote_mysql(col)));
+                        where_bind.push(val);
+                    }
+                }
+                let sql = format!(
+                    "DELETE FROM {}.{} WHERE {} LIMIT 1",
+                    quote_mysql(&database),
+                    quote_mysql(&table),
+                    where_parts.join(" AND ")
+                );
+                let mut q = sqlx::query(&sql);
+                for val in &where_bind {
+                    q = bind_mysql_value(q, val);
+                }
+                let result = q
+                    .execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                total_deleted += result.rows_affected();
+            }
+        }
+        RemotePool::Postgres(pool) => {
+            for row_del in &rows {
+                if row_del.primary_keys.is_empty() {
+                    continue;
+                }
+                let where_pairs: Vec<(&String, &serde_json::Value)> =
+                    row_del.primary_keys.iter().collect();
+                let mut param_idx: usize = 1;
+                let mut where_parts: Vec<String> = Vec::new();
+                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                for (col, val) in &where_pairs {
+                    if val.is_null() {
+                        where_parts.push(format!("{} IS NULL", quote_postgres(col)));
+                    } else {
+                        where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx));
+                        param_idx += 1;
+                        where_bind.push(val);
+                    }
+                }
+                let sql = format!(
+                    "DELETE FROM {}.{} WHERE {}",
+                    quote_postgres(&database),
+                    quote_postgres(&table),
+                    where_parts.join(" AND ")
+                );
+                let mut q = sqlx::query(&sql);
+                for val in &where_bind {
+                    q = bind_pg_value(q, val);
+                }
+                let result = q
+                    .execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                total_deleted += result.rows_affected();
+            }
+        }
+        RemotePool::Sqlite(pool) => {
+            for row_del in &rows {
+                if row_del.primary_keys.is_empty() {
+                    continue;
+                }
+                let where_pairs: Vec<(&String, &serde_json::Value)> =
+                    row_del.primary_keys.iter().collect();
+                let mut where_parts: Vec<String> = Vec::new();
+                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                for (col, val) in &where_pairs {
+                    if val.is_null() {
+                        where_parts.push(format!("{} IS NULL", quote_sqlite(col)));
+                    } else {
+                        where_parts.push(format!("{} = ?", quote_sqlite(col)));
+                        where_bind.push(val);
+                    }
+                }
+                let sql = format!(
+                    "DELETE FROM {} WHERE {}",
+                    quote_sqlite(&table),
+                    where_parts.join(" AND ")
+                );
+                let mut q = sqlx::query(&sql);
+                for val in &where_bind {
+                    q = bind_sqlite_value(q, val);
+                }
+                let result = q
+                    .execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                total_deleted += result.rows_affected();
+            }
+        }
+    }
+
+    Ok(UpdateResult { updated_count: total_deleted })
+}
+
 /// Execute a batch of row-level UPDATE statements for inline cell editing.
 #[tauri::command]
 pub async fn query_update_rows(

@@ -43,6 +43,7 @@
     tableName?: string;
     onDeleteRow?: (_row: CellValue[], _rowKey: string) => void;
     onCloneRow?: (_row: CellValue[]) => void;
+    onDeleteRowsPending?: (_deletedRows: Map<string, CellValue[]>) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -139,6 +140,7 @@
     tableName,
     onDeleteRow,
     onCloneRow,
+    onDeleteRowsPending,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -426,6 +428,9 @@
 
   let pendingNewRows = $state<{ key: string }[]>([]);
   let nextNewRowId = 0;
+
+  // rowKey → original row values snapshot for building DELETE WHERE clauses
+  let pendingDeletedRows = $state<Map<string, CellValue[]>>(new Map());
 
   $effect(() => {
     const trigger = addRowTrigger;
@@ -743,6 +748,39 @@
 
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
       e.preventDefault();
+    }
+
+    if ((e.key === 'Delete' || e.key === 'Backspace') && editable && !readOnly) {
+      e.preventDefault();
+      // Collect rows to act on: either the full selection or just the focused row
+      const targets: { key: string; data: CellValue[] }[] = [];
+      if (selectedRowKeys.size > 0) {
+        for (let r = 0; r < pageRows.length; r++) {
+          const rowData = pageRows[r];
+          const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+          if (selectedRowKeys.has(rowKey)) targets.push({ key: rowKey, data: rowData });
+        }
+      } else if (focusedCell) {
+        const rowData = pageRows[focusedCell.row];
+        if (rowData) {
+          const rowKey = buildRowKey(rowData, columns, pageOffset + focusedCell.row);
+          targets.push({ key: rowKey, data: rowData });
+        }
+      }
+      if (targets.length > 0) {
+        const allDeleted = targets.every((t) => pendingDeletedRows.has(t.key));
+        const next = new Map(pendingDeletedRows);
+        for (const { key, data } of targets) {
+          if (allDeleted) {
+            next.delete(key);
+          } else {
+            next.set(key, [...data]);
+          }
+        }
+        pendingDeletedRows = next;
+        onDeleteRowsPending?.(pendingDeletedRows);
+      }
+      return;
     }
 
     if (!focusedCell) {
@@ -1303,10 +1341,28 @@
   }
 
   function deleteRow(): void {
-    if (!contextMenu || !onDeleteRow) return;
+    if (!contextMenu || !editable || readOnly) return;
     const { row, rowKey } = contextMenu;
-    onDeleteRow(row, rowKey);
+    const next = new Map(pendingDeletedRows);
+    if (next.has(rowKey)) {
+      next.delete(rowKey);
+    } else {
+      next.set(rowKey, [...row]);
+    }
+    pendingDeletedRows = next;
+    onDeleteRowsPending?.(pendingDeletedRows);
     dismissContextMenu();
+  }
+
+  function markRowDeleted(rowKey: string, row: CellValue[]): void {
+    const next = new Map(pendingDeletedRows);
+    if (next.has(rowKey)) {
+      next.delete(rowKey);
+    } else {
+      next.set(rowKey, [...row]);
+    }
+    pendingDeletedRows = next;
+    onDeleteRowsPending?.(pendingDeletedRows);
   }
 
   function handleContextMenuKeydown(e: KeyboardEvent): void {
@@ -1404,18 +1460,27 @@
           {@const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex)}
           {@const isSelected = selectedRowKeys.has(rowKey)}
           {@const rowDirty = isRowPending(rowKey)}
+          {@const isDeleted = pendingDeletedRows.has(rowKey)}
           <tr
             class="data-row"
             class:row-selected={isSelected}
+            class:row-deleted={isDeleted}
             onclick={(e) => handleRowClick(e, rowKey)}
             oncontextmenu={(e) => handleRowContextMenu(e, row, processedRowIndex)}
           >
             <!-- Row number / dirty indicator -->
             <td
               class="rownum-cell"
-              onclick={() => { focusedCell = null; onDeselect?.(); }}
+              tabindex="-1"
+              onclick={() => {
+                anchorCell = { row: rowIndex, col: 0 };
+                focusedCell = { row: rowIndex, col: 0 };
+                onDeselect?.();
+              }}
             >
-              {#if rowDirty}
+              {#if isDeleted}
+                <span class="row-deleted-indicator" aria-label="Row pending deletion">–</span>
+              {:else if rowDirty}
                 <span class="row-dirty-dot" aria-label="Row has unsaved changes"></span>
               {:else}
                 <span class="rownum">{rowOffset + pageOffset + rowIndex + 1}</span>
@@ -1690,15 +1755,13 @@
           >
             Clone row
           </button>
-          {#if onDeleteRow}
-            <button
-              class="context-menu-item context-menu-item-danger"
-              role="menuitem"
-              onclick={() => deleteRow()}
-            >
-              Delete row
-            </button>
-          {/if}
+          <button
+            class="context-menu-item context-menu-item-danger"
+            role="menuitem"
+            onclick={() => deleteRow()}
+          >
+            {pendingDeletedRows.has(contextMenu!.rowKey) ? 'Undelete row' : 'Delete row'}
+          </button>
         {/if}
       {/if}
     </div>
@@ -1952,6 +2015,7 @@
     box-sizing: border-box;
     padding: 0;
     cursor: pointer;
+    outline: none;
   }
 
   .rownum {
@@ -1967,6 +2031,31 @@
     height: 6px;
     border-radius: 50%;
     background: var(--color-accent);
+  }
+
+  .data-row.row-deleted {
+    background: color-mix(in srgb, var(--color-danger) 6%, transparent);
+  }
+
+  .data-row.row-deleted .rownum-cell {
+    border-left: 2px solid var(--color-danger);
+  }
+
+  .data-row.row-deleted:hover {
+    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  }
+
+  .data-row.row-deleted .data-cell {
+    text-decoration: line-through;
+    opacity: 0.5;
+  }
+
+  .row-deleted-indicator {
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--color-danger);
+    user-select: none;
+    line-height: 1;
   }
 
   /* ── Data cells ─────────────────────────────────────────────────────────── */

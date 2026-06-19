@@ -86,6 +86,7 @@ pub fn run() {
             commands::query::query_execute,
             commands::query::query_execute_selection,
             commands::query::query_update_rows,
+            commands::query::query_delete_rows,
             commands::query::query_insert_row,
             commands::query::query_format,
             // Schema introspection
