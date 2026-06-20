@@ -720,7 +720,6 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: var(--color-bg-primary);
   }
 
   /* ── Toolbar ───────────────────────────────────────────────────────────── */
@@ -733,9 +732,6 @@
     align-items: center;
     gap: var(--spacing-2);
     padding: 0 var(--spacing-3);
-    background: var(--color-bg-secondary);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
     border-bottom: 1px solid var(--color-border);
   }
 

@@ -55,7 +55,7 @@
   let grpCtx   = $state<GrpCtxMenu | null>(null);
   let connCtx  = $state<ConnCtxMenu | null>(null);
 
-  interface ConfirmState { title: string; message: string; onconfirm: () => void }
+  interface ConfirmState { title: string; message: string; confirmText?: string; onconfirm: () => void }
   let confirmState = $state<ConfirmState | null>(null);
 
   // ── Connection helpers ────────────────────────────────────────────────────
@@ -285,6 +285,74 @@
     if (!dbCtx) return;
     panelStore.openInFocused({ kind: 'erd', connectionId: dbCtx.connectionId, database: dbCtx.database });
     dbCtx = null;
+  }
+
+  function qi(name: string, dbType: string): string {
+    if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
+    return '"' + name.replace(/"/g, '""') + '"';
+  }
+
+  function ctxDropTable() {
+    if (!tableCtx) return;
+    const { connectionId, database, table } = tableCtx;
+    const profile = connectionStore.getById(connectionId);
+    tableCtx = null;
+    if (!profile || profile.readOnly) return;
+    const dbType = profile.dbType;
+    const sql = dbType === 'sqlite'
+      ? `DROP TABLE ${qi(table.name, dbType)}`
+      : `DROP TABLE ${qi(database, dbType)}.${qi(table.name, dbType)}`;
+    confirmState = {
+      title: 'Drop Table',
+      message: `Drop table "${table.name}"? This will permanently delete the table and all its data. This cannot be undone.`,
+      confirmText: 'Drop Table',
+      onconfirm: async () => {
+        confirmState = null;
+        try {
+          await schemaApi.executeDdl(connectionId, sql);
+          const connMap = new Map(schemaCache.get(connectionId) ?? []);
+          connMap.set(database, []);
+          schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+          await loadTables(connectionId, database);
+        } catch (err) {
+          alert(errorMessage(err));
+        }
+      },
+    };
+  }
+
+  function ctxDropDatabase() {
+    if (!dbCtx) return;
+    const { connectionId, database } = dbCtx;
+    const profile = connectionStore.getById(connectionId);
+    dbCtx = null;
+    if (!profile || profile.readOnly) return;
+    const dbType = profile.dbType;
+    let sql: string;
+    if (dbType === 'mysql' || dbType === 'mariadb') {
+      sql = `DROP DATABASE ${qi(database, dbType)}`;
+    } else if (dbType === 'postgres') {
+      sql = `DROP SCHEMA ${qi(database, dbType)} CASCADE`;
+    } else {
+      return;
+    }
+    confirmState = {
+      title: dbType === 'postgres' ? 'Drop Schema' : 'Drop Database',
+      message: `Drop ${dbType === 'postgres' ? 'schema' : 'database'} "${database}"? This will permanently delete all tables and data within it. This cannot be undone.`,
+      confirmText: dbType === 'postgres' ? 'Drop Schema' : 'Drop Database',
+      onconfirm: async () => {
+        confirmState = null;
+        try {
+          await schemaApi.executeDdl(connectionId, sql);
+          const connMap = new Map(schemaCache.get(connectionId) ?? []);
+          connMap.delete(database);
+          schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+          expandedDatabases = new Set([...expandedDatabases].filter(k => k !== `${connectionId}/${database}`));
+        } catch (err) {
+          alert(errorMessage(err));
+        }
+      },
+    };
   }
 
   function handleWindowKeydown(e: KeyboardEvent) {
@@ -558,18 +626,30 @@
 
 <!-- Context menus -->
 {#if tableCtx}
+  {@const tableCtxProfile = connectionStore.getById(tableCtx.connectionId)}
   <div class="ctx-menu" role="menu" style="top:{tableCtx.y}px;left:{tableCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={ctxOpenTable}>Open Table</button>
     <button class="ctx-item" role="menuitem" onclick={ctxViewDdl}>View DDL</button>
     <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
+    {#if !tableCtxProfile?.readOnly}
+      <div class="ctx-sep" role="separator"></div>
+      <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDropTable}>Drop Table</button>
+    {/if}
   </div>
 {/if}
 
 {#if dbCtx}
+  {@const dbCtxProfile = connectionStore.getById(dbCtx.connectionId)}
   <div class="ctx-menu" role="menu" style="top:{dbCtx.y}px;left:{dbCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item" role="menuitem" onclick={() => { if (dbCtx) { navigator.clipboard.writeText(dbCtx.database); dbCtx = null; } }}>Copy Name</button>
+    {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dbType !== 'sqlite'}
+      <div class="ctx-sep" role="separator"></div>
+      <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDropDatabase}>
+        {dbCtxProfile?.dbType === 'postgres' ? 'Drop Schema' : 'Drop Database'}
+      </button>
+    {/if}
   </div>
 {/if}
 
@@ -620,7 +700,7 @@
   <ConfirmDialog
     title={confirmState.title}
     message={confirmState.message}
-    confirmText="Delete"
+    confirmText={confirmState.confirmText ?? 'Delete'}
     danger={true}
     onconfirm={confirmState.onconfirm}
     oncancel={() => (confirmState = null)}
