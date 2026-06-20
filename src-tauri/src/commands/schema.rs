@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
-use crate::error::AppError;
+use crate::error::{AppError, RowmanceError};
 
 #[derive(Debug, Serialize)]
 pub struct TableInfo {
@@ -308,6 +308,58 @@ pub async fn schema_list_foreign_keys(
                 .collect())
         }
     }
+}
+
+/// Execute a DDL statement (ALTER TABLE, CREATE INDEX, etc.) against the connection.
+/// The caller is responsible for generating correct, database-specific SQL.
+#[tauri::command]
+pub async fn schema_execute_ddl(
+    sqlite: State<'_, sqlx::SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    sql: String,
+) -> Result<(), AppError> {
+    let profile_row = sqlx::query!(
+        "SELECT read_only FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    match profile_row {
+        None => return Err(AppError::new(
+            "CONNECTION_NOT_FOUND",
+            format!("No connection with id {connection_id}"),
+        )),
+        Some(row) if row.read_only != 0 => {
+            return Err(AppError::new(
+                "READ_ONLY_VIOLATION",
+                "This connection is in read-only mode — DDL statements are not allowed",
+            ));
+        }
+        _ => {}
+    }
+
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+    match pool_ref.value() {
+        RemotePool::MySql(pool) => sqlx::query(&sql)
+            .execute(pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| AppError::from(RowmanceError::Database(e)))?,
+        RemotePool::Postgres(pool) => sqlx::query(&sql)
+            .execute(pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| AppError::from(RowmanceError::Database(e)))?,
+        RemotePool::Sqlite(pool) => sqlx::query(&sql)
+            .execute(pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| AppError::from(RowmanceError::Database(e)))?,
+    }
+    Ok(())
 }
 
 /// Return the DDL for a table or view.

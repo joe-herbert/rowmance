@@ -1,10 +1,14 @@
 <!--
-  TableStructure — panel showing columns, indexes, and foreign keys for a table.
+  TableStructure — panel showing columns, indexes, and foreign keys for a table,
+  with inline editing of structure (add/modify/drop columns, indexes, and foreign keys).
 -->
 <script lang="ts">
   import * as schemaApi from '$lib/tauri/schema';
   import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
+  import { useConnections } from '$lib/stores/connections.svelte';
   import { errorMessage } from '$lib/utils/errors';
+  import Modal from '$lib/components/Modal.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
 
   interface Props {
     connectionId: string;
@@ -14,13 +18,23 @@
 
   const { connectionId, database, table }: Props = $props();
 
+  const connections = useConnections();
+  const profile = $derived(connections.getById(connectionId));
+  const dbType = $derived(profile?.dbType ?? 'mysql');
+  const isReadOnly = $derived(profile?.readOnly ?? false);
+  const isMysql = $derived(dbType === 'mysql' || dbType === 'mariadb');
+  const isPostgres = $derived(dbType === 'postgres');
+  const isSqlite = $derived(dbType === 'sqlite');
+
+  // ── Data state ─────────────────────────────────────────────────────────────
+
   let isLoading = $state(true);
   let loadError = $state<string | null>(null);
   let columns = $state<ColumnInfo[]>([]);
   let indexes = $state<IndexInfo[]>([]);
   let foreignKeys = $state<ForeignKeyInfo[]>([]);
 
-  $effect(() => {
+  function loadData() {
     isLoading = true;
     loadError = null;
     Promise.all([
@@ -36,10 +50,278 @@
       loadError = errorMessage(err);
       isLoading = false;
     });
+  }
+
+  $effect(() => {
+    editMode = false;
+    loadData();
   });
+
+  // ── Edit state ─────────────────────────────────────────────────────────────
+
+  let editMode = $state(false);
+  let isSaving = $state(false);
+  let saveError = $state<string | null>(null);
+
+  interface ColForm {
+    mode: 'add' | 'edit';
+    original: ColumnInfo | null;
+    name: string;
+    dataType: string;
+    nullable: boolean;
+    defaultValue: string;
+    autoIncrement: boolean;
+    comment: string;
+  }
+  let columnForm = $state<ColForm | null>(null);
+
+  interface IdxForm {
+    name: string;
+    selectedColumns: string[];
+    unique: boolean;
+    isPrimary: boolean;
+  }
+  let indexForm = $state<IdxForm | null>(null);
+
+  interface FkForm {
+    constraintName: string;
+    selectedColumns: string[];
+    referencedTable: string;
+    referencedColumns: string;
+    onDelete: string;
+    onUpdate: string;
+  }
+  let fkForm = $state<FkForm | null>(null);
+
+  interface ConfirmDrop { label: string; sqls: string[]; }
+  let confirmDrop = $state<ConfirmDrop | null>(null);
+
+  // ── SQL helpers ────────────────────────────────────────────────────────────
+
+  function qi(name: string): string {
+    if (isMysql) return '`' + name.replace(/`/g, '``') + '`';
+    return '"' + name.replace(/"/g, '""') + '"';
+  }
+
+  function tRef(): string {
+    if (isSqlite) return qi(table);
+    return qi(database) + '.' + qi(table);
+  }
+
+  function escStr(s: string): string {
+    return "'" + s.replace(/'/g, "''") + "'";
+  }
+
+  async function execSqls(sqls: string[]) {
+    for (const sql of sqls) {
+      await schemaApi.executeDdl(connectionId, sql);
+    }
+  }
+
+  // ── Column SQL ─────────────────────────────────────────────────────────────
+
+  function colDef(form: ColForm): string {
+    let s = `${qi(form.name)} ${form.dataType}`;
+    if (!form.nullable) s += ' NOT NULL';
+    if (isMysql && form.autoIncrement) s += ' AUTO_INCREMENT';
+    if (form.defaultValue.trim()) s += ` DEFAULT ${form.defaultValue.trim()}`;
+    if (isMysql && form.comment.trim()) s += ` COMMENT ${escStr(form.comment.trim())}`;
+    return s;
+  }
+
+  function buildAddColSqls(form: ColForm): string[] {
+    return [`ALTER TABLE ${tRef()} ADD COLUMN ${colDef(form)}`];
+  }
+
+  function buildEditColSqls(orig: ColumnInfo, form: ColForm): string[] {
+    if (isMysql) {
+      return [`ALTER TABLE ${tRef()} CHANGE COLUMN ${qi(orig.name)} ${colDef(form)}`];
+    }
+    if (isPostgres) {
+      const stmts: string[] = [];
+      const t = tRef();
+      const oq = qi(orig.name);
+      if (form.dataType !== orig.dataType) {
+        stmts.push(`ALTER TABLE ${t} ALTER COLUMN ${oq} TYPE ${form.dataType}`);
+      }
+      if (form.nullable !== orig.nullable) {
+        stmts.push(`ALTER TABLE ${t} ALTER COLUMN ${oq} ${form.nullable ? 'DROP NOT NULL' : 'SET NOT NULL'}`);
+      }
+      const origDef = orig.defaultValue ?? '';
+      const newDef = form.defaultValue.trim();
+      if (newDef !== origDef) {
+        stmts.push(newDef
+          ? `ALTER TABLE ${t} ALTER COLUMN ${oq} SET DEFAULT ${newDef}`
+          : `ALTER TABLE ${t} ALTER COLUMN ${oq} DROP DEFAULT`);
+      }
+      if (form.name !== orig.name) {
+        stmts.push(`ALTER TABLE ${t} RENAME COLUMN ${oq} TO ${qi(form.name)}`);
+      }
+      return stmts;
+    }
+    if (isSqlite && form.name !== orig.name) {
+      return [`ALTER TABLE ${tRef()} RENAME COLUMN ${qi(orig.name)} TO ${qi(form.name)}`];
+    }
+    return [];
+  }
+
+  function buildDropColSql(name: string): string {
+    return `ALTER TABLE ${tRef()} DROP COLUMN ${qi(name)}`;
+  }
+
+  // ── Index SQL ──────────────────────────────────────────────────────────────
+
+  function buildAddIdxSql(form: IdxForm): string {
+    const cols = form.selectedColumns.map(qi).join(', ');
+    if (form.isPrimary) {
+      return `ALTER TABLE ${tRef()} ADD PRIMARY KEY (${cols})`;
+    }
+    const name = form.name.trim() || `idx_${table}_${form.selectedColumns.join('_')}`;
+    return `CREATE ${form.unique ? 'UNIQUE ' : ''}INDEX ${qi(name)} ON ${tRef()} (${cols})`;
+  }
+
+  function buildDropIdxSql(name: string): string {
+    if (name === 'PRIMARY' && isMysql) return `ALTER TABLE ${tRef()} DROP PRIMARY KEY`;
+    if (isMysql) return `DROP INDEX ${qi(name)} ON ${tRef()}`;
+    if (isPostgres) return `DROP INDEX ${qi(database)}.${qi(name)}`;
+    return `DROP INDEX ${qi(name)}`;
+  }
+
+  // ── FK SQL ─────────────────────────────────────────────────────────────────
+
+  function buildAddFkSql(form: FkForm): string {
+    const local = form.selectedColumns.map(qi).join(', ');
+    const refCols = form.referencedColumns.split(',').map(s => qi(s.trim())).join(', ');
+    const name = form.constraintName.trim() || `fk_${table}_${form.selectedColumns.join('_')}`;
+    return `ALTER TABLE ${tRef()} ADD CONSTRAINT ${qi(name)} FOREIGN KEY (${local}) REFERENCES ${qi(form.referencedTable.trim())} (${refCols}) ON DELETE ${form.onDelete} ON UPDATE ${form.onUpdate}`;
+  }
+
+  function buildDropFkSql(name: string): string {
+    if (isMysql) return `ALTER TABLE ${tRef()} DROP FOREIGN KEY ${qi(name)}`;
+    return `ALTER TABLE ${tRef()} DROP CONSTRAINT ${qi(name)}`;
+  }
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  function openAddCol() {
+    columnForm = {
+      mode: 'add', original: null,
+      name: '', dataType: isMysql ? 'VARCHAR(255)' : 'TEXT',
+      nullable: true, defaultValue: '', autoIncrement: false, comment: '',
+    };
+    saveError = null;
+  }
+
+  function openEditCol(col: ColumnInfo) {
+    columnForm = {
+      mode: 'edit', original: col,
+      name: col.name, dataType: col.dataType,
+      nullable: col.nullable, defaultValue: col.defaultValue ?? '',
+      autoIncrement: col.isAutoIncrement, comment: col.comment ?? '',
+    };
+    saveError = null;
+  }
+
+  async function submitCol() {
+    if (!columnForm) return;
+    if (!columnForm.name.trim()) { saveError = 'Column name is required'; return; }
+    if (!columnForm.dataType.trim()) { saveError = 'Data type is required'; return; }
+    isSaving = true; saveError = null;
+    try {
+      const sqls = columnForm.mode === 'add'
+        ? buildAddColSqls(columnForm)
+        : buildEditColSqls(columnForm.original!, columnForm);
+      if (sqls.length > 0) await execSqls(sqls);
+      columnForm = null;
+      loadData();
+    } catch (err) {
+      saveError = errorMessage(err);
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  function openAddIdx() {
+    indexForm = { name: '', selectedColumns: [], unique: false, isPrimary: false };
+    saveError = null;
+  }
+
+  async function submitIdx() {
+    if (!indexForm) return;
+    if (!indexForm.selectedColumns.length) { saveError = 'Select at least one column'; return; }
+    isSaving = true; saveError = null;
+    try {
+      await execSqls([buildAddIdxSql(indexForm)]);
+      indexForm = null;
+      loadData();
+    } catch (err) {
+      saveError = errorMessage(err);
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  function openAddFk() {
+    fkForm = {
+      constraintName: '', selectedColumns: [],
+      referencedTable: '', referencedColumns: '',
+      onDelete: 'NO ACTION', onUpdate: 'NO ACTION',
+    };
+    saveError = null;
+  }
+
+  async function submitFk() {
+    if (!fkForm) return;
+    if (!fkForm.selectedColumns.length) { saveError = 'Select at least one column'; return; }
+    if (!fkForm.referencedTable.trim()) { saveError = 'Referenced table is required'; return; }
+    if (!fkForm.referencedColumns.trim()) { saveError = 'Referenced columns are required'; return; }
+    isSaving = true; saveError = null;
+    try {
+      await execSqls([buildAddFkSql(fkForm)]);
+      fkForm = null;
+      loadData();
+    } catch (err) {
+      saveError = errorMessage(err);
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  function requestDrop(label: string, sqls: string[]) {
+    confirmDrop = { label, sqls };
+    saveError = null;
+  }
+
+  async function execConfirm() {
+    if (!confirmDrop) return;
+    isSaving = true; saveError = null;
+    try {
+      await execSqls(confirmDrop.sqls);
+      confirmDrop = null;
+      loadData();
+    } catch (err) {
+      saveError = errorMessage(err);
+      confirmDrop = null;
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  function toggleColSel(col: string, arr: string[]): string[] {
+    return arr.includes(col) ? arr.filter(c => c !== col) : [...arr, col];
+  }
+
+  const refActions = [
+    { value: 'NO ACTION', label: 'NO ACTION' },
+    { value: 'RESTRICT', label: 'RESTRICT' },
+    { value: 'CASCADE', label: 'CASCADE' },
+    { value: 'SET NULL', label: 'SET NULL' },
+    { value: 'SET DEFAULT', label: 'SET DEFAULT' },
+  ];
 </script>
 
 <div class="structure-viewer">
+  <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
   <div class="toolbar">
     <span class="object-label">
       <span class="object-type">table</span>
@@ -48,9 +330,19 @@
     </span>
     {#if !isLoading && !loadError}
       <span class="col-count">{columns.length} columns</span>
+      {#if !isReadOnly}
+        <button
+          class="edit-toggle"
+          class:edit-toggle--active={editMode}
+          onclick={() => { editMode = !editMode; saveError = null; }}
+        >
+          {editMode ? 'Done' : 'Edit'}
+        </button>
+      {/if}
     {/if}
   </div>
 
+  <!-- ── Content ─────────────────────────────────────────────────────────── -->
   <div class="content">
     {#if isLoading}
       <div class="state-overlay">
@@ -62,8 +354,15 @@
       </div>
     {:else}
       <div class="sections">
-        <!-- Columns -->
+
+        <!-- Columns ──────────────────────────────────────────────────────── -->
         <section class="section">
+          {#if editMode}
+            <div class="section-header section-header--flex">
+              <span>Columns ({columns.length})</span>
+              <button class="add-btn" onclick={openAddCol}>+ Add Column</button>
+            </div>
+          {/if}
           <table class="col-table">
             <thead>
               <tr>
@@ -72,6 +371,7 @@
                 <th class="th-narrow">Key</th>
                 <th class="th-narrow" title="Nullable">Null</th>
                 <th>Default</th>
+                {#if editMode}<th class="th-actions"></th>{/if}
               </tr>
             </thead>
             <tbody>
@@ -86,10 +386,27 @@
                   </td>
                   <td class="col-null center-cell">{col.nullable ? '✓' : ''}</td>
                   <td class="col-default mono">{col.defaultValue ?? ''}</td>
+                  {#if editMode}
+                    <td class="col-actions">
+                      <div class="row-actions">
+                        <button class="act-btn" title="Edit column" onclick={() => openEditCol(col)}>
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z"/>
+                          </svg>
+                        </button>
+                        <button class="act-btn act-btn--danger" title="Drop column" onclick={() => requestDrop(`Drop column "${col.name}"?`, [buildDropColSql(col.name)])}>
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="3,6 13,6"/>
+                            <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  {/if}
                 </tr>
                 {#if col.comment}
                   <tr class="comment-row">
-                    <td colspan="5" class="col-comment">{col.comment}</td>
+                    <td colspan={editMode ? 6 : 5} class="col-comment">{col.comment}</td>
                   </tr>
                 {/if}
               {/each}
@@ -97,10 +414,15 @@
           </table>
         </section>
 
-        <!-- Indexes -->
-        {#if indexes.length > 0}
+        <!-- Indexes ──────────────────────────────────────────────────────── -->
+        {#if indexes.length > 0 || editMode}
           <section class="section">
-            <div class="section-header">Indexes ({indexes.length})</div>
+            <div class="section-header section-header--flex">
+              <span>Indexes ({indexes.length})</span>
+              {#if editMode}
+                <button class="add-btn" onclick={openAddIdx}>+ Add Index</button>
+              {/if}
+            </div>
             <div class="index-list">
               {#each indexes as idx (idx.name)}
                 <div class="index-row">
@@ -112,19 +434,42 @@
                     {#if idx.unique}<span class="badge badge--unique">UNIQUE</span>{/if}
                     <span class="index-type">{idx.indexType}</span>
                   </div>
+                  {#if editMode}
+                    <div class="row-actions row-actions--shown">
+                      <button class="act-btn act-btn--danger" title="Drop index" onclick={() => requestDrop(`Drop index "${idx.name}"?`, [buildDropIdxSql(idx.name)])}>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="3,6 13,6"/>
+                          <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
+                        </svg>
+                      </button>
+                    </div>
+                  {/if}
                 </div>
               {/each}
             </div>
           </section>
         {/if}
 
-        <!-- Foreign Keys -->
-        {#if foreignKeys.length > 0}
+        <!-- Foreign Keys ─────────────────────────────────────────────────── -->
+        {#if foreignKeys.length > 0 || editMode}
           <section class="section">
-            <div class="section-header">Foreign Keys ({foreignKeys.length})</div>
+            <div class="section-header section-header--flex">
+              <span>Foreign Keys ({foreignKeys.length})</span>
+              {#if editMode && !isSqlite}
+                <button class="add-btn" onclick={openAddFk}>+ Add Foreign Key</button>
+              {/if}
+            </div>
             <div class="fk-list">
               {#each foreignKeys as fk (fk.constraintName)}
-                <div class="fk-card">
+                <div class="fk-card" class:fk-card--edit={editMode}>
+                  {#if editMode}
+                    <button class="act-btn act-btn--danger fk-drop-btn" title="Drop foreign key" onclick={() => requestDrop(`Drop foreign key "${fk.constraintName}"?`, [buildDropFkSql(fk.constraintName)])}>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="3,6 13,6"/>
+                        <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
+                      </svg>
+                    </button>
+                  {/if}
                   <div class="fk-name mono">{fk.constraintName}</div>
                   <div class="fk-relation">
                     <span class="mono fk-cols">{fk.columns.join(', ')}</span>
@@ -138,13 +483,235 @@
                   </div>
                 </div>
               {/each}
+              {#if editMode && isSqlite}
+                <div class="sqlite-note">SQLite does not support adding foreign key constraints to existing tables.</div>
+              {/if}
             </div>
           </section>
         {/if}
+
       </div>
     {/if}
   </div>
 </div>
+
+<!-- ── Column Modal ──────────────────────────────────────────────────────── -->
+{#if columnForm}
+  {@const form = columnForm}
+  <Modal label={form.mode === 'add' ? 'Add Column' : 'Edit Column'} onbackdropclick={() => !isSaving && (columnForm = null)}>
+    <div class="modal-card">
+      <div class="modal-title">
+        {form.mode === 'add' ? 'Add Column' : `Edit Column: ${form.original?.name}`}
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label class="form-label" for="col-name">Name</label>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input id="col-name" class="form-input" value={form.name} autofocus
+            oninput={(e) => { columnForm!.name = (e.target as HTMLInputElement).value; }}
+            placeholder="column_name" />
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="col-type">
+            Type
+            {#if isSqlite && form.mode === 'edit'}
+              <span class="form-hint">(SQLite: rename only)</span>
+            {/if}
+          </label>
+          <input id="col-type" class="form-input" value={form.dataType}
+            oninput={(e) => { columnForm!.dataType = (e.target as HTMLInputElement).value; }}
+            placeholder={isMysql ? 'VARCHAR(255)' : 'TEXT'}
+            disabled={isSqlite && form.mode === 'edit'} />
+        </div>
+        {#if !(isSqlite && form.mode === 'edit')}
+          <div class="form-check-row">
+            <input type="checkbox" id="col-nullable" checked={form.nullable}
+              onchange={(e) => { columnForm!.nullable = (e.target as HTMLInputElement).checked; }} />
+            <label for="col-nullable" class="form-check-label">Allow NULL</label>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="col-default">Default Value</label>
+            <input id="col-default" class="form-input" value={form.defaultValue}
+              oninput={(e) => { columnForm!.defaultValue = (e.target as HTMLInputElement).value; }}
+              placeholder="e.g. 0, 'active', NULL, CURRENT_TIMESTAMP" />
+          </div>
+          {#if isMysql}
+            <div class="form-check-row">
+              <input type="checkbox" id="col-ai" checked={form.autoIncrement}
+                onchange={(e) => { columnForm!.autoIncrement = (e.target as HTMLInputElement).checked; }} />
+              <label for="col-ai" class="form-check-label">Auto Increment</label>
+            </div>
+            <div class="form-row">
+              <label class="form-label" for="col-comment">Comment</label>
+              <input id="col-comment" class="form-input" value={form.comment}
+                oninput={(e) => { columnForm!.comment = (e.target as HTMLInputElement).value; }}
+                placeholder="Optional column comment" />
+            </div>
+          {/if}
+        {/if}
+        {#if saveError}
+          <div class="modal-error">{saveError}</div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick={() => (columnForm = null)} disabled={isSaving}>Cancel</button>
+        <button class="btn btn--primary" onclick={submitCol} disabled={isSaving}>
+          {isSaving ? 'Saving…' : form.mode === 'add' ? 'Add Column' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+<!-- ── Index Modal ───────────────────────────────────────────────────────── -->
+{#if indexForm}
+  {@const form = indexForm}
+  <Modal label="Add Index" onbackdropclick={() => !isSaving && (indexForm = null)}>
+    <div class="modal-card">
+      <div class="modal-title">Add Index</div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label class="form-label" for="idx-name">
+            Index Name <span class="form-hint">(auto-generated if blank)</span>
+          </label>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input id="idx-name" class="form-input" value={form.name} autofocus
+            oninput={(e) => { indexForm!.name = (e.target as HTMLInputElement).value; }}
+            placeholder={`idx_${table}_column`} />
+        </div>
+        <div class="form-row">
+          <div class="form-label">Columns</div>
+          <div class="col-selector">
+            {#each columns as col}
+              <label class="col-selector-item">
+                <input type="checkbox" checked={form.selectedColumns.includes(col.name)}
+                  onchange={() => { indexForm!.selectedColumns = toggleColSel(col.name, indexForm!.selectedColumns); }} />
+                <span class="mono">{col.name}</span>
+                <span class="col-type-hint">{col.dataType}</span>
+              </label>
+            {/each}
+          </div>
+        </div>
+        {#if !form.isPrimary}
+          <div class="form-check-row">
+            <input type="checkbox" id="idx-unique" checked={form.unique}
+              onchange={(e) => { indexForm!.unique = (e.target as HTMLInputElement).checked; }} />
+            <label for="idx-unique" class="form-check-label">Unique</label>
+          </div>
+        {/if}
+        {#if !isSqlite}
+          <div class="form-check-row">
+            <input type="checkbox" id="idx-pk" checked={form.isPrimary}
+              onchange={(e) => {
+                indexForm!.isPrimary = (e.target as HTMLInputElement).checked;
+                if (indexForm!.isPrimary) indexForm!.unique = true;
+              }} />
+            <label for="idx-pk" class="form-check-label">Primary Key</label>
+          </div>
+        {/if}
+        {#if saveError}
+          <div class="modal-error">{saveError}</div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick={() => (indexForm = null)} disabled={isSaving}>Cancel</button>
+        <button class="btn btn--primary" onclick={submitIdx} disabled={isSaving}>
+          {isSaving ? 'Saving…' : 'Add Index'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+<!-- ── Foreign Key Modal ─────────────────────────────────────────────────── -->
+{#if fkForm}
+  {@const form = fkForm}
+  <Modal label="Add Foreign Key" onbackdropclick={() => !isSaving && (fkForm = null)}>
+    <div class="modal-card">
+      <div class="modal-title">Add Foreign Key</div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label class="form-label" for="fk-name">
+            Constraint Name <span class="form-hint">(auto-generated if blank)</span>
+          </label>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input id="fk-name" class="form-input" value={form.constraintName} autofocus
+            oninput={(e) => { fkForm!.constraintName = (e.target as HTMLInputElement).value; }}
+            placeholder={`fk_${table}_column`} />
+        </div>
+        <div class="form-row">
+          <div class="form-label">Local Columns</div>
+          <div class="col-selector">
+            {#each columns as col}
+              <label class="col-selector-item">
+                <input type="checkbox" checked={form.selectedColumns.includes(col.name)}
+                  onchange={() => { fkForm!.selectedColumns = toggleColSel(col.name, fkForm!.selectedColumns); }} />
+                <span class="mono">{col.name}</span>
+                <span class="col-type-hint">{col.dataType}</span>
+              </label>
+            {/each}
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="fk-ref-table">Referenced Table</label>
+          <input id="fk-ref-table" class="form-input" value={form.referencedTable}
+            oninput={(e) => { fkForm!.referencedTable = (e.target as HTMLInputElement).value; }}
+            placeholder="other_table" />
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="fk-ref-cols">
+            Referenced Columns <span class="form-hint">(comma-separated)</span>
+          </label>
+          <input id="fk-ref-cols" class="form-input" value={form.referencedColumns}
+            oninput={(e) => { fkForm!.referencedColumns = (e.target as HTMLInputElement).value; }}
+            placeholder="id" />
+        </div>
+        <div class="form-row-pair">
+          <div class="form-row">
+            <div class="form-label">ON DELETE</div>
+            <Select options={refActions} value={form.onDelete} onchange={(v) => { fkForm!.onDelete = v; }} size="md" />
+          </div>
+          <div class="form-row">
+            <div class="form-label">ON UPDATE</div>
+            <Select options={refActions} value={form.onUpdate} onchange={(v) => { fkForm!.onUpdate = v; }} size="md" />
+          </div>
+        </div>
+        {#if saveError}
+          <div class="modal-error">{saveError}</div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick={() => (fkForm = null)} disabled={isSaving}>Cancel</button>
+        <button class="btn btn--primary" onclick={submitFk} disabled={isSaving}>
+          {isSaving ? 'Saving…' : 'Add Foreign Key'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+<!-- ── Drop Confirm Modal ─────────────────────────────────────────────────── -->
+{#if confirmDrop}
+  {@const drop = confirmDrop}
+  <Modal label="Confirm drop" onbackdropclick={() => !isSaving && (confirmDrop = null)}>
+    <div class="modal-card modal-card--sm">
+      <div class="modal-title">{drop.label}</div>
+      <div class="modal-body">
+        <p class="confirm-text">This action cannot be undone.</p>
+        <div class="preview-sql mono">{drop.sqls[0]}</div>
+        {#if saveError}
+          <div class="modal-error">{saveError}</div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick={() => (confirmDrop = null)} disabled={isSaving}>Cancel</button>
+        <button class="btn btn--danger" onclick={execConfirm} disabled={isSaving}>
+          {isSaving ? 'Dropping…' : 'Drop'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
 
 <style>
   .structure-viewer {
@@ -217,6 +784,39 @@
     letter-spacing: 0.02em;
   }
 
+  .edit-toggle {
+    flex-shrink: 0;
+    height: 22px;
+    padding: 0 10px;
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: all var(--transition-fast);
+  }
+
+  .edit-toggle:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
+
+  .edit-toggle--active {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: white;
+  }
+
+  .edit-toggle--active:hover {
+    background: var(--color-accent-hover, var(--color-accent));
+    border-color: var(--color-accent-hover, var(--color-accent));
+    opacity: 0.9;
+  }
+
   /* ── Scroll content ────────────────────────────────────────────────────── */
 
   .content {
@@ -255,6 +855,38 @@
     z-index: 1;
   }
 
+  .section-header--flex {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* ── Add buttons in section headers ────────────────────────────────────── */
+
+  .add-btn {
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    padding: 2px 8px;
+    height: 18px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    letter-spacing: 0;
+    text-transform: none;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+  }
+
+  .add-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
+
   /* ── Columns table ─────────────────────────────────────────────────────── */
 
   .col-table {
@@ -291,6 +923,10 @@
     width: 1px;
     text-align: center;
     white-space: nowrap;
+  }
+
+  .th-actions {
+    width: 52px;
   }
 
   .col-table td {
@@ -341,6 +977,11 @@
     white-space: nowrap;
   }
 
+  .col-actions {
+    padding: 0 var(--spacing-2) !important;
+    width: 52px;
+  }
+
   .comment-row td {
     padding: 0 var(--spacing-3) 6px;
     font-size: 11px;
@@ -351,6 +992,54 @@
 
   .mono {
     font-family: var(--font-family-mono);
+  }
+
+  /* ── Row action buttons ────────────────────────────────────────────────── */
+
+  .row-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .row-actions--shown {
+    opacity: 1;
+  }
+
+  tr:hover .row-actions,
+  .index-row:hover .row-actions,
+  .fk-card:hover .row-actions {
+    opacity: 1;
+  }
+
+  .act-btn {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+  }
+
+  .act-btn:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border);
+    color: var(--color-text-primary);
+  }
+
+  .act-btn--danger:hover {
+    background: var(--color-danger-subtle, rgba(239, 68, 68, 0.1));
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--color-danger, #ef4444);
   }
 
   /* ── Badges ────────────────────────────────────────────────────────────── */
@@ -476,11 +1165,28 @@
     box-shadow: var(--shadow-sm);
     font-size: var(--font-size-xs);
     transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+    position: relative;
   }
 
   .fk-card:hover {
     border-color: var(--color-border-strong);
     box-shadow: var(--shadow-md);
+  }
+
+  .fk-card--edit {
+    padding-right: var(--spacing-8);
+  }
+
+  .fk-drop-btn {
+    position: absolute;
+    top: var(--spacing-2);
+    right: var(--spacing-2);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .fk-card:hover .fk-drop-btn {
+    opacity: 1;
   }
 
   .fk-name {
@@ -543,6 +1249,13 @@
     margin: 0 5px;
   }
 
+  .sqlite-note {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-disabled);
+    font-style: italic;
+    padding: var(--spacing-1) 0;
+  }
+
   /* ── State overlays ────────────────────────────────────────────────────── */
 
   .state-overlay {
@@ -568,5 +1281,249 @@
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.35; }
+  }
+
+  /* ── Modal card ────────────────────────────────────────────────────────── */
+
+  .modal-card {
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    width: 440px;
+    max-width: 92vw;
+    overflow: hidden;
+    animation: modal-in 140ms ease both;
+  }
+
+  .modal-card--sm {
+    width: 360px;
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0); }
+  }
+
+  .modal-title {
+    padding: var(--spacing-4) var(--spacing-4) var(--spacing-3);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .modal-body {
+    padding: var(--spacing-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+
+  .modal-footer {
+    padding: var(--spacing-3) var(--spacing-4);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    justify-content: flex-end;
+  }
+
+  /* ── Form elements ─────────────────────────────────────────────────────── */
+
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .form-row-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-3);
+  }
+
+  .form-label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+  }
+
+  .form-hint {
+    font-weight: var(--font-weight-regular, 400);
+    color: var(--color-text-disabled);
+    font-size: 10px;
+  }
+
+  .form-input {
+    height: 30px;
+    padding: 0 var(--spacing-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  .form-input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--color-accent-subtle);
+  }
+
+  .form-input:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .form-check-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+
+  .form-check-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .form-check-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+  }
+
+  /* ── Column multi-selector ─────────────────────────────────────────────── */
+
+  .col-selector {
+    display: flex;
+    flex-direction: column;
+    max-height: 140px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 3px;
+    background: var(--color-bg-secondary);
+  }
+
+  .col-selector-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-primary);
+    transition: background var(--transition-fast);
+  }
+
+  .col-selector-item:hover {
+    background: var(--color-bg-hover);
+  }
+
+  .col-selector-item input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .col-type-hint {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--color-text-disabled);
+    font-family: var(--font-family-mono);
+  }
+
+  /* ── Modal buttons ─────────────────────────────────────────────────────── */
+
+  .btn {
+    height: 28px;
+    padding: 0 14px;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    font-family: var(--font-family-ui);
+  }
+
+  .btn:hover:not(:disabled) {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn--primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: white;
+  }
+
+  .btn--primary:hover:not(:disabled) {
+    opacity: 0.88;
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: white;
+  }
+
+  .btn--danger {
+    background: var(--color-danger, #ef4444);
+    border-color: var(--color-danger, #ef4444);
+    color: white;
+  }
+
+  .btn--danger:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+
+  /* ── Modal content helpers ─────────────────────────────────────────────── */
+
+  .modal-error {
+    padding: 8px 10px;
+    background: var(--color-danger-subtle, rgba(239, 68, 68, 0.08));
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: var(--radius-md);
+    color: var(--color-danger, #ef4444);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-normal);
+  }
+
+  .confirm-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .preview-sql {
+    margin-top: var(--spacing-2);
+    padding: 8px 10px;
+    background: var(--color-bg-tertiary, var(--color-bg-hover));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    word-break: break-all;
+    line-height: 1.5;
   }
 </style>

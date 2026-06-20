@@ -89,13 +89,14 @@ pub fn run() {
             commands::query::query_delete_rows,
             commands::query::query_insert_row,
             commands::query::query_format,
-            // Schema introspection
+            // Schema introspection & modification
             commands::schema::schema_list_databases,
             commands::schema::schema_list_tables,
             commands::schema::schema_list_columns,
             commands::schema::schema_list_indexes,
             commands::schema::schema_list_foreign_keys,
             commands::schema::schema_get_ddl,
+            commands::schema::schema_execute_ddl,
             // Query history
             commands::history::history_list,
             commands::history::history_clear,

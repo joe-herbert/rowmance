@@ -34,6 +34,10 @@ export async function listForeignKeys(
   return invoke<ForeignKeyInfo[]>('schema_list_foreign_keys', { connectionId, database, table });
 }
 
+export async function executeDdl(connectionId: string, sql: string): Promise<void> {
+  return invoke<void>('schema_execute_ddl', { connectionId, sql });
+}
+
 export async function getDdl(
   connectionId: string,
   database: string,
