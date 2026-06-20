@@ -7,6 +7,10 @@
 <script lang="ts">
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import DbIcon from '$lib/components/icons/DbIcon.svelte';
+  import TableIcon from '$lib/components/icons/TableIcon.svelte';
+  import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import * as schemaApi from '$lib/tauri/schema';
   import type { TableInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
@@ -14,6 +18,7 @@
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
+  const settingsStore = useSettings();
 
   // ── Schema state ──────────────────────────────────────────────────────────────
 
@@ -233,24 +238,12 @@
 
   // ── System item helpers ───────────────────────────────────────────────────────
 
-  const SYSTEM_DATABASES = new Set([
-    'information_schema',
-    'mysql',
-    'performance_schema',
-    'sys',
-    'pg_catalog',
-    'pg_toast',
-    'pg_temp',
-  ]);
-
-  const SYSTEM_TABLE_PATTERNS = [/^__drizzle_migrations$/, /^migrations$/, /^schema_migrations$/];
-
-  function isSystemDatabase(db: string): boolean {
-    return SYSTEM_DATABASES.has(db.toLowerCase());
+  function checkSystemDatabase(db: string): boolean {
+    return isSystemDatabase(db, settingsStore.settings.systemDatabases);
   }
 
-  function isSystemTable(name: string): boolean {
-    return SYSTEM_TABLE_PATTERNS.some((p) => p.test(name));
+  function checkSystemTable(name: string): boolean {
+    return isSystemTable(name, settingsStore.settings.systemTablePatterns);
   }
 </script>
 
@@ -345,16 +338,17 @@
                   aria-expanded={isDbExpanded}
                   aria-selected={false}
                 >
+                  {@const isDbSystem = checkSystemDatabase(database)}
                   <!-- Database node -->
                   <button
                     class="node-row database-node"
-                    class:system={isSystemDatabase(database)}
+                    class:system={isDbSystem}
                     onclick={() => toggleDatabase(profile.id, database)}
                     oncontextmenu={(e) => showDbContextMenu(e, profile.id, database)}
                     aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} database {database}"
                   >
                     <span class="chevron" class:open={isDbExpanded} aria-hidden="true">›</span>
-                    <span class="node-icon" aria-hidden="true">🗃</span>
+                    <DbIcon system={isDbSystem} size={14} aria-hidden="true" />
                     <span class="node-label">{database}</span>
                     {#if isDbLoading}
                       <span class="loading-indicator" aria-label="Loading">…</span>
@@ -368,19 +362,22 @@
                   {#if isDbExpanded && tables.length > 0}
                     <ul class="tree-children" role="group">
                       {#each tables as table}
+                        {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                         <li class="tree-node leaf-node" role="treeitem" aria-selected={false}>
                           <button
                             class="node-row table-node"
-                            class:system={isSystemTable(table.name)}
+                            class:system={isTableSystem}
                             ondblclick={() => openTable(profile.id, database, table.name)}
                             onclick={() => openTable(profile.id, database, table.name)}
                             oncontextmenu={(e) => showContextMenu(e, profile.id, database, table)}
                             title="Open {table.name}"
                             aria-label="Open table {table.name}"
                           >
-                            <span class="node-icon" aria-hidden="true">
-                              {table.tableType === 'view' ? '◫' : '▦'}
-                            </span>
+                            {#if table.tableType === 'view'}
+                              <span class="node-icon" aria-hidden="true">◫</span>
+                            {:else}
+                              <TableIcon system={isTableSystem} aria-hidden="true" />
+                            {/if}
                             <span class="node-label">{table.name}</span>
                             {#if table.rowCount !== null}
                               <span class="row-count">{table.rowCount.toLocaleString()}</span>
@@ -624,6 +621,7 @@
     flex-shrink: 0;
     font-size: var(--font-size-xs);
   }
+
 
   .node-label {
     flex: 1;

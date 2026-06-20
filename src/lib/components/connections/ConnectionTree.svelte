@@ -6,7 +6,11 @@
 <script lang="ts">
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
   import ConnectionForm from './ConnectionForm.svelte';
+  import DbIcon from '$lib/components/icons/DbIcon.svelte';
+  import TableIcon from '$lib/components/icons/TableIcon.svelte';
+  import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
   import { ask } from '@tauri-apps/plugin-dialog';
@@ -16,6 +20,7 @@
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
+  const settingsStore = useSettings();
 
   // ── Add / edit forms ──────────────────────────────────────────────────────
 
@@ -271,45 +276,12 @@
 
   // ── System database / table detection ────────────────────────────────────
 
-  const SYSTEM_DATABASES = new Set([
-    // MySQL / MariaDB
-    'information_schema', 'mysql', 'performance_schema', 'sys',
-    // PostgreSQL
-    'postgres', 'template0', 'template1',
-    // SQL Server
-    'master', 'model', 'msdb', 'tempdb',
-  ]);
-  const SYSTEM_TABLE_PATTERNS = [
-    // Generic
-    /^migrations$/i,
-    // Drizzle
-    /^__drizzle_migrations$/i,
-    // Prisma
-    /^_prisma_migrations$/i,
-    // Rails / ActiveRecord
-    /^schema_migrations$/i, /^ar_internal_metadata$/i,
-    // Django
-    /^django_migrations$/i,
-    // Laravel
-    /^laravel_migrations$/i,
-    // Flyway
-    /^flyway_schema_history$/i,
-    // Liquibase
-    /^databasechangelog(lock)?$/i,
-    // Knex
-    /^knex_migrations(_(lock))?$/i,
-    // Sequelize
-    /^sequelize_meta$/i,
-    // TypeORM
-    /^typeorm_metadata$/i,
-    // Alembic
-    /^alembic_version$/i,
-    // Goose
-    /^goose_db_version$/i,
-  ];
-
-  function isSystemDatabase(name: string) { return SYSTEM_DATABASES.has(name.toLowerCase()); }
-  function isSystemTable(name: string) { return SYSTEM_TABLE_PATTERNS.some(p => p.test(name)); }
+  function checkSystemDatabase(name: string) {
+    return isSystemDatabase(name, settingsStore.settings.systemDatabases);
+  }
+  function checkSystemTable(name: string) {
+    return isSystemTable(name, settingsStore.settings.systemTablePatterns);
+  }
 
   // ── Derived groupings ─────────────────────────────────────────────────────
 
@@ -510,7 +482,8 @@
             {@const tables = databases.get(database) ?? []}
             {@const dbLoadError = loadErrors.get(dbKey)}
 
-            <div class="db-item" class:system-item={isSystemDatabase(database)}>
+            {@const isDbSystem = checkSystemDatabase(database)}
+            <div class="db-item" class:system-item={isDbSystem}>
               <button
                 class="db-row"
                 class:open={isDbExpanded}
@@ -521,11 +494,7 @@
                 <span class="chevron" class:open={isDbExpanded} aria-hidden="true">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </span>
-                <svg class="db-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                  <path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-                  <path d="M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6"></path>
-                </svg>
+                <DbIcon system={isDbSystem} aria-hidden="true" />
                 <span class="db-name">{database}</span>
                 {#if isDbLoading}
                   <span class="loading-dots" aria-label="Loading">…</span>
@@ -539,20 +508,17 @@
               {#if isDbExpanded && tables.length > 0}
                 <div class="table-list">
                   {#each tables as table}
+                    {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                     <button
                       class="table-row"
-                      class:system-item={isSystemTable(table.name)}
+                      class:system-item={isTableSystem}
                       class:active={isTableActive(profile.id, database, table.name)}
                       onclick={() => openTable(profile.id, database, table.name)}
                       oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
                       title={table.name}
                       aria-label="Open {table.name}"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="table-icon">
-                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                        <line x1="3" y1="9.5" x2="21" y2="9.5"></line>
-                        <line x1="9" y1="9.5" x2="9" y2="20"></line>
-                      </svg>
+                      <TableIcon system={isTableSystem} aria-hidden="true" />
                       <span class="table-name">{table.name}</span>
                       {#if table.rowCount !== null}
                         <span class="row-count">{table.rowCount.toLocaleString()}</span>
@@ -949,7 +915,6 @@
   .table-row.active { background: var(--color-accent-subtle); color: var(--color-accent); box-shadow: inset 2px 0 0 var(--color-accent); }
   .table-row.active:hover { background: var(--color-accent-subtle); }
 
-  .table-icon { flex-shrink: 0; }
   .table-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .row-count {

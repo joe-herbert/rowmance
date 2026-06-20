@@ -1,4 +1,5 @@
 /** Shared TypeScript types used across the frontend and Tauri invoke wrappers. */
+import { BUILTIN_DATABASES, BUILTIN_TABLE_PATTERNS } from '$lib/utils/system-items';
 
 // ── Database connections ────────────────────────────────────────────────────
 
@@ -235,6 +236,8 @@ export interface AppSettings {
   historyMaxEntries: number;
   sidebarFloating: boolean;
   clickOutsideEdit: 'discard' | 'confirm';
+  systemDatabases: string[];
+  systemTablePatterns: string[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -252,6 +255,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   historyMaxEntries: 500,
   sidebarFloating: false,
   clickOutsideEdit: 'discard',
+  systemDatabases: [...BUILTIN_DATABASES],
+  systemTablePatterns: [...BUILTIN_TABLE_PATTERNS],
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

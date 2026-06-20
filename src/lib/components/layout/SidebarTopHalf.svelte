@@ -6,6 +6,9 @@
 <script lang="ts">
   import { usePanels, sameContent } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import TableIcon from '$lib/components/icons/TableIcon.svelte';
+  import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import type { PanelKind } from '$lib/types';
 
   interface Props {
@@ -16,6 +19,7 @@
 
   const panelStore = usePanels();
   const connectionStore = useConnections();
+  const settingsStore = useSettings();
 
   function panelLabel(content: PanelKind): string {
     switch (content.kind) {
@@ -162,17 +166,9 @@
           ></span>
           <span class="panel-icon" aria-hidden="true">
             {#if item.content.kind === 'table_browser'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                <line x1="3" y1="9.5" x2="21" y2="9.5"></line>
-                <line x1="9" y1="9.5" x2="9" y2="20"></line>
-              </svg>
+              <TableIcon system={isSystemDatabase(item.content.database, settingsStore.settings.systemDatabases) || isSystemTable(item.content.table, settingsStore.settings.systemTablePatterns)} />
             {:else if item.content.kind === 'table_structure'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-              </svg>
+              <TableIcon system={isSystemDatabase(item.content.database, settingsStore.settings.systemDatabases) || isSystemTable(item.content.table, settingsStore.settings.systemTablePatterns)} />
             {:else if item.content.kind === 'query_editor'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="8 7 4 12 8 17"></polyline>

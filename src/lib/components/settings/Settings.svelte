@@ -338,9 +338,76 @@
 
     {:else if activeSection === 'connections'}
       <h2 class="section-title">Connections</h2>
-      <p class="section-description">
-        Connection-level settings are managed per connection in the Connections panel.
-      </p>
+
+      <div class="setting-group">
+        <div class="setting-row setting-row--block">
+          <div class="setting-label">
+            <span class="label-text">System Databases</span>
+            <span class="label-hint">Databases shown with a wrench icon. Press Enter to add an entry.</span>
+          </div>
+          <div class="tag-list">
+            {#each settings.systemDatabases as db}
+              <span class="tag">
+                {db}
+                <button
+                  class="tag-remove"
+                  aria-label="Remove {db}"
+                  onclick={() => update('systemDatabases', settings.systemDatabases.filter(d => d !== db))}
+                >×</button>
+              </span>
+            {/each}
+            <input
+              class="tag-input"
+              type="text"
+              placeholder="Add database…"
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  const val = (e.currentTarget as HTMLInputElement).value.trim();
+                  if (val && !settings.systemDatabases.includes(val)) {
+                    update('systemDatabases', [...settings.systemDatabases, val]);
+                  }
+                  (e.currentTarget as HTMLInputElement).value = '';
+                  e.preventDefault();
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        <div class="setting-row setting-row--block">
+          <div class="setting-label">
+            <span class="label-text">System Table Patterns</span>
+            <span class="label-hint">Tables matching these names are shown with a wrench icon. Matched case-insensitively. Press Enter to add an entry.</span>
+          </div>
+          <div class="tag-list">
+            {#each settings.systemTablePatterns as pattern}
+              <span class="tag">
+                {pattern}
+                <button
+                  class="tag-remove"
+                  aria-label="Remove {pattern}"
+                  onclick={() => update('systemTablePatterns', settings.systemTablePatterns.filter(p => p !== pattern))}
+                >×</button>
+              </span>
+            {/each}
+            <input
+              class="tag-input"
+              type="text"
+              placeholder="Add table name…"
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  const val = (e.currentTarget as HTMLInputElement).value.trim();
+                  if (val && !settings.systemTablePatterns.includes(val)) {
+                    update('systemTablePatterns', [...settings.systemTablePatterns, val]);
+                  }
+                  (e.currentTarget as HTMLInputElement).value = '';
+                  e.preventDefault();
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
 
     {:else if activeSection === 'appearance'}
       <h2 class="section-title">Appearance</h2>
@@ -720,5 +787,70 @@
   .modal-error {
     font-size: var(--font-size-sm);
     color: var(--color-danger);
+  }
+
+  .setting-row--block {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-2);
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-1);
+    align-items: center;
+    min-height: 28px;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px var(--spacing-2);
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono, monospace);
+  }
+
+
+  .tag-remove {
+    color: var(--color-accent);
+    font-size: var(--font-size-sm);
+    line-height: 1;
+    padding: 0 2px;
+    border-radius: 2px;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+  }
+
+  .tag-remove:hover {
+    opacity: 1;
+  }
+
+  .tag-input {
+    height: 24px;
+    padding: 0 var(--spacing-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-mono, monospace);
+    outline: none;
+    min-width: 160px;
+    transition: border-color var(--transition-fast);
+  }
+
+  .tag-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .tag-input::placeholder {
+    font-family: var(--font-family-ui);
+    color: var(--color-text-muted);
   }
 </style>
