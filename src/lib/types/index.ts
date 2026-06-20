@@ -200,6 +200,17 @@ export interface ThemeData { name: string; extends: string; variables: Record<st
 
 export interface UpdateCheckResult { available: boolean; version: string | null; notes: string | null; }
 
+// ── Users ────────────────────────────────────────────────────────────────────
+
+export interface DbUser {
+  username: string;
+  host: string | null;
+  isSuperuser: boolean;
+  canCreateDb: boolean;
+  canCreateRole: boolean;
+  isLocked: boolean;
+}
+
 // ── Panels ───────────────────────────────────────────────────────────────────
 
 export type PanelKind =
@@ -210,6 +221,7 @@ export type PanelKind =
   | { kind: 'erd'; connectionId: string; database: string }
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'settings' }
+  | { kind: 'user_manager'; connectionId: string }
   | { kind: 'empty' };
 
 export interface PanelState {

@@ -15,6 +15,7 @@
   import ErdCanvas from '$lib/components/erd/ErdCanvas.svelte';
   import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
   import Settings from '$lib/components/settings/Settings.svelte';
+  import UserManager from '$lib/components/users/UserManager.svelte';
 
   interface Props {
     index: number;
@@ -85,6 +86,8 @@
     />
   {:else if panel.content.kind === 'settings'}
     <Settings />
+  {:else if panel.content.kind === 'user_manager'}
+    <UserManager connectionId={panel.content.connectionId} />
   {:else}
     <!-- Empty panel placeholder -->
     <div class="empty-panel">

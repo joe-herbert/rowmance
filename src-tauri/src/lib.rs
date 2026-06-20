@@ -143,6 +143,14 @@ pub fn run() {
             commands::window::window_set_traffic_light_position,
             // Explain
             commands::query::query_explain,
+            // User management
+            commands::users::users_list,
+            commands::users::users_get_grants,
+            commands::users::users_create,
+            commands::users::users_drop,
+            commands::users::users_rename,
+            commands::users::users_set_password,
+            commands::users::users_execute_grant,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Rowmance");

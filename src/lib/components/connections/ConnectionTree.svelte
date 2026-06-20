@@ -13,8 +13,8 @@
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
-  import { ask } from '@tauri-apps/plugin-dialog';
   import { errorMessage } from '$lib/utils/errors';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { portal } from '$lib/actions/portal';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
 
@@ -55,6 +55,9 @@
   let grpCtx   = $state<GrpCtxMenu | null>(null);
   let connCtx  = $state<ConnCtxMenu | null>(null);
 
+  interface ConfirmState { title: string; message: string; onconfirm: () => void }
+  let confirmState = $state<ConfirmState | null>(null);
+
   // ── Connection helpers ────────────────────────────────────────────────────
 
   function isConnected(id: string)   { return connectionStore.activeIds.has(id); }
@@ -72,14 +75,20 @@
     if (isConnected(profile.id)) toggleExpand(profile.id);
   }
 
-  async function deleteConnection(profile: ConnectionProfile): Promise<boolean> {
-    if (!await ask(`Delete "${profile.name}"? This cannot be undone.`, { title: 'Delete Connection', kind: 'warning' })) return false;
-    if (connectionStore.isActive(profile.id)) await connectionStore.disconnect(profile.id);
-    try {
-      await connectionsApi.deleteConnection(profile.id);
-      await connectionStore.load();
-    } catch { /* ignore */ }
-    return true;
+  function deleteConnection(profile: ConnectionProfile, onDone?: () => void) {
+    confirmState = {
+      title: 'Delete Connection',
+      message: `Delete "${profile.name}"? This cannot be undone.`,
+      onconfirm: async () => {
+        confirmState = null;
+        if (connectionStore.isActive(profile.id)) await connectionStore.disconnect(profile.id);
+        try {
+          await connectionsApi.deleteConnection(profile.id);
+          await connectionStore.load();
+          onDone?.();
+        } catch { /* ignore */ }
+      },
+    };
   }
 
   // ── Schema helpers ────────────────────────────────────────────────────────
@@ -168,13 +177,19 @@
     } catch { /* ignore */ } finally { renamingGroupId = null; }
   }
 
-  async function deleteGroup(group: ConnectionGroup) {
+  function deleteGroup(group: ConnectionGroup) {
     grpCtx = null;
-    if (!await ask(`Delete group "${group.name}" and all its connections? This cannot be undone.`, { title: 'Delete Group', kind: 'warning' })) return;
-    try {
-      await connectionsApi.deleteConnectionGroup(group.id);
-      await connectionStore.load();
-    } catch { /* ignore */ }
+    confirmState = {
+      title: 'Delete Group',
+      message: `Delete group "${group.name}" and all its connections? This cannot be undone.`,
+      onconfirm: async () => {
+        confirmState = null;
+        try {
+          await connectionsApi.deleteConnectionGroup(group.id);
+          await connectionStore.load();
+        } catch { /* ignore */ }
+      },
+    };
   }
 
   // ── Context menu helpers ──────────────────────────────────────────────────
@@ -240,6 +255,12 @@
     connCtx = null;
     await connectionStore.disconnect(id);
     expandedConnections = new Set([...expandedConnections].filter(i => i !== id));
+  }
+
+  function ctxManageUsers() {
+    if (!connCtx) return;
+    panelStore.openInFocused({ kind: 'user_manager', connectionId: connCtx.profile.id });
+    connCtx = null;
   }
 
   function ctxOpenTable() {
@@ -564,6 +585,7 @@
   {@const connConnected = isConnected(connCtx.profile.id)}
   <div class="ctx-menu" role="menu" style="top:{connCtx.y}px;left:{connCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: connCtx.profile.id }); connCtx = null; } }}>New Query Editor</button>
+    <button class="ctx-item" role="menuitem" onclick={ctxManageUsers}>Manage Users</button>
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { editingProfile = connCtx.profile; connCtx = null; } }}>Edit</button>
     <button class="ctx-item" role="menuitem" onclick={ctxConnToggleReadOnly}>{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</button>
@@ -590,7 +612,18 @@
   <ConnectionForm
     profile={editingProfile}
     onclose={() => (editingProfile = undefined)}
-    ondelete={async () => { if (editingProfile && await deleteConnection(editingProfile)) editingProfile = undefined; }}
+    ondelete={() => { if (editingProfile) deleteConnection(editingProfile, () => { editingProfile = undefined; }); }}
+  />
+{/if}
+
+{#if confirmState}
+  <ConfirmDialog
+    title={confirmState.title}
+    message={confirmState.message}
+    confirmText="Delete"
+    danger={true}
+    onconfirm={confirmState.onconfirm}
+    oncancel={() => (confirmState = null)}
   />
 {/if}
 

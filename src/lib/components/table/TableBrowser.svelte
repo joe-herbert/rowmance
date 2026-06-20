@@ -23,6 +23,7 @@
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
+  import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
   import { useToast } from '$lib/stores/toast.svelte';
 
   interface Props {
@@ -822,12 +823,7 @@
       title="Refresh"
       aria-label="Refresh table data"
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 11a8 8 0 0 1 13.5-5.5L20 8"></path>
-        <polyline points="20 3 20 8 15 8"></polyline>
-        <path d="M20 13a8 8 0 0 1-13.5 5.5L4 16"></path>
-        <polyline points="4 21 4 16 9 16"></polyline>
-      </svg>
+      <RefreshIcon />
     </button>
   </div>
 

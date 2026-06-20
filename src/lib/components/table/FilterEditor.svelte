@@ -239,6 +239,7 @@
   import { onMount } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
   import Select from '$lib/components/ui/Select.svelte';
+  import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
 
   interface Props {
     columns: ColumnMeta[];
@@ -400,10 +401,11 @@
         Add group
       </button>
     {/if}
-    <div class="mode-tabs" role="tablist">
-      <button class="mode-tab" class:mode-tab--active={draft.mode === 'builder'} role="tab" aria-selected={draft.mode === 'builder'} onclick={() => switchMode('builder')}>Builder</button>
-      <button class="mode-tab" class:mode-tab--active={draft.mode === 'sql'} role="tab" aria-selected={draft.mode === 'sql'} onclick={() => switchMode('sql')}>SQL</button>
-    </div>
+    <SegmentedControl
+      options={[{ value: 'builder', label: 'Builder' }, { value: 'sql', label: 'SQL' }]}
+      value={draft.mode}
+      onchange={(v) => switchMode(v as 'builder' | 'sql')}
+    />
     <button class="fe-close-btn" onclick={onClose} aria-label="Close filters">✕</button>
   </div>
 
@@ -558,32 +560,6 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     flex: 1;
-  }
-
-  .mode-tabs {
-    display: flex;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-
-  .mode-tab {
-    padding: 2px var(--spacing-2);
-    background: transparent;
-    border: none;
-    font-size: var(--font-size-xs);
-    font-family: var(--font-family-ui);
-    color: var(--color-text-muted);
-    cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .mode-tab + .mode-tab { border-left: 1px solid var(--color-border); }
-
-  .mode-tab--active {
-    background: var(--color-accent-subtle);
-    color: var(--color-accent);
-    font-weight: var(--font-weight-medium);
   }
 
   .fe-add-group-btn {

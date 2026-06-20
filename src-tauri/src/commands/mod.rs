@@ -11,4 +11,5 @@ pub mod settings;
 pub mod ssh;
 pub mod themes;
 pub mod updater;
+pub mod users;
 pub mod window;
