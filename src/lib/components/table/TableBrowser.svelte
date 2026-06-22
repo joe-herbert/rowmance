@@ -39,6 +39,8 @@
   } from '$lib/components/table/FilterEditor.svelte';
   import CsvImportModal from '$lib/components/table/CsvImportModal.svelte';
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
+  import SqlPreviewModal from '$lib/components/table/SqlPreviewModal.svelte';
+  import type { DbType } from '$lib/types';
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
@@ -102,6 +104,96 @@
   );
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
+  let showSqlPreview = $state(false);
+
+  function quoteIdent(name: string, dbType: DbType): string {
+    if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
+    if (dbType === 'sqlite') return `"${name.replace(/"/g, '""')}"`;
+    return `\`${name.replace(/`/g, '``')}\``;
+  }
+
+  function formatSqlValue(val: unknown, dbType: DbType): string {
+    if (val === null || val === undefined) return 'NULL';
+    if (typeof val === 'boolean') {
+      if (dbType === 'postgres') return val ? 'TRUE' : 'FALSE';
+      return val ? '1' : '0';
+    }
+    if (typeof val === 'number') return String(val);
+    return `'${String(val).replace(/'/g, "''")}'`;
+  }
+
+  function buildPreviewStatements(): string[] {
+    if (!result) return [];
+    const connection = connections.getById(connectionId);
+    const dbType: DbType = connection?.dbType ?? 'mysql';
+    const q = (name: string) => quoteIdent(name, dbType);
+    const v = (val: unknown) => formatSqlValue(val, dbType);
+
+    const useSchema = dbType !== 'sqlite';
+    const tableRef = useSchema ? `${q(database)}.${q(table)}` : q(table);
+    const pkColumns = result.columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
+    const hasPk = pkColumns.length > 0;
+
+    const stmts: string[] = [];
+
+    for (const [rowKey, colMap] of pendingChanges) {
+      if (rowKey.startsWith('__new__')) {
+        const vals: Record<string, unknown> = Object.fromEntries(colMap);
+        for (const col of result.columns) {
+          if (col.name in vals) continue;
+          if (col.isAutoIncrement) continue;
+          if (col.nullable && col.defaultValue == null) vals[col.name] = null;
+        }
+        if (Object.keys(vals).length === 0) continue;
+        const cols = Object.keys(vals).map(q).join(', ');
+        const values = Object.values(vals).map(v).join(', ');
+        stmts.push(`INSERT INTO ${tableRef} (${cols}) VALUES (${values});`);
+        continue;
+      }
+
+      if (pendingDeletedRows.has(rowKey)) continue;
+
+      const origRow = originalRows.get(rowKey);
+      if (!origRow) continue;
+
+      const primaryKeys: Record<string, unknown> = {};
+      if (hasPk) {
+        pkColumns.forEach((pkCol) => {
+          const idx = result!.columns.findIndex((c) => c.name === pkCol);
+          primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
+        });
+      } else {
+        result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+      }
+
+      const setClauses = [...colMap.entries()].map(([col, val]) => `${q(col)} = ${v(val)}`).join(', ');
+      const whereClauses = Object.entries(primaryKeys)
+        .map(([col, val]) => val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`)
+        .join(' AND ');
+      const limit = (dbType === 'mysql' || dbType === 'mariadb') ? ' LIMIT 1' : '';
+      stmts.push(`UPDATE ${tableRef} SET ${setClauses} WHERE ${whereClauses}${limit};`);
+    }
+
+    for (const [rowKey, origRow] of pendingDeletedRows) {
+      if (rowKey.startsWith('__new__')) continue;
+      const primaryKeys: Record<string, unknown> = {};
+      if (hasPk) {
+        pkColumns.forEach((pkCol) => {
+          const idx = result!.columns.findIndex((c) => c.name === pkCol);
+          primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
+        });
+      } else {
+        result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+      }
+      const whereClauses = Object.entries(primaryKeys)
+        .map(([col, val]) => val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`)
+        .join(' AND ');
+      const limit = (dbType === 'mysql' || dbType === 'mariadb') ? ' LIMIT 1' : '';
+      stmts.push(`DELETE FROM ${tableRef} WHERE ${whereClauses}${limit};`);
+    }
+
+    return stmts;
+  }
 
   // ── No-PK warning banner ──────────────────────────────────────────────────
 
@@ -868,15 +960,26 @@
     {/if}
 
     {#if pendingCount > 0}
-      <button
-        class="toolbar-btn save-btn"
-        onclick={saveChanges}
-        disabled={isSaving}
-        title="Save pending changes to the database"
-        aria-label="Save {pendingCount} pending changes"
-      >
-        {isSaving ? 'Saving…' : `Save ${pendingCount} change${pendingCount !== 1 ? 's' : ''}`}
-      </button>
+      <div class="save-split-btn">
+        <button
+          class="toolbar-btn save-btn save-split-main"
+          onclick={saveChanges}
+          disabled={isSaving}
+          title="Save pending changes to the database"
+          aria-label="Save {pendingCount} pending changes"
+        >
+          {isSaving ? 'Saving…' : `Save ${pendingCount} change${pendingCount !== 1 ? 's' : ''}`}
+        </button>
+        <button
+          class="toolbar-btn save-btn save-split-arrow"
+          onclick={() => { showSqlPreview = true; }}
+          disabled={isSaving}
+          title="Preview SQL"
+          aria-label="Preview SQL"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
 
       <button
         class="toolbar-btn discard-btn"
@@ -1198,6 +1301,15 @@
   />
 {/if}
 
+{#if showSqlPreview}
+  <SqlPreviewModal
+    statements={buildPreviewStatements()}
+    onrun={() => { showSqlPreview = false; saveChanges(); }}
+    oncancel={() => { showSqlPreview = false; }}
+    ondiscard={() => { showSqlPreview = false; discardChanges(); }}
+  />
+{/if}
+
 <style>
   .table-browser {
     position: relative;
@@ -1337,6 +1449,25 @@
   .toolbar-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .save-split-btn {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+  }
+
+  .save-split-main {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+  }
+
+  .save-split-arrow {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    padding: 0 6px;
+    border-left-color: var(--color-accent);
   }
 
   .save-btn {
