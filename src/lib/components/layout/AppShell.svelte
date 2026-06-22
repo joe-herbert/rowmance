@@ -190,6 +190,81 @@
   let paletteOpen = $state(false);
   let globalSearchOpen = $state(false);
 
+  // ── Connection chip popup ─────────────────────────────────────────────────
+
+  let connChipOpen = $state(false);
+  let connChipEl = $state<HTMLElement | null>(null);
+  let connPopupEl = $state<HTMLElement | null>(null);
+  let popupX = $state(0);
+  let popupY = $state(0);
+  let elapsedDisplay = $state('');
+  let disconnecting = $state(false);
+
+  function toggleConnChip() {
+    if (!connChipOpen && connChipEl) {
+      const rect = connChipEl.getBoundingClientRect();
+      popupX = rect.left;
+      popupY = rect.bottom + 6;
+    }
+    connChipOpen = !connChipOpen;
+  }
+
+  function formatElapsed(ms: number): string {
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  $effect(() => {
+    if (!activeConnection) connChipOpen = false;
+  });
+
+  $effect(() => {
+    if (!connChipOpen || !activeConnection) return;
+    const id = activeConnection.id;
+
+    function update() {
+      const start = connectionsStore.getConnectedAt(id);
+      elapsedDisplay = start ? formatElapsed(Date.now() - start.getTime()) : '';
+    }
+
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  });
+
+  $effect(() => {
+    if (!connChipOpen) return;
+
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        connChipEl && !connChipEl.contains(target) &&
+        connPopupEl && !connPopupEl.contains(target)
+      ) {
+        connChipOpen = false;
+      }
+    }
+
+    setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
+    return () => document.removeEventListener('click', handleClickOutside);
+  });
+
+  async function handleDisconnect() {
+    if (!activeConnection) return;
+    disconnecting = true;
+    try {
+      await connectionsStore.disconnect(activeConnection.id);
+    } finally {
+      disconnecting = false;
+      connChipOpen = false;
+    }
+  }
+
   function openPalette() { paletteOpen = true; }
   function closePalette() { paletteOpen = false; }
   function openGlobalSearch() { globalSearchOpen = true; }
@@ -226,23 +301,32 @@
     {/if}
 
     {#if activeConnection}
-      <div
-        class="conn-chip"
-        style="border-left-color: {activeConnection.color ?? 'var(--color-accent)'}"
-        data-tauri-drag-region="false"
-      >
-        <span
-          class="conn-chip-dot"
-          style="background: {activeConnection.color ?? 'var(--color-accent)'}; box-shadow: 0 0 0 3px color-mix(in srgb, {activeConnection.color ?? 'var(--color-accent)'} 26%, transparent)"
-        ></span>
-        <span class="conn-chip-name">{activeConnection.name}</span>
-        <span class="conn-chip-tag">{activeConnection.dbType}</span>
-        {#if activeConnection.readOnly}
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
-            <rect x="5" y="11" width="14" height="9" rx="2"></rect>
-            <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+      <div class="conn-chip-wrapper" bind:this={connChipEl} data-tauri-drag-region="false">
+        <button
+          class="conn-chip"
+          class:conn-chip--open={connChipOpen}
+          style="border-left-color: {activeConnection.color ?? 'var(--color-accent)'}"
+          onclick={toggleConnChip}
+          aria-expanded={connChipOpen}
+          aria-haspopup="true"
+        >
+          <span
+            class="conn-chip-dot"
+            style="background: {activeConnection.color ?? 'var(--color-accent)'}; box-shadow: 0 0 0 3px color-mix(in srgb, {activeConnection.color ?? 'var(--color-accent)'} 26%, transparent)"
+          ></span>
+          <span class="conn-chip-name">{activeConnection.name}</span>
+          <span class="conn-chip-tag">{activeConnection.dbType}</span>
+          {#if activeConnection.readOnly}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
+              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+              <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+            </svg>
+          {/if}
+          <svg class="conn-chip-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
-        {/if}
+        </button>
+
       </div>
     {:else}
       <span class="app-title">Rowmance</span>
@@ -392,6 +476,40 @@
   <StatusBar />
 </div>
 
+{#if connChipOpen && activeConnection}
+  <div
+    class="conn-popup"
+    bind:this={connPopupEl}
+    role="dialog"
+    aria-label="Connection details"
+    style="left: {popupX}px; top: {popupY}px;"
+    transition:fade={{ duration: 100 }}
+  >
+    <div class="conn-popup-row">
+      <span
+        class="conn-popup-dot"
+        style="background: {activeConnection.color ?? 'var(--color-accent)'}"
+      ></span>
+      <span class="conn-popup-name">{activeConnection.name}</span>
+      <span class="conn-chip-tag">{activeConnection.dbType}</span>
+    </div>
+    <div class="conn-popup-time">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+      Connected {elapsedDisplay}
+    </div>
+    <button
+      class="conn-popup-disconnect"
+      onclick={handleDisconnect}
+      disabled={disconnecting}
+    >
+      {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+    </button>
+  </div>
+{/if}
+
 <Toast />
 <OnboardingTip />
 
@@ -473,19 +591,114 @@
 
   /* ── Connection chip ───────────────────────────────────────────────────── */
 
+  .conn-chip-wrapper {
+    position: relative;
+    flex-shrink: 0;
+  }
+
   .conn-chip {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 4px 10px 4px 8px;
+    padding: 4px 8px 4px 8px;
     border-radius: var(--radius-lg);
     background: var(--color-bg-secondary);
     border: 1px solid var(--color-border);
     border-left-width: 3px;
     color: var(--color-text-primary);
     font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
     user-select: none;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .conn-chip:hover,
+  .conn-chip--open {
+    background: var(--color-bg-hover);
+  }
+
+  .conn-chip-chevron {
+    color: var(--color-text-muted);
     flex-shrink: 0;
+    transition: transform var(--transition-fast);
+  }
+
+  .conn-chip--open .conn-chip-chevron {
+    transform: rotate(180deg);
+  }
+
+  .conn-popup {
+    position: fixed;
+    min-width: 220px;
+    background: var(--color-bg-primary);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 200;
+  }
+
+  .conn-popup-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .conn-popup-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .conn-popup-name {
+    font-weight: var(--font-weight-semibold);
+    font-size: 12.5px;
+    color: var(--color-text-primary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .conn-popup-time {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .conn-popup-disconnect {
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    align-self: stretch;
+    text-align: center;
+  }
+
+  .conn-popup-disconnect:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger, #e53e3e) 10%, transparent);
+    border-color: var(--color-danger, #e53e3e);
+    color: var(--color-danger, #e53e3e);
+  }
+
+  .conn-popup-disconnect:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .conn-chip-dot {

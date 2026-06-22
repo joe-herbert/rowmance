@@ -14,6 +14,7 @@ let groups = $state<ConnectionGroup[]>([]);
 let activeIds = $state<Set<string>>(new Set());
 let connectingIds = $state<Set<string>>(new Set());
 let errorIds = $state<Map<string, string>>(new Map());
+let connectedAt = $state<Map<string, Date>>(new Map());
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
@@ -40,6 +41,8 @@ export function useConnections() {
       [profiles, groups] = await Promise.all([api.listConnections(), api.listConnectionGroups()]);
       const ids = await api.listActiveConnections();
       activeIds = new Set(ids);
+      const now = new Date();
+      connectedAt = new Map(ids.map((id) => [id, now]));
     },
 
     /** Create a new connection profile. */
@@ -73,6 +76,7 @@ export function useConnections() {
       try {
         await api.connectToDatabase(id);
         activeIds = new Set([...activeIds, id]);
+        connectedAt = new Map([...connectedAt, [id, new Date()]]);
       } catch (err) {
         const message = errorMessage(err);
         errorIds = new Map([...errorIds, [id, message]]);
@@ -86,6 +90,7 @@ export function useConnections() {
     async disconnect(id: string): Promise<void> {
       await api.disconnectFromDatabase(id);
       activeIds = new Set([...activeIds].filter((i) => i !== id));
+      connectedAt = new Map([...connectedAt].filter(([k]) => k !== id));
     },
 
     /** Check whether a given profile ID is currently connected. */
@@ -96,6 +101,11 @@ export function useConnections() {
     /** Return the profile with the given ID, or undefined. */
     getById(id: string): ConnectionProfile | undefined {
       return profiles.find((p) => p.id === id);
+    },
+
+    /** Return the timestamp when this connection was established, or undefined. */
+    getConnectedAt(id: string): Date | undefined {
+      return connectedAt.get(id);
     },
   };
 }
