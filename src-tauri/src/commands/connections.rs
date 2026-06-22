@@ -500,6 +500,7 @@ pub async fn connections_connect(
     connections
         .connect(
             &id,
+            &row.name,
             &row.db_type,
             &row.host,
             row.port as u16,

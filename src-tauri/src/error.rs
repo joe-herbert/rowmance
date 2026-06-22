@@ -64,9 +64,9 @@ impl From<RowmanceError> for AppError {
                 "CONNECTION_NOT_FOUND",
                 format!("No connection with id {id}"),
             ),
-            RowmanceError::ConnectionNotActive(ref id) => AppError::new(
+            RowmanceError::ConnectionNotActive(ref name) => AppError::new(
                 "CONNECTION_NOT_ACTIVE",
-                format!("Connection {id} is not connected"),
+                format!("Connection {name} is not connected"),
             ),
             RowmanceError::ReadOnlyViolation => AppError::new(
                 "READ_ONLY_VIOLATION",

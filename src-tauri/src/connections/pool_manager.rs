@@ -27,12 +27,14 @@ pub enum RemotePool {
 #[derive(Debug, Default)]
 pub struct ConnectionManager {
     pools: DashMap<String, RemotePool>,
+    names: DashMap<String, String>,
 }
 
 impl ConnectionManager {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             pools: DashMap::new(),
+            names: DashMap::new(),
         })
     }
 
@@ -42,6 +44,7 @@ impl ConnectionManager {
     pub async fn connect(
         &self,
         id: &str,
+        name: &str,
         db_type: &str,
         host: &str,
         port: u16,
@@ -145,6 +148,7 @@ impl ConnectionManager {
         };
 
         self.pools.insert(id.to_owned(), pool);
+        self.names.insert(id.to_owned(), name.to_owned());
         Ok(())
     }
 
@@ -175,9 +179,14 @@ impl ConnectionManager {
         &self,
         id: &str,
     ) -> Result<dashmap::mapref::one::Ref<'_, String, RemotePool>, RowmanceError> {
-        self.pools
-            .get(id)
-            .ok_or_else(|| RowmanceError::ConnectionNotActive(id.to_owned()))
+        self.pools.get(id).ok_or_else(|| {
+            let name = self
+                .names
+                .get(id)
+                .map(|n| n.clone())
+                .unwrap_or_else(|| id.to_owned());
+            RowmanceError::ConnectionNotActive(name)
+        })
     }
 }
 
@@ -229,7 +238,7 @@ mod tests {
         let result = tokio::runtime::Runtime::new().unwrap().block_on(async {
             manager
                 .connect(
-                    "id", "oracle", "localhost", 1521, "db", "user", "pw", 1, 1,
+                    "id", "name", "oracle", "localhost", 1521, "db", "user", "pw", 1, 1,
                     false, None, None, None,
                 )
                 .await
@@ -326,7 +335,7 @@ mod tests {
         let result = tokio::runtime::Runtime::new().unwrap().block_on(async {
             manager
                 .connect(
-                    "id", "oracle", "localhost", 1521, "db", "user", "pw", 1, 1,
+                    "id", "name", "oracle", "localhost", 1521, "db", "user", "pw", 1, 1,
                     true, Some("/tmp/ca.pem"), None, None,
                 )
                 .await
