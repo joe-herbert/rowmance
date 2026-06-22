@@ -26,6 +26,7 @@
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
   import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
   import { useToast } from '$lib/stores/toast.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
 
   interface Props {
     connectionId: string;
@@ -42,8 +43,9 @@
   const panelStore = usePanels();
   const statusBar = useStatusBar();
   const toast = useToast();
+  const settings = useSettings();
 
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = $derived(settings.settings.pageSize);
 
   let page = $state(1);
   let filterEditorState = $state<FilterEditorState>(

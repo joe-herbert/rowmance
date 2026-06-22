@@ -231,7 +231,7 @@
 
     isRunning = true;
     try {
-      result = await executeQuery(connectionId, query, 1, 50);
+      result = await executeQuery(connectionId, query, 1, settingsStore.settings.pageSize);
       onExecute?.(query);
     } catch (err) {
       result = {
