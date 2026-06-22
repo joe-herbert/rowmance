@@ -589,7 +589,7 @@
     if (columnPickerAnchorEl) {
       const rect = columnPickerAnchorEl.getBoundingClientRect();
       pickerTop = rect.bottom + 4;
-      pickerLeft = rect.right - 220;
+      pickerLeft = rect.right - 320;
     }
     showColumnPicker = true;
   }
@@ -598,20 +598,20 @@
 
   // ── Export state ───────────────────────────────────────────────────────────
 
-  let showExportMenu = $state(false);
-  let exportMenuTop = $state(0);
-  let exportMenuLeft = $state(0);
   let exportTableName = $state('');
   let showTableNameInput = $state(false);
   let pendingExportFormat = $state<ExportFormat | null>(null);
   let pendingExportToFile = $state(false);
   let exportError = $state<string | null>(null);
 
+  // ── Actions menu state ────────────────────────────────────────────────────
+
+  let showActionsMenu = $state(false);
+  let actionsMenuTop = $state(0);
+  let actionsMenuLeft = $state(0);
+
   // ── Import modal state ─────────────────────────────────────────────────────
 
-  let showImportMenu = $state(false);
-  let importMenuTop = $state(0);
-  let importMenuLeft = $state(0);
   let showCsvImport = $state(false);
   let showSqlImport = $state(false);
   let importSource = $state<'file' | 'clipboard'>('file');
@@ -642,7 +642,6 @@
   }
 
   function startExport(format: ExportFormat, toFile: boolean): void {
-    showExportMenu = false;
     const def = EXPORT_FORMATS.find((f) => f.format === format);
     if (def?.needsTableName) {
       pendingExportFormat = format;
@@ -664,11 +663,14 @@
         });
         if (!filePath) return;
         await exportResultToFile(getExportRows(), getExportColumns(), format, filePath, tblName);
+        toast.addToast('Exported to file', 'success', 2000);
       } else {
         await exportResultToClipboard(getExportRows(), getExportColumns(), format, tblName);
+        toast.addToast('Copied to clipboard', 'success', 2000);
       }
     } catch (err) {
       exportError = errorMessage(err);
+      toast.addToast('Export failed', 'error', 3000);
     }
   }
 
@@ -942,23 +944,6 @@
       </div>
     {/if}
 
-    {#if currentColumns.length > 0}
-      <button
-        bind:this={columnPickerAnchorEl}
-        class="refresh-button"
-        class:refresh-button--labeled={hiddenColumns.size > 0}
-        onclick={openColumnPicker}
-        title="Show/hide columns"
-        aria-label="Column visibility"
-        aria-expanded={showColumnPicker}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-        {#if hiddenColumns.size > 0}
-          <span class="badge">{hiddenColumns.size}</span>
-        {/if}
-      </button>
-    {/if}
-
     {#if pendingCount > 0}
       <div class="save-split-btn">
         <button
@@ -1004,21 +989,89 @@
       </button>
     {/if}
 
-    <!-- Export dropdown -->
-    {#if result !== null}
-      <div class="export-dropdown">
-        <button
-          class="refresh-button"
-          onclick={(e) => { if (!showExportMenu) { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); exportMenuTop = r.bottom + 4; exportMenuLeft = r.right - 210; } showExportMenu = !showExportMenu; exportError = null; }}
-          aria-expanded={showExportMenu}
-          aria-label="Export table data"
-          title="Export"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>        </button>
+    <!-- Actions button (Columns / Export / Import / Refresh) -->
+    <div class="export-dropdown">
+      <button
+        bind:this={columnPickerAnchorEl}
+        class="refresh-button"
+        onclick={(e) => {
+          if (!showActionsMenu) {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            actionsMenuTop = r.bottom + 4;
+            actionsMenuLeft = r.right - 240;
+          }
+          showActionsMenu = !showActionsMenu;
+          exportError = null;
+        }}
+        aria-expanded={showActionsMenu}
+        aria-label="Table actions"
+        title="Actions"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+      </button>
 
-        {#if showExportMenu}
-          <div use:portal class="export-positioner" style="top: {exportMenuTop}px; left: {exportMenuLeft}px;">
-            <div class="export-menu" role="menu">
+      {#if showActionsMenu}
+        <div use:portal class="export-positioner" style="top: {actionsMenuTop}px; left: {actionsMenuLeft}px;">
+          <div class="export-menu actions-menu" role="menu">
+
+            <!-- Refresh -->
+            <button
+              class="export-menu-row"
+              role="menuitem"
+              onclick={() => { showActionsMenu = false; handleRefresh(); }}
+              disabled={isLoading}
+            >
+              <RefreshIcon />
+              <span>Refresh</span>
+            </button>
+
+            <!-- Columns -->
+            {#if currentColumns.length > 0}
+              <button
+                class="export-menu-row"
+                role="menuitem"
+                onclick={() => { showActionsMenu = false; openColumnPicker(); }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                <span>Columns</span>
+                {#if hiddenColumns.size > 0}
+                  <span class="badge actions-menu-badge">{hiddenColumns.size} hidden</span>
+                {/if}
+              </button>
+              <div class="actions-menu-divider"></div>
+            {/if}
+
+            <!-- Import -->
+            <div class="export-menu-title">Import</div>
+            <div class="export-menu-section">
+              <span class="export-format-label">CSV</span>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showActionsMenu = false; importSource = 'clipboard'; showCsvImport = true; }}
+              >Clipboard</button>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showActionsMenu = false; importSource = 'file'; showCsvImport = true; }}
+              >File</button>
+            </div>
+            <div class="export-menu-section">
+              <span class="export-format-label">SQL</span>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showActionsMenu = false; importSource = 'clipboard'; showSqlImport = true; }}
+              >Clipboard</button>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showActionsMenu = false; importSource = 'file'; showSqlImport = true; }}
+              >File</button>
+            </div>
+
+            <!-- Export -->
+            {#if result !== null}
               <div class="export-menu-title">Export</div>
               {#each EXPORT_FORMATS as fmt}
                 <div class="export-menu-section">
@@ -1026,101 +1079,27 @@
                   <button
                     class="export-menu-item"
                     role="menuitem"
-                    onclick={() => startExport(fmt.format, false)}
-                  >
-                    Clipboard
-                  </button>
+                    onclick={() => { showActionsMenu = false; startExport(fmt.format, false); }}
+                  >Clipboard</button>
                   <button
                     class="export-menu-item"
                     role="menuitem"
-                    onclick={() => startExport(fmt.format, true)}
-                  >
-                    File
-                  </button>
+                    onclick={() => { showActionsMenu = false; startExport(fmt.format, true); }}
+                  >File</button>
                 </div>
               {/each}
-            </div>
-            <div
-              class="export-backdrop"
-              role="presentation"
-              onclick={() => (showExportMenu = false)}
-              onkeydown={(e) => { if (e.key === 'Escape') showExportMenu = false; }}
-            ></div>
-          </div>
-        {/if}
-      </div>
-    {/if}
+            {/if}
 
-    <!-- Import dropdown -->
-    <div class="export-dropdown">
-      <button
-        class="refresh-button"
-        onclick={(e) => { if (!showImportMenu) { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); importMenuTop = r.bottom + 4; importMenuLeft = r.right - 210; } showImportMenu = !showImportMenu; }}
-        aria-expanded={showImportMenu}
-        aria-label="Import data"
-        title="Import"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      </button>
-
-      {#if showImportMenu}
-        <div use:portal class="export-positioner" style="top: {importMenuTop}px; left: {importMenuLeft}px;">
-          <div class="export-menu" role="menu">
-            <div class="export-menu-title">Import</div>
-            <div class="export-menu-section">
-              <span class="export-format-label">CSV</span>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showImportMenu = false; importSource = 'clipboard'; showCsvImport = true; }}
-              >
-                Clipboard
-              </button>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showImportMenu = false; importSource = 'file'; showCsvImport = true; }}
-              >
-                File
-              </button>
-            </div>
-            <div class="export-menu-section">
-              <span class="export-format-label">SQL</span>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showImportMenu = false; importSource = 'clipboard'; showSqlImport = true; }}
-              >
-                Clipboard
-              </button>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showImportMenu = false; importSource = 'file'; showSqlImport = true; }}
-              >
-                File
-              </button>
-            </div>
           </div>
           <div
             class="export-backdrop"
             role="presentation"
-            onclick={() => (showImportMenu = false)}
-            onkeydown={(e) => { if (e.key === 'Escape') showImportMenu = false; }}
+            onclick={() => (showActionsMenu = false)}
+            onkeydown={(e) => { if (e.key === 'Escape') showActionsMenu = false; }}
           ></div>
         </div>
       {/if}
     </div>
-
-    <button
-      class="refresh-button"
-      onclick={handleRefresh}
-      disabled={isLoading}
-      title="Refresh"
-      aria-label="Refresh table data"
-    >
-      <RefreshIcon />
-    </button>
     </div>
   </div>
 
@@ -1282,7 +1261,7 @@
     {connectionId}
     source={importSource}
     onclose={() => (showCsvImport = false)}
-    onimported={() => { showCsvImport = false; load(); }}
+    onimported={(count) => { showCsvImport = false; load(); toast.addToast(`Imported ${count} row${count !== 1 ? 's' : ''}`, 'success', 3000); }}
   />
 {/if}
 
@@ -1291,6 +1270,7 @@
     {connectionId}
     source={importSource}
     onclose={() => (showSqlImport = false)}
+    onimported={(count) => { toast.addToast(`Executed ${count} statement${count !== 1 ? 's' : ''}`, 'success', 3000); }}
   />
 {/if}
 
@@ -1871,6 +1851,55 @@
   .export-menu-item:hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
+  }
+
+  .actions-menu {
+    min-width: 240px;
+    position: relative;
+    z-index: 300;
+  }
+
+  .export-menu-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    width: 100%;
+    padding: var(--spacing-2) var(--spacing-3);
+    background: transparent;
+    border: none;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    border-radius: 0;
+    text-align: left;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    font-family: var(--font-family-ui);
+  }
+
+  .export-menu-row:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .export-menu-row:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .actions-menu-badge {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-tertiary, var(--color-bg-hover));
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .actions-menu-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--spacing-1) 0;
   }
 
   .export-backdrop {

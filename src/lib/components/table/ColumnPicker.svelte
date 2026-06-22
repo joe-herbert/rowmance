@@ -47,12 +47,13 @@
     {#each columns as col (col.name)}
       {@const hidden = hiddenColumns.has(col.name)}
       <li class="column-row" role="listitem">
-        <div class="column-label">
+        <button class="column-label" onclick={() => onToggle(col.name)} aria-pressed={!hidden}>
           <Checkbox
             size="sm"
             checked={!hidden}
-            onchange={() => onToggle(col.name)}
-            aria-label="Show {col.name}"
+            onchange={() => {}}
+            aria-hidden="true"
+            tabindex={-1}
           />
           <span class="column-name" class:column-hidden={hidden}>{col.name}</span>
           <span class="column-type">{col.dataType}</span>
@@ -62,7 +63,7 @@
           {#if col.isForeignKey}
             <span class="badge fk-badge" title="Foreign key">FK</span>
           {/if}
-        </div>
+        </button>
       </li>
     {/each}
   </ul>
@@ -147,6 +148,11 @@
     cursor: pointer;
     transition: background var(--transition-fast);
     font-size: var(--font-size-sm);
+    width: 100%;
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-family: inherit;
   }
 
   .column-label:hover {
