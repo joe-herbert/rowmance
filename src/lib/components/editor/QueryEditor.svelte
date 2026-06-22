@@ -42,30 +42,45 @@
   import { errorMessage } from '$lib/utils/errors';
   import Select from '$lib/components/ui/Select.svelte';
   import { portal } from '$lib/actions/portal';
+  import { queryEditorCache } from '$lib/stores/queryEditorState';
 
   interface Props {
     connectionId: string;
     database?: string;
     initialSql?: string;
+    editorId?: string;
     onExecute?: (_sql: string) => void;
   }
 
-  let { connectionId, database: initialDatabase, initialSql = '', onExecute }: Props = $props();
+  let { connectionId, database: initialDatabase, initialSql = '', editorId, onExecute }: Props = $props();
 
   const connections = useConnections();
   const settingsStore = useSettings();
   const panelStore = usePanels();
 
+  const cached = editorId ? queryEditorCache.get(editorId) : undefined;
+
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
   let editorView = $state<EditorView | undefined>(undefined);
-  let sqlText = $state(untrack(() => initialSql));
-  let results = $state<QueryResult[]>([]);
-  let executedStatements = $state<string[]>([]);
+  let sqlText = $state(untrack(() => cached?.sql ?? initialSql));
+  let results = $state<QueryResult[]>(untrack(() => cached?.results ?? []));
+  let executedStatements = $state<string[]>(untrack(() => cached?.executedStatements ?? []));
   let isRunning = $state(false);
   let transactionActive = $state(false);
 
   let databases = $state<string[]>([]);
-  let selectedDatabase = $state<string>(untrack(() => initialDatabase ?? connections.getById(connectionId)?.database ?? ''));
+  let selectedDatabase = $state<string>(untrack(() => cached?.selectedDatabase ?? initialDatabase ?? connections.getById(connectionId)?.database ?? ''));
+
+  $effect(() => {
+    if (!editorId) return;
+    queryEditorCache.save(editorId, { sql: sqlText, results, executedStatements, selectedDatabase });
+  });
+
+  $effect(() => {
+    if (!editorId) return;
+    const dirtyKey = `query:${editorId}`;
+    panelStore.setItemDirty(dirtyKey, sqlText !== initialSql && sqlText.trim() !== '');
+  });
 
   let toolbarEl = $state<HTMLDivElement | undefined>(undefined);
   let toolbarWidth = $state(9999);

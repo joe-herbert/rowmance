@@ -48,8 +48,8 @@
   onclick={() => !isFocused && panelStore.focus(index)}
 >
   {#if panel.content.kind === 'query_editor'}
-    {#key panel.content}
-      <QueryEditor connectionId={panel.content.connectionId} database={panel.content.database} initialSql={panel.content.initialSql} />
+    {#key panel.content.editorId}
+      <QueryEditor connectionId={panel.content.connectionId} database={panel.content.database} initialSql={panel.content.initialSql} editorId={panel.content.editorId} />
     {/key}
   {:else if panel.content.kind === 'table_browser'}
     {#key panel.content}

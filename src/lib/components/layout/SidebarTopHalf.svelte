@@ -223,7 +223,7 @@
   {#if itemToClose}
     <ConfirmDialog
       title="Close tab"
-      message="This table has unsaved changes. Close anyway?"
+      message="This tab has unsaved changes. Close anyway?"
       confirmText="Close"
       cancelText="Cancel"
       danger={true}

@@ -8,6 +8,7 @@
  */
 import { untrack } from 'svelte';
 import type { PanelState, PanelKind, SplitMode } from '$lib/types';
+import { queryEditorCache } from './queryEditorState';
 
 export interface OpenItem {
   id: string;
@@ -93,6 +94,7 @@ export function dirtyKeyForContent(content: PanelKind): string | null {
   if (content.kind === 'table_browser') return `${content.connectionId}:${content.database}:${content.table}`;
   if (content.kind === 'table_structure') return `${content.connectionId}:${content.database}:${content.table}`;
   if (content.kind === 'ddl_viewer') return `${content.connectionId}:${content.database}:${content.objectName}`;
+  if (content.kind === 'query_editor' && content.editorId) return `query:${content.editorId}`;
   return null;
 }
 
@@ -176,6 +178,9 @@ export function usePanels() {
     closeOpenItem(itemId: string) {
       const item = openItems.find(i => i.id === itemId);
       if (!item) return;
+      if (item.content.kind === 'query_editor' && item.content.editorId) {
+        queryEditorCache.delete(item.content.editorId);
+      }
       openItems = openItems.filter(i => i.id !== itemId);
       panels = panels.map(p =>
         sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
@@ -193,6 +198,9 @@ export function usePanels() {
       const focused = panels[focusedIndex];
       if (!focused || focused.content.kind === 'empty') return;
 
+      if (focused.content.kind === 'query_editor' && focused.content.editorId) {
+        queryEditorCache.delete(focused.content.editorId);
+      }
       const itemIndex = openItems.findIndex(i => sameContent(i.content, focused.content));
       openItems = openItems.filter((_, i) => i !== itemIndex);
 
