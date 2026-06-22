@@ -68,7 +68,7 @@ pub async fn list_tables(pool: &PgPool, schema: &str) -> Result<Vec<TableInfo>, 
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
+    let mut tables: Vec<TableInfo> = rows
         .into_iter()
         .map(|r| TableInfo {
             name: r.table_name.unwrap_or_default(),
@@ -79,7 +79,23 @@ pub async fn list_tables(pool: &PgPool, schema: &str) -> Result<Vec<TableInfo>, 
             },
             row_count: r.row_count,
         })
-        .collect())
+        .collect();
+
+    for table in &mut tables {
+        if matches!(table.row_count, Some(0) | None) {
+            let schema_esc = schema.replace('"', "\"\"");
+            let tbl_esc = table.name.replace('"', "\"\"");
+            let count: i64 = sqlx::query_scalar(&format!(
+                "SELECT COUNT(*) FROM \"{}\".\"{}\"",
+                schema_esc, tbl_esc
+            ))
+            .fetch_one(pool)
+            .await?;
+            table.row_count = Some(count);
+        }
+    }
+
+    Ok(tables)
 }
 
 /// List all columns for a given table in the given schema.

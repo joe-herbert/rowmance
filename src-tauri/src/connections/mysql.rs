@@ -67,7 +67,7 @@ pub async fn list_tables(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
+    let mut tables: Vec<TableInfo> = rows
         .into_iter()
         .map(|r| TableInfo {
             name: r.name.unwrap_or_default(),
@@ -78,7 +78,21 @@ pub async fn list_tables(
             },
             row_count: r.row_count,
         })
-        .collect())
+        .collect();
+
+    for table in &mut tables {
+        if matches!(table.row_count, Some(0) | None) {
+            let db_esc = database.replace('`', "``");
+            let tbl_esc = table.name.replace('`', "``");
+            let count: i64 =
+                sqlx::query_scalar(&format!("SELECT COUNT(*) FROM `{}`.`{}`", db_esc, tbl_esc))
+                    .fetch_one(pool)
+                    .await?;
+            table.row_count = Some(count);
+        }
+    }
+
+    Ok(tables)
 }
 
 /// List all columns for a given table.

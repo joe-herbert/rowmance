@@ -79,7 +79,7 @@ pub async fn list_tables(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
+    let mut tables: Vec<TableInfo> = rows
         .into_iter()
         .map(|r| TableInfo {
             name: r.name,
@@ -90,7 +90,18 @@ pub async fn list_tables(
             },
             row_count: None,
         })
-        .collect())
+        .collect();
+
+    for table in &mut tables {
+        let tbl_esc = table.name.replace('"', "\"\"");
+        let count: i64 =
+            sqlx::query_scalar(&format!("SELECT COUNT(*) FROM \"{}\"", tbl_esc))
+                .fetch_one(pool)
+                .await?;
+        table.row_count = Some(count);
+    }
+
+    Ok(tables)
 }
 
 /// List all columns for a given table using PRAGMA table_info.
