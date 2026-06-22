@@ -281,6 +281,7 @@
   });
 
   function handleGlobalKeydown(e: KeyboardEvent) {
+    if (shortcutsStore.isRecording) return;
     if ((e.metaKey || e.ctrlKey) && e.key === 'f' && !paletteOpen) {
       e.preventDefault();
       globalSearchOpen = true;
