@@ -6,6 +6,7 @@
  * Open items are tracked independently of the panel layout — closing a panel
  * does not remove items from the open list. Items are removed only via closeOpenItem().
  */
+import { untrack } from 'svelte';
 import type { PanelState, PanelKind, SplitMode } from '$lib/types';
 
 export interface OpenItem {
@@ -46,6 +47,8 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
       return true;
     case 'query_editor':
       return b.kind === 'query_editor' && !!a.editorId && a.editorId === b.editorId;
+    case 'user_manager':
+      return b.kind === 'user_manager' && a.connectionId === b.connectionId;
     case 'empty':
       return true;
   }
@@ -57,6 +60,7 @@ let panels = $state<PanelState[]>([makePanel({ kind: 'empty' })]);
 let splitMode = $state<SplitMode>('none');
 let focusedIndex = $state(0);
 let openItems = $state<OpenItem[]>([]);
+let dirtyItemKeys = $state<Set<string>>(new Set());
 
 // ── Split mode transitions ────────────────────────────────────────────────────
 
@@ -83,6 +87,13 @@ function nextSplitMode(current: SplitMode, direction: 'right' | 'down'): SplitMo
 function previousSplitMode(current: SplitMode): SplitMode {
   if (current === 'quad') return 'horizontal'; // caller adjusts as needed
   return 'none';
+}
+
+export function dirtyKeyForContent(content: PanelKind): string | null {
+  if (content.kind === 'table_browser') return `${content.connectionId}:${content.database}:${content.table}`;
+  if (content.kind === 'table_structure') return `${content.connectionId}:${content.database}:${content.table}`;
+  if (content.kind === 'ddl_viewer') return `${content.connectionId}:${content.database}:${content.objectName}`;
+  return null;
 }
 
 // ── Public interface ──────────────────────────────────────────────────────────
@@ -228,6 +239,19 @@ export function usePanels() {
       if (index >= 0 && index < panels.length) {
         focusedIndex = index;
       }
+    },
+
+    setItemDirty(key: string, dirty: boolean) {
+      untrack(() => {
+        if (dirtyItemKeys.has(key) === dirty) return;
+        const next = new Set(dirtyItemKeys);
+        if (dirty) next.add(key);
+        else next.delete(key);
+        dirtyItemKeys = next;
+      });
+    },
+    isItemDirty(key: string): boolean {
+      return dirtyItemKeys.has(key);
     },
 
     /** Reorder open items by moving fromId to before/after toId. */

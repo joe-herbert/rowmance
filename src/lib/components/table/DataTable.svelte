@@ -54,6 +54,13 @@
     onDeleteRowsPending?: (_deletedRows: Map<string, CellValue[]>) => void;
     onForeignKeyClick?: (_colName: string, _value: CellValue) => void;
     onForeignKeyQuickView?: (_colName: string, _value: CellValue) => Promise<QuickViewData | null>;
+    initialColWidths?: Record<string, number>;
+    initialColumnOrder?: string[];
+    onColWidthsChange?: (widths: Record<string, number>) => void;
+    onColumnOrderChange?: (order: string[]) => void;
+    initialPendingChanges?: Map<string, Map<string, CellValue>>;
+    initialOriginalRows?: Map<string, CellValue[]>;
+    initialDeletedRows?: Map<string, CellValue[]>;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -153,6 +160,13 @@
     onDeleteRowsPending,
     onForeignKeyClick,
     onForeignKeyQuickView,
+    initialColWidths,
+    initialColumnOrder,
+    onColWidthsChange,
+    onColumnOrderChange,
+    initialPendingChanges,
+    initialOriginalRows,
+    initialDeletedRows,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -188,6 +202,9 @@
     const fromDisplay = columnOrder.indexOf(fromOriginal);
     const toDisplay = columnOrder.indexOf(toOriginal);
     columnOrder = reorderColumns(columnOrder, fromDisplay, toDisplay);
+    if (onColumnOrderChange) {
+      onColumnOrderChange(columnOrder.map(i => columns[i].name));
+    }
     draggingColName = null;
     dragOverColName = null;
   }
@@ -361,6 +378,28 @@
     if (!tableContainerEl) return;
     colWidths = computeDefaultColWidths(columns, rows, tableContainerEl);
 
+    // Apply saved column widths (override computed defaults per column)
+    if (initialColWidths) {
+      colWidths = colWidths.map((w, i) => {
+        const name = columns[i]?.name;
+        return name !== undefined && initialColWidths![name] != null ? initialColWidths![name] : w;
+      });
+    }
+
+    // Apply saved column order
+    if (initialColumnOrder && initialColumnOrder.length > 0) {
+      const nameToIdx = new Map(columns.map((c, i) => [c.name, i] as const));
+      const order: number[] = [];
+      for (const name of initialColumnOrder) {
+        const idx = nameToIdx.get(name);
+        if (idx !== undefined) order.push(idx);
+      }
+      for (let i = 0; i < columns.length; i++) {
+        if (!order.includes(i)) order.push(i);
+      }
+      if (order.length === columns.length) columnOrder = order;
+    }
+
     await tick();
 
     // Verify: if any header label is still overflowing after the computed widths are applied,
@@ -395,6 +434,11 @@
   }
 
   function onResizePointerUp(): void {
+    if (resizingColIndex !== null && onColWidthsChange) {
+      const widths: Record<string, number> = {};
+      columns.forEach((col, i) => { widths[col.name] = colWidths[i]; });
+      onColWidthsChange(widths);
+    }
     resizingColIndex = null;
   }
 
@@ -433,16 +477,28 @@
 
   // ── Pending changes ───────────────────────────────────────────────────────
 
-  let pendingChanges = $state<Map<string, Map<string, CellValue>>>(new Map());
+  let pendingChanges = $state<Map<string, Map<string, CellValue>>>(
+    untrack(() => initialPendingChanges ? new Map(initialPendingChanges) : new Map()),
+  );
   // Snapshot of each row's DB values at the time of its first edit — used to
   // build all-columns WHERE clauses for tables without a primary key.
-  let originalRows = $state<Map<string, CellValue[]>>(new Map());
+  let originalRows = $state<Map<string, CellValue[]>>(
+    untrack(() => initialOriginalRows ? new Map(initialOriginalRows) : new Map()),
+  );
 
-  let pendingNewRows = $state<{ key: string }[]>([]);
+  let pendingNewRows = $state<{ key: string }[]>(
+    untrack(() =>
+      initialPendingChanges
+        ? [...initialPendingChanges.keys()].filter((k) => k.startsWith('__new__')).map((key) => ({ key }))
+        : [],
+    ),
+  );
   let nextNewRowId = 0;
 
   // rowKey → original row values snapshot for building DELETE WHERE clauses
-  let pendingDeletedRows = $state<Map<string, CellValue[]>>(new Map());
+  let pendingDeletedRows = $state<Map<string, CellValue[]>>(
+    untrack(() => initialDeletedRows ? new Map(initialDeletedRows) : new Map()),
+  );
 
   $effect(() => {
     const trigger = addRowTrigger;

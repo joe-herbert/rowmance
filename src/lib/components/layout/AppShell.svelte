@@ -14,7 +14,9 @@
   import Toast from '$lib/components/ui/Toast.svelte';
   import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
-  import { usePanels } from '$lib/stores/panels.svelte';
+  import { usePanels, dirtyKeyForContent } from '$lib/stores/panels.svelte';
+  import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { useShortcuts } from '$lib/stores/shortcuts.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
@@ -186,7 +188,16 @@
     if (action === 'OPEN_SETTINGS') openSettings();
     if (action === 'COMMAND_PALETTE') openPalette();
     if (action === 'TOGGLE_SYSTEM_ITEMS') settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
-    if (action === 'PANEL_CLOSE') panelStore.closeFocusedItem();
+    if (action === 'PANEL_CLOSE') {
+      const focused = panelStore.focusedPanel.content;
+      const dKey = dirtyKeyForContent(focused);
+      if (dKey && panelStore.isItemDirty(dKey)) {
+        confirmCloseFocused = true;
+        confirmCloseFocusedKey = dKey;
+      } else {
+        panelStore.closeFocusedItem();
+      }
+    }
     if (action === 'PANEL_NEXT') panelStore.focusNext();
     if (action === 'PANEL_PREV') panelStore.focusPrev();
     if (action === 'NEW_QUERY_EDITOR') {
@@ -198,6 +209,8 @@
 
   let paletteOpen = $state(false);
   let globalSearchOpen = $state(false);
+  let confirmCloseFocused = $state(false);
+  let confirmCloseFocusedKey = $state<string | null>(null);
 
   // ── Connection chip popup ─────────────────────────────────────────────────
 
@@ -518,6 +531,26 @@
       {disconnecting ? 'Disconnecting…' : 'Disconnect'}
     </button>
   </div>
+{/if}
+
+{#if confirmCloseFocused}
+  <ConfirmDialog
+    title="Close tab"
+    message="This table has unsaved changes. Close anyway?"
+    confirmText="Close"
+    cancelText="Cancel"
+    danger={true}
+    onconfirm={() => {
+      if (confirmCloseFocusedKey) {
+        clearTablePendingState(confirmCloseFocusedKey);
+        panelStore.setItemDirty(confirmCloseFocusedKey, false);
+      }
+      panelStore.closeFocusedItem();
+      confirmCloseFocused = false;
+      confirmCloseFocusedKey = null;
+    }}
+    oncancel={() => { confirmCloseFocused = false; confirmCloseFocusedKey = null; }}
+  />
 {/if}
 
 <Toast />

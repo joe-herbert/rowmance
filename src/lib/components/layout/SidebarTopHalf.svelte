@@ -4,12 +4,14 @@
   Each row: connection color dot + type SVG icon + name + connection short name + × close.
 -->
 <script lang="ts">
-  import { usePanels, sameContent } from '$lib/stores/panels.svelte';
+  import { usePanels, sameContent, dirtyKeyForContent } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import type { PanelKind } from '$lib/types';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
 
   interface Props {
     onClose: () => void;
@@ -99,6 +101,13 @@
     if ((e.target as HTMLElement).closest('.close-btn')) return;
     pointerStartY = e.clientY;
     dragId = id;
+  }
+
+  let confirmCloseItemId = $state<string | null>(null);
+
+  function itemIsDirty(item: import('$lib/stores/panels.svelte').OpenItem): boolean {
+    const key = dirtyKeyForContent(item.content);
+    return key ? panelStore.isItemDirty(key) : false;
   }
 
   function openNewQueryEditor() {
@@ -192,13 +201,23 @@
             {/if}
           </span>
           <span class="panel-label">{panelLabel(item.content)}</span>
+          {#if itemIsDirty(item)}
+            <span class="dirty-dot" title="Unsaved changes" aria-label="Has unsaved changes"></span>
+          {/if}
           {#if connInfo}
             <span class="conn-short">{connInfo.shortName}</span>
           {/if}
           <button
             class="close-btn"
             aria-label="Close panel"
-            onclick={(e) => { e.stopPropagation(); panelStore.closeOpenItem(item.id); }}
+            onclick={(e) => {
+              e.stopPropagation();
+              if (itemIsDirty(item)) {
+                confirmCloseItemId = item.id;
+              } else {
+                panelStore.closeOpenItem(item.id);
+              }
+            }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -213,6 +232,27 @@
     </ul>
   {/if}
 </div>
+
+{#if confirmCloseItemId !== null}
+  {@const itemToClose = panelStore.openItems.find(i => i.id === confirmCloseItemId)}
+  {#if itemToClose}
+    <ConfirmDialog
+      title="Close tab"
+      message="This table has unsaved changes. Close anyway?"
+      confirmText="Close"
+      cancelText="Cancel"
+      danger={true}
+      onconfirm={() => {
+        const key = dirtyKeyForContent(itemToClose.content);
+        if (key) clearTablePendingState(key);
+        panelStore.setItemDirty(key ?? '', false);
+        panelStore.closeOpenItem(confirmCloseItemId!);
+        confirmCloseItemId = null;
+      }}
+      oncancel={() => { confirmCloseItemId = null; }}
+    />
+  {/if}
+{/if}
 
 <style>
   .section {
@@ -349,6 +389,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 78px;
+    flex-shrink: 0;
+    font-weight: initial;
+  }
+
+  .dirty-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-warning, #f59e0b);
     flex-shrink: 0;
   }
 

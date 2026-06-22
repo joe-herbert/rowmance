@@ -1,5 +1,21 @@
+<script module>
+  // Shared across all TableBrowser instances — persists across remounts.
+  type CellValue = string | number | boolean | null;
+  const tableScrollPositions = new Map<string, number>();
+  const tablePendingState = new Map<string, {
+    changes: Map<string, Map<string, CellValue>>;
+    originalRows: Map<string, CellValue[]>;
+    deletedRows: Map<string, CellValue[]>;
+  }>();
+
+  export function clearTablePendingState(key: string): void {
+    tablePendingState.delete(key);
+    tableScrollPositions.delete(key);
+  }
+</script>
+
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   import { executeQuery, updateRows, insertRow, deleteRows } from '$lib/tauri/query';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
@@ -27,6 +43,8 @@
   import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
   import { useToast } from '$lib/stores/toast.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { loadColPrefs, saveColPrefs } from '$lib/utils/table-prefs';
+  import { dirtyKeyForContent } from '$lib/stores/panels.svelte';
 
   interface Props {
     connectionId: string;
@@ -66,11 +84,19 @@
 
   // ── Pending changes ───────────────────────────────────────────────────────
 
-  type CellValue = string | number | boolean | null;
-  let pendingChanges = $state<Map<string, Map<string, CellValue>>>(new Map());
-  let originalRows = $state<Map<string, CellValue[]>>(new Map());
+  const _pendingKey = `${connectionId}:${database}:${table}`;
+  const _restoredPending = untrack(() => tablePendingState.get(_pendingKey) ?? null);
+
+  let pendingChanges = $state<Map<string, Map<string, CellValue>>>(
+    _restoredPending ? new Map(_restoredPending.changes) : new Map(),
+  );
+  let originalRows = $state<Map<string, CellValue[]>>(
+    _restoredPending ? new Map(_restoredPending.originalRows) : new Map(),
+  );
   // rowKey → original row snapshot, used to build DELETE WHERE clauses on save
-  let pendingDeletedRows = $state<Map<string, CellValue[]>>(new Map());
+  let pendingDeletedRows = $state<Map<string, CellValue[]>>(
+    _restoredPending ? new Map(_restoredPending.deletedRows) : new Map(),
+  );
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
 
@@ -78,6 +104,7 @@
 
   const NO_PK_WARN_KEY = 'rowmance_no_pk_warn_dismissed';
   let noPkWarnDismissed = $state(localStorage.getItem(NO_PK_WARN_KEY) === 'true');
+  let connectionReadOnly = $derived(connections.getById(connectionId)?.readOnly ?? false);
 
   const tableHasNoPk = $derived(
     result !== null &&
@@ -102,15 +129,17 @@
   const pendingCount = $derived(pendingChanges.size + pendingDeletedRows.size);
 
   function handleChangePending(changes: Map<string, Map<string, CellValue>>, rows: Map<string, CellValue[]>): void {
-    pendingChanges = changes;
-    originalRows = rows;
+    // Deep-copy to plain Maps so TableBrowser owns its data independently of DataTable's reactive proxies.
+    pendingChanges = new Map([...changes].map(([k, v]) => [k, new Map(v)]));
+    originalRows = new Map([...rows].map(([k, v]) => [k, [...v]]));
   }
 
   function handleDeleteRowsPending(deletedRows: Map<string, CellValue[]>): void {
-    pendingDeletedRows = deletedRows;
+    pendingDeletedRows = new Map([...deletedRows].map(([k, v]) => [k, [...v]]));
   }
 
   function discardChanges(): void {
+    tablePendingState.delete(_pendingKey);
     pendingChanges = new Map();
     originalRows = new Map();
     pendingDeletedRows = new Map();
@@ -197,6 +226,7 @@
       if (deleteChanges.length > 0) {
         await deleteRows(connectionId, database, table, deleteChanges);
       }
+      tablePendingState.delete(_pendingKey);
       pendingChanges = new Map();
       pendingDeletedRows = new Map();
       addRowTrigger = 0;
@@ -212,7 +242,10 @@
 
   // ── Column visibility ─────────────────────────────────────────────────────
 
-  let hiddenColumns = $state<Set<string>>(new Set());
+  const _savedPrefs = untrack(() => loadColPrefs(connectionId, database, table));
+  let hiddenColumns = $state<Set<string>>(new Set(_savedPrefs?.hiddenColumns ?? []));
+  const _initialColWidths = _savedPrefs?.colWidths ?? undefined;
+  const _initialColumnOrder = _savedPrefs?.columnOrder && _savedPrefs.columnOrder.length > 0 ? _savedPrefs.columnOrder : undefined;
   let showColumnPicker = $state(false);
   let columnPickerAnchorEl = $state<HTMLButtonElement | null>(null);
 
@@ -227,7 +260,6 @@
 
   let dbType = $derived(connections.getById(connectionId)?.dbType ?? 'mysql');
   let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
-  let connectionReadOnly = $derived(connections.getById(connectionId)?.readOnly ?? false);
 
   function quoteIdentifier(name: string): string {
     return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;
@@ -314,6 +346,76 @@
 
   let lastQueryMs = $state<number | null>(null);
 
+  // ── Dirty state tracking ──────────────────────────────────────────────────
+
+  const _dirtyKey = _pendingKey;
+
+  $effect(() => {
+    panelStore.setItemDirty(_dirtyKey, pendingCount > 0);
+    return () => {
+      // Only clear dirty if there are no saved pending changes (e.g. after save/discard).
+      // When switching tabs, tablePendingState still holds the data so the indicator should stay.
+      if (!tablePendingState.has(_pendingKey)) {
+        panelStore.setItemDirty(_dirtyKey, false);
+      }
+    };
+  });
+
+  // Eagerly mirror pending state into the module-level map so it's available
+  // immediately when a new instance mounts (cleanup timing is not reliable).
+  $effect(() => {
+    if (pendingChanges.size > 0 || pendingDeletedRows.size > 0) {
+      tablePendingState.set(_pendingKey, {
+        changes: new Map([...pendingChanges].map(([k, v]) => [k, new Map(v)])),
+        originalRows: new Map([...originalRows].map(([k, v]) => [k, [...v]])),
+        deletedRows: new Map([...pendingDeletedRows].map(([k, v]) => [k, [...v]])),
+      });
+    } else {
+      tablePendingState.delete(_pendingKey);
+    }
+  });
+
+  // ── Scroll position persistence ───────────────────────────────────────────
+
+  // Restore scroll position after first data load
+  let _scrollRestored = false;
+  $effect(() => {
+    if (result !== null && !_scrollRestored) {
+      _scrollRestored = true;
+      const saved = tableScrollPositions.get(_dirtyKey);
+      if (saved) {
+        tick().then(() => {
+          const scrollEl = tableBrowserEl?.querySelector('.table-scroll') as HTMLElement | null;
+          if (scrollEl) scrollEl.scrollTop = saved;
+        });
+      }
+    }
+  });
+
+  // Save scroll position on unmount
+  $effect(() => {
+    return () => {
+      const scrollEl = tableBrowserEl?.querySelector('.table-scroll') as HTMLElement | null;
+      if (scrollEl && scrollEl.scrollTop > 0) {
+        tableScrollPositions.set(_dirtyKey, scrollEl.scrollTop);
+      } else if (scrollEl && scrollEl.scrollTop === 0) {
+        tableScrollPositions.delete(_dirtyKey);
+      }
+    };
+  });
+
+  // ── Save hiddenColumns to localStorage when they change ──────────────────
+
+  let _hiddenColsInitialized = false;
+  $effect(() => {
+    const cols = [...hiddenColumns]; // track dependency
+    if (!_hiddenColsInitialized) {
+      _hiddenColsInitialized = true;
+      return;
+    }
+    saveColPrefs(connectionId, database, table, { hiddenColumns: cols });
+  });
+
   async function load(): Promise<void> {
     isLoading = true;
     error = null;
@@ -377,13 +479,9 @@
       ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: initialFilter }
       : emptyFilterState();
     showFilterEditor = false;
-    pendingChanges = new Map();
-    originalRows = new Map();
-    pendingDeletedRows = new Map();
-    hiddenColumns = new Set();
     showColumnPicker = false;
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
-    untrack(() => { tableKey++; load(); });
+    untrack(() => { load(); });
   });
 
   // Column picker position
@@ -1001,6 +1099,13 @@
           onPageInfo={handleDtPageInfo}
           onForeignKeyClick={foreignKeys.length > 0 ? handleForeignKeyClick : undefined}
           onForeignKeyQuickView={foreignKeys.length > 0 ? handleForeignKeyQuickView : undefined}
+          initialColWidths={_initialColWidths}
+          initialColumnOrder={_initialColumnOrder}
+          onColWidthsChange={(widths) => saveColPrefs(connectionId, database, table, { colWidths: widths })}
+          onColumnOrderChange={(order) => saveColPrefs(connectionId, database, table, { columnOrder: order })}
+          initialPendingChanges={tableKey === 0 ? _restoredPending?.changes : undefined}
+          initialOriginalRows={tableKey === 0 ? _restoredPending?.originalRows : undefined}
+          initialDeletedRows={tableKey === 0 ? _restoredPending?.deletedRows : undefined}
         />
       {/key}
     {:else}

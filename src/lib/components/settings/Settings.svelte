@@ -2,6 +2,10 @@
   Settings — application settings page with sections for General, Editor,
   Keyboard, and Connections (placeholder).
 -->
+<script module>
+  let lastActiveSection = 'general';
+</script>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -19,7 +23,11 @@
 
   type Section = 'general' | 'editor' | 'keyboard' | 'connections' | 'appearance';
 
-  let activeSection = $state<Section>('general');
+  let activeSection = $state<Section>(lastActiveSection as Section);
+
+  $effect(() => {
+    lastActiveSection = activeSection;
+  });
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
 
