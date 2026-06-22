@@ -442,22 +442,10 @@
   <!-- Left sidebar (toggleable) -->
   {#if leftVisible}
     <aside class="left-sidebar" style="width: {leftWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
-      <Sidebar onClose={toggleLeftSidebar} />
+      <Sidebar />
     </aside>
   {/if}
 
-  <!-- Floating toggle button when left sidebar is hidden -->
-  {#if !leftVisible}
-    <button
-      class="left-sidebar-toggle"
-      onclick={toggleLeftSidebar}
-      aria-label="Show left sidebar"
-      title="Show left sidebar"
-      transition:fade={{ duration: 150 }}
-    >
-      ›
-    </button>
-  {/if}
 
   <!-- Resize handle: left sidebar ↔ main area -->
   {#if leftVisible}
@@ -493,25 +481,41 @@
   <!-- Right sidebar (toggleable) -->
   {#if rightVisible}
     <aside class="right-sidebar" style="width: {rightWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
-      <RightSidebar onClose={toggleRightSidebar} initialPanel={activeRightPanel} onPanelChange={(p) => { activeRightPanel = (p ?? 'history') as RightPanel; settingsStore.set('rightSidebarPanel', activeRightPanel); }} />
+      <RightSidebar initialPanel={activeRightPanel} onPanelChange={(p) => { activeRightPanel = (p ?? 'history') as RightPanel; settingsStore.set('rightSidebarPanel', activeRightPanel); }} />
     </aside>
   {/if}
 
-  <!-- Floating toggle button when right sidebar is hidden -->
-  {#if !rightVisible}
-    <button
-      class="right-sidebar-toggle"
-      onclick={toggleRightSidebar}
-      aria-label="Show right sidebar"
-      title="Show right sidebar"
-      transition:fade={{ duration: 150 }}
-    >
-      ‹
-    </button>
-  {/if}
 </div>
 
-  <StatusBar />
+  <div class="statusbar-row">
+    <button
+      class="sidebar-toggle-btn"
+      class:sidebar-toggle-btn--active={leftVisible}
+      onclick={toggleLeftSidebar}
+      aria-label="{leftVisible ? 'Hide' : 'Show'} left sidebar"
+      title="{leftVisible ? 'Hide' : 'Show'} left sidebar"
+    >
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="5" y1="1" x2="5" y2="14" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="1.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5"/>
+      </svg>
+    </button>
+    <StatusBar />
+    <button
+      class="sidebar-toggle-btn"
+      class:sidebar-toggle-btn--active={rightVisible}
+      onclick={toggleRightSidebar}
+      aria-label="{rightVisible ? 'Hide' : 'Show'} right sidebar"
+      title="{rightVisible ? 'Hide' : 'Show'} right sidebar"
+    >
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="10" y1="1" x2="10" y2="14" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="10.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5"/>
+      </svg>
+    </button>
+  </div>
 </div>
 
 {#if connChipOpen && activeConnection}
@@ -1018,59 +1022,39 @@
     border-radius: var(--radius-sm);
   }
 
-  /* ── Sidebar toggle buttons (when sidebar is hidden) ───────────────────── */
+  /* ── Status bar row (status bar + sidebar toggles) ─────────────────────── */
 
-  .left-sidebar-toggle {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 28px;
-    height: 52px;
+  .statusbar-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--panel-spacing);
+    flex-shrink: 0;
+  }
+
+  .sidebar-toggle-btn {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--color-bg-secondary);
+    width: 36px;
+    height: var(--statusbar-height);
+    background: var(--color-bg-primary);
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
     border: 1px solid var(--color-border);
-    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    border-radius: var(--panel-radius);
     color: var(--color-text-muted);
-    font-size: var(--font-size-lg);
     cursor: pointer;
-    z-index: 10;
+    opacity: var(--panel-opacity);
     transition: background var(--transition-fast), color var(--transition-fast);
   }
 
-  .left-sidebar-toggle:hover {
+  .sidebar-toggle-btn:hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
   }
 
-  .right-sidebar-toggle {
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 28px;
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-bg-secondary);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    color: var(--color-text-muted);
-    font-size: var(--font-size-lg);
-    cursor: pointer;
-    z-index: 10;
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .right-sidebar-toggle:hover {
-    background: var(--color-bg-hover);
-    color: var(--color-text-primary);
+  .sidebar-toggle-btn--active {
+    color: var(--color-accent);
   }
 </style>

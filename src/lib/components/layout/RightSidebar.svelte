@@ -19,12 +19,11 @@
   type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
 
   interface Props {
-    onClose: () => void;
     initialPanel?: ActivePanel;
     onPanelChange?: (_panel: ActivePanel) => void;
   }
 
-  const { onClose, initialPanel = 'history', onPanelChange }: Props = $props();
+  const { initialPanel = 'history', onPanelChange }: Props = $props();
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
@@ -33,16 +32,12 @@
   let activePanel = $state<ActivePanel>(untrack(() => initialPanel));
 
   function selectPanel(panel: ActivePanel) {
-    if (activePanel === panel) {
-      onClose();
-    } else {
-      activePanel = panel;
-      onPanelChange?.(panel);
-      if (panel === 'history') loadHistory();
-      if (panel === 'saved') loadSavedQueries();
-      if (panel === 'column') columnInspectorKey = null;
-      if (panel === 'table-info') tableInfoKey = null;
-    }
+    activePanel = panel;
+    onPanelChange?.(panel);
+    if (panel === 'history') loadHistory();
+    if (panel === 'saved') loadSavedQueries();
+    if (panel === 'column') columnInspectorKey = null;
+    if (panel === 'table-info') tableInfoKey = null;
   }
 
   // ── Relations panel ───────────────────────────────────────────────────────
@@ -326,14 +321,7 @@
 <div class="right-sidebar" onclick={() => { savedCtxMenu = null; }}>
   <!-- Icon tab strip -->
   <div class="tab-strip" role="tablist" aria-label="Right sidebar panels">
-    <button class="icon-btn" title="Close sidebar" onclick={onClose} aria-label="Close sidebar">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="9 18 15 12 9 6"></polyline>
-      </svg>
-    </button>
-
     <div class="spacer"></div>
-
     <button
       class="tab-btn"
       class:active={activePanel === 'history'}
@@ -782,24 +770,6 @@
 
   .spacer {
     flex: 1;
-  }
-
-  .icon-btn {
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .icon-btn:hover {
-    background: var(--color-bg-hover);
-    color: var(--color-text-primary);
   }
 
   .panel-content {

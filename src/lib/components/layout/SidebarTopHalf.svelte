@@ -13,11 +13,6 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
 
-  interface Props {
-    onClose: () => void;
-  }
-
-  const { onClose }: Props = $props();
 
   const panelStore = usePanels();
   const connectionStore = useConnections();
@@ -135,16 +130,6 @@
       </svg>
     </button>
     {/if}
-    <button
-      class="icon-btn"
-      onclick={onClose}
-      title="Collapse sidebar"
-      aria-label="Collapse left sidebar"
-    >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 18 9 12 15 6"></polyline>
-      </svg>
-    </button>
   </div>
 
   {#if panelStore.openItems.length === 0}

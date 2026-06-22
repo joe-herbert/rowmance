@@ -7,15 +7,10 @@
   import SidebarTopHalf from './SidebarTopHalf.svelte';
   import SidebarBottomHalf from './SidebarBottomHalf.svelte';
 
-  interface Props {
-    onClose: () => void;
-  }
-
-  const { onClose }: Props = $props();
 </script>
 
 <div class="sidebar">
-  <SidebarTopHalf {onClose} />
+  <SidebarTopHalf />
   <SidebarBottomHalf />
 </div>
 

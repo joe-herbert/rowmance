@@ -88,11 +88,12 @@
 
 <style>
   .status-bar {
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 10px;
-    height: 30px;
+    height: var(--statusbar-height);
     padding: 0 14px;
     background: var(--color-bg-primary);
     -webkit-backdrop-filter: var(--glass-blur);
