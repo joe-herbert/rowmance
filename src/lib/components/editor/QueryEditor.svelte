@@ -40,14 +40,17 @@
   import * as schemaApi from '$lib/tauri/schema';
   import { statementAtCursor } from '$lib/utils/sql';
   import { errorMessage } from '$lib/utils/errors';
+  import Select from '$lib/components/ui/Select.svelte';
+  import { portal } from '$lib/actions/portal';
 
   interface Props {
     connectionId: string;
+    database?: string;
     initialSql?: string;
     onExecute?: (_sql: string) => void;
   }
 
-  let { connectionId, initialSql = '', onExecute }: Props = $props();
+  let { connectionId, database: initialDatabase, initialSql = '', onExecute }: Props = $props();
 
   const connections = useConnections();
   const settingsStore = useSettings();
@@ -59,6 +62,51 @@
   let result = $state<QueryResult | null>(null);
   let isRunning = $state(false);
   let transactionActive = $state(false);
+
+  let databases = $state<string[]>([]);
+  let selectedDatabase = $state<string>(untrack(() => initialDatabase ?? connections.getById(connectionId)?.database ?? ''));
+
+  let toolbarEl = $state<HTMLDivElement | undefined>(undefined);
+  let toolbarWidth = $state(9999);
+  let actionsMenuOpen = $state(false);
+  let actionsMenuTriggerEl = $state<HTMLButtonElement | undefined>(undefined);
+  let actionsMenuEl = $state<HTMLDivElement | undefined>(undefined);
+  let actionsMenuTop = $state(0);
+  let actionsMenuLeft = $state(0);
+
+  const compact = $derived(toolbarWidth < 700);
+
+  $effect(() => {
+    if (!toolbarEl) return;
+    const ro = new ResizeObserver(entries => {
+      toolbarWidth = entries[0].contentRect.width;
+    });
+    ro.observe(toolbarEl);
+    return () => ro.disconnect();
+  });
+
+  $effect(() => {
+    if (!actionsMenuOpen) return;
+
+    function positionMenu() {
+      if (!actionsMenuTriggerEl || !actionsMenuEl) return;
+      const rect = actionsMenuTriggerEl.getBoundingClientRect();
+      actionsMenuTop = rect.bottom + 4;
+      actionsMenuLeft = rect.right - actionsMenuEl.offsetWidth;
+    }
+
+    requestAnimationFrame(positionMenu);
+
+    function onMousedown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (!actionsMenuTriggerEl?.contains(t) && !actionsMenuEl?.contains(t)) {
+        actionsMenuOpen = false;
+      }
+    }
+
+    document.addEventListener('mousedown', onMousedown, true);
+    return () => document.removeEventListener('mousedown', onMousedown, true);
+  });
 
   let connectionName = $derived(connections.getById(connectionId)?.name ?? connectionId);
   let transactionMode = $derived(settingsStore.settings.transactionMode);
@@ -93,9 +141,13 @@
     schemaRef.tables = [];
     schemaRef.columns = new Map();
     try {
-      const databases = await schemaApi.listDatabases(connId);
+      const dbs = await schemaApi.listDatabases(connId);
+      databases = dbs;
+      if (!selectedDatabase && dbs.length > 0) {
+        selectedDatabase = dbs[0];
+      }
       const tables: SchemaTable[] = [];
-      for (const db of databases) {
+      for (const db of dbs) {
         const dbTables = await schemaApi.listTables(connId, db);
         for (const t of dbTables) {
           tables.push({ database: db, name: t.name });
@@ -231,7 +283,7 @@
 
     isRunning = true;
     try {
-      result = await executeQuery(connectionId, query, 1, settingsStore.settings.pageSize);
+      result = await executeQuery(connectionId, query, 1, settingsStore.settings.pageSize, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
       result = {
@@ -258,7 +310,7 @@
 
     isRunning = true;
     try {
-      result = await executeSelection(connectionId, query);
+      result = await executeSelection(connectionId, query, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
       result = {
@@ -283,7 +335,7 @@
 
     isRunning = true;
     try {
-      result = await executeSelection(connectionId, stmt);
+      result = await executeSelection(connectionId, stmt, selectedDatabase || null);
       onExecute?.(stmt);
     } catch (err) {
       result = {
@@ -318,7 +370,7 @@
     if (!query || isRunning) return;
     isRunning = true;
     try {
-      const explainResult = await explainQuery(connectionId, query);
+      const explainResult = await explainQuery(connectionId, query, selectedDatabase || null);
       panelStore.openInFocused({
         kind: 'explain',
         connectionId,
@@ -494,7 +546,7 @@
 </script>
 
 <div class="query-editor-panel">
-  <div class="toolbar">
+  <div class="toolbar" bind:this={toolbarEl}>
     <button
       class="run-button"
       onclick={runQuery}
@@ -509,46 +561,103 @@
       {connectionName}
     </span>
 
+    {#if databases.length > 0}
+      <Select
+        bind:value={selectedDatabase}
+        options={databases.map(db => ({ value: db, label: db }))}
+        size="xs"
+        aria-label="Select database"
+        mono
+      />
+    {:else if selectedDatabase}
+      <span class="connection-badge" title="Database">{selectedDatabase}</span>
+    {/if}
+
     {#if transactionActive}
       <span class="tx-badge" title="Transaction in progress">TXN</span>
     {/if}
 
     <div class="toolbar-spacer"></div>
 
-    <button
-      class="toolbar-btn"
-      onclick={runSelection}
-      disabled={isRunning}
-      title="Run selection (Cmd+Shift+Enter)"
-    >
-      Run Selection
-    </button>
+    {#if compact}
+      <button
+        bind:this={actionsMenuTriggerEl}
+        class="toolbar-btn toolbar-btn--icon"
+        onclick={() => { actionsMenuOpen = !actionsMenuOpen; }}
+        title="More actions"
+        aria-label="More actions"
+        aria-expanded={actionsMenuOpen}
+        aria-haspopup="menu"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="2" cy="7" r="1.25" fill="currentColor"/>
+          <circle cx="7" cy="7" r="1.25" fill="currentColor"/>
+          <circle cx="12" cy="7" r="1.25" fill="currentColor"/>
+        </svg>
+      </button>
 
-    <button
-      class="toolbar-btn"
-      onclick={runUnderCursor}
-      disabled={isRunning}
-      title="Run statement under cursor (Cmd+Shift+R)"
-    >
-      Run Cursor
-    </button>
+      {#if actionsMenuOpen}
+        <div
+          bind:this={actionsMenuEl}
+          class="actions-menu"
+          role="menu"
+          style="top:{actionsMenuTop}px;left:{actionsMenuLeft}px"
+          use:portal
+        >
+          <button class="actions-menu-item" role="menuitem" onclick={() => { runSelection(); actionsMenuOpen = false; }} disabled={isRunning}>
+            <span>Run Selection</span>
+            <kbd>⇧↵</kbd>
+          </button>
+          <button class="actions-menu-item" role="menuitem" onclick={() => { runUnderCursor(); actionsMenuOpen = false; }} disabled={isRunning}>
+            <span>Run Cursor</span>
+            <kbd>⇧R</kbd>
+          </button>
+          <div class="actions-menu-sep" role="separator"></div>
+          <button class="actions-menu-item" role="menuitem" onclick={() => { formatQuery(); actionsMenuOpen = false; }}>
+            <span>Format SQL</span>
+            <kbd>⇧F</kbd>
+          </button>
+          <button class="actions-menu-item" role="menuitem" onclick={() => { runExplain(); actionsMenuOpen = false; }} disabled={isRunning}>
+            <span>Explain</span>
+          </button>
+        </div>
+      {/if}
+    {:else}
+      <button
+        class="toolbar-btn"
+        onclick={runSelection}
+        disabled={isRunning}
+        title="Run selection (Cmd+Shift+Enter)"
+      >
+        Run Selection
+      </button>
 
-    <button
-      class="toolbar-btn"
-      onclick={formatQuery}
-      title="Format SQL (Cmd+Shift+F)"
-    >
-      Format
-    </button>
+      <button
+        class="toolbar-btn"
+        onclick={runUnderCursor}
+        disabled={isRunning}
+        title="Run statement under cursor (Cmd+Shift+R)"
+      >
+        Run Cursor
+      </button>
 
-    <button
-      class="toolbar-btn"
-      onclick={runExplain}
-      disabled={isRunning}
-      title="Explain query"
-    >
-      Explain
-    </button>
+      <button
+        class="toolbar-btn"
+        onclick={formatQuery}
+        title="Format SQL (Cmd+Shift+F)"
+      >
+        Format
+      </button>
+
+      <button
+        class="toolbar-btn"
+        onclick={runExplain}
+        disabled={isRunning}
+        title="Explain query"
+      >
+        Explain
+      </button>
+    {/if}
   </div>
 
   {#if showTransactionToolbar}
@@ -587,14 +696,14 @@
   }
 
   .toolbar {
-    flex: 0 0 var(--toolbar-height);
+    flex-shrink: 0;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--spacing-2);
     padding: 0 var(--spacing-3);
     border-bottom: 1px solid var(--color-border);
     min-height: var(--toolbar-height);
-    max-height: var(--toolbar-height);
   }
 
   .run-button {
@@ -628,16 +737,12 @@
     align-items: center;
     padding: 0 var(--spacing-2);
     height: calc(var(--toolbar-height) - var(--spacing-3));
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
-    max-width: 160px;
+    max-width: 300px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: default;
   }
 
   .tx-badge {
@@ -682,6 +787,78 @@
   .toolbar-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .toolbar-btn--icon {
+    width: calc(var(--toolbar-height) - var(--spacing-3));
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Actions overflow menu */
+  .actions-menu {
+    position: fixed;
+    z-index: 9999;
+    background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    padding: 3px;
+    min-width: 160px;
+    animation: dropdown-in var(--transition-md) both;
+    transform-origin: top right;
+  }
+
+  @keyframes dropdown-in {
+    from { opacity: 0; transform: scaleY(0.92) translateY(-4px); }
+    to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
+  }
+
+  .actions-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-4);
+    width: 100%;
+    padding: 0 var(--spacing-2);
+    min-height: 26px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-primary);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-xs);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .actions-menu-item:hover:not(:disabled) {
+    background: var(--color-accent-subtle);
+  }
+
+  .actions-menu-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .actions-menu-item kbd {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+    font-family: var(--font-family-ui);
+  }
+
+  .actions-menu-sep {
+    height: 1px;
+    background: var(--color-border);
+    margin: 3px 0;
   }
 
   /* Transaction toolbar */

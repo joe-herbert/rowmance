@@ -1,6 +1,6 @@
 /// Tauri commands for executing SQL queries against remote databases.
 use serde::{Deserialize, Serialize};
-use sqlx::{Column, Executor, Row, Statement, TypeInfo};
+use sqlx::{Column, ConnectOptions, Executor, Row, Statement, TypeInfo};
 use std::sync::Arc;
 use tauri::State;
 
@@ -628,6 +628,7 @@ pub async fn query_execute(
     sql: String,
     page: u32,
     page_size: u32,
+    database: Option<String>,
 ) -> Result<QueryResult, AppError> {
     let query_id = uuid::Uuid::new_v4().to_string();
     let start = std::time::Instant::now();
@@ -655,9 +656,34 @@ pub async fn query_execute(
     let offset = (page.saturating_sub(1)) * page_size;
 
     let result = match pool_ref.value() {
-        RemotePool::MySql(pool) => execute_mysql(pool, &sql, page_size, offset).await,
-        RemotePool::Postgres(pool) => execute_postgres(pool, &sql, page_size, offset).await,
-        RemotePool::Sqlite(pool) => execute_sqlite(pool, &sql, page_size, offset).await,
+        RemotePool::MySql(pool) => {
+            if let Some(db) = &database {
+                // `USE db` cannot be sent as a prepared statement (MySQL error 1295).
+                // Open a short-lived direct connection with the target database set in
+                // the options so we never need to issue USE at all.
+                let mut conn = (*pool.connect_options()).clone().database(db)
+                    .connect().await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                execute_mysql(&mut conn, &sql, page_size, offset).await
+            } else {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                execute_mysql(&mut *conn, &sql, page_size, offset).await
+            }
+        }
+        RemotePool::Postgres(pool) => {
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            if let Some(schema) = &database {
+                sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
+            execute_postgres(&mut *conn, &sql, page_size, offset).await
+        }
+        RemotePool::Sqlite(pool) => {
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            execute_sqlite(&mut *conn, &sql, page_size, offset).await
+        }
     };
 
     let duration_ms = start.elapsed().as_millis() as u64;
@@ -720,9 +746,10 @@ pub async fn query_execute_selection(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     sql: String,
+    database: Option<String>,
 ) -> Result<QueryResult, AppError> {
     // Delegate to the main executor with page=1 and a large page size.
-    query_execute(sqlite, connections, connection_id, sql, 1, 10_000).await
+    query_execute(sqlite, connections, connection_id, sql, 1, 10_000, database).await
 }
 
 // ── Type formatting helpers ───────────────────────────────────────────────────
@@ -762,7 +789,7 @@ type ExecuteResult = Result<
 >;
 
 async fn execute_mysql(
-    pool: &sqlx::MySqlPool,
+    conn: &mut sqlx::mysql::MySqlConnection,
     sql: &str,
     page_size: u32,
     offset: u32,
@@ -773,14 +800,14 @@ async fn execute_mysql(
     if is_select {
         let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
         let total_rows: Option<i64> = sqlx::query(&count_sql)
-            .fetch_one(pool)
+            .fetch_one(&mut *conn)
             .await
             .ok()
             .and_then(|row| row.try_get::<i64, _>(0).ok());
 
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
-            .fetch_all(pool)
+            .fetch_all(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -797,7 +824,7 @@ async fn execute_mysql(
                 })
                 .collect()
         } else {
-            match pool.prepare(&paginated).await {
+            match conn.prepare(&paginated).await {
                 Ok(stmt) => stmt
                     .columns()
                     .iter()
@@ -825,7 +852,7 @@ async fn execute_mysql(
         Ok((columns, data, total_rows, None))
     } else {
         let result = sqlx::query(sql)
-            .execute(pool)
+            .execute(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
         Ok((vec![], vec![], None, Some(result.rows_affected())))
@@ -833,7 +860,7 @@ async fn execute_mysql(
 }
 
 async fn execute_postgres(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::postgres::PgConnection,
     sql: &str,
     page_size: u32,
     offset: u32,
@@ -843,14 +870,14 @@ async fn execute_postgres(
     if is_select {
         let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
         let total_rows: Option<i64> = sqlx::query(&count_sql)
-            .fetch_one(pool)
+            .fetch_one(&mut *conn)
             .await
             .ok()
             .and_then(|row| row.try_get::<i64, _>(0).ok());
 
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
-            .fetch_all(pool)
+            .fetch_all(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -867,7 +894,7 @@ async fn execute_postgres(
                 })
                 .collect()
         } else {
-            match pool.prepare(&paginated).await {
+            match conn.prepare(&paginated).await {
                 Ok(stmt) => stmt
                     .columns()
                     .iter()
@@ -891,7 +918,7 @@ async fn execute_postgres(
         Ok((columns, data, total_rows, None))
     } else {
         let result = sqlx::query(sql)
-            .execute(pool)
+            .execute(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
         Ok((vec![], vec![], None, Some(result.rows_affected())))
@@ -899,7 +926,7 @@ async fn execute_postgres(
 }
 
 async fn execute_sqlite(
-    pool: &sqlx::SqlitePool,
+    conn: &mut sqlx::sqlite::SqliteConnection,
     sql: &str,
     page_size: u32,
     offset: u32,
@@ -909,14 +936,14 @@ async fn execute_sqlite(
     if is_select {
         let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
         let total_rows: Option<i64> = sqlx::query(&count_sql)
-            .fetch_one(pool)
+            .fetch_one(&mut *conn)
             .await
             .ok()
             .and_then(|row| row.try_get::<i64, _>(0).ok());
 
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
-            .fetch_all(pool)
+            .fetch_all(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -933,7 +960,7 @@ async fn execute_sqlite(
                 })
                 .collect()
         } else {
-            match pool.prepare(&paginated).await {
+            match conn.prepare(&paginated).await {
                 Ok(stmt) => stmt
                     .columns()
                     .iter()
@@ -957,7 +984,7 @@ async fn execute_sqlite(
         Ok((columns, data, total_rows, None))
     } else {
         let result = sqlx::query(sql)
-            .execute(pool)
+            .execute(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
         Ok((vec![], vec![], None, Some(result.rows_affected())))
@@ -1085,13 +1112,18 @@ pub async fn query_explain(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     sql: String,
+    database: Option<String>,
 ) -> Result<ExplainResult, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
         RemotePool::MySql(pool) => {
+            let base_opts = (*pool.connect_options()).clone();
+            let opts = if let Some(db) = &database { base_opts.database(db) } else { base_opts };
+            let mut conn = opts.connect().await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             let explain_sql = format!("EXPLAIN FORMAT=JSON {sql}");
             let rows = sqlx::query(&explain_sql)
-                .fetch_all(pool)
+                .fetch_all(&mut conn)
                 .await
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             let raw = if let Some(row) = rows.first() {
@@ -1106,9 +1138,16 @@ pub async fn query_explain(
             })
         }
         RemotePool::Postgres(pool) => {
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            if let Some(schema) = &database {
+                sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
             let explain_sql = format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}");
             let rows = sqlx::query(&explain_sql)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             let plans: Vec<serde_json::Value> = rows
@@ -1126,9 +1165,10 @@ pub async fn query_explain(
             })
         }
         RemotePool::Sqlite(pool) => {
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             let explain_sql = format!("EXPLAIN QUERY PLAN {sql}");
             let rows = sqlx::query(&explain_sql)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             let plans: Vec<serde_json::Value> = rows

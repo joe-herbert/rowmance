@@ -7,12 +7,13 @@ export async function executeQuery(
   sql: string,
   page: number,
   pageSize: number,
+  database?: string | null,
 ): Promise<QueryResult> {
-  return invoke<QueryResult>('query_execute', { connectionId, sql, page, pageSize });
+  return invoke<QueryResult>('query_execute', { connectionId, sql, page, pageSize, database: database ?? null });
 }
 
-export async function executeSelection(connectionId: string, sql: string): Promise<QueryResult> {
-  return invoke<QueryResult>('query_execute_selection', { connectionId, sql });
+export async function executeSelection(connectionId: string, sql: string, database?: string | null): Promise<QueryResult> {
+  return invoke<QueryResult>('query_execute_selection', { connectionId, sql, database: database ?? null });
 }
 
 export async function cancelQuery(queryId: string): Promise<void> {
@@ -63,6 +64,6 @@ export async function insertRow(
   return invoke<void>('query_insert_row', { connectionId, database, table, values });
 }
 
-export async function explainQuery(connectionId: string, sql: string): Promise<ExplainResult> {
-  return invoke<ExplainResult>('query_explain', { connectionId, sql });
+export async function explainQuery(connectionId: string, sql: string, database?: string | null): Promise<ExplainResult> {
+  return invoke<ExplainResult>('query_explain', { connectionId, sql, database: database ?? null });
 }

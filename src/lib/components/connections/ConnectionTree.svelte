@@ -886,6 +886,8 @@
       <button class="ctx-item" role="menuitem" onclick={ctxNewTable}>New Table</button>
       <div class="ctx-sep" role="separator"></div>
     {/if}
+    <button class="ctx-item" role="menuitem" onclick={() => { if (dbCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: dbCtx.connectionId, database: dbCtx.database }); dbCtx = null; } }}>New Query Editor</button>
+    <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item" role="menuitem" onclick={ctxRefreshDatabase}>Refresh</button>
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
     <div class="ctx-sep" role="separator"></div>
