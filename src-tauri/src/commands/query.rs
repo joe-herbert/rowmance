@@ -601,6 +601,241 @@ pub async fn query_insert_row(
     Ok(())
 }
 
+/// Split a SQL string into individual statements on `;`, respecting quoted strings and comments.
+fn split_statements(sql: &str) -> Vec<String> {
+    let mut statements: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let chars: Vec<char> = sql.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        match chars[i] {
+            '\'' => {
+                current.push('\'');
+                i += 1;
+                while i < len {
+                    let c = chars[i];
+                    current.push(c);
+                    i += 1;
+                    if c == '\'' {
+                        if i < len && chars[i] == '\'' {
+                            current.push('\'');
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            '"' => {
+                current.push('"');
+                i += 1;
+                while i < len {
+                    let c = chars[i];
+                    current.push(c);
+                    i += 1;
+                    if c == '"' {
+                        if i < len && chars[i] == '"' {
+                            current.push('"');
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            '`' => {
+                current.push('`');
+                i += 1;
+                while i < len {
+                    let c = chars[i];
+                    current.push(c);
+                    i += 1;
+                    if c == '`' {
+                        if i < len && chars[i] == '`' {
+                            current.push('`');
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            '-' if i + 1 < len && chars[i + 1] == '-' => {
+                current.push('-');
+                i += 1;
+                while i < len && chars[i] != '\n' {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+            }
+            '/' if i + 1 < len && chars[i + 1] == '*' => {
+                current.push('/');
+                current.push('*');
+                i += 2;
+                while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+                if i + 1 < len {
+                    current.push('*');
+                    current.push('/');
+                    i += 2;
+                }
+            }
+            ';' => {
+                let stmt = current.trim().to_string();
+                if !stmt.is_empty() {
+                    statements.push(stmt);
+                }
+                current = String::new();
+                i += 1;
+            }
+            c => {
+                current.push(c);
+                i += 1;
+            }
+        }
+    }
+
+    let stmt = current.trim().to_string();
+    if !stmt.is_empty() {
+        statements.push(stmt);
+    }
+
+    statements
+}
+
+/// Execute multiple SQL statements and return all result sets.
+#[tauri::command]
+pub async fn query_execute_multi(
+    sqlite: State<'_, sqlx::SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    sql: String,
+    database: Option<String>,
+) -> Result<Vec<QueryResult>, AppError> {
+    let statements = split_statements(&sql);
+    if statements.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let profile_row = sqlx::query!(
+        "SELECT read_only FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    let is_read_only = profile_row.as_ref().map(|r| r.read_only != 0).unwrap_or(false);
+
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+    let mut results: Vec<QueryResult> = Vec::new();
+
+    for stmt in &statements {
+        if is_read_only && is_mutating_statement(stmt) {
+            results.push(QueryResult {
+                query_id: uuid::Uuid::new_v4().to_string(),
+                columns: vec![],
+                rows: vec![],
+                total_rows: None,
+                duration_ms: 0,
+                affected_rows: None,
+                error: Some(
+                    "This connection is in read-only mode — mutating statements are not allowed"
+                        .to_string(),
+                ),
+            });
+            continue;
+        }
+
+        let query_id = uuid::Uuid::new_v4().to_string();
+        let start = std::time::Instant::now();
+
+        let exec_result = match pool_ref.value() {
+            RemotePool::MySql(pool) => {
+                if let Some(db) = &database {
+                    let mut conn = (*pool.connect_options()).clone().database(db)
+                        .connect().await
+                        .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                    execute_mysql(&mut conn, stmt, 10_000, 0).await
+                } else {
+                    let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                    execute_mysql(&mut *conn, stmt, 10_000, 0).await
+                }
+            }
+            RemotePool::Postgres(pool) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                if let Some(schema) = &database {
+                    sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                        .execute(&mut *conn)
+                        .await
+                        .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                }
+                execute_postgres(&mut *conn, stmt, 10_000, 0).await
+            }
+            RemotePool::Sqlite(pool) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                execute_sqlite(&mut *conn, stmt, 10_000, 0).await
+            }
+        };
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        match exec_result {
+            Ok((columns, rows, total_rows, affected_rows)) => {
+                let row_count = rows.len() as i64;
+                record_history(
+                    sqlite.inner(),
+                    &query_id,
+                    &connection_id,
+                    stmt,
+                    duration_ms,
+                    Some(row_count),
+                    None,
+                    "success",
+                )
+                .await;
+                results.push(QueryResult {
+                    query_id,
+                    columns,
+                    rows,
+                    total_rows,
+                    duration_ms,
+                    affected_rows,
+                    error: None,
+                });
+            }
+            Err(err_msg) => {
+                record_history(
+                    sqlite.inner(),
+                    &query_id,
+                    &connection_id,
+                    stmt,
+                    duration_ms,
+                    None,
+                    Some(&err_msg),
+                    "error",
+                )
+                .await;
+                results.push(QueryResult {
+                    query_id,
+                    columns: vec![],
+                    rows: vec![],
+                    total_rows: None,
+                    duration_ms,
+                    affected_rows: None,
+                    error: Some(err_msg),
+                });
+            }
+        }
+    }
+
+    Ok(results)
+}
+
 /// Enforce read-only mode by checking the leading SQL keyword.
 fn is_mutating_statement(sql: &str) -> bool {
     let keyword = sql.split_whitespace().next().unwrap_or("").to_uppercase();
@@ -795,6 +1030,7 @@ async fn execute_mysql(
     offset: u32,
 ) -> ExecuteResult {
     // Wrap SELECT statements with LIMIT/OFFSET; pass DDL/DML through unchanged.
+    let sql = sql.trim_end_matches(';');
     let is_select = sql.trim().to_uppercase().starts_with("SELECT");
 
     if is_select {
@@ -865,6 +1101,7 @@ async fn execute_postgres(
     page_size: u32,
     offset: u32,
 ) -> ExecuteResult {
+    let sql = sql.trim_end_matches(';');
     let is_select = sql.trim().to_uppercase().starts_with("SELECT");
 
     if is_select {
@@ -931,6 +1168,7 @@ async fn execute_sqlite(
     page_size: u32,
     offset: u32,
 ) -> ExecuteResult {
+    let sql = sql.trim_end_matches(';');
     let is_select = sql.trim().to_uppercase().starts_with("SELECT");
 
     if is_select {
@@ -1234,6 +1472,35 @@ async fn record_history(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn split_statements_single() {
+        assert_eq!(split_statements("SELECT 1"), vec!["SELECT 1"]);
+    }
+
+    #[test]
+    fn split_statements_multiple() {
+        let stmts = split_statements("SELECT 1; SELECT 2");
+        assert_eq!(stmts, vec!["SELECT 1", "SELECT 2"]);
+    }
+
+    #[test]
+    fn split_statements_trailing_semicolon() {
+        let stmts = split_statements("SELECT 1;");
+        assert_eq!(stmts, vec!["SELECT 1"]);
+    }
+
+    #[test]
+    fn split_statements_semicolon_in_string() {
+        let stmts = split_statements("SELECT 'a;b'; SELECT 2");
+        assert_eq!(stmts, vec!["SELECT 'a;b'", "SELECT 2"]);
+    }
+
+    #[test]
+    fn split_statements_empty_and_whitespace() {
+        let stmts = split_statements("  ;  ;  SELECT 1  ;  ");
+        assert_eq!(stmts, vec!["SELECT 1"]);
+    }
 
     #[test]
     fn mutating_keywords_are_detected() {

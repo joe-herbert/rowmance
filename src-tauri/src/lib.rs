@@ -85,6 +85,7 @@ pub fn run() {
             // Query execution
             commands::query::query_execute,
             commands::query::query_execute_selection,
+            commands::query::query_execute_multi,
             commands::query::query_update_rows,
             commands::query::query_delete_rows,
             commands::query::query_insert_row,

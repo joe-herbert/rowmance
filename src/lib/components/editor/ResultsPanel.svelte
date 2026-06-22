@@ -9,10 +9,22 @@
   const toast = useToast();
 
   interface Props {
-    result: QueryResult | null;
+    results: QueryResult[];
+    statements?: string[];
   }
 
-  let { result }: Props = $props();
+  let { results, statements = [] }: Props = $props();
+
+  let activeTab = $state(0);
+
+  $effect(() => {
+    // Reset to first tab whenever results change.
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    results;
+    activeTab = 0;
+  });
+
+  let result = $derived(results[activeTab] ?? null);
 
   let rowLabel = $derived(
     result
@@ -116,118 +128,145 @@
 </script>
 
 <div class="results-panel">
-  {#if result === null}
+  {#if results.length === 0}
     <div class="placeholder">
       <span class="placeholder-text">Run a query to see results</span>
     </div>
-  {:else if result.error !== null}
-    <div class="error-box" role="alert">
-      <div class="error-header">
-        <span class="error-label">Error</span>
-        <button class="error-copy" onclick={() => navigator.clipboard.writeText(result!.error!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy error">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
+  {:else}
+    {#if results.length > 1}
+      <div class="tab-bar" role="tablist">
+        <div class="tab-list">
+          {#each results as r, i}
+            <button
+              class="tab-btn"
+              class:tab-btn--active={activeTab === i}
+              class:tab-btn--error={r.error !== null}
+              role="tab"
+              aria-selected={activeTab === i}
+              onclick={() => { activeTab = i; }}
+            >
+              Result {i + 1}
+              {#if r.error !== null}
+                <span class="tab-error-dot" aria-hidden="true">●</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+        {#if statements[activeTab]}
+          <span class="tab-sql" title={statements[activeTab]}>{statements[activeTab]}</span>
+        {/if}
       </div>
-      <span class="error-message">{result.error}</span>
-    </div>
-  {:else if hasData}
-    <div class="export-toolbar">
-      <div class="export-dropdown">
-        <button
-          class="export-btn"
-          onclick={() => { showExportMenu = !showExportMenu; exportError = null; }}
-          aria-expanded={showExportMenu}
-          aria-label="Export results"
-        >
-          Export ▾
-        </button>
+    {/if}
 
-        {#if showExportMenu}
-          <div class="export-menu" role="menu">
-            {#each EXPORT_FORMATS as fmt}
-              <div class="export-menu-section">
-                <span class="export-format-label">{fmt.label}</span>
-                <button
-                  class="export-menu-item"
-                  role="menuitem"
-                  onclick={() => startExport(fmt.format, false)}
-                >
-                  To Clipboard
-                </button>
-                <button
-                  class="export-menu-item"
-                  role="menuitem"
-                  onclick={() => startExport(fmt.format, true)}
-                >
-                  To File
-                </button>
-              </div>
-            {/each}
+    {#if result !== null && result.error !== null}
+      <div class="error-box" role="alert">
+        <div class="error-header">
+          <span class="error-label">Error</span>
+          <button class="error-copy" onclick={() => navigator.clipboard.writeText(result!.error!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy error">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+        <span class="error-message">{result.error}</span>
+      </div>
+    {:else if hasData}
+      <div class="export-toolbar">
+        <div class="export-dropdown">
+          <button
+            class="export-btn"
+            onclick={() => { showExportMenu = !showExportMenu; exportError = null; }}
+            aria-expanded={showExportMenu}
+            aria-label="Export results"
+          >
+            Export ▾
+          </button>
+
+          {#if showExportMenu}
+            <div class="export-menu" role="menu">
+              {#each EXPORT_FORMATS as fmt}
+                <div class="export-menu-section">
+                  <span class="export-format-label">{fmt.label}</span>
+                  <button
+                    class="export-menu-item"
+                    role="menuitem"
+                    onclick={() => startExport(fmt.format, false)}
+                  >
+                    To Clipboard
+                  </button>
+                  <button
+                    class="export-menu-item"
+                    role="menuitem"
+                    onclick={() => startExport(fmt.format, true)}
+                  >
+                    To File
+                  </button>
+                </div>
+              {/each}
+            </div>
+            <div
+              class="export-backdrop"
+              role="presentation"
+              onclick={() => (showExportMenu = false)}
+              onkeydown={(e) => { if (e.key === 'Escape') showExportMenu = false; }}
+            ></div>
+          {/if}
+        </div>
+
+        {#if showTableNameInput}
+          <div class="table-name-input-row">
+            <label class="table-name-label" for="rp-table-name">Table name:</label>
+            <input
+              id="rp-table-name"
+              class="table-name-input"
+              type="text"
+              placeholder="table_name"
+              bind:value={exportTableName}
+              onkeydown={handleExportKeydown}
+              aria-label="Table name for SQL INSERT export"
+            />
+            <button class="export-confirm-btn" onclick={confirmTableNameExport}>Export</button>
+            <button class="export-cancel-btn" onclick={cancelTableNameExport}>Cancel</button>
           </div>
-          <div
-            class="export-backdrop"
-            role="presentation"
-            onclick={() => (showExportMenu = false)}
-            onkeydown={(e) => { if (e.key === 'Escape') showExportMenu = false; }}
-          ></div>
+        {/if}
+
+        {#if exportError}
+          <div class="export-error-wrap">
+            <span class="export-error">{exportError}</span>
+            <button class="export-error-copy" onclick={() => navigator.clipboard.writeText(exportError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
         {/if}
       </div>
 
-      {#if showTableNameInput}
-        <div class="table-name-input-row">
-          <label class="table-name-label" for="rp-table-name">Table name:</label>
-          <input
-            id="rp-table-name"
-            class="table-name-input"
-            type="text"
-            placeholder="table_name"
-            bind:value={exportTableName}
-            onkeydown={handleExportKeydown}
-            aria-label="Table name for SQL INSERT export"
-          />
-          <button class="export-confirm-btn" onclick={confirmTableNameExport}>Export</button>
-          <button class="export-cancel-btn" onclick={cancelTableNameExport}>Cancel</button>
-        </div>
-      {/if}
-
-      {#if exportError}
-        <div class="export-error-wrap">
-          <span class="export-error">{exportError}</span>
-          <button class="export-error-copy" onclick={() => navigator.clipboard.writeText(exportError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </button>
-        </div>
-      {/if}
-    </div>
-
-    <div class="table-wrapper">
-      <DataTable columns={result.columns} rows={result.rows} />
-    </div>
-    <div class="status-bar">
-      <span class="status-item">{rowLabel}</span>
-      {#if durationLabel}
-        <span class="status-separator">·</span>
-        <span class="status-item">{durationLabel}</span>
-      {/if}
-      {#if affectedLabel}
-        <span class="status-separator">·</span>
-        <span class="status-item">{affectedLabel}</span>
-      {/if}
-    </div>
-  {:else}
-    <!-- Query ran successfully but returned no columns (e.g. DDL or empty result). -->
-    <div class="empty-result">
-      <span class="empty-text">Query executed successfully — no rows returned.</span>
-    </div>
-    <div class="status-bar">
-      {#if durationLabel}
-        <span class="status-item">{durationLabel}</span>
-      {/if}
-      {#if affectedLabel}
-        <span class="status-separator">·</span>
-        <span class="status-item">{affectedLabel}</span>
-      {/if}
-    </div>
+      <div class="table-wrapper">
+        <DataTable columns={result.columns} rows={result.rows} />
+      </div>
+      <div class="status-bar">
+        <span class="status-item">{rowLabel}</span>
+        {#if durationLabel}
+          <span class="status-separator">·</span>
+          <span class="status-item">{durationLabel}</span>
+        {/if}
+        {#if affectedLabel}
+          <span class="status-separator">·</span>
+          <span class="status-item">{affectedLabel}</span>
+        {/if}
+      </div>
+    {:else if result !== null}
+      <!-- Query ran successfully but returned no columns (e.g. DDL or empty result). -->
+      <div class="empty-result">
+        <span class="empty-text">Query executed successfully — no rows returned.</span>
+      </div>
+      <div class="status-bar">
+        {#if durationLabel}
+          <span class="status-item">{durationLabel}</span>
+        {/if}
+        {#if affectedLabel}
+          <span class="status-separator">·</span>
+          <span class="status-item">{affectedLabel}</span>
+        {/if}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -250,6 +289,73 @@
   .placeholder-text {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+  }
+
+  /* ── Result tabs ────────────────────────────────────────────────────────── */
+
+  .tab-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    overflow: hidden;
+  }
+
+  .tab-list {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 0;
+    overflow-x: auto;
+  }
+
+  .tab-sql {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--spacing-3);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-left: 1px solid var(--color-border);
+    direction: rtl;
+    text-align: left;
+  }
+
+  .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: 0 var(--spacing-3);
+    height: 30px;
+    border: none;
+    border-right: 1px solid var(--color-border);
+    background: transparent;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .tab-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .tab-btn--active {
+    color: var(--color-text-primary);
+    background: var(--color-bg-primary);
+    box-shadow: inset 0 -2px 0 var(--color-accent);
+  }
+
+  .tab-btn--error .tab-error-dot {
+    color: var(--color-danger);
+    font-size: 8px;
   }
 
   .error-box {

@@ -32,13 +32,13 @@
   } from '@codemirror/autocomplete';
   import { format as sqlFormat } from 'sql-formatter';
   import type { QueryResult } from '$lib/types';
-  import { executeQuery, executeSelection, explainQuery } from '$lib/tauri/query';
+  import { executeMultiQuery, explainQuery } from '$lib/tauri/query';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import ResultsPanel from '$lib/components/editor/ResultsPanel.svelte';
   import * as schemaApi from '$lib/tauri/schema';
-  import { statementAtCursor } from '$lib/utils/sql';
+  import { splitStatements, statementAtCursor } from '$lib/utils/sql';
   import { errorMessage } from '$lib/utils/errors';
   import Select from '$lib/components/ui/Select.svelte';
   import { portal } from '$lib/actions/portal';
@@ -59,7 +59,8 @@
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
   let editorView = $state<EditorView | undefined>(undefined);
   let sqlText = $state(untrack(() => initialSql));
-  let result = $state<QueryResult | null>(null);
+  let results = $state<QueryResult[]>([]);
+  let executedStatements = $state<string[]>([]);
   let isRunning = $state(false);
   let transactionActive = $state(false);
 
@@ -282,11 +283,12 @@
     if (!query || isRunning) return;
 
     isRunning = true;
+    executedStatements = splitStatements(query);
     try {
-      result = await executeQuery(connectionId, query, 1, settingsStore.settings.pageSize, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
-      result = {
+      results = [{
         queryId: '',
         columns: [],
         rows: [],
@@ -294,7 +296,7 @@
         durationMs: 0,
         affectedRows: null,
         error: errorMessage(err),
-      };
+      }];
     } finally {
       isRunning = false;
     }
@@ -309,11 +311,12 @@
     if (!query) return;
 
     isRunning = true;
+    executedStatements = splitStatements(query);
     try {
-      result = await executeSelection(connectionId, query, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
-      result = {
+      results = [{
         queryId: '',
         columns: [],
         rows: [],
@@ -321,7 +324,7 @@
         durationMs: 0,
         affectedRows: null,
         error: errorMessage(err),
-      };
+      }];
     } finally {
       isRunning = false;
     }
@@ -334,11 +337,12 @@
     if (!stmt.trim()) return;
 
     isRunning = true;
+    executedStatements = [stmt];
     try {
-      result = await executeSelection(connectionId, stmt, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null);
       onExecute?.(stmt);
     } catch (err) {
-      result = {
+      results = [{
         queryId: '',
         columns: [],
         rows: [],
@@ -346,7 +350,7 @@
         durationMs: 0,
         affectedRows: null,
         error: errorMessage(err),
-      };
+      }];
     } finally {
       isRunning = false;
     }
@@ -378,7 +382,7 @@
         dialect: explainResult.dialect,
       });
     } catch (err) {
-      result = {
+      results = [{
         queryId: '',
         columns: [],
         rows: [],
@@ -386,7 +390,7 @@
         durationMs: 0,
         affectedRows: null,
         error: errorMessage(err),
-      };
+      }];
     } finally {
       isRunning = false;
     }
@@ -401,10 +405,10 @@
       : 'BEGIN';
     isRunning = true;
     try {
-      await executeSelection(connectionId, sql);
+      await executeMultiQuery(connectionId, sql);
       transactionActive = true;
     } catch (err) {
-      result = {
+      results = [{
         queryId: '',
         columns: [],
         rows: [],
@@ -412,7 +416,7 @@
         durationMs: 0,
         affectedRows: null,
         error: errorMessage(err),
-      };
+      }];
     } finally {
       isRunning = false;
     }
@@ -421,10 +425,10 @@
   async function commitTransaction(): Promise<void> {
     isRunning = true;
     try {
-      await executeSelection(connectionId, 'COMMIT');
+      await executeMultiQuery(connectionId, 'COMMIT');
       transactionActive = false;
     } catch (err) {
-      result = {
+      results = [{
         queryId: '',
         columns: [],
         rows: [],
@@ -432,7 +436,7 @@
         durationMs: 0,
         affectedRows: null,
         error: errorMessage(err),
-      };
+      }];
     } finally {
       isRunning = false;
     }
@@ -441,10 +445,10 @@
   async function rollbackTransaction(): Promise<void> {
     isRunning = true;
     try {
-      await executeSelection(connectionId, 'ROLLBACK');
+      await executeMultiQuery(connectionId, 'ROLLBACK');
       transactionActive = false;
     } catch (err) {
-      result = {
+      results = [{
         queryId: '',
         columns: [],
         rows: [],
@@ -452,7 +456,7 @@
         durationMs: 0,
         affectedRows: null,
         error: errorMessage(err),
-      };
+      }];
     } finally {
       isRunning = false;
     }
@@ -521,8 +525,8 @@
         closeBrackets(),
         autocompletion({ override: [makeSchemaCompletionSource()] }),
         sqlLang(),
-        keymap.of([...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
         runKeymap,
+        keymap.of([...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             sqlText = update.state.doc.toString();
@@ -681,7 +685,7 @@
   </div>
 
   <div class="results-wrapper">
-    <ResultsPanel {result} />
+    <ResultsPanel {results} statements={executedStatements} />
   </div>
 </div>
 

@@ -16,6 +16,14 @@ export async function executeSelection(connectionId: string, sql: string, databa
   return invoke<QueryResult>('query_execute_selection', { connectionId, sql, database: database ?? null });
 }
 
+export async function executeMultiQuery(
+  connectionId: string,
+  sql: string,
+  database?: string | null,
+): Promise<QueryResult[]> {
+  return invoke<QueryResult[]>('query_execute_multi', { connectionId, sql, database: database ?? null });
+}
+
 export async function cancelQuery(queryId: string): Promise<void> {
   return invoke<void>('query_cancel', { queryId });
 }
