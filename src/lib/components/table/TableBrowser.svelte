@@ -338,6 +338,7 @@
             const s = schemaMap.get(col.name);
             return {
               ...col,
+              dataType: s?.dataType ?? col.dataType,
               nullable: s ? s.nullable : col.nullable,
               isPrimaryKey: s?.isPrimaryKey ?? false,
               isForeignKey: s?.isForeignKey ?? false,
