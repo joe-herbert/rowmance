@@ -55,7 +55,7 @@
     return state.groups.reduce((sum, g) => sum + g.rules.filter(isActiveRule).length, 0);
   }
 
-  function buildRuleSql(r: FilterRule, quoteIdentifier: (n: string) => string): string {
+  function buildRuleSql(r: FilterRule, quoteIdentifier: (_n: string) => string): string {
     if (r.rawSql !== undefined) return r.rawSql.trim();
     const col = quoteIdentifier(r.column);
     if (r.operator === 'IS NULL') return `${col} IS NULL`;
@@ -67,7 +67,7 @@
 
   export function buildWhereClause(
     state: FilterEditorState,
-    quoteIdentifier: (n: string) => string,
+    quoteIdentifier: (_n: string) => string,
   ): string {
     if (state.mode === 'sql') return state.sql.trim();
 
@@ -236,7 +236,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
   import Select from '$lib/components/ui/Select.svelte';
   import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
@@ -272,14 +272,14 @@
     draft.mode = newMode;
   }
 
-  let draft = $state<FilterEditorState>({
+  let draft = $state<FilterEditorState>(untrack(() => ({
     mode: value.mode,
     groupJunction: value.groupJunction,
     groups: value.groups.length > 0
       ? value.groups.map((g) => ({ ...g, rules: g.rules.map((r) => ({ ...r })) }))
       : [{ id: crypto.randomUUID(), conjunction: 'AND', rules: [newRule()] }],
     sql: value.sql,
-  });
+  })));
   let panelEl = $state<HTMLDivElement | null>(null);
 
   const OPERATORS: FilterOperator[] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL', 'IN'];
@@ -513,7 +513,7 @@
         class="sql-textarea"
         bind:value={draft.sql}
         placeholder="condition… (Shift+Enter for newline, Enter to apply)"
-        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+        autocomplete="off" autocapitalize="off" spellcheck="false"
         rows="3"
         onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); applyFilter(); } }}
       ></textarea>

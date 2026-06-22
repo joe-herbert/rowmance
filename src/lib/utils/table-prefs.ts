@@ -33,5 +33,7 @@ export function saveColPrefs(
       columnOrder: [],
     };
     localStorage.setItem(key, JSON.stringify({ ...existing, ...prefs }));
-  } catch {}
+  } catch {
+    // intentionally empty
+  }
 }

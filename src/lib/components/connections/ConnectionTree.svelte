@@ -694,7 +694,7 @@
   <div class="conn-item">
     <!-- Main row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="conn-row" class:connected class:errored oncontextmenu={(e) => showConnCtx(e, profile)} onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)}>
+    <div class="conn-row" class:connected class:errored oncontextmenu={(e) => showConnCtx(e, profile)} onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { connected ? toggleExpand(profile.id) : handleConnect(profile); } }}>
       <div class="conn-row-left">
         <!-- Chevron: rotates when expanded -->
         <button
@@ -907,10 +907,10 @@
     {/if}
     <div class="ctx-sep" role="separator"></div>
     {#if connectionStore.groups.length > 0}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="ctx-item ctx-item--submenu"
         role="menuitem"
+        tabindex="0"
         aria-haspopup="true"
         onmouseenter={() => {
           if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
@@ -923,10 +923,10 @@
         Move to Group
         <svg class="ctx-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         {#if moveToGroupSubmenuOpen}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="ctx-submenu"
             role="menu"
+            tabindex="0"
             onmouseenter={() => {
               if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
             }}
@@ -934,7 +934,7 @@
               moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150);
             }}
           >
-            {#each connectionStore.groups.filter(g => g.id !== connCtx.profile.groupId) as g (g.id)}
+            {#each connectionStore.groups.filter(g => g.id !== connCtx?.profile.groupId) as g (g.id)}
               <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(g.id)}>{g.name}</button>
             {/each}
           </div>
@@ -1294,20 +1294,6 @@
     letter-spacing: normal;
   }
 
-  .rename-input {
-    width: 100%;
-    height: 24px;
-    padding: 0 var(--spacing-2);
-    margin: 2px 0;
-    border: 1px solid var(--color-accent);
-    border-radius: var(--radius-sm);
-    background: var(--color-bg-primary);
-    color: var(--color-text-primary);
-    font-size: 10.5px;
-    font-family: var(--font-family-ui);
-    outline: none;
-  }
-
   /* ── Connection rows ── */
 
   .conn-item {
@@ -1418,7 +1404,6 @@
   }
 
   .action-btn:hover { background: var(--color-bg-active); color: var(--color-text-primary); }
-  .action-btn--danger:hover { color: var(--color-danger); }
 
   /* ── Error / loading ── */
 
@@ -1506,7 +1491,6 @@
 
   .db-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
 
-  .db-icon { flex-shrink: 0; color: var(--color-text-muted); }
   .db-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* ── Table rows ── */
@@ -1640,7 +1624,6 @@
 
   .ctx-item:hover { background: var(--color-bg-active); }
   .ctx-item--danger { color: var(--color-danger); }
-  .ctx-item--active { color: var(--color-accent); }
 
   .ctx-item--submenu {
     position: relative;

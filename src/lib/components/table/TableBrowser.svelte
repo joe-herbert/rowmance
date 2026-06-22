@@ -44,7 +44,6 @@
   import { useToast } from '$lib/stores/toast.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { loadColPrefs, saveColPrefs } from '$lib/utils/table-prefs';
-  import { dirtyKeyForContent } from '$lib/stores/panels.svelte';
 
   interface Props {
     connectionId: string;
@@ -84,7 +83,7 @@
 
   // ── Pending changes ───────────────────────────────────────────────────────
 
-  const _pendingKey = `${connectionId}:${database}:${table}`;
+  const _pendingKey = untrack(() => `${connectionId}:${database}:${table}`);
   const _restoredPending = untrack(() => tablePendingState.get(_pendingKey) ?? null);
 
   let pendingChanges = $state<Map<string, Map<string, CellValue>>>(

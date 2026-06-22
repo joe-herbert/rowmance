@@ -140,7 +140,7 @@
   let setPasswordError = $state<string | null>(null);
   let setPasswordSaving = $state(false);
 
-  function openSetPassword() {
+  function _openSetPassword() {
     setPasswordForm = { password: '' };
     setPasswordError = null;
   }
@@ -734,7 +734,6 @@
                   value={grantSql}
                   disabled={isReadOnly || grantRunning}
                   autocomplete="off"
-                  autocorrect="off"
                   autocapitalize="off"
                   spellcheck={false}
                   oninput={(e) => { grantSql = (e.target as HTMLTextAreaElement).value; }}

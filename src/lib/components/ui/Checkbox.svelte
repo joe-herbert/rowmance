@@ -3,13 +3,15 @@
   Supports two size variants and full keyboard/accessibility support.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
+
   interface Props {
     checked?: boolean;
     id?: string;
     'aria-label'?: string;
     disabled?: boolean;
     size?: 'sm' | 'md';
-    onchange?: (checked: boolean) => void;
+    onchange?: (_checked: boolean) => void;
     class?: string;
   }
 
@@ -24,7 +26,7 @@
   }: Props = $props();
 
   const internalId = `checkbox-${Math.random().toString(36).slice(2)}`;
-  const inputId = id ?? internalId;
+  const inputId = untrack(() => id ?? internalId);
 
   function handleChange(e: Event) {
     const c = (e.currentTarget as HTMLInputElement).checked;

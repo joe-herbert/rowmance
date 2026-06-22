@@ -56,8 +56,8 @@
     onForeignKeyQuickView?: (_colName: string, _value: CellValue) => Promise<QuickViewData | null>;
     initialColWidths?: Record<string, number>;
     initialColumnOrder?: string[];
-    onColWidthsChange?: (widths: Record<string, number>) => void;
-    onColumnOrderChange?: (order: string[]) => void;
+    onColWidthsChange?: (_widths: Record<string, number>) => void;
+    onColumnOrderChange?: (_order: string[]) => void;
     initialPendingChanges?: Map<string, Map<string, CellValue>>;
     initialOriginalRows?: Map<string, CellValue[]>;
     initialDeletedRows?: Map<string, CellValue[]>;
@@ -155,7 +155,7 @@
     addRowTrigger = 0,
     onPageInfo,
     tableName,
-    onDeleteRow,
+    onDeleteRow: _onDeleteRow,
     onCloneRow,
     onDeleteRowsPending,
     onForeignKeyClick,
@@ -1454,7 +1454,7 @@
     dismissContextMenu();
   }
 
-  function markRowDeleted(rowKey: string, row: CellValue[]): void {
+  function _markRowDeleted(rowKey: string, row: CellValue[]): void {
     const next = new Map(pendingDeletedRows);
     if (next.has(rowKey)) {
       next.delete(rowKey);
@@ -1672,7 +1672,6 @@
           </tr>
           {#if quickViewState?.triggerRowKey === rowKey}
             <tr class="quick-view-row">
-              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
               <td class="quick-view-cell" colspan={visibleColumns.length + 1} tabindex="-1">
                 {#if quickViewState.loading}
                   <div class="quick-view-panel">

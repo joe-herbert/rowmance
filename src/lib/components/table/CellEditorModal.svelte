@@ -95,7 +95,6 @@
 </script>
 
 <Modal zindex={500} label="Edit {colName}" onbackdropclick={handleBackdropClick}>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={modalEl}
     class="modal-dialog"

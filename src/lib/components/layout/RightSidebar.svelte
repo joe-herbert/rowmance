@@ -4,6 +4,7 @@
   Panels: Query History, Saved Queries.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
@@ -20,7 +21,7 @@
   interface Props {
     onClose: () => void;
     initialPanel?: ActivePanel;
-    onPanelChange?: (panel: ActivePanel) => void;
+    onPanelChange?: (_panel: ActivePanel) => void;
   }
 
   const { onClose, initialPanel = 'history', onPanelChange }: Props = $props();
@@ -29,7 +30,7 @@
   const panelStore = usePanels();
   const cellSelectionStore = useCellSelection();
 
-  let activePanel = $state<ActivePanel>(initialPanel);
+  let activePanel = $state<ActivePanel>(untrack(() => initialPanel));
 
   function selectPanel(panel: ActivePanel) {
     if (activePanel === panel) {

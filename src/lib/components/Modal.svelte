@@ -11,7 +11,6 @@
   const { zindex = 300, label, onbackdropclick, children }: Props = $props();
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="modal-backdrop"
   style="z-index: {zindex}"
@@ -20,6 +19,7 @@
   aria-label={label}
   tabindex="-1"
   onclick={(e) => { if (e.target === e.currentTarget) onbackdropclick?.(); }}
+  onkeydown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onbackdropclick?.(); }}
   use:portal
 >
   {@render children()}

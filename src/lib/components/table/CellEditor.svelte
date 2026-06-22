@@ -206,6 +206,7 @@
   class="editor-actions"
   style="top: {actionsTop}px; left: {actionsCenter}px; transform: translateX(-50%);"
   role="toolbar"
+  tabindex="0"
   aria-label="Edit actions"
   onkeydown={handleKeydown}
 >

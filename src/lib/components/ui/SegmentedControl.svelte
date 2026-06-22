@@ -11,7 +11,7 @@
   interface Props {
     options: Option[];
     value: string;
-    onchange?: (value: string) => void;
+    onchange?: (_value: string) => void;
   }
 
   const { options, value, onchange }: Props = $props();

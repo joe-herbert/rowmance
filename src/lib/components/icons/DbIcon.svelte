@@ -1,9 +1,9 @@
 <script lang="ts">
-  interface Props { system?: boolean; size?: number; }
-  let { system = false, size = 13 }: Props = $props();
+  interface Props { system?: boolean; size?: number; 'aria-hidden'?: boolean | 'true' | 'false'; }
+  let { system = false, size = 13, 'aria-hidden': ariaHidden }: Props = $props();
 </script>
 
-<span class="icon-wrap">
+<span class="icon-wrap" aria-hidden={ariaHidden}>
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
     <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
     <path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>

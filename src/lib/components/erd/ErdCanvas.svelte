@@ -68,10 +68,8 @@
         edges: elkEdges,
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const layouted: any = await elk.layout(elkGraph);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const layoutNodes = ((layouted.children ?? []) as any[]).map((n) => {
         const table = nodes.find((t: { name: string }) => t.name === n.id)!;
         return {
@@ -84,11 +82,9 @@
         };
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const layoutEdges = ((layouted.edges ?? []) as any[]).map((e: any, i: number) => ({
         id: e.id,
         relation: edges[i],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sections: ((e.sections ?? []) as any[]).map((s: any) => ({
           startPoint: s.startPoint ?? { x: 0, y: 0 },
           endPoint: s.endPoint ?? { x: 0, y: 0 },

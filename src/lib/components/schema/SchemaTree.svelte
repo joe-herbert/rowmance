@@ -331,6 +331,7 @@
                 {@const isDbExpanded = expandedDatabases.has(dbKey)}
                 {@const isDbLoading = loadingKeys.has(dbKey)}
                 {@const tables = databases.get(database) ?? []}
+                {@const isDbSystem = checkSystemDatabase(database)}
 
                 <li
                   class="tree-node"
@@ -338,7 +339,6 @@
                   aria-expanded={isDbExpanded}
                   aria-selected={false}
                 >
-                  {@const isDbSystem = checkSystemDatabase(database)}
                   <!-- Database node -->
                   <button
                     class="node-row database-node"

@@ -1004,8 +1004,7 @@
   }
 
   tr:hover .row-actions,
-  .index-row:hover .row-actions,
-  .fk-card:hover .row-actions {
+  .index-row:hover .row-actions {
     opacity: 1;
   }
 

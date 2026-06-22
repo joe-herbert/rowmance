@@ -152,40 +152,4 @@
     color: var(--color-accent);
   }
 
-  .action-btn {
-    height: 22px;
-    padding: 0 10px;
-    border-radius: var(--radius-sm);
-    font-size: 11px;
-    font-family: var(--font-family-ui);
-    font-weight: var(--font-weight-semibold);
-    cursor: pointer;
-    transition: background var(--transition-fast), opacity var(--transition-fast);
-  }
-
-  .action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .action-btn.discard {
-    background: var(--color-bg-secondary);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-  }
-
-  .action-btn.discard:hover:not(:disabled) {
-    background: var(--color-bg-hover);
-    color: var(--color-text-primary);
-  }
-
-  .action-btn.save {
-    background: var(--color-accent);
-    border: none;
-    color: #fff;
-  }
-
-  .action-btn.save:hover:not(:disabled) {
-    opacity: 0.9;
-  }
 </style>

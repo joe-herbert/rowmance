@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 // These mirror the inline functions in TableBrowser.svelte, adapted to take
 // dbType as a parameter instead of reading it from component state.
 
-const PAGE_SIZE = 50;
+const _PAGE_SIZE = 50;
 
 function quoteIdentifier(name: string, dbType: string): string {
   return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;

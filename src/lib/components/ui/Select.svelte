@@ -25,7 +25,7 @@
     disabled?: boolean;
     size?: 'xs' | 'sm' | 'md';
     mono?: boolean;
-    onchange?: (value: string) => void;
+    onchange?: (_value: string) => void;
     class?: string;
     style?: string;
   }

@@ -4,7 +4,7 @@
   Handles horizontal resize of both sidebars via pointer-drag.
 -->
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { slide, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import Sidebar from './Sidebar.svelte';
@@ -33,12 +33,12 @@
   // ── Sidebar widths (persisted as CSS variables) ───────────────────────────
 
   let leftWidth = $state(240);
-  let leftVisible = $state(settings.leftSidebarVisible);
+  let leftVisible = $state(untrack(() => settings.leftSidebarVisible));
   let rightWidth = $state(280);
   type RightPanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations';
 
-  let rightVisible = $state(settings.rightSidebarVisible);
-  let activeRightPanel = $state<RightPanel>((settings.rightSidebarPanel as RightPanel) || 'history');
+  let rightVisible = $state(untrack(() => settings.rightSidebarVisible));
+  let activeRightPanel = $state<RightPanel>(untrack(() => (settings.rightSidebarPanel as RightPanel) || 'history'));
 
   const SIDEBAR_INSET = 0;
 
@@ -90,7 +90,7 @@
     }
   }
 
-  const hasTableContext = $derived(
+  const _hasTableContext = $derived(
     focusedContent.kind === 'table_browser' || focusedContent.kind === 'table_structure' || focusedContent.kind === 'ddl_viewer'
   );
 
