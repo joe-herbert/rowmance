@@ -276,12 +276,14 @@
 
   function showTableCtx(e: MouseEvent, connectionId: string, database: string, table: TableInfo) {
     e.preventDefault();
+    e.stopPropagation();
     closeAllCtx();
     tableCtx = { x: e.clientX, y: e.clientY, connectionId, database, table };
   }
 
   function showDbCtx(e: MouseEvent, connectionId: string, database: string) {
     e.preventDefault();
+    e.stopPropagation();
     closeAllCtx();
     dbCtx = { x: e.clientX, y: e.clientY, connectionId, database };
   }
@@ -303,6 +305,27 @@
     e.preventDefault();
     closeAllCtx();
     panelCtx = { x: e.clientX, y: e.clientY };
+  }
+
+  async function ctxRefreshConnection() {
+    if (!connCtx) return;
+    const { profile } = connCtx;
+    connCtx = null;
+    schemaCache = new Map([...schemaCache].filter(([k]) => k !== profile.id));
+    expandedDatabases = new Set([...expandedDatabases].filter(k => !k.startsWith(`${profile.id}/`)));
+    await loadDatabases(profile.id);
+  }
+
+  async function ctxRefreshDatabase() {
+    if (!dbCtx) return;
+    const { connectionId, database } = dbCtx;
+    dbCtx = null;
+    const connMap = new Map(schemaCache.get(connectionId) ?? []);
+    connMap.set(database, []);
+    schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+    if (expandedDatabases.has(`${connectionId}/${database}`)) {
+      await loadTables(connectionId, database);
+    }
   }
 
   async function ctxMoveToGroup(groupId: string | null) {
@@ -863,6 +886,7 @@
       <button class="ctx-item" role="menuitem" onclick={ctxNewTable}>New Table</button>
       <div class="ctx-sep" role="separator"></div>
     {/if}
+    <button class="ctx-item" role="menuitem" onclick={ctxRefreshDatabase}>Refresh</button>
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item" role="menuitem" onclick={() => { if (dbCtx) { navigator.clipboard.writeText(dbCtx.database); dbCtx = null; } }}>Copy Name</button>
@@ -901,6 +925,7 @@
     </button>
     <div class="ctx-sep" role="separator"></div>
     {#if connConnected}
+      <button class="ctx-item" role="menuitem" onclick={ctxRefreshConnection}>Refresh</button>
       <button class="ctx-item" role="menuitem" onclick={ctxConnDisconnect}>Disconnect</button>
     {:else}
       <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</button>
