@@ -54,6 +54,7 @@
     onDeleteRowsPending?: (_deletedRows: Map<string, CellValue[]>) => void;
     onForeignKeyClick?: (_colName: string, _value: CellValue) => void;
     onForeignKeyQuickView?: (_colName: string, _value: CellValue) => Promise<QuickViewData | null>;
+    onConnectColumn?: (_colName: string) => void;
     initialColWidths?: Record<string, number>;
     initialColumnOrder?: string[];
     onColWidthsChange?: (_widths: Record<string, number>) => void;
@@ -160,6 +161,7 @@
     onDeleteRowsPending,
     onForeignKeyClick,
     onForeignKeyQuickView,
+    onConnectColumn,
     initialColWidths,
     initialColumnOrder,
     onColWidthsChange,
@@ -1904,6 +1906,16 @@
         >
           Copy as CSV
         </button>
+        {#if contextMenu.colName && onConnectColumn && !contextMenuSnapshotIsMultiCell}
+          <div class="context-menu-separator"></div>
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => { onConnectColumn!(contextMenu!.colName!); dismissContextMenu(); }}
+          >
+            Connect column…
+          </button>
+        {/if}
         <div class="context-menu-separator"></div>
         {#if selectedRowKeys.size > 1}
           <button

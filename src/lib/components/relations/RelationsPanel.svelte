@@ -2,11 +2,12 @@
   RelationsPanel — shows foreign-key relations for the currently focused table cell.
   Forward: FKs FROM the current table that include the selected column (→ referenced table).
   Reverse: FKs FROM other tables that point TO the current table's selected column (← referencing tables).
-  Uses erd_get_graph to load all FK edges for the database, then filters client-side.
+  Also shows user-defined virtual connections that span databases/connections.
 -->
 <script lang="ts">
   import { useCellSelection, type CellSelection } from '$lib/stores/cellSelection.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { getErdGraph } from '$lib/tauri/erd';
   import { executeQuery } from '$lib/tauri/query';
@@ -16,7 +17,7 @@
   type CellValue = string | number | boolean | null;
 
   interface RelationEntry {
-    edge: ErdRelation;
+    edge: ErdRelation | null;
     direction: 'forward' | 'reverse';
     targetTable: string;
     filterColumn: string;
@@ -25,10 +26,15 @@
     columnNames: string[];
     loading: boolean;
     error: string | null;
+    virtual?: boolean;
+    vrId?: string;
+    targetConnectionId?: string;
+    targetDatabase?: string;
   }
 
   const cellSelectionStore = useCellSelection();
   const connectionStore = useConnections();
+  const vrStore = useVirtualRelations();
   const panelStore = usePanels();
 
   let relations = $state<RelationEntry[]>([]);
@@ -58,13 +64,11 @@
 
     try {
       const graph = await getErdGraph(sel.connectionId, sel.database);
-
       const entries: RelationEntry[] = [];
 
-      // Forward: edges where this table is the source and selected column is a FK column
+      // Forward: edges where this table is the source
       for (const edge of graph.edges) {
         if (edge.fromTable === sel.table && edge.fromColumns.includes(sel.columnName)) {
-          // Resolve the value for each FK column (may be composite)
           const colIdx = edge.fromColumns.indexOf(sel.columnName);
           const refCol = edge.toColumns[colIdx] ?? edge.toColumns[0];
           entries.push({
@@ -81,7 +85,7 @@
         }
       }
 
-      // Reverse: edges where this table is the target and selected column is a referenced column
+      // Reverse: edges where this table is the target
       for (const edge of graph.edges) {
         if (edge.toTable === sel.table && edge.toColumns.includes(sel.columnName)) {
           const colIdx = edge.toColumns.indexOf(sel.columnName);
@@ -100,6 +104,56 @@
         }
       }
 
+      // Virtual relations — forward (from.column matches selected column)
+      const vrForward = vrStore.forwardFrom({
+        connectionId: sel.connectionId,
+        database: sel.database,
+        table: sel.table,
+        column: sel.columnName,
+      });
+      for (const vr of vrForward) {
+        entries.push({
+          edge: null,
+          direction: 'forward',
+          targetTable: vr.to.table,
+          filterColumn: vr.to.column,
+          filterValue: sel.cellValue,
+          rows: [],
+          columnNames: [],
+          loading: true,
+          error: null,
+          virtual: true,
+          vrId: vr.id,
+          targetConnectionId: vr.to.connectionId,
+          targetDatabase: vr.to.database,
+        });
+      }
+
+      // Virtual relations — reverse (to.column matches selected column)
+      const vrReverse = vrStore.reverseFrom({
+        connectionId: sel.connectionId,
+        database: sel.database,
+        table: sel.table,
+        column: sel.columnName,
+      });
+      for (const vr of vrReverse) {
+        entries.push({
+          edge: null,
+          direction: 'reverse',
+          targetTable: vr.from.table,
+          filterColumn: vr.from.column,
+          filterValue: sel.cellValue,
+          rows: [],
+          columnNames: [],
+          loading: true,
+          error: null,
+          virtual: true,
+          vrId: vr.id,
+          targetConnectionId: vr.from.connectionId,
+          targetDatabase: vr.from.database,
+        });
+      }
+
       relations = entries;
       globalLoading = false;
 
@@ -107,9 +161,12 @@
       await Promise.all(
         entries.map(async (_, i) => {
           const rel = relations[i];
+          const connId = rel.targetConnectionId ?? sel.connectionId;
+          const db = rel.targetDatabase ?? sel.database;
+          const connDbType = connectionStore.getById(connId)?.dbType ?? dbType;
           try {
-            const sql = `SELECT * FROM ${quoteId(sel.database, dbType)}.${quoteId(rel.targetTable, dbType)} WHERE ${quoteId(rel.filterColumn, dbType)} = ${valueLiteral(rel.filterValue)}`;
-            const result = await executeQuery(sel.connectionId, sql, 1, rel.direction === 'forward' ? 20 : 10);
+            const sql = `SELECT * FROM ${quoteId(db, connDbType)}.${quoteId(rel.targetTable, connDbType)} WHERE ${quoteId(rel.filterColumn, connDbType)} = ${valueLiteral(rel.filterValue)}`;
+            const result = await executeQuery(connId, sql, 1, rel.direction === 'forward' ? 20 : 10);
             if (result.error) {
               relations[i].loading = false;
               relations[i].error = result.error;
@@ -131,13 +188,15 @@
   }
 
   function openRelation(sel: CellSelection, rel: RelationEntry) {
-    const dbType = connectionStore.getById(sel.connectionId)?.dbType ?? 'mysql';
+    const connId = rel.targetConnectionId ?? sel.connectionId;
+    const db = rel.targetDatabase ?? sel.database;
+    const connDbType = connectionStore.getById(connId)?.dbType ?? 'mysql';
     panelStore.openInFocused({
       kind: 'table_browser',
-      connectionId: sel.connectionId,
-      database: sel.database,
+      connectionId: connId,
+      database: db,
       table: rel.targetTable,
-      initialFilter: `${quoteId(rel.filterColumn, dbType)} = ${valueLiteral(rel.filterValue)}`,
+      initialFilter: `${quoteId(rel.filterColumn, connDbType)} = ${valueLiteral(rel.filterValue)}`,
     });
   }
 
@@ -150,6 +209,7 @@
   // Debounced reload when the selected cell changes
   $effect(() => {
     const sel = cellSelectionStore.current;
+    const _vr = vrStore.relations; // track virtual relation changes
 
     const timer = setTimeout(() => {
       if (sel && sel.cellValue !== null) {
@@ -168,6 +228,15 @@
   const forwardRelations = $derived(relations.filter((r) => r.direction === 'forward'));
   const reverseRelations = $derived(relations.filter((r) => r.direction === 'reverse'));
   const MAX_COLS = 3;
+
+  function getRelKey(rel: RelationEntry, i: number): string {
+    if (rel.virtual && rel.vrId) return `vr-${rel.vrId}`;
+    return rel.edge ? rel.edge.constraintName : `idx-${i}`;
+  }
+
+  function connName(connectionId: string): string {
+    return connectionStore.profiles.find((p) => p.id === connectionId)?.name ?? connectionId;
+  }
 </script>
 
 <div class="relations-panel">
@@ -194,7 +263,7 @@
       <div class="error-row">{globalError}</div>
     {:else if relations.length === 0}
       <div class="empty-state">
-        <p>No foreign key relations found for this column.</p>
+        <p>No relations found for this column.</p>
       </div>
     {:else}
       {#if forwardRelations.length > 0}
@@ -202,12 +271,19 @@
           <span class="section-arrow">↗</span>
           <span class="section-label">REFERENCES</span>
         </div>
-        {#each forwardRelations as rel (rel.edge.constraintName)}
+        {#each forwardRelations as rel, i (getRelKey(rel, i))}
           {@const previewCols = rel.columnNames.slice(0, MAX_COLS)}
-          <div class="relation-card">
+          <div class="relation-card" class:virtual-card={rel.virtual}>
             <div class="relation-title">
-              <span class="rel-table">{rel.targetTable}</span>
-              <span class="rel-via">via {rel.edge.fromColumns.join(', ')} → {rel.edge.toColumns.join(', ')}</span>
+              <div class="rel-title-row">
+                <span class="rel-table">{rel.targetTable}</span>
+                {#if rel.virtual}<span class="virtual-badge">virtual</span>{/if}
+              </div>
+              {#if rel.virtual && rel.targetConnectionId}
+                <span class="rel-via">{connName(rel.targetConnectionId)} / {rel.targetDatabase} · {rel.filterColumn}</span>
+              {:else if rel.edge}
+                <span class="rel-via">via {rel.edge.fromColumns.join(', ')} → {rel.edge.toColumns.join(', ')}</span>
+              {/if}
             </div>
             {#if rel.loading}
               <div class="rel-state">Loading…</div>
@@ -251,12 +327,19 @@
           <span class="section-arrow">↙</span>
           <span class="section-label">REFERENCED BY</span>
         </div>
-        {#each reverseRelations as rel (rel.edge.constraintName + rel.targetTable)}
+        {#each reverseRelations as rel, i (getRelKey(rel, i + 1000))}
           {@const previewCols = rel.columnNames.slice(0, MAX_COLS)}
-          <div class="relation-card">
+          <div class="relation-card" class:virtual-card={rel.virtual}>
             <div class="relation-title">
-              <span class="rel-table">{rel.targetTable}</span>
-              <span class="rel-via">via {rel.filterColumn}</span>
+              <div class="rel-title-row">
+                <span class="rel-table">{rel.targetTable}</span>
+                {#if rel.virtual}<span class="virtual-badge">virtual</span>{/if}
+              </div>
+              {#if rel.virtual && rel.targetConnectionId}
+                <span class="rel-via">{connName(rel.targetConnectionId)} / {rel.targetDatabase} · {rel.filterColumn}</span>
+              {:else if rel.edge}
+                <span class="rel-via">via {rel.filterColumn}</span>
+              {/if}
             </div>
             {#if rel.loading}
               <div class="rel-state">Loading…</div>
@@ -324,6 +407,7 @@
     background: var(--color-bg-secondary);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+    gap: 0;
   }
 
   .context-table {
@@ -358,6 +442,40 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+  }
+
+  .add-btn {
+    margin-left: auto;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0 var(--spacing-1);
+    line-height: 1;
+    border-radius: var(--radius-sm);
+    align-self: center;
+    transition: color var(--transition-fast), background var(--transition-fast);
+  }
+
+  .add-btn:hover {
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
+
+  .link-btn {
+    display: block;
+    margin-top: var(--spacing-1);
+    font-size: var(--font-size-xs);
+    color: var(--color-accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-style: normal;
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .state-row {
@@ -404,6 +522,10 @@
     overflow: hidden;
   }
 
+  .virtual-card {
+    border-style: dashed;
+  }
+
   .relation-title {
     display: flex;
     flex-direction: column;
@@ -413,11 +535,47 @@
     border-bottom: 1px solid var(--color-border);
   }
 
+  .rel-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+  }
+
   .rel-table {
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
     font-weight: var(--font-weight-medium);
     color: var(--color-text-primary);
+    flex: 1;
+  }
+
+  .virtual-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border-radius: var(--radius-sm);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .delete-vr-btn {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    transition: color var(--transition-fast);
+  }
+
+  .delete-vr-btn:hover {
+    color: var(--color-danger);
   }
 
   .rel-via {

@@ -187,6 +187,22 @@ export interface ErdTable { name: string; columns: ErdColumn[]; }
 export interface ErdRelation { fromTable: string; fromColumns: string[]; toTable: string; toColumns: string[]; constraintName: string; }
 export interface ErdGraph { nodes: ErdTable[]; edges: ErdRelation[]; }
 
+// ── Virtual Relations ─────────────────────────────────────────────────────────
+
+export interface ColumnRef {
+  connectionId: string;
+  database: string;
+  table: string;
+  column: string;
+}
+
+export interface VirtualRelation {
+  id: string;
+  label?: string;
+  from: ColumnRef;
+  to: ColumnRef;
+}
+
 // ── EXPLAIN ──────────────────────────────────────────────────────────────────
 
 export interface ExplainResult { rawJson: string; dialect: string; }

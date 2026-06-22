@@ -22,6 +22,8 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
+  import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
   import type { QueryResult, ColumnMeta, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import DataTable, { type PageInfo, type QuickViewData } from '$lib/components/table/DataTable.svelte';
@@ -58,6 +60,8 @@
   const connections = useConnections();
   const cellSelectionStore = useCellSelection();
   const panelStore = usePanels();
+  const vrStore = useVirtualRelations();
+  let connectColumnName = $state<string | null>(null);
   const statusBar = useStatusBar();
   const toast = useToast();
   const settings = useSettings();
@@ -444,7 +448,7 @@
               dataType: s?.dataType ?? col.dataType,
               nullable: s ? s.nullable : col.nullable,
               isPrimaryKey: s?.isPrimaryKey ?? false,
-              isForeignKey: s?.isForeignKey ?? false,
+              isForeignKey: (s?.isForeignKey ?? false) || vrStore.hasAny(connectionId, database, table, col.name),
               defaultValue: s?.defaultValue ?? null,
               isAutoIncrement: s?.isAutoIncrement ?? false,
               isUnique: uniqueColNames.has(col.name),
@@ -614,11 +618,35 @@
 
   function handleForeignKeyClick(colName: string, value: CellValue): void {
     const fk = foreignKeys.find((f) => f.columns.includes(colName));
-    if (!fk) return;
-    const colIdx = fk.columns.indexOf(colName);
-    const refCol = fk.referencedColumns[colIdx];
-    if (!refCol) return;
-    const quotedCol = quoteIdentifier(refCol);
+    if (fk) {
+      const colIdx = fk.columns.indexOf(colName);
+      const refCol = fk.referencedColumns[colIdx];
+      if (!refCol) return;
+      const quotedCol = quoteIdentifier(refCol);
+      let filter: string;
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        filter = `${quotedCol} = ${value}`;
+      } else {
+        const escaped = String(value).replace(/'/g, "''");
+        filter = `${quotedCol} = '${escaped}'`;
+      }
+      panelStore.openInFocused({
+        kind: 'table_browser',
+        connectionId,
+        database,
+        table: fk.referencedTable,
+        initialFilter: filter,
+      });
+      return;
+    }
+
+    // Check virtual relations
+    const vr = vrStore.forwardFrom({ connectionId, database, table, column: colName })[0];
+    if (!vr) return;
+    const targetConnId = vr.to.connectionId;
+    const targetDb = vr.to.database;
+    const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
+    const quotedCol = targetDbType === 'postgres' ? `"${vr.to.column}"` : `\`${vr.to.column}\``;
     let filter: string;
     if (typeof value === 'number' || typeof value === 'boolean') {
       filter = `${quotedCol} = ${value}`;
@@ -628,9 +656,9 @@
     }
     panelStore.openInFocused({
       kind: 'table_browser',
-      connectionId,
-      database,
-      table: fk.referencedTable,
+      connectionId: targetConnId,
+      database: targetDb,
+      table: vr.to.table,
       initialFilter: filter,
     });
   }
@@ -1096,8 +1124,9 @@
           onCellSelect={handleCellSelect}
           onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}
-          onForeignKeyClick={foreignKeys.length > 0 ? handleForeignKeyClick : undefined}
+          onForeignKeyClick={(foreignKeys.length > 0 || vrStore.hasAnyForTable(connectionId, database, table)) ? handleForeignKeyClick : undefined}
           onForeignKeyQuickView={foreignKeys.length > 0 ? handleForeignKeyQuickView : undefined}
+          onConnectColumn={(colName) => { connectColumnName = colName; }}
           initialColWidths={_initialColWidths}
           initialColumnOrder={_initialColumnOrder}
           onColWidthsChange={(widths) => saveColPrefs(connectionId, database, table, { colWidths: widths })}
@@ -1156,6 +1185,13 @@
     {connectionId}
     source={importSource}
     onclose={() => (showSqlImport = false)}
+  />
+{/if}
+
+{#if connectColumnName !== null}
+  <VirtualRelationModal
+    from={{ connectionId, database, table, column: connectColumnName }}
+    onClose={() => (connectColumnName = null)}
   />
 {/if}
 

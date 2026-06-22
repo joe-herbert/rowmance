@@ -4,11 +4,13 @@
 -->
 <script lang="ts">
   import * as schemaApi from '$lib/tauri/schema';
-  import type { ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
+  import type { ColumnInfo, IndexInfo, ForeignKeyInfo, ColumnRef, VirtualRelation } from '$lib/types';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import { errorMessage } from '$lib/utils/errors';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
+  import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
 
   interface Props {
     connectionId: string;
@@ -19,6 +21,7 @@
   const { connectionId, database, table }: Props = $props();
 
   const connections = useConnections();
+  const vrStore = useVirtualRelations();
   const profile = $derived(connections.getById(connectionId));
   const dbType = $derived(profile?.dbType ?? 'mysql');
   const isReadOnly = $derived(profile?.readOnly ?? false);
@@ -311,6 +314,33 @@
     return arr.includes(col) ? arr.filter(c => c !== col) : [...arr, col];
   }
 
+  // ── Virtual Relations ──────────────────────────────────────────────────────
+
+  interface VrModal { from: ColumnRef; editId?: string; initialTo?: ColumnRef; initialLabel?: string; }
+  let vrModal = $state<VrModal | null>(null);
+
+  const tableVirtualRelations = $derived(
+    vrStore.relations.filter((vr) =>
+      (vr.from.connectionId === connectionId && vr.from.database === database && vr.from.table === table) ||
+      (vr.to.connectionId === connectionId && vr.to.database === database && vr.to.table === table)
+    )
+  );
+
+  function openAddVr(colName: string) {
+    vrModal = { from: { connectionId, database, table, column: colName } };
+  }
+
+  function openEditVr(vr: VirtualRelation) {
+    const isFrom = vr.from.connectionId === connectionId && vr.from.database === database && vr.from.table === table;
+    vrModal = isFrom
+      ? { from: vr.from, editId: vr.id, initialTo: vr.to, initialLabel: vr.label }
+      : { from: vr.to, editId: vr.id, initialTo: vr.from, initialLabel: vr.label };
+  }
+
+  function connName(connId: string): string {
+    return connections.getById(connId)?.name ?? connId;
+  }
+
   const refActions = [
     { value: 'NO ACTION', label: 'NO ACTION' },
     { value: 'RESTRICT', label: 'RESTRICT' },
@@ -371,7 +401,7 @@
                 <th class="th-narrow">Key</th>
                 <th class="th-narrow" title="Nullable">Null</th>
                 <th>Default</th>
-                {#if editMode}<th class="th-actions"></th>{/if}
+                <th class="th-actions"></th>
               </tr>
             </thead>
             <tbody>
@@ -386,9 +416,9 @@
                   </td>
                   <td class="col-null center-cell">{col.nullable ? '✓' : ''}</td>
                   <td class="col-default mono">{col.defaultValue ?? ''}</td>
-                  {#if editMode}
-                    <td class="col-actions">
-                      <div class="row-actions">
+                  <td class="col-actions">
+                    <div class="row-actions">
+                      {#if editMode}
                         <button class="act-btn" title="Edit column" onclick={() => openEditCol(col)}>
                           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z"/>
@@ -400,13 +430,20 @@
                             <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
                           </svg>
                         </button>
-                      </div>
-                    </td>
-                  {/if}
+                      {/if}
+                      <button class="act-btn act-btn--connect" title="Add virtual connection" onclick={() => openAddVr(col.name)}>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M4 8h8M10 5l3 3-3 3"/>
+                          <circle cx="2" cy="8" r="1.5"/>
+                          <circle cx="14" cy="8" r="1.5"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
                 </tr>
                 {#if col.comment}
                   <tr class="comment-row">
-                    <td colspan={editMode ? 6 : 5} class="col-comment">{col.comment}</td>
+                    <td colspan="6" class="col-comment">{col.comment}</td>
                   </tr>
                 {/if}
               {/each}
@@ -449,6 +486,54 @@
             </div>
           </section>
         {/if}
+
+        <!-- Virtual Connections ──────────────────────────────────────────── -->
+        <section class="section">
+          <div class="section-header section-header--flex">
+            <span>Virtual Connections ({tableVirtualRelations.length})</span>
+          </div>
+          <div class="fk-list">
+            {#each tableVirtualRelations as vr (vr.id)}
+              {@const isFrom = vr.from.connectionId === connectionId && vr.from.database === database && vr.from.table === table}
+              {@const localCol = isFrom ? vr.from.column : vr.to.column}
+              {@const otherRef = isFrom ? vr.to : vr.from}
+              <div class="fk-card vr-card">
+                <div class="vr-actions">
+                  <button class="act-btn" title="Edit connection" onclick={() => openEditVr(vr)}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z"/>
+                    </svg>
+                  </button>
+                  <button class="act-btn act-btn--danger" title="Remove connection" onclick={() => vrStore.remove(vr.id)}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="3,6 13,6"/>
+                      <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
+                    </svg>
+                  </button>
+                </div>
+                {#if vr.label}
+                  <div class="fk-name">{vr.label}</div>
+                {/if}
+                <div class="fk-relation">
+                  <span class="mono fk-cols">{localCol}</span>
+                  <span class="fk-arrow">↔</span>
+                  <span class="mono fk-ref vr-other-ref">
+                    {#if otherRef.connectionId !== connectionId}
+                      <span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>
+                    {/if}
+                    {otherRef.database}.{otherRef.table}.{otherRef.column}
+                  </span>
+                </div>
+                <div class="fk-actions">
+                  <span class="badge badge--vr">virtual</span>
+                </div>
+              </div>
+            {/each}
+            {#if tableVirtualRelations.length === 0}
+              <div class="vr-empty">No virtual connections. Use the <span class="vr-empty-hint">→</span> button on a column row to add one.</div>
+            {/if}
+          </div>
+        </section>
 
         <!-- Foreign Keys ─────────────────────────────────────────────────── -->
         {#if foreignKeys.length > 0 || editMode}
@@ -494,6 +579,17 @@
     {/if}
   </div>
 </div>
+
+<!-- ── Virtual Relation Modal ─────────────────────────────────────────────── -->
+{#if vrModal}
+  <VirtualRelationModal
+    from={vrModal.from}
+    editId={vrModal.editId}
+    initialTo={vrModal.initialTo}
+    initialLabel={vrModal.initialLabel}
+    onClose={() => (vrModal = null)}
+  />
+{/if}
 
 <!-- ── Column Modal ──────────────────────────────────────────────────────── -->
 {#if columnForm}
@@ -1241,6 +1337,67 @@
   .fk-sep {
     color: var(--color-border-strong);
     margin: 0 5px;
+  }
+
+  .act-btn--connect {
+    color: var(--color-accent);
+    opacity: 0;
+  }
+
+  tr:hover .act-btn--connect {
+    opacity: 0.6;
+  }
+
+  tr:hover .act-btn--connect:hover {
+    opacity: 1;
+    background: var(--color-accent-subtle);
+    border-color: rgba(124, 92, 255, 0.22);
+  }
+
+  .badge--vr {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border-color: rgba(124, 92, 255, 0.22);
+    font-size: 9px;
+  }
+
+  .vr-card {
+    padding-right: var(--spacing-8);
+  }
+
+  .vr-actions {
+    position: absolute;
+    top: var(--spacing-2);
+    right: var(--spacing-2);
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .vr-card:hover .vr-actions {
+    opacity: 1;
+  }
+
+  .vr-other-ref {
+    color: var(--color-accent);
+  }
+
+  .vr-conn-hint {
+    color: var(--color-text-muted);
+    font-size: 10px;
+  }
+
+  .vr-empty {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .vr-empty-hint {
+    font-style: normal;
+    color: var(--color-accent);
   }
 
   .sqlite-note {
