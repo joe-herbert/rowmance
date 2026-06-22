@@ -906,9 +906,6 @@
       <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</button>
     {/if}
     <div class="ctx-sep" role="separator"></div>
-    {#if connCtx.profile.groupId !== null}
-      <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(null)}>Remove from Group</button>
-    {/if}
     {#if connectionStore.groups.length > 0}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
@@ -943,6 +940,9 @@
           </div>
         {/if}
       </div>
+      {#if connCtx.profile.groupId !== null}
+        <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(null)}>Remove from Group</button>
+      {/if}
       <div class="ctx-sep" role="separator"></div>
     {/if}
     <button class="ctx-item" role="menuitem" onclick={() => { connCtx = null; startCreateGroup(); }}>New Group</button>
@@ -1266,7 +1266,7 @@
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 4px 8px;
+    padding: 8px 8px;
     font-size: 10.5px;
     font-weight: 700;
     letter-spacing: 0.04em;
