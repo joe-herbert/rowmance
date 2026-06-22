@@ -482,7 +482,7 @@
     <div class="modal">
       <header class="modal-header">
         <h2 class="modal-title">New Theme</h2>
-        <button class="close-btn" onclick={cancelCreateTheme} aria-label="Close">✕</button>
+        <button class="close-btn" onclick={cancelCreateTheme} aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </header>
 
       <div class="modal-body">
@@ -528,7 +528,7 @@
     <div class="modal">
       <header class="modal-header">
         <h2 class="modal-title">Delete Theme</h2>
-        <button class="close-btn" onclick={() => (confirmingDelete = false)} aria-label="Close">✕</button>
+        <button class="close-btn" onclick={() => (confirmingDelete = false)} aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </header>
       <div class="modal-body">
         <p class="modal-confirm-text">Delete <strong>{settings.theme}</strong>? This cannot be undone.</p>

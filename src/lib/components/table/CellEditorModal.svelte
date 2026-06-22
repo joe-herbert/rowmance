@@ -90,7 +90,7 @@
 
   function boolLabel(v: boolean | null): string {
     if (v === null) return 'NULL';
-    return v ? '✓ true' : '✗ false';
+    return v ? 'true' : 'false';
   }
 </script>
 

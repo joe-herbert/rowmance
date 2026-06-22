@@ -406,7 +406,7 @@
       value={draft.mode}
       onchange={(v) => switchMode(v as 'builder' | 'sql')}
     />
-    <button class="fe-close-btn" onclick={onClose} aria-label="Close filters">✕</button>
+    <button class="fe-close-btn" onclick={onClose} aria-label="Close filters"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
 
   {#if draft.mode === 'builder'}
@@ -486,7 +486,7 @@
                     {/if}
                   {/if}
 
-                  <button class="rule-remove-btn" onclick={() => removeRule(group.id, rule.id)} aria-label="Remove filter" title="Remove">✕</button>
+                  <button class="rule-remove-btn" onclick={() => removeRule(group.id, rule.id)} aria-label="Remove filter" title="Remove"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </div>
               {/each}
             </div>

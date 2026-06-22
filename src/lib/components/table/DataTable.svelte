@@ -1659,7 +1659,7 @@
                         class:bool-true={cellValue}
                         class:bool-false={!cellValue}
                       >
-                        {cellValue ? '✓' : '✗'}
+                        {#if cellValue}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>{/if}
                       </span>
                     {:else}
                       {formatCell(cellValue)}
@@ -1680,7 +1680,7 @@
                     <div class="quick-view-header">
                       <span class="quick-view-title">Loading…</span>
                       <!-- svelte-ignore a11y_autofocus -->
-                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view">✕</button>
+                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     </div>
                   </div>
                 {:else if quickViewState.data !== null}
@@ -1693,7 +1693,7 @@
                         <span class="quick-view-filter">{qd.refColumn} = {qd.refValue}</span>
                       </span>
                       <!-- svelte-ignore a11y_autofocus -->
-                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view">✕</button>
+                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     </div>
                     {#if qd.row === null}
                       <div class="quick-view-empty">No matching row found</div>
@@ -1769,7 +1769,7 @@
                       <span class="empty-value">EMPTY</span>
                     {:else if typeCategory === 'boolean' && (typeof currentValue === 'boolean' || typeof currentValue === 'number')}
                       <span class="bool-value" class:bool-true={currentValue} class:bool-false={!currentValue}>
-                        {currentValue ? '✓' : '✗'}
+                        {#if currentValue}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>{/if}
                       </span>
                     {:else}
                       {formatCell(currentValue)}

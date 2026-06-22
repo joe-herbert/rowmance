@@ -163,11 +163,22 @@
             {#if item.content.kind === 'table_browser'}
               <TableIcon system={isSystemDatabase(item.content.database, settingsStore.settings.systemDatabases) || isSystemTable(item.content.table, settingsStore.settings.systemTablePatterns)} />
             {:else if item.content.kind === 'table_structure'}
-              <TableIcon system={isSystemDatabase(item.content.database, settingsStore.settings.systemDatabases) || isSystemTable(item.content.table, settingsStore.settings.systemTablePatterns)} />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                <line x1="9" y1="4" x2="9" y2="20"></line>
+                <line x1="15" y1="4" x2="15" y2="20"></line>
+              </svg>
             {:else if item.content.kind === 'query_editor'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="8 7 4 12 8 17"></polyline>
                 <polyline points="16 7 20 12 16 17"></polyline>
+              </svg>
+            {:else if item.content.kind === 'ddl_viewer'}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="8" y1="13" x2="16" y2="13"></line>
+                <line x1="8" y1="17" x2="13" y2="17"></line>
               </svg>
             {:else if item.content.kind === 'settings'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">

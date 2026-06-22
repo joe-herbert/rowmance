@@ -414,7 +414,7 @@
                     {#if col.isAutoIncrement}<span class="badge badge--ai">AI</span>{/if}
                     {#if col.isForeignKey}<span class="badge badge--fk">FK</span>{/if}
                   </td>
-                  <td class="col-null center-cell">{col.nullable ? '✓' : ''}</td>
+                  <td class="col-null center-cell">{#if col.nullable}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{/if}</td>
                   <td class="col-default mono">{col.defaultValue ?? ''}</td>
                   <td class="col-actions">
                     <div class="row-actions">

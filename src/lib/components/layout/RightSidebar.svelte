@@ -331,7 +331,7 @@
       title="Query History"
       onclick={(e) => { e.stopPropagation(); selectPanel('history'); }}
     >
-      🕐
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     </button>
 
     <button
@@ -343,7 +343,7 @@
       title="Saved Queries"
       onclick={(e) => { e.stopPropagation(); selectPanel('saved'); }}
     >
-      🔖
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
     </button>
 
     <button
@@ -355,7 +355,7 @@
       title="Column Inspector"
       onclick={(e) => { e.stopPropagation(); selectPanel('column'); }}
     >
-      ≡
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>
     </button>
 
     <button
@@ -367,7 +367,7 @@
       title="Table Info"
       onclick={(e) => { e.stopPropagation(); selectPanel('table-info'); }}
     >
-      ℹ
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8" stroke-width="2.5"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
     </button>
 
     <button
@@ -379,7 +379,7 @@
       title="Relations"
       onclick={(e) => { e.stopPropagation(); selectPanel('relations'); }}
     >
-      ↔
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
     </button>
   </div>
 
@@ -527,7 +527,7 @@
                   aria-label="{isOpen ? 'Collapse' : 'Expand'} folder {folder.name}"
                 >
                   <span class="chevron" class:open={isOpen} aria-hidden="true">›</span>
-                  <span class="folder-icon" aria-hidden="true">📁</span>
+                  <span class="folder-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
                   <span class="folder-name">{folder.name}</span>
                   {#if folderQueries.length > 0}
                     <span class="count-badge">{folderQueries.length}</span>
@@ -661,8 +661,8 @@
                     <tr class:selected-col={col.name === sel!.columnName}>
                       <td class="mono">{col.name}</td>
                       <td class="mono type-cell">{col.dataType}</td>
-                      <td class="center-cell">{col.nullable ? '✓' : ''}</td>
-                      <td class="center-cell">{col.isPrimaryKey ? '✓' : ''}</td>
+                      <td class="center-cell">{#if col.nullable}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{/if}</td>
+                      <td class="center-cell">{#if col.isPrimaryKey}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{/if}</td>
                     </tr>
                   {/each}
                 </tbody>

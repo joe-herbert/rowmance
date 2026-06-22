@@ -274,7 +274,7 @@
                   height={NODE_ROW_HEIGHT}
                 />
                 {#if col.isPrimaryKey}
-                  <text class="col-pk-icon" x="8" y={NODE_ROW_HEIGHT / 2} dominant-baseline="middle">★</text>
+                  <polygon class="col-pk-icon" points="8,3 9.5,7 14,7 10.5,9.5 11.8,14 8,11.5 4.2,14 5.5,9.5 2,7 6.5,7" transform="translate(0, {NODE_ROW_HEIGHT / 2 - 8.5})" />
                 {/if}
                 <text
                   class="col-name"
