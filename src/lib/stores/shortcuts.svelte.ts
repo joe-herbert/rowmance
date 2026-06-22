@@ -35,7 +35,8 @@ export type ShortcutAction =
   | 'COMMAND_PALETTE'
   | 'NEW_QUERY_EDITOR'
   | 'NEW_WINDOW'
-  | 'OPEN_SETTINGS';
+  | 'OPEN_SETTINGS'
+  | 'TOGGLE_SYSTEM_ITEMS';
 
 export interface ShortcutDefinition {
   action: ShortcutAction;
@@ -201,6 +202,13 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+,',
     jetbrains: 'Mod+,',
     vim: 'Mod+,',
+  },
+  {
+    action: 'TOGGLE_SYSTEM_ITEMS',
+    label: 'Toggle System Items',
+    vscode: 'Mod+Shift+H',
+    jetbrains: 'Mod+Shift+H',
+    vim: 'Mod+Shift+H',
   },
 ];
 

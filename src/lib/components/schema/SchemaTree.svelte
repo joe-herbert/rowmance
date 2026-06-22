@@ -326,7 +326,7 @@
 
           {#if isExpanded && databases}
             <ul class="tree-children" role="group">
-              {#each [...databases.keys()] as database}
+              {#each [...databases.keys()].filter(db => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
                 {@const dbKey = `${profile.id}/${database}`}
                 {@const isDbExpanded = expandedDatabases.has(dbKey)}
                 {@const isDbLoading = loadingKeys.has(dbKey)}
@@ -361,7 +361,7 @@
 
                   {#if isDbExpanded && tables.length > 0}
                     <ul class="tree-children" role="group">
-                      {#each tables as table}
+                      {#each tables.filter(t => settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) as table}
                         {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                         <li class="tree-node leaf-node" role="treeitem" aria-selected={false}>
                           <button
@@ -419,6 +419,10 @@
     style="top: {dbContextMenu.y}px; left: {dbContextMenu.x}px;"
   >
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
+    <div class="ctx-sep" role="separator"></div>
+    <button class="ctx-item" role="menuitem" onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); closeDbContextMenu(); }}>
+      {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
+    </button>
   </div>
 {/if}
 
@@ -684,6 +688,12 @@
 
   .ctx-item:hover {
     background: var(--color-bg-active);
+  }
+
+  .ctx-sep {
+    height: 1px;
+    margin: var(--spacing-1) 0;
+    background: var(--color-border);
   }
 
   @keyframes pulse {

@@ -700,7 +700,7 @@
         {:else if connLoadError}
           <div class="load-error">{connLoadError}</div>
         {:else if databases}
-          {#each [...databases.keys()] as database}
+          {#each [...databases.keys()].filter(db => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
             {@const dbKey = `${profile.id}/${database}`}
             {@const isDbExpanded = expandedDatabases.has(dbKey)}
             {@const isDbLoading = loadingKeys.has(dbKey)}
@@ -732,7 +732,7 @@
 
               {#if isDbExpanded && tables.length > 0}
                 <div class="table-list">
-                  {#each tables as table}
+                  {#each tables.filter(t => settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) as table}
                     {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                     <button
                       class="table-row"
@@ -813,6 +813,10 @@
     <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { editingProfile = connCtx.profile; connCtx = null; } }}>Edit</button>
     <button class="ctx-item" role="menuitem" onclick={ctxConnToggleReadOnly}>{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</button>
     <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { navigator.clipboard.writeText(connCtx.profile.name); connCtx = null; } }}>Copy Name</button>
+    <div class="ctx-sep" role="separator"></div>
+    <button class="ctx-item" role="menuitem" onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); connCtx = null; }}>
+      {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
+    </button>
     <div class="ctx-sep" role="separator"></div>
     {#if connConnected}
       <button class="ctx-item" role="menuitem" onclick={ctxConnDisconnect}>Disconnect</button>

@@ -177,6 +177,7 @@
     if (action === 'NEW_WINDOW') openNewWindow();
     if (action === 'OPEN_SETTINGS') openSettings();
     if (action === 'COMMAND_PALETTE') openPalette();
+    if (action === 'TOGGLE_SYSTEM_ITEMS') settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
     if (action === 'PANEL_CLOSE') panelStore.closeFocusedItem();
     if (action === 'PANEL_NEXT') panelStore.focusNext();
     if (action === 'PANEL_PREV') panelStore.focusPrev();

@@ -250,6 +250,7 @@ export interface AppSettings {
   clickOutsideEdit: 'discard' | 'confirm';
   systemDatabases: string[];
   systemTablePatterns: string[];
+  showSystemItems: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -269,6 +270,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   clickOutsideEdit: 'discard',
   systemDatabases: [...BUILTIN_DATABASES],
   systemTablePatterns: [...BUILTIN_TABLE_PATTERNS],
+  showSystemItems: true,
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

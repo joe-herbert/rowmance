@@ -340,6 +340,17 @@
       <h2 class="section-title">Connections</h2>
 
       <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Show System Items</span>
+            <span class="label-hint">Show system databases and tables in the schema tree</span>
+          </div>
+          <Checkbox
+            checked={settings.showSystemItems}
+            onchange={(c) => update('showSystemItems', c)}
+          />
+        </div>
+
         <div class="setting-row setting-row--block">
           <div class="setting-label">
             <span class="label-text">System Databases</span>
