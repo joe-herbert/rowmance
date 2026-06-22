@@ -16,11 +16,12 @@
   import { defaultKeymap, indentWithTab } from '@codemirror/commands';
   import { sql as sqlLang } from '@codemirror/lang-sql';
   import {
-    defaultHighlightStyle,
+    HighlightStyle,
     syntaxHighlighting,
     bracketMatching,
     foldGutter,
   } from '@codemirror/language';
+  import { tags } from '@lezer/highlight';
   import {
     closeBrackets,
     closeBracketsKeymap,
@@ -235,6 +236,18 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  function buildHighlightStyle(): HighlightStyle {
+    return HighlightStyle.define([
+      { tag: tags.keyword, color: resolveCSSVar('--color-editor-keyword') },
+      { tag: tags.string, color: resolveCSSVar('--color-editor-string') },
+      { tag: tags.number, color: resolveCSSVar('--color-editor-number') },
+      { tag: tags.comment, color: resolveCSSVar('--color-editor-comment') },
+      { tag: tags.operator, color: resolveCSSVar('--color-editor-operator') },
+      { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: resolveCSSVar('--color-editor-function') },
+      { tag: [tags.typeName, tags.className], color: resolveCSSVar('--color-editor-type') },
+    ]);
+  }
+
   function buildTheme(): Extension {
     return EditorView.theme({
       '&': {
@@ -251,8 +264,8 @@
       '.cm-cursor, .cm-dropCursor': {
         borderLeftColor: resolveCSSVar('--color-editor-cursor'),
       },
-      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
-        backgroundColor: resolveCSSVar('--color-editor-selection'),
+      '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground': {
+        backgroundColor: 'var(--color-editor-selection)',
       },
       '.cm-gutters': {
         backgroundColor: resolveCSSVar('--color-editor-gutter-bg'),
@@ -535,7 +548,7 @@
         rectangularSelection(),
         crosshairCursor(),
         highlightSelectionMatches(),
-        syntaxHighlighting(defaultHighlightStyle),
+        syntaxHighlighting(buildHighlightStyle()),
         bracketMatching(),
         closeBrackets(),
         autocompletion({ override: [makeSchemaCompletionSource()] }),
