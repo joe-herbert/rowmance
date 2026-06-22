@@ -1,36 +1,29 @@
 import type { VirtualRelation, ColumnRef } from '$lib/types';
+import * as vrApi from '$lib/tauri/virtual_relations';
 
-const STORAGE_KEY = 'rowmance_virtual_relations';
+let relations = $state<VirtualRelation[]>([]);
 
-function loadFromStorage(): VirtualRelation[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveToStorage(relations: VirtualRelation[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(relations));
-}
-
-let relations = $state<VirtualRelation[]>(loadFromStorage());
+vrApi.listVirtualRelations().then((loaded) => {
+  relations = loaded;
+});
 
 export function useVirtualRelations() {
   return {
     get relations() { return relations; },
 
-    add(vr: Omit<VirtualRelation, 'id'>): VirtualRelation {
-      const newVr: VirtualRelation = { ...vr, id: crypto.randomUUID() };
-      relations = [...relations, newVr];
-      saveToStorage(relations);
-      return newVr;
+    async add(input: { from: ColumnRef; to: ColumnRef; label?: string }): Promise<VirtualRelation> {
+      const vr = await vrApi.createVirtualRelation({
+        from: input.from,
+        to: input.to,
+        label: input.label ?? null,
+      });
+      relations = [...relations, vr];
+      return vr;
     },
 
-    remove(id: string): void {
+    async remove(id: string): Promise<void> {
+      await vrApi.deleteVirtualRelation(id);
       relations = relations.filter((r) => r.id !== id);
-      saveToStorage(relations);
     },
 
     /** Find all virtual relations where the given column is the "from" side. */

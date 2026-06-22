@@ -12,4 +12,5 @@ pub mod ssh;
 pub mod themes;
 pub mod updater;
 pub mod users;
+pub mod virtual_relations;
 pub mod window;

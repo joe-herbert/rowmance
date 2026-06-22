@@ -137,11 +137,11 @@
     }
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!toConnectionId || !toDatabase || !toTable || !toColumn) return;
     const toRef: ColumnRef = { connectionId: toConnectionId, database: toDatabase, table: toTable, column: toColumn };
-    if (editId) vrStore.remove(editId);
-    vrStore.add({ from, to: toRef, label: label.trim() || undefined });
+    if (editId) await vrStore.remove(editId);
+    await vrStore.add({ from, to: toRef, label: label.trim() || undefined });
     onCreated?.();
     onClose();
   }

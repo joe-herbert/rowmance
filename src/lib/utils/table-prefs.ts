@@ -1,38 +1,45 @@
+import { invoke } from '@tauri-apps/api/core';
+
 interface ColPrefs {
   hiddenColumns: string[];
   colWidths: Record<string, number>;
   columnOrder: string[];
 }
 
-const PREFIX = 'rowmance_col_prefs:';
+const PREFIX = 'col_prefs:';
 
 function prefsKey(connectionId: string, database: string, table: string): string {
   return `${PREFIX}${connectionId}:${database}:${table}`;
 }
 
-export function loadColPrefs(connectionId: string, database: string, table: string): ColPrefs | null {
+export async function loadColPrefs(
+  connectionId: string,
+  database: string,
+  table: string,
+): Promise<ColPrefs | null> {
   try {
-    const raw = localStorage.getItem(prefsKey(connectionId, database, table));
-    return raw ? (JSON.parse(raw) as ColPrefs) : null;
+    return await invoke<ColPrefs | null>('settings_get', {
+      key: prefsKey(connectionId, database, table),
+    });
   } catch {
     return null;
   }
 }
 
-export function saveColPrefs(
+export async function saveColPrefs(
   connectionId: string,
   database: string,
   table: string,
   prefs: Partial<ColPrefs>,
-): void {
+): Promise<void> {
   try {
     const key = prefsKey(connectionId, database, table);
-    const existing: ColPrefs = loadColPrefs(connectionId, database, table) ?? {
+    const existing = (await loadColPrefs(connectionId, database, table)) ?? {
       hiddenColumns: [],
       colWidths: {},
       columnOrder: [],
     };
-    localStorage.setItem(key, JSON.stringify({ ...existing, ...prefs }));
+    await invoke<void>('settings_set', { key, value: { ...existing, ...prefs } });
   } catch {
     // intentionally empty
   }

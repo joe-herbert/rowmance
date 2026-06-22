@@ -143,6 +143,11 @@ pub fn run() {
             commands::window::window_set_traffic_light_position,
             // Explain
             commands::query::query_explain,
+            // Virtual relations
+            commands::virtual_relations::virtual_relations_list,
+            commands::virtual_relations::virtual_relations_create,
+            commands::virtual_relations::virtual_relations_update,
+            commands::virtual_relations::virtual_relations_delete,
             // User management
             commands::users::users_list,
             commands::users::users_get_grants,

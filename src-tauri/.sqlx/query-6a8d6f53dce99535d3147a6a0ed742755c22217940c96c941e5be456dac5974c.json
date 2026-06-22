@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE virtual_relations\n        SET label = ?,\n            from_connection_id = ?, from_database = ?, from_table = ?, from_column = ?,\n            to_connection_id = ?, to_database = ?, to_table = ?, to_column = ?,\n            updated_at = ?\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "6a8d6f53dce99535d3147a6a0ed742755c22217940c96c941e5be456dac5974c"
+}

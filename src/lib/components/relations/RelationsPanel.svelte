@@ -442,40 +442,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
-  }
-
-  .add-btn {
-    margin-left: auto;
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0 var(--spacing-1);
-    line-height: 1;
-    border-radius: var(--radius-sm);
-    align-self: center;
-    transition: color var(--transition-fast), background var(--transition-fast);
-  }
-
-  .add-btn:hover {
-    color: var(--color-accent);
-    background: var(--color-accent-subtle);
-  }
-
-  .link-btn {
-    display: block;
-    margin-top: var(--spacing-1);
-    font-size: var(--font-size-xs);
-    color: var(--color-accent);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    font-style: normal;
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
 
   .state-row {

@@ -245,10 +245,23 @@
 
   // ── Column visibility ─────────────────────────────────────────────────────
 
-  const _savedPrefs = untrack(() => loadColPrefs(connectionId, database, table));
-  let hiddenColumns = $state<Set<string>>(new Set(_savedPrefs?.hiddenColumns ?? []));
-  const _initialColWidths = _savedPrefs?.colWidths ?? undefined;
-  const _initialColumnOrder = _savedPrefs?.columnOrder && _savedPrefs.columnOrder.length > 0 ? _savedPrefs.columnOrder : undefined;
+  let hiddenColumns = $state<Set<string>>(new Set());
+  let initialColWidths = $state<Record<string, number> | undefined>(undefined);
+  let initialColumnOrder = $state<string[] | undefined>(undefined);
+
+  // Load column prefs from DB whenever connection/db/table change.
+  $effect(() => {
+    const conn = connectionId, db = database, tbl = table;
+    hiddenColumns = new Set();
+    initialColWidths = undefined;
+    initialColumnOrder = undefined;
+    loadColPrefs(conn, db, tbl).then((prefs) => {
+      hiddenColumns = new Set(prefs?.hiddenColumns ?? []);
+      initialColWidths = prefs?.colWidths;
+      initialColumnOrder = prefs?.columnOrder?.length ? prefs.columnOrder : undefined;
+    });
+  });
+
   let showColumnPicker = $state(false);
   let columnPickerAnchorEl = $state<HTMLButtonElement | null>(null);
 
@@ -257,6 +270,7 @@
     if (next.has(name)) next.delete(name);
     else next.add(name);
     hiddenColumns = next;
+    saveColPrefs(connectionId, database, table, { hiddenColumns: [...next] });
   }
 
   // ── DB type + SQL helpers ─────────────────────────────────────────────────
@@ -405,18 +419,6 @@
         tableScrollPositions.delete(_dirtyKey);
       }
     };
-  });
-
-  // ── Save hiddenColumns to localStorage when they change ──────────────────
-
-  let _hiddenColsInitialized = false;
-  $effect(() => {
-    const cols = [...hiddenColumns]; // track dependency
-    if (!_hiddenColsInitialized) {
-      _hiddenColsInitialized = true;
-      return;
-    }
-    saveColPrefs(connectionId, database, table, { hiddenColumns: cols });
   });
 
   async function load(): Promise<void> {
@@ -1127,8 +1129,8 @@
           onForeignKeyClick={(foreignKeys.length > 0 || vrStore.hasAnyForTable(connectionId, database, table)) ? handleForeignKeyClick : undefined}
           onForeignKeyQuickView={foreignKeys.length > 0 ? handleForeignKeyQuickView : undefined}
           onConnectColumn={(colName) => { connectColumnName = colName; }}
-          initialColWidths={_initialColWidths}
-          initialColumnOrder={_initialColumnOrder}
+          initialColWidths={initialColWidths}
+          initialColumnOrder={initialColumnOrder}
           onColWidthsChange={(widths) => saveColPrefs(connectionId, database, table, { colWidths: widths })}
           onColumnOrderChange={(order) => saveColPrefs(connectionId, database, table, { columnOrder: order })}
           initialPendingChanges={tableKey === 0 ? _restoredPending?.changes : undefined}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM virtual_relations WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4349f0e6cbeb3039d9bab556e565b7e79c8b4136bb3be6b0e524762c181fb6d8"
+}

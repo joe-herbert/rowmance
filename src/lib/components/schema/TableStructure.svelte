@@ -504,7 +504,7 @@
                       <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z"/>
                     </svg>
                   </button>
-                  <button class="act-btn act-btn--danger" title="Remove connection" onclick={() => vrStore.remove(vr.id)}>
+                  <button class="act-btn act-btn--danger" title="Remove connection" onclick={() => { vrStore.remove(vr.id); }}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <polyline points="3,6 13,6"/>
                       <path d="M8 6V2M5 6l.5 9h5l.5-9"/>

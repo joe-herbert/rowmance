@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO virtual_relations (\n            id, label,\n            from_connection_id, from_database, from_table, from_column,\n            to_connection_id, to_database, to_table, to_column,\n            created_at, updated_at\n        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "585baadb1d0e60b440bf7353adf98c924e492aa32856a2040094ee5dd52d2417"
+}
