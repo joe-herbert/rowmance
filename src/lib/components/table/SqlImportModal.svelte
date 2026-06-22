@@ -223,6 +223,8 @@
 <style>
   .modal {
     background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
     width: 560px;
@@ -230,7 +232,7 @@
     max-height: calc(100vh - var(--spacing-8));
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: clip;
   }
 
   .modal-header {

@@ -393,13 +393,8 @@
   function openColumnPicker(): void {
     if (columnPickerAnchorEl) {
       const rect = columnPickerAnchorEl.getBoundingClientRect();
-      const containerRect = columnPickerAnchorEl
-        .closest('.table-browser')
-        ?.getBoundingClientRect();
-      if (containerRect) {
-        pickerTop = rect.bottom - containerRect.top + 4;
-        pickerLeft = rect.right - containerRect.left - 220; // align right edge
-      }
+      pickerTop = rect.bottom + 4;
+      pickerLeft = rect.right - 220;
     }
     showColumnPicker = true;
   }
@@ -409,6 +404,8 @@
   // ── Export state ───────────────────────────────────────────────────────────
 
   let showExportMenu = $state(false);
+  let exportMenuTop = $state(0);
+  let exportMenuLeft = $state(0);
   let exportTableName = $state('');
   let showTableNameInput = $state(false);
   let pendingExportFormat = $state<ExportFormat | null>(null);
@@ -418,6 +415,8 @@
   // ── Import modal state ─────────────────────────────────────────────────────
 
   let showImportMenu = $state(false);
+  let importMenuTop = $state(0);
+  let importMenuLeft = $state(0);
   let showCsvImport = $state(false);
   let showSqlImport = $state(false);
   let importSource = $state<'file' | 'clipboard'>('file');
@@ -780,7 +779,7 @@
       <div class="export-dropdown">
         <button
           class="refresh-button"
-          onclick={() => { showExportMenu = !showExportMenu; exportError = null; }}
+          onclick={(e) => { if (!showExportMenu) { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); exportMenuTop = r.bottom + 4; exportMenuLeft = r.right - 210; } showExportMenu = !showExportMenu; exportError = null; }}
           aria-expanded={showExportMenu}
           aria-label="Export table data"
           title="Export"
@@ -788,34 +787,36 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>        </button>
 
         {#if showExportMenu}
-          <div class="export-menu" role="menu">
-            <div class="export-menu-title">Export</div>
-            {#each EXPORT_FORMATS as fmt}
-              <div class="export-menu-section">
-                <span class="export-format-label">{fmt.label}</span>
-                <button
-                  class="export-menu-item"
-                  role="menuitem"
-                  onclick={() => startExport(fmt.format, false)}
-                >
-                  Clipboard
-                </button>
-                <button
-                  class="export-menu-item"
-                  role="menuitem"
-                  onclick={() => startExport(fmt.format, true)}
-                >
-                  File
-                </button>
-              </div>
-            {/each}
+          <div use:portal class="export-positioner" style="top: {exportMenuTop}px; left: {exportMenuLeft}px;">
+            <div class="export-menu" role="menu">
+              <div class="export-menu-title">Export</div>
+              {#each EXPORT_FORMATS as fmt}
+                <div class="export-menu-section">
+                  <span class="export-format-label">{fmt.label}</span>
+                  <button
+                    class="export-menu-item"
+                    role="menuitem"
+                    onclick={() => startExport(fmt.format, false)}
+                  >
+                    Clipboard
+                  </button>
+                  <button
+                    class="export-menu-item"
+                    role="menuitem"
+                    onclick={() => startExport(fmt.format, true)}
+                  >
+                    File
+                  </button>
+                </div>
+              {/each}
+            </div>
+            <div
+              class="export-backdrop"
+              role="presentation"
+              onclick={() => (showExportMenu = false)}
+              onkeydown={(e) => { if (e.key === 'Escape') showExportMenu = false; }}
+            ></div>
           </div>
-          <div
-            class="export-backdrop"
-            role="presentation"
-            onclick={() => (showExportMenu = false)}
-            onkeydown={(e) => { if (e.key === 'Escape') showExportMenu = false; }}
-          ></div>
         {/if}
       </div>
     {/if}
@@ -824,7 +825,7 @@
     <div class="export-dropdown">
       <button
         class="refresh-button"
-        onclick={() => { showImportMenu = !showImportMenu; }}
+        onclick={(e) => { if (!showImportMenu) { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); importMenuTop = r.bottom + 4; importMenuLeft = r.right - 210; } showImportMenu = !showImportMenu; }}
         aria-expanded={showImportMenu}
         aria-label="Import data"
         title="Import"
@@ -833,49 +834,51 @@
       </button>
 
       {#if showImportMenu}
-        <div class="export-menu" role="menu">
-          <div class="export-menu-title">Import</div>
-          <div class="export-menu-section">
-            <span class="export-format-label">CSV</span>
-            <button
-              class="export-menu-item"
-              role="menuitem"
-              onclick={() => { showImportMenu = false; importSource = 'clipboard'; showCsvImport = true; }}
-            >
-              Clipboard
-            </button>
-            <button
-              class="export-menu-item"
-              role="menuitem"
-              onclick={() => { showImportMenu = false; importSource = 'file'; showCsvImport = true; }}
-            >
-              File
-            </button>
+        <div use:portal class="export-positioner" style="top: {importMenuTop}px; left: {importMenuLeft}px;">
+          <div class="export-menu" role="menu">
+            <div class="export-menu-title">Import</div>
+            <div class="export-menu-section">
+              <span class="export-format-label">CSV</span>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showImportMenu = false; importSource = 'clipboard'; showCsvImport = true; }}
+              >
+                Clipboard
+              </button>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showImportMenu = false; importSource = 'file'; showCsvImport = true; }}
+              >
+                File
+              </button>
+            </div>
+            <div class="export-menu-section">
+              <span class="export-format-label">SQL</span>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showImportMenu = false; importSource = 'clipboard'; showSqlImport = true; }}
+              >
+                Clipboard
+              </button>
+              <button
+                class="export-menu-item"
+                role="menuitem"
+                onclick={() => { showImportMenu = false; importSource = 'file'; showSqlImport = true; }}
+              >
+                File
+              </button>
+            </div>
           </div>
-          <div class="export-menu-section">
-            <span class="export-format-label">SQL</span>
-            <button
-              class="export-menu-item"
-              role="menuitem"
-              onclick={() => { showImportMenu = false; importSource = 'clipboard'; showSqlImport = true; }}
-            >
-              Clipboard
-            </button>
-            <button
-              class="export-menu-item"
-              role="menuitem"
-              onclick={() => { showImportMenu = false; importSource = 'file'; showSqlImport = true; }}
-            >
-              File
-            </button>
-          </div>
+          <div
+            class="export-backdrop"
+            role="presentation"
+            onclick={() => (showImportMenu = false)}
+            onkeydown={(e) => { if (e.key === 'Escape') showImportMenu = false; }}
+          ></div>
         </div>
-        <div
-          class="export-backdrop"
-          role="presentation"
-          onclick={() => (showImportMenu = false)}
-          onkeydown={(e) => { if (e.key === 'Escape') showImportMenu = false; }}
-        ></div>
       {/if}
     </div>
 
@@ -1008,7 +1011,7 @@
   </div>
 
   {#if showColumnPicker && currentColumns.length > 0}
-    <div class="picker-positioner" style="top: {pickerTop}px; left: {pickerLeft}px;">
+    <div use:portal class="picker-positioner" style="top: {pickerTop}px; left: {pickerLeft}px;">
       <ColumnPicker
         columns={currentColumns}
         {hiddenColumns}
@@ -1519,12 +1522,9 @@
 
   /* ── Column picker positioner ────────────────────────────────────────────── */
 
-  .picker-positioner {
-    position: absolute;
-    z-index: 200;
-  }
-
-  :global(.filter-positioner) {
+  :global(.picker-positioner),
+  :global(.filter-positioner),
+  :global(.export-positioner) {
     position: fixed;
     z-index: 1000;
   }
@@ -1537,14 +1537,12 @@
   }
 
   .export-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
     background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-overlay);
-    z-index: 300;
     min-width: 210px;
     padding: var(--spacing-1) 0;
   }

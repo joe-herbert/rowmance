@@ -73,6 +73,8 @@
     position: absolute;
     z-index: 200;
     background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-overlay);
@@ -81,7 +83,7 @@
     max-height: 400px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: clip;
   }
 
   .picker-header {

@@ -1925,7 +1925,7 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    overflow: hidden;
+    overflow: clip;
   }
 
   /* ── Table scroll ────────────────────────────────────────────────────────── */
@@ -1969,13 +1969,12 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
   }
 
   .header-row {
     height: 34px;
     background: var(--color-table-header-bg);
+    background-attachment: fixed;
     border-bottom: 1px solid var(--color-border-strong);
     font-size: 11px;
     color: var(--color-text-secondary);
@@ -2467,6 +2466,7 @@
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-secondary);
     background: var(--color-table-header-bg);
+    background-attachment: fixed;
     border-bottom: 1px solid var(--color-border-strong);
     text-align: left;
     white-space: nowrap;

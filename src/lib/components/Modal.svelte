@@ -30,8 +30,6 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
-    -webkit-backdrop-filter: blur(var(--modal-backdrop-blur, 4px));
-    backdrop-filter: blur(var(--modal-backdrop-blur, 4px));
     display: flex;
     align-items: center;
     justify-content: center;

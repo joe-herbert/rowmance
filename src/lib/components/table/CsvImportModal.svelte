@@ -281,12 +281,14 @@
 <style>
   .modal {
     background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
     width: 640px;
     max-width: calc(100vw - var(--spacing-8));
     max-height: calc(100vh - var(--spacing-8));
-    overflow: hidden;
+    overflow: clip;
     display: flex;
     flex-direction: column;
   }
