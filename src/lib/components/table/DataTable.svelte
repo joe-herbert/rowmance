@@ -13,6 +13,14 @@
   type CellValue = string | number | boolean | null;
   type SortDir = 'asc' | 'desc' | 'none';
 
+  export interface QuickViewData {
+    tableName: string;
+    refColumn: string;
+    refValue: CellValue;
+    columns: ColumnMeta[];
+    row: CellValue[] | null;
+  }
+
   // Ensures only one context menu is open across all DataTable instances at a time.
   let activeMenuDismiss: (() => void) | null = null;
 
@@ -44,6 +52,8 @@
     onDeleteRow?: (_row: CellValue[], _rowKey: string) => void;
     onCloneRow?: (_row: CellValue[]) => void;
     onDeleteRowsPending?: (_deletedRows: Map<string, CellValue[]>) => void;
+    onForeignKeyClick?: (_colName: string, _value: CellValue) => void;
+    onForeignKeyQuickView?: (_colName: string, _value: CellValue) => Promise<QuickViewData | null>;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -141,6 +151,8 @@
     onDeleteRow,
     onCloneRow,
     onDeleteRowsPending,
+    onForeignKeyClick,
+    onForeignKeyQuickView,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -519,6 +531,34 @@
   let modalTarget = $state<EditTarget | null>(null);
   let tableContainerEl = $state<HTMLDivElement | null>(null);
 
+  // ── Quick view state ──────────────────────────────────────────────────────
+
+  let quickViewState = $state<{
+    triggerRowKey: string;
+    triggerColName: string;
+    loading: boolean;
+    data: QuickViewData | null;
+  } | null>(null);
+
+  async function triggerQuickView(colName: string, cellValue: CellValue, rowKey: string): Promise<void> {
+    if (!onForeignKeyQuickView) return;
+    if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
+      quickViewState = null;
+      return;
+    }
+    quickViewState = { triggerRowKey: rowKey, triggerColName: colName, loading: true, data: null };
+    try {
+      const data = await onForeignKeyQuickView(colName, cellValue);
+      if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
+        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, loading: false, data };
+      }
+    } catch {
+      if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
+        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, loading: false, data: null };
+      }
+    }
+  }
+
   function handleCellDblClick(
     e: MouseEvent,
     row: CellValue[],
@@ -816,6 +856,10 @@
       }
       return;
     } else if (e.key === 'Escape') {
+      if (quickViewState) {
+        quickViewState = null;
+        return;
+      }
       cancelEdit();
       anchorCell = null;
       focusedCell = null;
@@ -1500,11 +1544,22 @@
                 class:cell-selected={isCellInSelection(rowIndex, colIndex)}
                 class:cell-focused={focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
                 class:cell-required-empty={isRequiredEmpty}
+                class:cell-fk={col.isForeignKey && cellValue !== null && !!onForeignKeyClick}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
                 oncontextmenu={(e) => { e.stopPropagation(); if (!isCellInSelection(rowIndex, colIndex)) { anchorCell = { row: rowIndex, col: colIndex }; focusedCell = { row: rowIndex, col: colIndex }; } handleRowContextMenu(e, row, processedRowIndex, col.name); }}
                 onmousedown={(e) => {
+                  if (e.button === 0 && e.metaKey && e.shiftKey && col.isForeignKey && cellValue !== null) {
+                    e.stopPropagation();
+                    triggerQuickView(col.name, cellValue, rowKey);
+                    return;
+                  }
+                  if (e.button === 0 && e.metaKey && col.isForeignKey && cellValue !== null) {
+                    e.stopPropagation();
+                    onForeignKeyClick?.(col.name, cellValue);
+                    return;
+                  }
                   if (e.button === 2 || (e.button === 0 && e.ctrlKey)) {
                     if (isCellInSelection(rowIndex, colIndex)) skipNextFocusReset = true;
                     return;
@@ -1559,6 +1614,72 @@
               </td>
             {/each}
           </tr>
+          {#if quickViewState?.triggerRowKey === rowKey}
+            <tr class="quick-view-row">
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+              <td class="quick-view-cell" colspan={visibleColumns.length + 1} tabindex="-1">
+                {#if quickViewState.loading}
+                  <div class="quick-view-panel">
+                    <div class="quick-view-header">
+                      <span class="quick-view-title">Loading…</span>
+                      <!-- svelte-ignore a11y_autofocus -->
+                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view">✕</button>
+                    </div>
+                  </div>
+                {:else if quickViewState.data !== null}
+                  {@const qd = quickViewState.data}
+                  <div class="quick-view-panel">
+                    <div class="quick-view-header">
+                      <span class="quick-view-title">
+                        <span class="quick-view-table-name">{qd.tableName}</span>
+                        <span class="quick-view-sep"> · </span>
+                        <span class="quick-view-filter">{qd.refColumn} = {qd.refValue}</span>
+                      </span>
+                      <!-- svelte-ignore a11y_autofocus -->
+                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view">✕</button>
+                    </div>
+                    {#if qd.row === null}
+                      <div class="quick-view-empty">No matching row found</div>
+                    {:else}
+                      <div class="quick-view-scroll">
+                        <table class="quick-view-table">
+                          <thead>
+                            <tr>
+                              {#each qd.columns as qcol}
+                                <th class="quick-view-th" class:quick-view-th-pk={qcol.isPrimaryKey}>
+                                  {#if qcol.isPrimaryKey}
+                                    <svg class="quick-view-pk" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                      <circle cx="8" cy="9" r="4"></circle><path d="M11 12l7 7"></path><path d="M16 17l2-2"></path>
+                                    </svg>
+                                  {/if}
+                                  {qcol.name}
+                                </th>
+                              {/each}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              {#each qd.columns as qcol, qi}
+                                <td class="quick-view-td" class:quick-view-td-number={getDataTypeCategory(qcol.dataType) === 'number'}>
+                                  {#if qd.row[qi] === null}
+                                    <span class="null-value">NULL</span>
+                                  {:else if qd.row[qi] === ''}
+                                    <span class="empty-value">EMPTY</span>
+                                  {:else}
+                                    {qd.row[qi]}
+                                  {/if}
+                                </td>
+                              {/each}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </td>
+            </tr>
+          {/if}
         {/each}
 
         {#each pendingNewRows as newRow}
@@ -2227,5 +2348,151 @@
   .cell-required-empty {
     background: color-mix(in srgb, var(--color-danger, #ef4444) 12%, transparent);
     box-shadow: inset 2px 0 0 var(--color-danger, #ef4444);
+  }
+
+  .data-cell.cell-fk:hover {
+    cursor: pointer;
+  }
+
+  .data-cell.cell-fk:hover .cell-content {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-style: dotted;
+    text-decoration-color: var(--color-text-muted);
+  }
+
+  /* ── Quick view ─────────────────────────────────────────────────────────── */
+
+  .quick-view-row {
+    background: transparent;
+  }
+
+  .quick-view-cell {
+    padding: 0;
+    border-bottom: 2px solid var(--color-accent);
+    outline: none;
+  }
+
+  .quick-view-panel {
+    padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-primary));
+    border-top: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
+
+  .quick-view-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-2);
+    gap: var(--spacing-2);
+  }
+
+  .quick-view-title {
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .quick-view-table-name {
+    color: var(--color-accent);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .quick-view-sep {
+    color: var(--color-text-muted);
+    margin: 0 2px;
+  }
+
+  .quick-view-filter {
+    color: var(--color-text-secondary);
+  }
+
+  .quick-view-close {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    line-height: 1;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .quick-view-close:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border);
+    color: var(--color-text-primary);
+  }
+
+  .quick-view-empty {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .quick-view-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    scrollbar-color: var(--color-scrollbar-thumb) transparent;
+    scrollbar-width: thin;
+  }
+
+  .quick-view-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    white-space: nowrap;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .quick-view-th {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+    background: var(--color-table-header-bg);
+    border-bottom: 1px solid var(--color-border-strong);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .quick-view-th-pk {
+    color: var(--color-accent);
+  }
+
+  .quick-view-pk {
+    display: inline;
+    vertical-align: middle;
+    margin-right: 3px;
+    color: var(--color-accent);
+    position: relative;
+    top: -1px;
+  }
+
+  .quick-view-td {
+    padding: 6px 12px;
+    color: var(--color-text-primary);
+    font-size: 12.5px;
+  }
+
+  .quick-view-td-number {
+    font-family: var(--font-family-mono);
+    color: var(--color-editor-number);
   }
 </style>

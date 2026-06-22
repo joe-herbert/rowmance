@@ -2,12 +2,13 @@
   import { untrack } from 'svelte';
   import { executeQuery, updateRows, insertRow, deleteRows } from '$lib/tauri/query';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
-  import { listColumns, listIndexes } from '$lib/tauri/schema';
+  import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
-  import type { QueryResult, ColumnMeta } from '$lib/types';
+  import { usePanels } from '$lib/stores/panels.svelte';
+  import type { QueryResult, ColumnMeta, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
-  import DataTable, { type PageInfo } from '$lib/components/table/DataTable.svelte';
+  import DataTable, { type PageInfo, type QuickViewData } from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
   import FilterEditor, {
     type FilterEditorState,
@@ -38,6 +39,7 @@
 
   const connections = useConnections();
   const cellSelectionStore = useCellSelection();
+  const panelStore = usePanels();
   const statusBar = useStatusBar();
   const toast = useToast();
 
@@ -56,6 +58,7 @@
   let filterEditorTop = $state(0);
   let filterEditorLeft = $state(0);
   let result = $state<QueryResult | null>(null);
+  let foreignKeys = $state<ForeignKeyInfo[]>([]);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
 
@@ -314,11 +317,13 @@
     error = null;
     const t0 = performance.now();
     try {
-      const [queryResult, schemaColumns, indexes] = await Promise.all([
+      const [queryResult, schemaColumns, indexes, fks] = await Promise.all([
         executeQuery(connectionId, buildSql(), untrack(() => page), PAGE_SIZE),
         listColumns(connectionId, database, table).catch(() => []),
         listIndexes(connectionId, database, table).catch(() => []),
+        listForeignKeys(connectionId, database, table).catch(() => []),
       ]);
+      foreignKeys = fks;
 
       if (queryResult.error) {
         error = queryResult.error;
@@ -506,6 +511,61 @@
       row,
       columns: result.columns,
     });
+  }
+
+  function handleForeignKeyClick(colName: string, value: CellValue): void {
+    const fk = foreignKeys.find((f) => f.columns.includes(colName));
+    if (!fk) return;
+    const colIdx = fk.columns.indexOf(colName);
+    const refCol = fk.referencedColumns[colIdx];
+    if (!refCol) return;
+    const quotedCol = quoteIdentifier(refCol);
+    let filter: string;
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      filter = `${quotedCol} = ${value}`;
+    } else {
+      const escaped = String(value).replace(/'/g, "''");
+      filter = `${quotedCol} = '${escaped}'`;
+    }
+    panelStore.openInFocused({
+      kind: 'table_browser',
+      connectionId,
+      database,
+      table: fk.referencedTable,
+      initialFilter: filter,
+    });
+  }
+
+  async function handleForeignKeyQuickView(colName: string, value: CellValue): Promise<QuickViewData | null> {
+    const fk = foreignKeys.find((f) => f.columns.includes(colName));
+    if (!fk) return null;
+    const colIdx = fk.columns.indexOf(colName);
+    const refCol = fk.referencedColumns[colIdx];
+    if (!refCol) return null;
+    const quotedDb = quoteIdentifier(database);
+    const quotedTable = quoteIdentifier(fk.referencedTable);
+    const quotedCol = quoteIdentifier(refCol);
+    let whereVal: string;
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      whereVal = String(value);
+    } else {
+      const escaped = String(value).replace(/'/g, "''");
+      whereVal = `'${escaped}'`;
+    }
+    const sql = `SELECT * FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} = ${whereVal}`;
+    try {
+      const queryResult = await executeQuery(connectionId, sql, 1, 1);
+      if (queryResult.error) return null;
+      return {
+        tableName: fk.referencedTable,
+        refColumn: refCol,
+        refValue: value,
+        columns: queryResult.columns,
+        row: queryResult.rows[0] ?? null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   // ── DataTable pagination state ─────────────────────────────────────────────
@@ -933,6 +993,8 @@
           onCellSelect={handleCellSelect}
           onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}
+          onForeignKeyClick={foreignKeys.length > 0 ? handleForeignKeyClick : undefined}
+          onForeignKeyQuickView={foreignKeys.length > 0 ? handleForeignKeyQuickView : undefined}
         />
       {/key}
     {:else}
