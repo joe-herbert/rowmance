@@ -842,7 +842,6 @@
     color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    background: var(--color-bg-secondary);
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
     border-bottom: 1px solid var(--color-border);

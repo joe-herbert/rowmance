@@ -85,7 +85,7 @@ button {
 input,
 textarea,
 select,
-[contenteditable] {
+[contenteditable]:not(.cm-content) {
   font-family: inherit;
   font-size: inherit;
   color: inherit;

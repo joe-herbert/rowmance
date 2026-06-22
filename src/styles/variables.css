@@ -52,7 +52,7 @@
   --color-null: #a855f7;
 
   /* ── Editor colours ─────────────────────────────────────────────────────── */
-  --color-editor-bg: rgba(255, 255, 255, 0.62);
+  --color-editor-bg: rgba(255, 255, 255, 0.1);
   --color-editor-text: #26262f;
   --color-editor-gutter-bg: rgba(240, 238, 252, 0.6);
   --color-editor-gutter-text: rgba(38, 38, 47, 0.35);

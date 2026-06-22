@@ -33,7 +33,7 @@
     --color-warning-subtle: rgba(217, 119, 6, 0.18);
     --color-success-subtle: rgba(22, 163, 74, 0.18);
 
-    --color-editor-bg: rgba(10, 10, 20, 0.6);
+    --color-editor-bg: rgba(10, 10, 20, 0.2);
     --color-editor-text: #eef0f8;
     --color-editor-gutter-bg: rgba(10, 10, 20, 0.4);
     --color-editor-gutter-text: rgba(238, 240, 248, 0.3);
@@ -95,7 +95,7 @@
   --color-warning-subtle: rgba(217, 119, 6, 0.18);
   --color-success-subtle: rgba(22, 163, 74, 0.18);
 
-  --color-editor-bg: rgba(10, 10, 20, 0.6);
+  --color-editor-bg: rgba(10, 10, 20, 0.2);
   --color-editor-text: #eef0f8;
   --color-editor-gutter-bg: rgba(10, 10, 20, 0.4);
   --color-editor-gutter-text: rgba(238, 240, 248, 0.3);

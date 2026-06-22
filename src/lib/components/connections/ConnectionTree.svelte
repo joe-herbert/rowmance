@@ -15,6 +15,9 @@
   import * as schemaApi from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import Modal from '$lib/components/Modal.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import { portal } from '$lib/actions/portal';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
 
@@ -57,6 +60,33 @@
 
   interface ConfirmState { title: string; message: string; confirmText?: string; onconfirm: () => void }
   let confirmState = $state<ConfirmState | null>(null);
+  let errorModal = $state<{ title: string; message: string } | null>(null);
+
+  // ── Create modals ─────────────────────────────────────────────────────────
+
+  interface CreateDbModal { connectionId: string; dbType: string }
+  interface CreateTableColumn { name: string; type: string; nullable: boolean; primaryKey: boolean }
+  interface CreateTableFk { localColumn: string; refTable: string; refColumn: string; onDelete: string; onUpdate: string }
+  interface CreateTableModal { connectionId: string; database: string; dbType: string }
+
+  let createDbModal   = $state<CreateDbModal | null>(null);
+  let createDbName    = $state('');
+  let createDbError   = $state('');
+  let createDbLoading = $state(false);
+
+  let createTableModal   = $state<CreateTableModal | null>(null);
+  let createTableName    = $state('');
+  let createTableColumns = $state<CreateTableColumn[]>([]);
+  let createTableFks     = $state<CreateTableFk[]>([]);
+  let createTableError   = $state('');
+  let createTableLoading = $state(false);
+
+  const refActions = [
+    { value: 'NO ACTION', label: 'NO ACTION' },
+    { value: 'RESTRICT',  label: 'RESTRICT'  },
+    { value: 'CASCADE',   label: 'CASCADE'   },
+    { value: 'SET NULL',  label: 'SET NULL'  },
+  ];
 
   // ── Connection helpers ────────────────────────────────────────────────────
 
@@ -315,7 +345,7 @@
           schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
           await loadTables(connectionId, database);
         } catch (err) {
-          alert(errorMessage(err));
+          errorModal = { title: 'Drop Table Failed', message: errorMessage(err) };
         }
       },
     };
@@ -349,10 +379,116 @@
           schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
           expandedDatabases = new Set([...expandedDatabases].filter(k => k !== `${connectionId}/${database}`));
         } catch (err) {
-          alert(errorMessage(err));
+          errorModal = { title: 'Drop Failed', message: errorMessage(err) };
         }
       },
     };
+  }
+
+  // ── Create database ───────────────────────────────────────────────────────
+
+  function ctxNewDatabase() {
+    if (!connCtx) return;
+    const { profile } = connCtx;
+    connCtx = null;
+    createDbName = '';
+    createDbError = '';
+    createDbModal = { connectionId: profile.id, dbType: profile.dbType };
+  }
+
+  async function executeCreateDatabase() {
+    if (!createDbModal) return;
+    const name = createDbName.trim();
+    if (!name) { createDbError = 'Name is required'; return; }
+    const { connectionId, dbType } = createDbModal;
+    const sql = dbType === 'postgres'
+      ? `CREATE SCHEMA ${qi(name, dbType)}`
+      : `CREATE DATABASE ${qi(name, dbType)}`;
+    createDbLoading = true;
+    createDbError = '';
+    try {
+      await schemaApi.executeDdl(connectionId, sql);
+      schemaCache = new Map([...schemaCache].filter(([k]) => k !== connectionId));
+      await loadDatabases(connectionId);
+      createDbModal = null;
+    } catch (err) {
+      createDbError = errorMessage(err);
+    } finally {
+      createDbLoading = false;
+    }
+  }
+
+  // ── Create table ──────────────────────────────────────────────────────────
+
+  function defaultColumnType(dbType: string): string {
+    if (dbType === 'postgres') return 'SERIAL';
+    if (dbType === 'sqlite') return 'INTEGER';
+    return 'INT';
+  }
+
+  function columnTypes(dbType: string): string[] {
+    if (dbType === 'mysql' || dbType === 'mariadb') {
+      return ['INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'VARCHAR(255)', 'TEXT', 'LONGTEXT', 'DATETIME', 'DATE', 'FLOAT', 'DOUBLE', 'DECIMAL(10,2)', 'BOOLEAN', 'JSON'];
+    } else if (dbType === 'postgres') {
+      return ['INTEGER', 'BIGINT', 'SMALLINT', 'VARCHAR(255)', 'TEXT', 'TIMESTAMP', 'DATE', 'REAL', 'NUMERIC(10,2)', 'BOOLEAN', 'JSON', 'JSONB', 'UUID', 'SERIAL', 'BIGSERIAL'];
+    }
+    return ['INTEGER', 'TEXT', 'REAL', 'BLOB', 'NUMERIC'];
+  }
+
+  function ctxNewTable() {
+    if (!dbCtx) return;
+    const { connectionId, database } = dbCtx;
+    const profile = connectionStore.getById(connectionId);
+    dbCtx = null;
+    if (!profile) return;
+    createTableName = '';
+    createTableError = '';
+    createTableColumns = [{ name: 'id', type: defaultColumnType(profile.dbType), nullable: false, primaryKey: true }];
+    createTableFks = [];
+    createTableModal = { connectionId, database, dbType: profile.dbType };
+  }
+
+  async function executeCreateTable() {
+    if (!createTableModal) return;
+    const name = createTableName.trim();
+    if (!name) { createTableError = 'Table name is required'; return; }
+    const emptyCol = createTableColumns.find(c => !c.name.trim());
+    if (emptyCol) { createTableError = 'All columns must have a name'; return; }
+    const incompleteFk = createTableFks.find(fk => !fk.localColumn || !fk.refTable.trim() || !fk.refColumn.trim());
+    if (incompleteFk) { createTableError = 'All foreign keys must have a local column, referenced table, and referenced column'; return; }
+    const { connectionId, database, dbType } = createTableModal;
+    const q = (n: string) => qi(n, dbType);
+    const pkCols = createTableColumns.filter(c => c.primaryKey);
+    const colDefs = createTableColumns.map(c => {
+      let def = `  ${q(c.name.trim())} ${c.type}`;
+      if (!c.nullable) def += ' NOT NULL';
+      return def;
+    });
+    if (pkCols.length > 0) {
+      colDefs.push(`  PRIMARY KEY (${pkCols.map(c => q(c.name.trim())).join(', ')})`);
+    }
+    for (const fk of createTableFks) {
+      const fkName = `fk_${name}_${fk.localColumn}`;
+      colDefs.push(`  CONSTRAINT ${q(fkName)} FOREIGN KEY (${q(fk.localColumn)}) REFERENCES ${q(fk.refTable.trim())} (${q(fk.refColumn.trim())}) ON DELETE ${fk.onDelete} ON UPDATE ${fk.onUpdate}`);
+    }
+    const tablePath = dbType === 'sqlite' ? q(name) : `${q(database)}.${q(name)}`;
+    const sql = `CREATE TABLE ${tablePath} (\n${colDefs.join(',\n')}\n)`;
+    createTableLoading = true;
+    createTableError = '';
+    try {
+      await schemaApi.executeDdl(connectionId, sql);
+      const connMap = new Map(schemaCache.get(connectionId) ?? []);
+      connMap.set(database, []);
+      schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+      if (expandedDatabases.has(`${connectionId}/${database}`)) {
+        await loadTables(connectionId, database);
+      }
+      createTableModal = null;
+    } catch (err) {
+      createTableError = errorMessage(err);
+    } finally {
+      createTableLoading = false;
+    }
   }
 
   function handleWindowKeydown(e: KeyboardEvent) {
@@ -641,6 +777,10 @@
 {#if dbCtx}
   {@const dbCtxProfile = connectionStore.getById(dbCtx.connectionId)}
   <div class="ctx-menu" role="menu" style="top:{dbCtx.y}px;left:{dbCtx.x}px" use:portal>
+    {#if !dbCtxProfile?.readOnly}
+      <button class="ctx-item" role="menuitem" onclick={ctxNewTable}>New Table</button>
+      <div class="ctx-sep" role="separator"></div>
+    {/if}
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item" role="menuitem" onclick={() => { if (dbCtx) { navigator.clipboard.writeText(dbCtx.database); dbCtx = null; } }}>Copy Name</button>
@@ -665,6 +805,9 @@
   {@const connConnected = isConnected(connCtx.profile.id)}
   <div class="ctx-menu" role="menu" style="top:{connCtx.y}px;left:{connCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: connCtx.profile.id }); connCtx = null; } }}>New Query Editor</button>
+    {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dbType !== 'sqlite'}
+      <button class="ctx-item" role="menuitem" onclick={ctxNewDatabase}>New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</button>
+    {/if}
     <button class="ctx-item" role="menuitem" onclick={ctxManageUsers}>Manage Users</button>
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { editingProfile = connCtx.profile; connCtx = null; } }}>Edit</button>
@@ -679,6 +822,162 @@
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => { if (connCtx) { deleteConnection(connCtx.profile); connCtx = null; } }}>Delete</button>
   </div>
+{/if}
+
+{#if createDbModal}
+  {@const dbLabel = createDbModal.dbType === 'postgres' ? 'Schema' : 'Database'}
+  <Modal label="New {dbLabel}" onbackdropclick={() => { createDbModal = null; }}>
+    <div class="create-modal-card">
+      <div class="create-modal-title">New {dbLabel}</div>
+      <div class="create-modal-body">
+        <label class="field-label" for="create-db-name">{dbLabel} Name</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          id="create-db-name"
+          class="field-input"
+          type="text"
+          bind:value={createDbName}
+          placeholder="my_database"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck={false}
+          onkeydown={(e) => { if (e.key === 'Enter') executeCreateDatabase(); if (e.key === 'Escape') createDbModal = null; }}
+          autofocus
+        />
+        {#if createDbError}
+          <div class="field-error">{createDbError}</div>
+        {/if}
+      </div>
+      <div class="create-modal-footer">
+        <button class="btn" onclick={() => createDbModal = null}>Cancel</button>
+        <button class="btn btn--primary" onclick={executeCreateDatabase} disabled={createDbLoading}>
+          {createDbLoading ? 'Creating…' : 'Create'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+{#if createTableModal}
+  {@const types = columnTypes(createTableModal.dbType)}
+  <Modal label="New Table" onbackdropclick={() => { createTableModal = null; }}>
+    <div class="create-modal-card create-modal-card--wide">
+      <div class="create-modal-title">New Table in <span class="create-modal-db">{createTableModal.database}</span></div>
+      <div class="create-modal-body">
+        <div class="field-group">
+          <label class="field-label" for="create-table-name">Table Name</label>
+          <input
+            id="create-table-name"
+            class="field-input"
+            type="text"
+            bind:value={createTableName}
+            placeholder="my_table"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck={false}
+          />
+        </div>
+
+        <div class="cols-section">
+          <div class="cols-header">
+            <span class="field-label">Columns</span>
+            <button
+              class="btn-add-col"
+              onclick={() => { createTableColumns = [...createTableColumns, { name: '', type: types[0], nullable: true, primaryKey: false }]; }}
+            >+ Add Column</button>
+          </div>
+          <div class="cols-head-row">
+            <span class="col-cell-name">Name</span>
+            <span class="col-cell-type">Type</span>
+            <span class="col-cell-flag">Null</span>
+            <span class="col-cell-flag">PK</span>
+            <span class="col-cell-del"></span>
+          </div>
+          {#each createTableColumns as col, i}
+            <div class="col-row">
+              <input class="field-input col-name-input" type="text" bind:value={col.name} placeholder="column_name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck={false} />
+              <Select bind:value={col.type} options={types.map(t => ({ value: t, label: t }))} size="sm" mono={true} style="width:100%" />
+              <Checkbox bind:checked={col.nullable} size="sm" aria-label="Nullable" />
+              <Checkbox bind:checked={col.primaryKey} size="sm" aria-label="Primary key" />
+              <button
+                class="col-del-btn"
+                onclick={() => { createTableColumns = createTableColumns.filter((_, idx) => idx !== i); }}
+                disabled={createTableColumns.length <= 1}
+                aria-label="Remove column"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+          {/each}
+        </div>
+
+        {#if createTableModal.dbType !== 'sqlite'}
+          <div class="cols-section">
+            <div class="cols-header">
+              <span class="field-label">Foreign Keys</span>
+              <button
+                class="btn-add-col"
+                onclick={() => { createTableFks = [...createTableFks, { localColumn: createTableColumns[0]?.name ?? '', refTable: '', refColumn: '', onDelete: 'NO ACTION', onUpdate: 'NO ACTION' }]; }}
+              >+ Add FK</button>
+            </div>
+            {#each createTableFks as fk, i}
+              <div class="fk-card">
+                <div class="fk-row">
+                  <Select
+                    bind:value={fk.localColumn}
+                    options={createTableColumns.filter(c => c.name.trim()).map(c => ({ value: c.name, label: c.name }))}
+                    size="sm"
+                    aria-label="Local column"
+                    style="flex:1;min-width:0"
+                  />
+                  <span class="fk-arrow">→</span>
+                  <input
+                    class="field-input fk-input"
+                    type="text"
+                    bind:value={fk.refTable}
+                    placeholder="ref_table"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck={false}
+                  />
+                  <input
+                    class="field-input fk-input"
+                    type="text"
+                    bind:value={fk.refColumn}
+                    placeholder="ref_col"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck={false}
+                  />
+                  <button
+                    class="col-del-btn"
+                    onclick={() => { createTableFks = createTableFks.filter((_, idx) => idx !== i); }}
+                    aria-label="Remove foreign key"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+                </div>
+                <div class="fk-actions-row">
+                  <span class="fk-action-label">ON DELETE</span>
+                  <Select bind:value={fk.onDelete} options={refActions} size="sm" style="flex:1;min-width:0" />
+                  <span class="fk-action-label">ON UPDATE</span>
+                  <Select bind:value={fk.onUpdate} options={refActions} size="sm" style="flex:1;min-width:0" />
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if createTableError}
+          <div class="field-error">{createTableError}</div>
+        {/if}
+      </div>
+      <div class="create-modal-footer">
+        <button class="btn" onclick={() => createTableModal = null}>Cancel</button>
+        <button class="btn btn--primary" onclick={executeCreateTable} disabled={createTableLoading}>
+          {createTableLoading ? 'Creating…' : 'Create Table'}
+        </button>
+      </div>
+    </div>
+  </Modal>
 {/if}
 
 {#if showAddForm}
@@ -705,6 +1004,20 @@
     onconfirm={confirmState.onconfirm}
     oncancel={() => (confirmState = null)}
   />
+{/if}
+
+{#if errorModal}
+  <Modal label={errorModal.title} onbackdropclick={() => (errorModal = null)}>
+    <div class="create-modal-card">
+      <div class="create-modal-title">{errorModal.title}</div>
+      <div class="create-modal-body">
+        <p class="error-modal-message">{errorModal.message}</p>
+      </div>
+      <div class="create-modal-footer">
+        <button class="btn btn--primary" onclick={() => (errorModal = null)}>OK</button>
+      </div>
+    </div>
+  </Modal>
 {/if}
 
 <style>
@@ -1138,5 +1451,244 @@
     height: 1px;
     margin: var(--spacing-1) 0;
     background: var(--color-border);
+  }
+
+  /* ── Create modals ── */
+
+  .create-modal-card {
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    width: 340px;
+    max-width: 94vw;
+    overflow: hidden;
+    animation: modal-in 140ms ease both;
+  }
+
+  .create-modal-card--wide {
+    width: 520px;
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0); }
+  }
+
+  .create-modal-title {
+    padding: var(--spacing-4) var(--spacing-4) var(--spacing-3);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .create-modal-db {
+    font-weight: var(--font-weight-normal);
+    color: var(--color-text-secondary);
+  }
+
+  .create-modal-body {
+    padding: var(--spacing-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .create-modal-footer {
+    padding: var(--spacing-3) var(--spacing-4);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    justify-content: flex-end;
+  }
+
+  .error-modal-message {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-normal);
+    word-break: break-word;
+  }
+
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    letter-spacing: 0.03em;
+  }
+
+  .field-input {
+    height: 30px;
+    padding: 0 var(--spacing-2);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    outline: none;
+    transition: border-color var(--transition-fast);
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .field-input:focus { border-color: var(--color-accent); }
+
+  .field-error {
+    font-size: 11.5px;
+    color: var(--color-danger);
+  }
+
+  /* Columns table */
+
+  .cols-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .cols-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .btn-add-col {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--color-accent);
+    background: transparent;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family-ui);
+    transition: background var(--transition-fast);
+  }
+
+  .btn-add-col:hover { background: var(--color-accent-subtle); }
+
+  .cols-head-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 40px 40px 24px;
+    gap: 6px;
+    padding: 0 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    letter-spacing: 0.03em;
+  }
+
+  .col-cell-flag { text-align: center; }
+
+  .col-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 40px 40px 24px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .col-name-input {
+    min-width: 0;
+  }
+
+  .col-del-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .col-del-btn:hover:not(:disabled) { background: var(--color-danger-subtle); color: var(--color-danger); }
+  .col-del-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* Shared modal buttons */
+
+  .btn {
+    height: 28px;
+    padding: 0 14px;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    font-family: var(--font-family-ui);
+  }
+
+  .btn:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .btn--primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: white;
+  }
+
+  .btn--primary:hover { opacity: 0.88; border-color: var(--color-accent); background: var(--color-accent); color: white; }
+  .btn--primary:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── FK cards ── */
+
+  .fk-card {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-secondary);
+  }
+
+  .fk-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fk-arrow {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .fk-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .fk-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fk-action-label {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    letter-spacing: 0.03em;
   }
 </style>

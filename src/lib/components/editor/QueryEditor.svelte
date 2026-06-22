@@ -592,7 +592,6 @@
     align-items: center;
     gap: var(--spacing-2);
     padding: 0 var(--spacing-3);
-    background: var(--color-bg-secondary);
     border-bottom: 1px solid var(--color-border);
     min-height: var(--toolbar-height);
     max-height: var(--toolbar-height);
