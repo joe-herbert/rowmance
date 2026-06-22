@@ -43,20 +43,27 @@
 
   let expandedGroups = $state<Set<string>>(new Set());
   let ungroupedExpanded = $state(true);
-  let renamingGroupId = $state<string | null>(null);
-  let renameValue = $state('');
+  let renamingGroupId   = $state<string | null>(null);
+  let renameValue       = $state('');
+  let renameError       = $state('');
+  let renameLoading     = $state(false);
 
   // ── Context menus ─────────────────────────────────────────────────────────
 
-  interface TableCtxMenu { x: number; y: number; connectionId: string; database: string; table: TableInfo }
-  interface DbCtxMenu    { x: number; y: number; connectionId: string; database: string }
-  interface GrpCtxMenu   { x: number; y: number; group: ConnectionGroup }
-  interface ConnCtxMenu  { x: number; y: number; profile: ConnectionProfile }
+  interface TableCtxMenu  { x: number; y: number; connectionId: string; database: string; table: TableInfo }
+  interface DbCtxMenu     { x: number; y: number; connectionId: string; database: string }
+  interface GrpCtxMenu    { x: number; y: number; group: ConnectionGroup }
+  interface ConnCtxMenu   { x: number; y: number; profile: ConnectionProfile }
+  interface PanelCtxMenu  { x: number; y: number }
 
-  let tableCtx = $state<TableCtxMenu | null>(null);
-  let dbCtx    = $state<DbCtxMenu | null>(null);
-  let grpCtx   = $state<GrpCtxMenu | null>(null);
-  let connCtx  = $state<ConnCtxMenu | null>(null);
+  let tableCtx  = $state<TableCtxMenu | null>(null);
+  let dbCtx     = $state<DbCtxMenu | null>(null);
+  let grpCtx    = $state<GrpCtxMenu | null>(null);
+  let connCtx   = $state<ConnCtxMenu | null>(null);
+  let panelCtx  = $state<PanelCtxMenu | null>(null);
+
+  let moveToGroupSubmenuOpen = $state(false);
+  let moveToGroupSubmenuTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
   interface ConfirmState { title: string; message: string; confirmText?: string; onconfirm: () => void }
   let confirmState = $state<ConfirmState | null>(null);
@@ -201,10 +208,17 @@
 
   async function commitRename() {
     if (!renamingGroupId || !renameValue.trim()) { renamingGroupId = null; return; }
+    renameLoading = true;
+    renameError   = '';
     try {
       await connectionsApi.updateConnectionGroup(renamingGroupId, { name: renameValue.trim() });
       await connectionStore.load();
-    } catch { /* ignore */ } finally { renamingGroupId = null; }
+      renamingGroupId = null;
+    } catch (e) {
+      renameError = errorMessage(e);
+    } finally {
+      renameLoading = false;
+    }
   }
 
   function deleteGroup(group: ConnectionGroup) {
@@ -222,9 +236,43 @@
     };
   }
 
+  // ── Group creation ────────────────────────────────────────────────────────
+
+  let createGroupModal  = $state(false);
+  let newGroupName      = $state('');
+  let newGroupError     = $state('');
+  let newGroupLoading   = $state(false);
+
+  function startCreateGroup() {
+    closeAllCtx();
+    newGroupName  = '';
+    newGroupError = '';
+    createGroupModal = true;
+  }
+
+  async function commitCreateGroup() {
+    const name = newGroupName.trim();
+    if (!name) return;
+    newGroupLoading = true;
+    newGroupError   = '';
+    try {
+      await connectionsApi.createConnectionGroup(name);
+      await connectionStore.load();
+      createGroupModal = false;
+    } catch (e) {
+      newGroupError = errorMessage(e);
+    } finally {
+      newGroupLoading = false;
+    }
+  }
+
   // ── Context menu helpers ──────────────────────────────────────────────────
 
-  function closeAllCtx() { tableCtx = null; dbCtx = null; grpCtx = null; connCtx = null; }
+  function closeAllCtx() {
+    tableCtx = null; dbCtx = null; grpCtx = null; connCtx = null; panelCtx = null;
+    moveToGroupSubmenuOpen = false;
+    if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
+  }
 
   function showTableCtx(e: MouseEvent, connectionId: string, database: string, table: TableInfo) {
     e.preventDefault();
@@ -246,8 +294,44 @@
 
   function showConnCtx(e: MouseEvent, profile: ConnectionProfile) {
     e.preventDefault();
+    e.stopPropagation();
     closeAllCtx();
     connCtx = { x: e.clientX, y: e.clientY, profile };
+  }
+
+  function showPanelCtx(e: MouseEvent) {
+    e.preventDefault();
+    closeAllCtx();
+    panelCtx = { x: e.clientX, y: e.clientY };
+  }
+
+  async function ctxMoveToGroup(groupId: string | null) {
+    if (!connCtx) return;
+    const { profile } = connCtx;
+    connCtx = null;
+    await connectionStore.update(profile.id, {
+      name: profile.name,
+      dbType: profile.dbType,
+      host: profile.host,
+      port: profile.port,
+      database: profile.database,
+      username: profile.username,
+      color: profile.color,
+      readOnly: profile.readOnly,
+      groupId,
+      sshEnabled: profile.sshEnabled,
+      sshHost: profile.sshHost,
+      sshPort: profile.sshPort,
+      sshUser: profile.sshUser,
+      sshAuthType: profile.sshAuthType,
+      sshKeyPath: profile.sshKeyPath,
+      sslEnabled: profile.sslEnabled,
+      sslCaPath: profile.sslCaPath,
+      sslCertPath: profile.sslCertPath,
+      sslKeyPath: profile.sslKeyPath,
+      poolMin: profile.poolMin,
+      poolMax: profile.poolMax,
+    });
   }
 
   async function ctxConnToggleReadOnly() {
@@ -492,7 +576,7 @@
   }
 
   function handleWindowKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') { closeAllCtx(); if (renamingGroupId) renamingGroupId = null; }
+    if (e.key === 'Escape') { closeAllCtx(); renamingGroupId = null; }
   }
 
   function handleWindowClick(e: MouseEvent) {
@@ -525,15 +609,18 @@
 
 <svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="connection-tree">
   <!-- Section header -->
-  <div class="tree-header no-select">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="tree-header no-select" oncontextmenu={showPanelCtx}>
     <span class="header-label">CONNECTIONS</span>
     <span class="header-count">{connectionStore.profiles.length}</span>
   </div>
 
   <!-- Scrollable list -->
-  <div class="tree-scroll gscroll">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="tree-scroll gscroll" oncontextmenu={(e) => { if ((e.target as Element).closest('.conn-item,.group-section,.ctx-menu')) return; showPanelCtx(e); }}>
     {#if connectionStore.profiles.length === 0 && connectionStore.groups.length === 0}
       <div class="empty-state">
         <p>No connections yet.</p>
@@ -548,6 +635,7 @@
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </span>
             <span class="group-name">Ungrouped</span>
+            <span class="group-count">{grouped().ungrouped.length}</span>
           </button>
           {#if ungroupedExpanded}
             {#each grouped().ungrouped as profile (profile.id)}
@@ -567,26 +655,13 @@
         {@const groupProfiles = grouped().byGroup.get(group.id) ?? []}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
-          {#if renamingGroupId === group.id}
-            <!-- svelte-ignore a11y_autofocus -->
-            <input
-              class="rename-input"
-              type="text"
-              bind:value={renameValue}
-              onblur={commitRename}
-              onkeydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') renamingGroupId = null; }}
-              aria-label="Rename group"
-              autofocus
-            />
-          {:else}
-            <button class="group-row" onclick={() => toggleGroup(group.id)}>
-              <span class="chevron" class:open={isExpanded} aria-hidden="true">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-              </span>
-              <span class="group-name">{group.name}</span>
-              <span class="group-count">{groupProfiles.length}</span>
-            </button>
-          {/if}
+          <button class="group-row" onclick={() => toggleGroup(group.id)}>
+            <span class="chevron" class:open={isExpanded} aria-hidden="true">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </span>
+            <span class="group-name">{group.name}</span>
+            <span class="group-count">{groupProfiles.length}</span>
+          </button>
           {#if isExpanded}
             {#each groupProfiles as profile (profile.id)}
               {@render connectionRow(profile)}
@@ -761,6 +836,13 @@
 {/snippet}
 
 <!-- Context menus -->
+{#if panelCtx}
+  <div class="ctx-menu" role="menu" style="top:{panelCtx.y}px;left:{panelCtx.x}px" use:portal>
+    <button class="ctx-item" role="menuitem" onclick={() => { panelCtx = null; newConnectionGroupId = undefined; showAddForm = true; }}>New Connection</button>
+    <button class="ctx-item" role="menuitem" onclick={startCreateGroup}>New Group</button>
+  </div>
+{/if}
+
 {#if tableCtx}
   {@const tableCtxProfile = connectionStore.getById(tableCtx.connectionId)}
   <div class="ctx-menu" role="menu" style="top:{tableCtx.y}px;left:{tableCtx.x}px" use:portal>
@@ -796,7 +878,7 @@
 {#if grpCtx}
   <div class="ctx-menu" role="menu" style="top:{grpCtx.y}px;left:{grpCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { newConnectionGroupId = grpCtx.group.id; showAddForm = true; grpCtx = null; } }}>New Connection in Group</button>
-    <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { renamingGroupId = grpCtx.group.id; renameValue = grpCtx.group.name; grpCtx = null; } }}>Rename Group</button>
+    <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { renamingGroupId = grpCtx.group.id; renameValue = grpCtx.group.name; renameError = ''; grpCtx = null; } }}>Rename Group</button>
     <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</button>
   </div>
 {/if}
@@ -823,6 +905,47 @@
     {:else}
       <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</button>
     {/if}
+    <div class="ctx-sep" role="separator"></div>
+    {#if connCtx.profile.groupId !== null}
+      <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(null)}>Remove from Group</button>
+    {/if}
+    {#if connectionStore.groups.length > 0}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="ctx-item ctx-item--submenu"
+        role="menuitem"
+        aria-haspopup="true"
+        onmouseenter={() => {
+          if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
+          moveToGroupSubmenuOpen = true;
+        }}
+        onmouseleave={() => {
+          moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150);
+        }}
+      >
+        Move to Group
+        <svg class="ctx-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        {#if moveToGroupSubmenuOpen}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="ctx-submenu"
+            role="menu"
+            onmouseenter={() => {
+              if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
+            }}
+            onmouseleave={() => {
+              moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150);
+            }}
+          >
+            {#each connectionStore.groups.filter(g => g.id !== connCtx.profile.groupId) as g (g.id)}
+              <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(g.id)}>{g.name}</button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <div class="ctx-sep" role="separator"></div>
+    {/if}
+    <button class="ctx-item" role="menuitem" onclick={() => { connCtx = null; startCreateGroup(); }}>New Group</button>
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => { if (connCtx) { deleteConnection(connCtx.profile); connCtx = null; } }}>Delete</button>
   </div>
@@ -857,6 +980,73 @@
         <button class="btn" onclick={() => createDbModal = null}>Cancel</button>
         <button class="btn btn--primary" onclick={executeCreateDatabase} disabled={createDbLoading}>
           {createDbLoading ? 'Creating…' : 'Create'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+{#if createGroupModal}
+  <Modal label="New Group" onbackdropclick={() => { createGroupModal = false; }}>
+    <div class="create-modal-card">
+      <div class="create-modal-title">New Group</div>
+      <div class="create-modal-body">
+        <label class="field-label" for="create-group-name">Group Name</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          id="create-group-name"
+          class="field-input"
+          type="text"
+          bind:value={newGroupName}
+          placeholder="Production"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck={false}
+          onkeydown={(e) => { if (e.key === 'Enter') commitCreateGroup(); if (e.key === 'Escape') createGroupModal = false; }}
+          autofocus
+        />
+        {#if newGroupError}
+          <div class="field-error">{newGroupError}</div>
+        {/if}
+      </div>
+      <div class="create-modal-footer">
+        <button class="btn" onclick={() => createGroupModal = false}>Cancel</button>
+        <button class="btn btn--primary" onclick={commitCreateGroup} disabled={newGroupLoading}>
+          {newGroupLoading ? 'Creating…' : 'Create'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+{#if renamingGroupId}
+  <Modal label="Rename Group" onbackdropclick={() => { renamingGroupId = null; }}>
+    <div class="create-modal-card">
+      <div class="create-modal-title">Rename Group</div>
+      <div class="create-modal-body">
+        <label class="field-label" for="rename-group-name">Group Name</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          id="rename-group-name"
+          class="field-input"
+          type="text"
+          bind:value={renameValue}
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck={false}
+          onkeydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') renamingGroupId = null; }}
+          autofocus
+        />
+        {#if renameError}
+          <div class="field-error">{renameError}</div>
+        {/if}
+      </div>
+      <div class="create-modal-footer">
+        <button class="btn" onclick={() => renamingGroupId = null}>Cancel</button>
+        <button class="btn btn--primary" onclick={commitRename} disabled={renameLoading}>
+          {renameLoading ? 'Saving…' : 'Save'}
         </button>
       </div>
     </div>
@@ -1450,6 +1640,37 @@
 
   .ctx-item:hover { background: var(--color-bg-active); }
   .ctx-item--danger { color: var(--color-danger); }
+  .ctx-item--active { color: var(--color-accent); }
+
+  .ctx-item--submenu {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: default;
+    user-select: none;
+  }
+  .ctx-item--submenu:hover { background: var(--color-bg-active); }
+
+  .ctx-caret {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .ctx-submenu {
+    position: absolute;
+    top: -4px;
+    left: 100%;
+    min-width: 140px;
+    padding: var(--spacing-1) 0;
+    background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    z-index: 1;
+  }
 
   .ctx-sep {
     height: 1px;
