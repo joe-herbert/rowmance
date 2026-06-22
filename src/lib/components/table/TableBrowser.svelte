@@ -813,7 +813,7 @@
       {/if}
     </button>
 
-    <div class="toolbar-spacer"></div>
+    <div class="toolbar-right">
 
     {#if dtPageInfo !== null}
       <span class="row-range">
@@ -1018,6 +1018,7 @@
     >
       <RefreshIcon />
     </button>
+    </div>
   </div>
 
   {#if filterStateIsActive(filterEditorState)}
@@ -1208,13 +1209,13 @@
   }
 
   .toolbar {
-    flex: 0 0 var(--toolbar-height);
+    flex-shrink: 0;
     min-height: var(--toolbar-height);
-    max-height: var(--toolbar-height);
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--spacing-2);
-    padding: 0 var(--spacing-3);
+    padding: var(--spacing-1) var(--spacing-3);
     border-bottom: 1px solid var(--color-border);
     overflow: visible;
     position: relative;
@@ -1257,8 +1258,12 @@
     font-family: var(--font-family-mono);
   }
 
-  .toolbar-spacer {
-    flex: 1;
+  .toolbar-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-2);
+    margin-left: auto;
   }
 
   .row-range {
