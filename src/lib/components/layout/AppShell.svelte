@@ -58,6 +58,8 @@
     return null;
   });
 
+  const isConnected = $derived(activeConnection ? connectionsStore.isActive(activeConnection.id) : false);
+
   type ViewMode = 'data' | 'structure' | 'sql';
 
   const activeView = $derived.by((): ViewMode | null => {
@@ -246,7 +248,7 @@
   });
 
   $effect(() => {
-    if (!connChipOpen || !activeConnection) return;
+    if (!connChipOpen || !activeConnection || !isConnected) return;
     const id = activeConnection.id;
 
     function update() {
@@ -283,6 +285,19 @@
       await connectionsStore.disconnect(activeConnection.id);
     } finally {
       disconnecting = false;
+      connChipOpen = false;
+    }
+  }
+
+  let connecting = $state(false);
+
+  async function handleConnect() {
+    if (!activeConnection) return;
+    connecting = true;
+    try {
+      await connectionsStore.connect(activeConnection.id);
+    } finally {
+      connecting = false;
       connChipOpen = false;
     }
   }
@@ -521,15 +536,29 @@
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
-      Connected {elapsedDisplay}
+      {#if isConnected}
+        Connected {elapsedDisplay}
+      {:else}
+        Disconnected
+      {/if}
     </div>
-    <button
-      class="conn-popup-disconnect"
-      onclick={handleDisconnect}
-      disabled={disconnecting}
-    >
-      {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-    </button>
+    {#if isConnected}
+      <button
+        class="conn-popup-disconnect"
+        onclick={handleDisconnect}
+        disabled={disconnecting}
+      >
+        {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+      </button>
+    {:else}
+      <button
+        class="conn-popup-disconnect"
+        onclick={handleConnect}
+        disabled={connecting}
+      >
+        {connecting ? 'Connecting…' : 'Connect'}
+      </button>
+    {/if}
   </div>
 {/if}
 
