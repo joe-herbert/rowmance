@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
-  WebviewWindow: vi.fn(),
+  WebviewWindow: vi.fn().mockImplementation(() => ({ once: vi.fn() })),
 }));
 
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -10,7 +10,8 @@ import { openNewWindow } from './window';
 const MockWebviewWindow = vi.mocked(WebviewWindow);
 
 beforeEach(() => {
-  MockWebviewWindow.mockReset();
+  MockWebviewWindow.mockClear();
+  MockWebviewWindow.mockImplementation(() => ({ once: vi.fn() }));
 });
 
 describe('openNewWindow', () => {

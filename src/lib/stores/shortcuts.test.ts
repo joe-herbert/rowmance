@@ -41,11 +41,12 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
   'NEW_QUERY_EDITOR',
   'NEW_WINDOW',
   'OPEN_SETTINGS',
+  'TOGGLE_SYSTEM_ITEMS',
 ];
 
 describe('SHORTCUT_DEFINITIONS', () => {
-  it('contains exactly 22 action definitions', () => {
-    expect(SHORTCUT_DEFINITIONS).toHaveLength(22);
+  it('contains exactly 23 action definitions', () => {
+    expect(SHORTCUT_DEFINITIONS).toHaveLength(23);
   });
 
   it('contains all expected action IDs', () => {
