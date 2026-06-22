@@ -23,19 +23,25 @@
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
 
-  // ── Sidebar widths (persisted as CSS variables) ───────────────────────────
-
-  let leftWidth = $state(240);
-  let leftVisible = $state(true);
-  let rightWidth = $state(280);
-  let rightVisible = $state(true);
-
-  const SIDEBAR_INSET = 0;
-
-  // ── Update notification ───────────────────────────────────────────────────
+  // ── Settings ──────────────────────────────────────────────────────────────
 
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
+
+  // ── Sidebar widths (persisted as CSS variables) ───────────────────────────
+
+  let leftWidth = $state(240);
+  let leftVisible = $state(settings.leftSidebarVisible);
+  let rightWidth = $state(280);
+  type RightPanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations';
+
+  let rightVisible = $state(settings.rightSidebarVisible);
+  let activeRightPanel = $state<RightPanel>((settings.rightSidebarPanel as RightPanel) || 'history');
+
+  const SIDEBAR_INSET = 0;
+
+  // ── Stores ────────────────────────────────────────────────────────────────
+
   const panelStore = usePanels();
   const shortcutsStore = useShortcuts();
   const connectionsStore = useConnections();
@@ -164,10 +170,12 @@
 
   function toggleLeftSidebar() {
     leftVisible = !leftVisible;
+    settingsStore.set('leftSidebarVisible', leftVisible);
   }
 
   function toggleRightSidebar() {
     rightVisible = !rightVisible;
+    settingsStore.set('rightSidebarVisible', rightVisible);
   }
 
   function handleShortcutAction(e: Event) {
@@ -457,7 +465,7 @@
   <!-- Right sidebar (toggleable) -->
   {#if rightVisible}
     <aside class="right-sidebar" style="width: {rightWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
-      <RightSidebar onClose={toggleRightSidebar} />
+      <RightSidebar onClose={toggleRightSidebar} initialPanel={activeRightPanel} onPanelChange={(p) => { activeRightPanel = (p ?? 'history') as RightPanel; settingsStore.set('rightSidebarPanel', activeRightPanel); }} />
     </aside>
   {/if}
 

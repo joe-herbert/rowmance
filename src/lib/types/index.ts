@@ -247,6 +247,9 @@ export interface AppSettings {
   transactionMode: boolean;
   historyMaxEntries: number;
   sidebarFloating: boolean;
+  leftSidebarVisible: boolean;
+  rightSidebarVisible: boolean;
+  rightSidebarPanel: string;
   clickOutsideEdit: 'discard' | 'confirm';
   systemDatabases: string[];
   systemTablePatterns: string[];
@@ -267,6 +270,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   transactionMode: false,
   historyMaxEntries: 500,
   sidebarFloating: false,
+  leftSidebarVisible: true,
+  rightSidebarVisible: false,
+  rightSidebarPanel: 'history',
   clickOutsideEdit: 'discard',
   systemDatabases: [...BUILTIN_DATABASES],
   systemTablePatterns: [...BUILTIN_TABLE_PATTERNS],

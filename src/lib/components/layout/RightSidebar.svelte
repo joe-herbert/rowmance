@@ -19,21 +19,24 @@
 
   interface Props {
     onClose: () => void;
+    initialPanel?: ActivePanel;
+    onPanelChange?: (panel: ActivePanel) => void;
   }
 
-  const { onClose }: Props = $props();
+  const { onClose, initialPanel = 'history', onPanelChange }: Props = $props();
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
   const cellSelectionStore = useCellSelection();
 
-  let activePanel = $state<ActivePanel>('history');
+  let activePanel = $state<ActivePanel>(initialPanel);
 
   function selectPanel(panel: ActivePanel) {
     if (activePanel === panel) {
       onClose();
     } else {
       activePanel = panel;
+      onPanelChange?.(panel);
       if (panel === 'history') loadHistory();
       if (panel === 'saved') loadSavedQueries();
       if (panel === 'column') columnInspectorKey = null;
