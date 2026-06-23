@@ -556,7 +556,7 @@
       </button>
     {:else}
       <button
-        class="conn-popup-disconnect"
+        class="conn-popup-connect"
         onclick={handleConnect}
         disabled={connecting}
       >
@@ -773,6 +773,32 @@
   }
 
   .conn-popup-disconnect:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .conn-popup-connect {
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    align-self: stretch;
+    text-align: center;
+  }
+
+  .conn-popup-connect:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .conn-popup-connect:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
