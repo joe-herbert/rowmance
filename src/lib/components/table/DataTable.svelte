@@ -594,12 +594,23 @@
   let editTarget = $state<EditTarget | null>(null);
   let modalTarget = $state<EditTarget | null>(null);
   let tableContainerEl = $state<HTMLDivElement | null>(null);
+  let tableScrollEl = $state<HTMLDivElement | null>(null);
+  let tableScrollWidth = $state(0);
+
+  $effect(() => {
+    if (!tableScrollEl) return;
+    tableScrollWidth = tableScrollEl.clientWidth;
+    const ro = new ResizeObserver(() => { tableScrollWidth = tableScrollEl!.clientWidth; });
+    ro.observe(tableScrollEl);
+    return () => ro.disconnect();
+  });
 
   // ── Quick view state ──────────────────────────────────────────────────────
 
   let quickViewState = $state<{
     triggerRowKey: string;
     triggerColName: string;
+    triggerCellValue: CellValue;
     loading: boolean;
     data: QuickViewData | null;
   } | null>(null);
@@ -610,15 +621,15 @@
       quickViewState = null;
       return;
     }
-    quickViewState = { triggerRowKey: rowKey, triggerColName: colName, loading: true, data: null };
+    quickViewState = { triggerRowKey: rowKey, triggerColName: colName, triggerCellValue: cellValue, loading: true, data: null };
     try {
       const data = await onForeignKeyQuickView(colName, cellValue);
       if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
-        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, loading: false, data };
+        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, triggerCellValue: cellValue, loading: false, data };
       }
     } catch {
       if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
-        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, loading: false, data: null };
+        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, triggerCellValue: cellValue, loading: false, data: null };
       }
     }
   }
@@ -859,6 +870,7 @@
     if (rowCount === 0 || colCount === 0) return;
 
     if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+      if (window.getSelection()?.toString()) return;
       e.preventDefault();
       copySelection();
       return;
@@ -1595,7 +1607,7 @@
   }}
 >
 
-  <div class="table-scroll" class:selecting={isDraggingSelection} ondblclick={(e) => { if (editable && !readOnly && !(e.target as Element).closest('tr')) onAddRow?.(); }}>
+  <div class="table-scroll" class:selecting={isDraggingSelection} bind:this={tableScrollEl} ondblclick={(e) => { if (editable && !readOnly && !(e.target as Element).closest('tr')) onAddRow?.(); }}>
     <table class="data-table">
       <thead>
         <tr class="header-row">
@@ -1778,23 +1790,27 @@
               <td class="quick-view-cell" colspan={visibleColumns.length + 1} tabindex="-1">
                 {#if quickViewState.loading}
                   <div class="quick-view-panel">
-                    <div class="quick-view-header">
+                    <div class="quick-view-header" style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))">
                       <span class="quick-view-title">Loading…</span>
-                      <!-- svelte-ignore a11y_autofocus -->
-                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                      <button class="quick-view-close" onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                     </div>
                   </div>
                 {:else if quickViewState.data !== null}
                   {@const qd = quickViewState.data}
                   <div class="quick-view-panel">
-                    <div class="quick-view-header">
+                    <div class="quick-view-header" style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))">
                       <span class="quick-view-title">
                         <span class="quick-view-table-name">{qd.tableName}</span>
                         <span class="quick-view-sep"> · </span>
                         <span class="quick-view-filter">{qd.refColumn} = {qd.refValue}</span>
                       </span>
-                      <!-- svelte-ignore a11y_autofocus -->
-                      <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                      <div class="quick-view-actions">
+                        {#if onForeignKeyClick}
+                          <button class="quick-view-go" onclick={() => { onForeignKeyClick!(quickViewState!.triggerColName, quickViewState!.triggerCellValue); quickViewState = null; }} aria-label="Go to row in table"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></button>
+                        {/if}
+                        <!-- svelte-ignore a11y_autofocus -->
+                        <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                      </div>
                     </div>
                     {#if qd.row === null}
                       <div class="quick-view-empty">No matching row found</div>
@@ -2193,6 +2209,7 @@
     white-space: nowrap;
     overflow: hidden;
     box-sizing: border-box;
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -2324,6 +2341,7 @@
     font-size: 11px;
     font-family: var(--font-family-mono);
     color: var(--color-text-muted);
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -2356,6 +2374,7 @@
     font-size: 14px;
     font-weight: bold;
     color: var(--color-danger);
+    -webkit-user-select: none;
     user-select: none;
     line-height: 1;
   }
@@ -2417,6 +2436,7 @@
   }
 
   .table-scroll.selecting {
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -2523,6 +2543,7 @@
     font-size: 13px;
     font-weight: var(--font-weight-semibold);
     color: var(--color-success, #22c55e);
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -2566,6 +2587,9 @@
     justify-content: space-between;
     margin-bottom: var(--spacing-2);
     gap: var(--spacing-2);
+    position: sticky;
+    left: var(--spacing-3);
+    z-index: 2;
   }
 
   .quick-view-title {
@@ -2595,6 +2619,14 @@
     color: var(--color-text-secondary);
   }
 
+  .quick-view-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    flex-shrink: 0;
+  }
+
+  .quick-view-go,
   .quick-view-close {
     flex-shrink: 0;
     display: flex;
@@ -2613,6 +2645,7 @@
     transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   }
 
+  .quick-view-go:hover,
   .quick-view-close:hover {
     background: var(--color-bg-hover);
     border-color: var(--color-border);
@@ -2671,6 +2704,8 @@
     padding: 6px 12px;
     color: var(--color-text-primary);
     font-size: 12.5px;
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   .quick-view-td-number {

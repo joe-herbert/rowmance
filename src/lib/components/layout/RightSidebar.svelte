@@ -982,6 +982,7 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
     transition: background var(--transition-fast);
+    -webkit-user-select: none;
     user-select: none;
   }
 

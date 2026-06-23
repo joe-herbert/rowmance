@@ -57,6 +57,14 @@ export function useVirtualRelations() {
       );
     },
 
+    /** Whether any virtual relation has the given column on the "from" (child/referencing) side. */
+    hasForwardFrom(connectionId: string, database: string, table: string, column: string): boolean {
+      return relations.some(
+        (r) =>
+          r.from.connectionId === connectionId && r.from.database === database && r.from.table === table && r.from.column === column,
+      );
+    },
+
     /** Whether any virtual relation involves any column of the given table (as "from" side). */
     hasAnyForTable(connectionId: string, database: string, table: string): boolean {
       return relations.some(

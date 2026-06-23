@@ -1303,6 +1303,7 @@
     border-radius: 6px;
     cursor: pointer;
     transition: background var(--transition-fast);
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -1511,6 +1512,7 @@
     text-align: left;
     border-radius: 7px;
     cursor: pointer;
+    -webkit-user-select: none;
     user-select: none;
     transition: background var(--transition-fast);
     background: transparent;
@@ -1537,6 +1539,7 @@
     text-align: left;
     border-radius: 8px;
     cursor: pointer;
+    -webkit-user-select: none;
     user-select: none;
     transition: background var(--transition-fast), color var(--transition-fast);
     background: transparent;
@@ -1658,6 +1661,7 @@
     align-items: center;
     justify-content: space-between;
     cursor: default;
+    -webkit-user-select: none;
     user-select: none;
   }
   .ctx-item--submenu:hover { background: var(--color-bg-active); }

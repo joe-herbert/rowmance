@@ -461,6 +461,7 @@
     color: var(--color-danger);
     background: var(--color-danger-subtle);
     border-radius: var(--radius-sm);
+    -webkit-user-select: text;
     user-select: text;
   }
 
@@ -564,6 +565,7 @@
     padding: var(--spacing-2);
     font-size: var(--font-size-xs);
     color: var(--color-danger);
+    -webkit-user-select: text;
     user-select: text;
   }
 
@@ -627,6 +629,8 @@
     max-width: 80px;
     border-right: 1px solid var(--color-border);
     vertical-align: middle;
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   .mini-td:last-child {

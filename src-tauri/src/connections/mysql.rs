@@ -110,6 +110,7 @@ pub async fn list_columns(
         column_key: Option<String>,
         extra: Option<String>,
         comment: Option<String>,
+        is_foreign_key: Option<i64>,
     }
 
     let rows = sqlx::query_as::<_, Row>(
@@ -121,9 +122,16 @@ pub async fn list_columns(
             CAST(c.COLUMN_DEFAULT AS CHAR) AS default_value,
             CAST(c.COLUMN_KEY     AS CHAR) AS column_key,
             CAST(c.EXTRA          AS CHAR) AS extra,
-            CAST(c.COLUMN_COMMENT AS CHAR) AS comment
+            CAST(c.COLUMN_COMMENT AS CHAR) AS comment,
+            COUNT(kcu.COLUMN_NAME) AS is_foreign_key
         FROM information_schema.COLUMNS c
+        LEFT JOIN information_schema.KEY_COLUMN_USAGE kcu
+          ON kcu.TABLE_SCHEMA = c.TABLE_SCHEMA
+         AND kcu.TABLE_NAME   = c.TABLE_NAME
+         AND kcu.COLUMN_NAME  = c.COLUMN_NAME
+         AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
         WHERE c.TABLE_SCHEMA = ? AND c.TABLE_NAME = ?
+        GROUP BY c.COLUMN_NAME, c.COLUMN_TYPE, c.IS_NULLABLE, c.COLUMN_DEFAULT, c.COLUMN_KEY, c.EXTRA, c.COLUMN_COMMENT, c.ORDINAL_POSITION
         ORDER BY c.ORDINAL_POSITION
         "#,
     )
@@ -136,7 +144,6 @@ pub async fn list_columns(
         .into_iter()
         .map(|r| {
             let is_pk = r.column_key.as_deref() == Some("PRI");
-            let is_fk = r.column_key.as_deref() == Some("MUL");
             let is_auto = r
                 .extra
                 .as_deref()
@@ -149,7 +156,7 @@ pub async fn list_columns(
                 default_value: r.default_value,
                 is_primary_key: is_pk,
                 is_auto_increment: is_auto,
-                is_foreign_key: is_fk,
+                is_foreign_key: r.is_foreign_key.unwrap_or(0) > 0,
                 comment: if r.comment.as_deref() == Some("") {
                     None
                 } else {

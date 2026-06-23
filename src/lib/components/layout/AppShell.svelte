@@ -658,6 +658,7 @@
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-secondary);
     letter-spacing: 0.02em;
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -684,6 +685,7 @@
     color: var(--color-text-primary);
     font-size: var(--font-size-xs);
     font-family: var(--font-family-ui);
+    -webkit-user-select: none;
     user-select: none;
     cursor: pointer;
     transition: background var(--transition-fast);

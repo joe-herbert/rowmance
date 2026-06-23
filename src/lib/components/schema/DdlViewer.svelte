@@ -266,6 +266,7 @@
     max-width: 300px;
     line-height: var(--line-height-normal);
     word-break: break-word;
+    -webkit-user-select: text;
     user-select: text;
   }
 

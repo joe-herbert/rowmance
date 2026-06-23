@@ -410,9 +410,9 @@
                   <td class="col-name mono">{col.name}</td>
                   <td class="col-type mono">{col.dataType}</td>
                   <td class="col-keys">
-                    {#if col.isPrimaryKey}<span class="badge badge--pk">PK</span>{/if}
-                    {#if col.isAutoIncrement}<span class="badge badge--ai">AI</span>{/if}
-                    {#if col.isForeignKey}<span class="badge badge--fk">FK</span>{/if}
+                    {#if col.isPrimaryKey}<span class="badge badge--pk" title="Primary Key">PK</span>{/if}
+                    {#if col.isAutoIncrement}<span class="badge badge--ai" title="Auto Increment">AI</span>{/if}
+                    {#if col.isForeignKey}<span class="badge badge--fk" title="Foreign Key">FK</span>{/if}
                   </td>
                   <td class="col-null center-cell">{#if col.nullable}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{/if}</td>
                   <td class="col-default mono">{col.defaultValue ?? ''}</td>
@@ -487,6 +487,44 @@
           </section>
         {/if}
 
+        <!-- Foreign Keys ─────────────────────────────────────────────────── -->
+        <section class="section">
+          <div class="section-header section-header--flex">
+            <span>Foreign Keys ({foreignKeys.length})</span>
+            {#if editMode && !isSqlite}
+              <button class="add-btn" onclick={openAddFk}>+ Add Foreign Key</button>
+            {/if}
+          </div>
+          <div class="fk-list">
+            {#each foreignKeys as fk (fk.constraintName)}
+              <div class="fk-card" class:fk-card--edit={editMode}>
+                {#if editMode}
+                  <button class="act-btn act-btn--danger fk-drop-btn" title="Drop foreign key" onclick={() => requestDrop(`Drop foreign key "${fk.constraintName}"?`, [buildDropFkSql(fk.constraintName)])}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="3,6 13,6"/>
+                      <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
+                    </svg>
+                  </button>
+                {/if}
+                <div class="fk-name mono">{fk.constraintName}</div>
+                <div class="fk-relation">
+                  <span class="mono fk-cols">{fk.columns.join(', ')}</span>
+                  <span class="fk-arrow">→</span>
+                  <span class="mono fk-ref">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span>
+                </div>
+                <div class="fk-actions">
+                  <span class="fk-action-label">ON DELETE</span> {fk.onDelete}
+                  <span class="fk-sep">·</span>
+                  <span class="fk-action-label">ON UPDATE</span> {fk.onUpdate}
+                </div>
+              </div>
+            {/each}
+            {#if editMode && isSqlite}
+              <div class="sqlite-note">SQLite does not support adding foreign key constraints to existing tables.</div>
+            {/if}
+          </div>
+        </section>
+
         <!-- Virtual Connections ──────────────────────────────────────────── -->
         <section class="section">
           <div class="section-header section-header--flex">
@@ -529,51 +567,8 @@
                 </div>
               </div>
             {/each}
-            {#if tableVirtualRelations.length === 0}
-              <div class="vr-empty">No virtual connections. Use the <span class="vr-empty-hint">→</span> button on a column row to add one.</div>
-            {/if}
           </div>
         </section>
-
-        <!-- Foreign Keys ─────────────────────────────────────────────────── -->
-        {#if foreignKeys.length > 0 || editMode}
-          <section class="section">
-            <div class="section-header section-header--flex">
-              <span>Foreign Keys ({foreignKeys.length})</span>
-              {#if editMode && !isSqlite}
-                <button class="add-btn" onclick={openAddFk}>+ Add Foreign Key</button>
-              {/if}
-            </div>
-            <div class="fk-list">
-              {#each foreignKeys as fk (fk.constraintName)}
-                <div class="fk-card" class:fk-card--edit={editMode}>
-                  {#if editMode}
-                    <button class="act-btn act-btn--danger fk-drop-btn" title="Drop foreign key" onclick={() => requestDrop(`Drop foreign key "${fk.constraintName}"?`, [buildDropFkSql(fk.constraintName)])}>
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="3,6 13,6"/>
-                        <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
-                      </svg>
-                    </button>
-                  {/if}
-                  <div class="fk-name mono">{fk.constraintName}</div>
-                  <div class="fk-relation">
-                    <span class="mono fk-cols">{fk.columns.join(', ')}</span>
-                    <span class="fk-arrow">→</span>
-                    <span class="mono fk-ref">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span>
-                  </div>
-                  <div class="fk-actions">
-                    <span class="fk-action-label">ON DELETE</span> {fk.onDelete}
-                    <span class="fk-sep">·</span>
-                    <span class="fk-action-label">ON UPDATE</span> {fk.onUpdate}
-                  </div>
-                </div>
-              {/each}
-              {#if editMode && isSqlite}
-                <div class="sqlite-note">SQLite does not support adding foreign key constraints to existing tables.</div>
-              {/if}
-            </div>
-          </section>
-        {/if}
 
       </div>
     {/if}

@@ -431,6 +431,7 @@
     font-family: var(--font-family-mono);
     white-space: pre-wrap;
     word-break: break-word;
+    -webkit-user-select: text;
     user-select: text;
   }
 

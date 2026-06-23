@@ -708,6 +708,7 @@
     font-family: var(--font-family-mono);
     color: var(--color-text-muted);
     text-align: center;
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -740,6 +741,7 @@
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
     color: var(--color-text-muted);
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -789,6 +791,7 @@
     font-weight: var(--font-weight-medium);
     color: var(--color-text-muted);
     font-family: var(--font-family-mono);
+    -webkit-user-select: none;
     user-select: none;
   }
 

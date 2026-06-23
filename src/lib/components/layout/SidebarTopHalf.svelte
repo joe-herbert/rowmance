@@ -327,6 +327,7 @@
     color: var(--color-text-secondary);
     cursor: pointer;
     border-radius: 8px;
+    -webkit-user-select: none;
     user-select: none;
     outline: none;
     transition: background var(--transition-fast);

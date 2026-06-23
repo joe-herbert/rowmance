@@ -119,6 +119,7 @@
 <style>
   .date-picker {
     padding: var(--spacing-2);
+    -webkit-user-select: none;
     user-select: none;
   }
 

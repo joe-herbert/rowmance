@@ -516,6 +516,7 @@
     text-align: left;
     border-radius: var(--radius-sm);
     transition: background var(--transition-fast);
+    -webkit-user-select: none;
     user-select: none;
     cursor: pointer;
   }
@@ -592,6 +593,7 @@
     text-align: left;
     border-radius: var(--radius-sm);
     transition: background var(--transition-fast);
+    -webkit-user-select: none;
     user-select: none;
     cursor: pointer;
   }

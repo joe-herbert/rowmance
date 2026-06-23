@@ -403,6 +403,7 @@
     color: var(--color-text-muted);
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    -webkit-user-select: none;
     user-select: none;
     font-family: var(--font-family-ui);
   }

@@ -111,6 +111,7 @@ ol {
 
 /* Prevent text selection on UI chrome */
 .no-select {
+  -webkit-user-select: none;
   user-select: none;
 }
 

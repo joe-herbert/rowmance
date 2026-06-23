@@ -542,7 +542,7 @@
               dataType: s?.dataType ?? col.dataType,
               nullable: s ? s.nullable : col.nullable,
               isPrimaryKey: s?.isPrimaryKey ?? false,
-              isForeignKey: (s?.isForeignKey ?? false) || vrStore.hasAny(connectionId, database, table, col.name),
+              isForeignKey: (s?.isForeignKey ?? false) || vrStore.hasForwardFrom(connectionId, database, table, col.name),
               defaultValue: s?.defaultValue ?? null,
               isAutoIncrement: s?.isAutoIncrement ?? false,
               isUnique: uniqueColNames.has(col.name),
@@ -764,13 +764,48 @@
 
   async function handleForeignKeyQuickView(colName: string, value: CellValue): Promise<QuickViewData | null> {
     const fk = foreignKeys.find((f) => f.columns.includes(colName));
-    if (!fk) return null;
-    const colIdx = fk.columns.indexOf(colName);
-    const refCol = fk.referencedColumns[colIdx];
-    if (!refCol) return null;
-    const quotedDb = quoteIdentifier(database);
-    const quotedTable = quoteIdentifier(fk.referencedTable);
-    const quotedCol = quoteIdentifier(refCol);
+    if (fk) {
+      const colIdx = fk.columns.indexOf(colName);
+      const refCol = fk.referencedColumns[colIdx];
+      if (!refCol) return null;
+      const quotedDb = quoteIdentifier(database);
+      const quotedTable = quoteIdentifier(fk.referencedTable);
+      const quotedCol = quoteIdentifier(refCol);
+      let whereVal: string;
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        whereVal = String(value);
+      } else {
+        const escaped = String(value).replace(/'/g, "''");
+        whereVal = `'${escaped}'`;
+      }
+      const sql = `SELECT * FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} = ${whereVal}`;
+      try {
+        const queryResult = await executeQuery(connectionId, sql, 1, 1);
+        if (queryResult.error) return null;
+        return {
+          tableName: fk.referencedTable,
+          refColumn: refCol,
+          refValue: value,
+          columns: queryResult.columns,
+          row: queryResult.rows[0] ?? null,
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    // Fall back to virtual relations
+    const vr = vrStore.forwardFrom({ connectionId, database, table, column: colName })[0];
+    if (!vr) return null;
+    const targetConnId = vr.to.connectionId;
+    if (!connections.isActive(targetConnId)) {
+      await connections.connect(targetConnId);
+    }
+    const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
+    const q = (name: string) => targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``;
+    const quotedDb = q(vr.to.database);
+    const quotedTable = q(vr.to.table);
+    const quotedCol = q(vr.to.column);
     let whereVal: string;
     if (typeof value === 'number' || typeof value === 'boolean') {
       whereVal = String(value);
@@ -780,11 +815,11 @@
     }
     const sql = `SELECT * FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} = ${whereVal}`;
     try {
-      const queryResult = await executeQuery(connectionId, sql, 1, 1);
+      const queryResult = await executeQuery(targetConnId, sql, 1, 1);
       if (queryResult.error) return null;
       return {
-        tableName: fk.referencedTable,
-        refColumn: refCol,
+        tableName: vr.to.table,
+        refColumn: vr.to.column,
         refValue: value,
         columns: queryResult.columns,
         row: queryResult.rows[0] ?? null,
@@ -1213,7 +1248,7 @@
           onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}
           onForeignKeyClick={(foreignKeys.length > 0 || vrStore.hasAnyForTable(connectionId, database, table)) ? handleForeignKeyClick : undefined}
-          onForeignKeyQuickView={foreignKeys.length > 0 ? handleForeignKeyQuickView : undefined}
+          onForeignKeyQuickView={(foreignKeys.length > 0 || vrStore.hasAnyForTable(connectionId, database, table)) ? handleForeignKeyQuickView : undefined}
           onConnectColumn={(colName) => { connectColumnName = colName; }}
           initialColWidths={initialColWidths}
           initialColumnOrder={initialColumnOrder}
@@ -1329,6 +1364,7 @@
     max-width: calc(100% - calc(28px + var(--spacing-2)));
     overflow: hidden;
     cursor: pointer;
+    -webkit-user-select: none;
     user-select: none;
   }
 
@@ -1630,6 +1666,7 @@
     flex: 1;
     white-space: pre-wrap;
     word-break: break-word;
+    -webkit-user-select: text;
     user-select: text;
   }
 
@@ -1780,6 +1817,7 @@
     font-family: var(--font-family-mono);
     white-space: pre-wrap;
     word-break: break-word;
+    -webkit-user-select: text;
     user-select: text;
   }
 
