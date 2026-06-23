@@ -17,7 +17,7 @@
     return connectionStore.getById(content.connectionId) ?? null;
   });
 
-  const connColor = $derived(focusedConnection?.color ?? 'var(--color-text-muted)');
+  const connColor = $derived(focusedConnection?.color ?? 'var(--color-accent)');
   const connName = $derived(focusedConnection?.name ?? null);
   const connType = $derived(
     focusedConnection

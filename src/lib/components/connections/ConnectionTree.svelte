@@ -102,7 +102,7 @@
   function hasError(id: string)      { return connectionStore.errorIds.has(id); }
   function connError(id: string)     { return connectionStore.errorIds.get(id) ?? 'Connection error'; }
   function dotColor(profile: ConnectionProfile): string {
-    return profile.color ?? '#7c5cff';
+    return profile.color ?? 'var(--color-accent)';
   }
 
   async function handleConnect(profile: ConnectionProfile) {

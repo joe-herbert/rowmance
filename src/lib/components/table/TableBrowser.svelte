@@ -913,7 +913,7 @@
 </script>
 
 <div class="table-browser" bind:this={tableBrowserEl}>
-  <div class="toolbar" style={connectionColor ? `border-bottom: 2px solid ${connectionColor};` : undefined}>
+  <div class="toolbar" style="border-bottom: 2px solid {connectionColor ?? 'var(--color-accent)'}">
     <span
       class="table-name"
       title={`Click to copy ${database}.${table}`}

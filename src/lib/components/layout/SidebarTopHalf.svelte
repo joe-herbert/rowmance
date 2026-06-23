@@ -224,7 +224,7 @@
         >
           <span
             class="conn-dot"
-            style={connInfo?.color ? `background:${connInfo.color}` : (item.content.kind === 'settings' ? 'background:transparent' : undefined)}
+            style={connInfo ? `background:${connInfo.color ?? 'var(--color-accent)'}` : 'background:transparent'}
             aria-hidden="true"
           ></span>
           <span class="panel-icon" aria-hidden="true">
