@@ -5,7 +5,7 @@
    width="165"
    height="165"
    viewBox="0 0 165 165"
-   sodipodi:docname="logo-colour.svg"
+   sodipodi:docname="icon.svg"
    inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
    inkscape:export-filename="icon.png"
    inkscape:export-xdpi="96"
@@ -78,6 +78,14 @@
      inkscape:window-y="212"
      inkscape:window-maximized="0"
      inkscape:current-layer="svg" />
+  <rect
+     style="fill:#c7d6ff;fill-opacity:1;stroke:none;stroke-width:21.3814;stroke-linecap:round;stroke-linejoin:round"
+     id="rect4"
+     width="165"
+     height="165"
+     x="0"
+     y="0"
+     ry="25" />
   <g
      id="svgg"
      transform="translate(-117.65363,-28.250605)">
