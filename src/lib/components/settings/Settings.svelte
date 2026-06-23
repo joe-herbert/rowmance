@@ -268,6 +268,18 @@
 
         <div class="setting-row">
           <div class="setting-label">
+            <span class="label-text">Boolean Display</span>
+            <span class="label-hint">How boolean and tinyint(1) values are shown in the table</span>
+          </div>
+          <Select
+            value={settings.booleanDisplay}
+            options={[{ value: 'tick-cross', label: '✓ / ✗' }, { value: 'true-false', label: 'True / False' }, { value: '1-0', label: '1 / 0' }]}
+            onchange={(v) => update('booleanDisplay', v as 'tick-cross' | 'true-false' | '1-0')}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
             <span class="label-text">Click Outside Cell Edit</span>
             <span class="label-hint">What happens when you click outside an active cell editor</span>
           </div>

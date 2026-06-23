@@ -268,6 +268,7 @@ export interface AppSettings {
   rightSidebarPanel: string;
   clickOutsideEdit: 'discard' | 'confirm';
   nowTimeSource: 'user' | 'database';
+  booleanDisplay: 'tick-cross' | 'true-false' | '1-0';
   systemDatabases: string[];
   systemTablePatterns: string[];
   showSystemItems: boolean;
@@ -292,6 +293,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rightSidebarPanel: 'history',
   clickOutsideEdit: 'discard',
   nowTimeSource: 'user',
+  booleanDisplay: 'tick-cross',
   systemDatabases: [...BUILTIN_DATABASES],
   systemTablePatterns: [...BUILTIN_TABLE_PATTERNS],
   showSystemItems: true,

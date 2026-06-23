@@ -9,6 +9,7 @@
   import DatePicker from '$lib/components/ui/DatePicker.svelte';
   import TimePicker from '$lib/components/ui/TimePicker.svelte';
   import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
+  import BooleanPicker from '$lib/components/ui/BooleanPicker.svelte';
   import { executeQuery } from '$lib/tauri/query';
 
   type CellValue = string | number | boolean | null;
@@ -17,6 +18,7 @@
     value: CellValue;
     originalValue: CellValue;
     dataType: string;
+    nullable: boolean;
     top: number;
     left: number;
     width: number;
@@ -29,14 +31,19 @@
     database?: string | null;
   }
 
-  let { value, originalValue, dataType, top, left, width, height, containerHeight, onConfirm, onCancel, onTab, connectionId, database }: Props = $props();
+  let { value, originalValue, dataType, nullable, top, left, width, height, containerHeight, onConfirm, onCancel, onTab, connectionId, database }: Props = $props();
 
   const { settings } = useSettings();
 
   // ── Pure helpers (also exported for tests) ──────────────────────────────────
 
   export function isBooleanType(dt: string): boolean {
-    return dt.toLowerCase().includes('bool');
+    const lower = dt.toLowerCase();
+    return lower.includes('bool') || lower === 'tinyint(1)';
+  }
+
+  function isTinyInt1(dt: string): boolean {
+    return dt.toLowerCase() === 'tinyint(1)';
   }
 
   export function isDateType(dt: string): boolean {
@@ -65,10 +72,14 @@
 
   const inputType = $derived(getInputType(dataType));
 
-  // For boolean: cycle null → true → false → null
-  let boolState = $state<boolean | null>(
-    untrack(() => typeof value === 'boolean' ? value : null),
-  );
+  // For boolean: null → true → false → null; also accept 0/1 from tinyint(1)
+  function toBoolState(v: typeof value): boolean | null {
+    if (v === true || v === 1) return true;
+    if (v === false || v === 0) return false;
+    return null;
+  }
+
+  let boolState = $state<boolean | null>(untrack(() => toBoolState(value)));
 
   // For text/date: string representation
   let textValue = $state<string>(
@@ -81,7 +92,7 @@
   let pickerEl = $state<HTMLDivElement | null>(null);
 
   const showPicker = $derived(
-    inputType === 'date' || inputType === 'datetime-local' || inputType === 'time',
+    inputType === 'date' || inputType === 'datetime-local' || inputType === 'time' || inputType === 'boolean',
   );
 
   // Off-screen until first position calculation runs
@@ -96,6 +107,7 @@
     'date': 300,
     'time': 150,
     'datetime-local': 450,
+    'boolean': 130,
   };
 
   // Height of the actions bar — used to decide above/below placement
@@ -175,15 +187,14 @@
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   });
 
-  function cycleBool(): void {
-    if (boolState === null) boolState = true;
-    else if (boolState === true) boolState = false;
-    else boolState = null;
+  function boolToDbValue(v: boolean | null): boolean | number | null {
+    if (v === null) return null;
+    return isTinyInt1(dataType) ? (v ? 1 : 0) : v;
   }
 
   function confirmEdit(): void {
     if (inputType === 'boolean') {
-      onConfirm(boolState);
+      onConfirm(boolToDbValue(boolState));
     } else if (textValue === '') {
       // Empty text — keep as empty string, not null (user can click Set NULL for that)
       onConfirm('');
@@ -216,7 +227,10 @@
 
   function boolLabel(v: boolean | null): string {
     if (v === null) return 'NULL';
-    return v ? 'true' : 'false';
+    const fmt = settings.booleanDisplay ?? 'tick-cross';
+    if (fmt === 'true-false') return v ? 'True' : 'False';
+    if (fmt === '1-0') return v ? '1' : '0';
+    return v ? '✓' : '✗';
   }
 
   function formatNow(d: Date, type: typeof inputType): string {
@@ -262,17 +276,15 @@
   onkeydown={handleKeydown}
 >
   {#if inputType === 'boolean'}
-    <button
+    <span
       class="bool-toggle"
       class:bool-true={boolState === true}
       class:bool-false={boolState === false}
       class:bool-null={boolState === null}
-      onclick={cycleBool}
-      title="Click to cycle: true → false → NULL"
-      aria-label="Toggle boolean value"
+      aria-label="Boolean value: {boolLabel(boolState)}"
     >
       {boolLabel(boolState)}
-    </button>
+    </span>
   {:else if inputType === 'datetime-local'}
     <input
       bind:this={inputEl}
@@ -334,22 +346,20 @@
   onkeydown={handleKeydown}
   use:portal
 >
-  {#if inputType !== 'boolean'}
-    <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
-  {:else}
-    <button class="action-btn confirm-btn" onclick={() => onConfirm(boolState)} title="Confirm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
-  {/if}
-  {#if showPicker}
+  <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
+  {#if inputType !== 'boolean' && showPicker}
     <button class="action-btn now-btn" onclick={handleNow} title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time" aria-label="Set to now">NOW</button>
   {/if}
-  <button
-    class="action-btn null-btn"
-    onclick={() => onConfirm(null)}
-    title="Set to NULL"
-    aria-label="Set to NULL"
-  >
-    NULL
-  </button>
+  {#if nullable}
+    <button
+      class="action-btn null-btn"
+      onclick={() => onConfirm(null)}
+      title="Set to NULL"
+      aria-label="Set to NULL"
+    >
+      NULL
+    </button>
+  {/if}
   <button class="action-btn cancel-btn" onclick={onCancel} title="Cancel (Escape)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
 </div>
 
@@ -365,7 +375,14 @@
     use:portal
     onkeydown={handleKeydown}
   >
-    {#if inputType === 'date'}
+    {#if inputType === 'boolean'}
+      <BooleanPicker
+        value={boolState}
+        displayFormat={settings.booleanDisplay ?? 'tick-cross'}
+        {nullable}
+        onselect={(v) => { boolState = v; onConfirm(boolToDbValue(v)); }}
+      />
+    {:else if inputType === 'date'}
       <DatePicker value={textValue} onchange={(v) => { textValue = v; }} />
     {:else if inputType === 'time'}
       <TimePicker value={textValue} onchange={(v) => { textValue = v; }} />
@@ -406,16 +423,15 @@
 
   .bool-toggle {
     flex: 1;
-    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 0 var(--spacing-3);
-    background: var(--color-bg-tertiary);
-    border: none;
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     font-family: var(--font-family-mono);
-    cursor: pointer;
-    transition: background var(--transition-fast);
     height: 100%;
+    user-select: none;
   }
 
   .bool-toggle.bool-true {
@@ -429,10 +445,6 @@
   .bool-toggle.bool-null {
     color: var(--color-null);
     font-style: italic;
-  }
-
-  .bool-toggle:hover {
-    background: var(--color-bg-hover);
   }
 
   .editor-actions {

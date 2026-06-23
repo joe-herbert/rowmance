@@ -546,6 +546,7 @@
           value: null,
           originalValue: null,
           dataType: firstVisCol.col.dataType,
+          nullable: firstVisCol.col.nullable,
           top: tdRect.top - containerRect.top,
           left: tdRect.left - containerRect.left,
           width: Math.max(tdRect.width, 160),
@@ -584,6 +585,7 @@
     value: CellValue;
     originalValue: CellValue;
     dataType: string;
+    nullable: boolean;
     top: number;
     left: number;
     width: number;
@@ -664,6 +666,7 @@
       value: currentValue,
       originalValue: row[originalColIndex],
       dataType: col.dataType,
+      nullable: col.nullable,
       top: tdRect.top - containerRect.top,
       left: tdRect.left - containerRect.left,
       width: Math.max(tdRect.width, 160),
@@ -696,6 +699,7 @@
       value: currentValue,
       originalValue: row[originalColIndex],
       dataType: col.dataType,
+      nullable: col.nullable,
       top: 0,
       left: 0,
       width: 0,
@@ -707,6 +711,9 @@
   function cellValuesEqual(a: CellValue, b: CellValue): boolean {
     if (a === b) return true;
     if (a === null || b === null) return false;
+    // boolean/number equivalence: true≡1, false≡0
+    if (typeof a === 'boolean' && typeof b === 'number') return (a ? 1 : 0) === b;
+    if (typeof b === 'boolean' && typeof a === 'number') return (b ? 1 : 0) === a;
     if (typeof a === 'number' && typeof b === 'string') {
       const n = Number(b);
       return b.trim() !== '' && !isNaN(n) && n === a;
@@ -1219,6 +1226,7 @@
       value: currentValue,
       originalValue: row[originalColIndex],
       dataType: col.dataType,
+      nullable: col.nullable,
       top: 0, left: 0, width: 0, height: 0, containerHeight: 0,
     };
     dismissContextMenu();
@@ -1244,6 +1252,7 @@
       value: currentValue,
       originalValue: currentValue,
       dataType: col.dataType,
+      nullable: col.nullable,
       top: tdRect.top - containerRect.top,
       left: tdRect.left - containerRect.left,
       width: Math.max(tdRect.width, 160),
@@ -1772,7 +1781,15 @@
                         class:bool-true={cellValue}
                         class:bool-false={!cellValue}
                       >
-                        {#if cellValue}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>{/if}
+                        {#if settings.booleanDisplay === 'true-false'}
+                          {cellValue ? 'True' : 'False'}
+                        {:else if settings.booleanDisplay === '1-0'}
+                          {cellValue ? '1' : '0'}
+                        {:else if cellValue}
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                        {:else}
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        {/if}
                       </span>
                     {:else}
                       {formatCell(cellValue)}
@@ -2087,6 +2104,7 @@
       value={editTarget.value}
       originalValue={editTarget.originalValue}
       dataType={editTarget.dataType}
+      nullable={editTarget.nullable}
       top={editTarget.top}
       left={editTarget.left}
       width={editTarget.width}
@@ -2109,6 +2127,7 @@
     originalValue={modalTarget.originalValue}
     colName={modalTarget.colName}
     dataType={modalTarget.dataType}
+    nullable={modalTarget.nullable}
     onConfirm={confirmModalEdit}
     onCancel={cancelModalEdit}
     {connectionId}

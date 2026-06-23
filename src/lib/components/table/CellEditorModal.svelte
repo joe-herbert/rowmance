@@ -8,11 +8,12 @@
   import DatePicker from '$lib/components/ui/DatePicker.svelte';
   import TimePicker from '$lib/components/ui/TimePicker.svelte';
   import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
+  import BooleanPicker from '$lib/components/ui/BooleanPicker.svelte';
   import { executeQuery } from '$lib/tauri/query';
 
   function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
     const lower = dt.toLowerCase();
-    if (lower.includes('bool')) return 'boolean';
+    if (lower.includes('bool') || lower === 'tinyint(1)') return 'boolean';
     if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp')) return 'datetime-local';
     if (lower.includes('date')) return 'date';
     if (lower.includes('time') && !lower.includes('timestamp')) return 'time';
@@ -26,21 +27,26 @@
     originalValue: CellValue;
     colName: string;
     dataType: string;
+    nullable: boolean;
     onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
     connectionId?: string;
     database?: string | null;
   }
 
-  let { value, originalValue, colName, dataType, onConfirm, onCancel, connectionId, database }: Props = $props();
+  let { value, originalValue, colName, dataType, nullable, onConfirm, onCancel, connectionId, database }: Props = $props();
 
   const { settings } = useSettings();
 
   const inputType = $derived(getInputType(dataType));
 
-  let boolState = $state<boolean | null>(
-    untrack(() => (typeof value === 'boolean' ? value : null)),
-  );
+  function toBoolState(v: typeof value): boolean | null {
+    if (v === true || v === 1) return true;
+    if (v === false || v === 0) return false;
+    return null;
+  }
+
+  let boolState = $state<boolean | null>(untrack(() => toBoolState(value)));
 
   let textValue = $state<string>(untrack(() => (value === null ? '' : String(value))));
 
@@ -54,15 +60,18 @@
     }
   });
 
-  function cycleBool(): void {
-    if (boolState === null) boolState = true;
-    else if (boolState === true) boolState = false;
-    else boolState = null;
+  function isTinyInt1(): boolean {
+    return dataType.toLowerCase() === 'tinyint(1)';
+  }
+
+  function boolToDbValue(v: boolean | null): boolean | number | null {
+    if (v === null) return null;
+    return isTinyInt1() ? (v ? 1 : 0) : v;
   }
 
   function confirmEdit(): void {
     if (inputType === 'boolean') {
-      onConfirm(boolState);
+      onConfirm(boolToDbValue(boolState));
     } else if (textValue === '') {
       onConfirm('');
     } else if (inputType === 'text') {
@@ -93,11 +102,6 @@
     } else {
       onCancel();
     }
-  }
-
-  function boolLabel(v: boolean | null): string {
-    if (v === null) return 'NULL';
-    return v ? 'true' : 'false';
   }
 
   const showNow = $derived(inputType === 'date' || inputType === 'datetime-local' || inputType === 'time');
@@ -149,16 +153,12 @@
 
     <div class="modal-body">
       {#if inputType === 'boolean'}
-        <button
-          class="bool-toggle"
-          class:bool-true={boolState === true}
-          class:bool-false={boolState === false}
-          class:bool-null={boolState === null}
-          onclick={cycleBool}
-          title="Click to cycle: true → false → NULL"
-        >
-          {boolLabel(boolState)}
-        </button>
+        <BooleanPicker
+          value={boolState}
+          displayFormat={settings.booleanDisplay ?? 'tick-cross'}
+          {nullable}
+          onselect={(v) => { boolState = v; }}
+        />
       {:else if inputType === 'datetime-local'}
         <DateTimePicker value={textValue} onchange={(v) => { textValue = v; }} />
       {:else if inputType === 'date'}
@@ -186,7 +186,9 @@
         {#if showNow}
           <button class="modal-btn btn-now" onclick={handleNow} title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time">NOW</button>
         {/if}
-        <button class="modal-btn btn-null" onclick={() => onConfirm(null)}>Set NULL</button>
+        {#if nullable}
+          <button class="modal-btn btn-null" onclick={() => onConfirm(null)}>Set NULL</button>
+        {/if}
         <button class="modal-btn btn-cancel" onclick={onCancel}>Cancel</button>
         <button class="modal-btn btn-confirm" onclick={confirmEdit}>Confirm</button>
       </div>
@@ -256,38 +258,6 @@
 
   .modal-textarea:focus {
     border-color: var(--color-accent);
-  }
-
-  .bool-toggle {
-    align-self: flex-start;
-    padding: var(--spacing-2) var(--spacing-4);
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    font-family: var(--font-family-mono);
-    cursor: pointer;
-    transition: background var(--transition-fast);
-  }
-
-  .bool-toggle.bool-true {
-    color: var(--color-success);
-    border-color: var(--color-success);
-  }
-
-  .bool-toggle.bool-false {
-    color: var(--color-danger);
-    border-color: var(--color-danger);
-  }
-
-  .bool-toggle.bool-null {
-    color: var(--color-null);
-    font-style: italic;
-  }
-
-  .bool-toggle:hover {
-    background: var(--color-bg-hover);
   }
 
   .modal-footer {
