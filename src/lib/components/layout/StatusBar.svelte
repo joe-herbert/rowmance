@@ -44,11 +44,12 @@
     statusBar.rowCount !== null ? `${statusBar.rowCount.toLocaleString()} rows` : null
   );
 
-  const dirtyText = $derived(
-    statusBar.pendingCount > 0
-      ? `${statusBar.pendingCount} unsaved change${statusBar.pendingCount !== 1 ? 's' : ''}`
-      : null
-  );
+  const dirtyText = $derived.by(() => {
+    const cells = statusBar.pendingCellCount;
+    const rows = statusBar.pendingRowCount;
+    if (cells === 0) return null;
+    return `${cells} unsaved change${cells !== 1 ? 's' : ''} in ${rows} row${rows !== 1 ? 's' : ''}`;
+  });
 </script>
 
 <div class="status-bar" role="status" aria-label="Status bar">

@@ -221,7 +221,10 @@
   // Key to force DataTable to fully reset (clears pending changes displayed)
   let tableKey = $state(0);
 
-  const pendingCount = $derived(pendingChanges.size + pendingDeletedRows.size);
+  const pendingRowCount = $derived(pendingChanges.size + pendingDeletedRows.size);
+  const pendingCellCount = $derived(
+    [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) + pendingDeletedRows.size
+  );
 
   function handleChangePending(changes: Map<string, Map<string, CellValue>>, rows: Map<string, CellValue[]>): void {
     // Deep-copy to plain Maps so TableBrowser owns its data independently of DataTable's reactive proxies.
@@ -460,7 +463,7 @@
   const _dirtyKey = _pendingKey;
 
   $effect(() => {
-    panelStore.setItemDirty(_dirtyKey, pendingCount > 0);
+    panelStore.setItemDirty(_dirtyKey, pendingRowCount > 0);
     return () => {
       // Only clear dirty if there are no saved pending changes (e.g. after save/discard).
       // When switching tabs, tablePendingState still holds the data so the indicator should stay.
@@ -858,10 +861,10 @@
 
     switch (action) {
       case 'TABLE_SAVE_CHANGES':
-        if (pendingCount > 0) saveChanges();
+        if (pendingRowCount > 0) saveChanges();
         break;
       case 'TABLE_DISCARD_CHANGES':
-        if (pendingCount > 0) discardChanges();
+        if (pendingRowCount > 0) discardChanges();
         break;
       case 'PAGE_NEXT':
         nextTablePage();
@@ -896,12 +899,13 @@
     if (!isFocused) return;
     const rowCount = dtPageInfo ? dtPageInfo.processedRowsLength : null;
     statusBar.update({
-      pendingCount,
+      pendingCellCount,
+      pendingRowCount,
       rowCount,
       lastQueryMs,
       isSaving,
-      onSave: pendingCount > 0 ? saveChanges : null,
-      onDiscard: pendingCount > 0 ? discardChanges : null,
+      onSave: pendingRowCount > 0 ? saveChanges : null,
+      onDiscard: pendingRowCount > 0 ? discardChanges : null,
     });
   });
 
@@ -982,16 +986,16 @@
       </div>
     {/if}
 
-    {#if pendingCount > 0}
+    {#if pendingRowCount > 0}
       <div class="save-split-btn">
         <button
           class="toolbar-btn save-btn save-split-main"
           onclick={saveChanges}
           disabled={isSaving}
           title="Save pending changes to the database"
-          aria-label="Save {pendingCount} pending changes"
+          aria-label="Save {pendingCellCount} pending changes"
         >
-          {isSaving ? 'Saving…' : `Save ${pendingCount} change${pendingCount !== 1 ? 's' : ''}`}
+          {isSaving ? 'Saving…' : `Save ${pendingCellCount} change${pendingCellCount !== 1 ? 's' : ''}`}
         </button>
         <button
           class="toolbar-btn save-btn save-split-arrow"

@@ -9,7 +9,8 @@
  * would cause.
  */
 
-let pendingCount = $state(0);
+let pendingCellCount = $state(0);
+let pendingRowCount = $state(0);
 let rowCount = $state<number | null>(null);
 let lastQueryMs = $state<number | null>(null);
 let isSaving = $state(false);
@@ -18,7 +19,8 @@ let onDiscard = $state<(() => void) | null>(null);
 
 export function useStatusBar() {
   return {
-    get pendingCount() { return pendingCount; },
+    get pendingCellCount() { return pendingCellCount; },
+    get pendingRowCount() { return pendingRowCount; },
     get rowCount() { return rowCount; },
     get lastQueryMs() { return lastQueryMs; },
     get isSaving() { return isSaving; },
@@ -26,14 +28,16 @@ export function useStatusBar() {
     get onDiscard() { return onDiscard; },
 
     update(patch: {
-      pendingCount?: number;
+      pendingCellCount?: number;
+      pendingRowCount?: number;
       rowCount?: number | null;
       lastQueryMs?: number | null;
       isSaving?: boolean;
       onSave?: (() => Promise<void>) | null;
       onDiscard?: (() => void) | null;
     }) {
-      if (patch.pendingCount !== undefined) pendingCount = patch.pendingCount;
+      if (patch.pendingCellCount !== undefined) pendingCellCount = patch.pendingCellCount;
+      if (patch.pendingRowCount !== undefined) pendingRowCount = patch.pendingRowCount;
       if (patch.rowCount !== undefined) rowCount = patch.rowCount;
       if (patch.lastQueryMs !== undefined) lastQueryMs = patch.lastQueryMs;
       if (patch.isSaving !== undefined) isSaving = patch.isSaving;
@@ -42,7 +46,8 @@ export function useStatusBar() {
     },
 
     clear() {
-      pendingCount = 0;
+      pendingCellCount = 0;
+      pendingRowCount = 0;
       rowCount = null;
       lastQueryMs = null;
       isSaving = false;
