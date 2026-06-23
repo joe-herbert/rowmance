@@ -106,6 +106,16 @@
 
   const showNow = $derived(inputType === 'date' || inputType === 'datetime-local' || inputType === 'time');
 
+  const isJsonType = $derived(dataType.toLowerCase() === 'json' || dataType.toLowerCase() === 'jsonb');
+
+  function formatJson(): void {
+    try {
+      textValue = JSON.stringify(JSON.parse(textValue), null, 2);
+    } catch {
+      // not valid JSON, do nothing
+    }
+  }
+
   function formatNow(d: Date, type: typeof inputType): string {
     const p = (n: number) => String(n).padStart(2, '0');
     const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
@@ -183,6 +193,9 @@
         {inputType === 'boolean' ? 'Click to cycle value' : 'Ctrl+Enter to confirm · Escape to cancel'}
       </span>
       <div class="modal-actions">
+        {#if isJsonType}
+          <button class="modal-btn btn-format-json" onclick={formatJson}>Format JSON</button>
+        {/if}
         {#if showNow}
           <button class="modal-btn btn-now" onclick={handleNow} title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time">NOW</button>
         {/if}
@@ -294,6 +307,17 @@
 
   .modal-btn:hover {
     background: var(--color-bg-hover);
+  }
+
+  .btn-format-json {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-accent);
+  }
+
+  .btn-format-json:hover {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
   }
 
   .btn-now {
