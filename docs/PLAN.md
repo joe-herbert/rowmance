@@ -83,7 +83,6 @@
 | `svelte` (v5) | UI framework, runes API |
 | `@tauri-apps/api` + plugins | Tauri IPC, filesystem, dialog, updater |
 | `@tanstack/svelte-table` | Headless table logic |
-| `bits-ui` | Accessible headless component primitives |
 | `codemirror` + `@codemirror/lang-sql` | SQL editor core |
 | `@codemirror/autocomplete` | Completion framework |
 | `@codemirror/view` + `@codemirror/state` | Editor primitives |
@@ -1709,7 +1708,6 @@ tauri-build = { version = "2", features = [] }
     "@tauri-apps/plugin-shell": "^2",
     "@tauri-apps/plugin-updater": "^2",
     "@tanstack/svelte-table": "^8",
-    "bits-ui": "latest",
     "@codemirror/autocomplete": "^6",
     "@codemirror/lang-sql": "^6",
     "@codemirror/state": "^6",

@@ -28,7 +28,6 @@
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-fs": "^2",
     "@tauri-apps/plugin-shell": "^2",
-    "bits-ui": "^1",
     "codemirror": "^6",
     "d3-drag": "^3.0.0",
     "d3-selection": "^3.0.0",
