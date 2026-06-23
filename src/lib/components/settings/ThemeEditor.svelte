@@ -334,6 +334,8 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-1);
+    flex: 1;
+    max-width: 500px;
   }
 
   .color-swatch {
@@ -364,12 +366,16 @@
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
     outline: none;
-    width: 160px;
+    flex: 1;
+    min-width: 0;
+    max-width: 500px;
     transition: border-color var(--transition-fast);
   }
 
   .text-input--sm {
-    width: 90px;
+    flex: 1;
+    min-width: 0;
+    width: auto;
   }
 
   .text-input:focus {
