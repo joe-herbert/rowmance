@@ -1146,23 +1146,31 @@
   </div>
 
   {#if filterStateIsActive(filterEditorState)}
-    <button
-      class="filter-summary-bar"
-      onclick={openFilterEditor}
-      title="Click to edit filters"
-      aria-label="Edit active filters"
-    >
-      {#each filterSummaryBlocks as grp}
-        <span class="fsb-group" class:fsb-group--bordered={grp.bordered}>
-          {#each grp.rules as rule}
-            <span class="fsb-line">
-              <span class="fsb-kw">{rule.first ? grp.keyword : rule.conjunction}</span>
-              <span class="fsb-text">{rule.text}</span>
-            </span>
-          {/each}
-        </span>
-      {/each}
-    </button>
+    <div class="filter-summary-bar">
+      <button
+        class="fsb-content"
+        onclick={openFilterEditor}
+        title="Click to edit filters"
+        aria-label="Edit active filters"
+      >
+        {#each filterSummaryBlocks as grp}
+          <span class="fsb-group" class:fsb-group--bordered={grp.bordered}>
+            {#each grp.rules as rule}
+              <span class="fsb-line">
+                <span class="fsb-kw">{rule.first ? grp.keyword : rule.conjunction}</span>
+                <span class="fsb-text">{rule.text}</span>
+              </span>
+            {/each}
+          </span>
+        {/each}
+      </button>
+      <button
+        class="fsb-clear"
+        onclick={() => { filterEditorState = emptyFilterState(); }}
+        title="Clear filters"
+        aria-label="Clear filters"
+      >×</button>
+    </div>
   {/if}
 
   {#if showTableNameInput}
@@ -1573,24 +1581,52 @@
   .filter-summary-bar {
     flex-shrink: 0;
     display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    width: 100%;
+  }
+
+  .fsb-content {
+    flex: 1;
+    display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 1px;
     padding: var(--spacing-1) var(--spacing-3);
-    background: var(--color-bg-secondary);
-    border-bottom: 1px solid var(--color-border);
     cursor: pointer;
     text-align: left;
-    width: 100%;
-    border-left: none;
-    border-right: none;
-    border-top: none;
+    border: none;
+    background: transparent;
     font-family: inherit;
     transition: background var(--transition-fast);
+    min-width: 0;
   }
 
-  .filter-summary-bar:hover {
+  .fsb-content:hover {
     background: var(--color-bg-hover);
+  }
+
+  .fsb-clear {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--spacing-3);
+    border: none;
+    border-left: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    line-height: 1;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .fsb-clear:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 
   .fsb-group {
