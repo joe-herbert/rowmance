@@ -187,10 +187,13 @@
     }
   }
 
-  function openRelation(sel: CellSelection, rel: RelationEntry) {
+  async function openRelation(sel: CellSelection, rel: RelationEntry) {
     const connId = rel.targetConnectionId ?? sel.connectionId;
     const db = rel.targetDatabase ?? sel.database;
     const connDbType = connectionStore.getById(connId)?.dbType ?? 'mysql';
+    if (rel.virtual && rel.targetConnectionId && !connectionStore.isActive(connId)) {
+      await connectionStore.connect(connId);
+    }
     panelStore.openInFocused({
       kind: 'table_browser',
       connectionId: connId,

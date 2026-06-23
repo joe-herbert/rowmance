@@ -712,7 +712,7 @@
     });
   }
 
-  function handleForeignKeyClick(colName: string, value: CellValue): void {
+  async function handleForeignKeyClick(colName: string, value: CellValue): Promise<void> {
     const fk = foreignKeys.find((f) => f.columns.includes(colName));
     if (fk) {
       const colIdx = fk.columns.indexOf(colName);
@@ -741,6 +741,9 @@
     if (!vr) return;
     const targetConnId = vr.to.connectionId;
     const targetDb = vr.to.database;
+    if (!connections.isActive(targetConnId)) {
+      await connections.connect(targetConnId);
+    }
     const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
     const quotedCol = targetDbType === 'postgres' ? `"${vr.to.column}"` : `\`${vr.to.column}\``;
     let filter: string;
