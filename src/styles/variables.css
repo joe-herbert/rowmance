@@ -148,5 +148,5 @@
   --color-table-row-alt: transparent;
   --color-table-row-hover: rgba(124, 92, 255, 0.07);
   --color-table-row-selected: rgba(124, 92, 255, 0.13);
-  --color-table-header-bg: linear-gradient(90deg, rgba(217, 198, 255, 0.90) 0%, rgba(194, 221, 255, 0.90) 100%);
+  --color-table-header-bg: linear-gradient(90deg, rgba(237, 218, 255, 0.95) 0%, rgba(214, 241, 255, 0.95) 100%);
 }

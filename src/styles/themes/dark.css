@@ -54,7 +54,7 @@
     --color-table-row-alt: transparent;
     --color-table-row-hover: rgba(124, 92, 255, 0.10);
     --color-table-row-selected: rgba(124, 92, 255, 0.22);
-    --color-table-header-bg: linear-gradient(90deg, rgba(54, 8, 55, 0.95) 0%, rgba(18, 58, 114, 0.95) 100%);
+    --color-table-header-bg: linear-gradient(90deg, rgba(48, 2, 81, 0.95) 0%, rgba(3, 35, 80, 0.95) 100%);
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
