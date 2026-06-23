@@ -740,6 +740,30 @@
     refocusCell();
   }
 
+  function handleTabFromEditor(shiftKey: boolean): void {
+    if (!focusedCell) return;
+    const rowCount = pageRows.length;
+    const colCount = visibleColumns.length;
+    let { row, col } = focusedCell;
+    if (shiftKey) {
+      col -= 1;
+      if (col < 0) {
+        col = colCount - 1;
+        row = Math.max(row - 1, 0);
+      }
+    } else {
+      col += 1;
+      if (col >= colCount) {
+        col = 0;
+        row = Math.min(row + 1, rowCount - 1);
+      }
+    }
+    anchorCell = { row, col };
+    focusedCell = { row, col };
+    skipNextFocusReset = true;
+    scrollFocusedCellIntoView(focusedCell);
+  }
+
   function confirmModalEdit(newValue: CellValue): void {
     if (!modalTarget) return;
     const { rowKey, colName, originalValue } = modalTarget;
@@ -1968,6 +1992,7 @@
       containerHeight={editTarget.containerHeight}
       onConfirm={confirmEdit}
       onCancel={cancelEdit}
+      onTab={handleTabFromEditor}
     />
   {/if}
 

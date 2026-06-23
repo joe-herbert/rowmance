@@ -19,9 +19,10 @@
     containerHeight: number;
     onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
+    onTab?: (_shiftKey: boolean) => void;
   }
 
-  let { value, originalValue, dataType, top, left, width, height, containerHeight, onConfirm, onCancel }: Props = $props();
+  let { value, originalValue, dataType, top, left, width, height, containerHeight, onConfirm, onCancel, onTab }: Props = $props();
 
   const { settings } = useSettings();
 
@@ -129,6 +130,10 @@
     if (e.key === 'Enter') {
       e.preventDefault();
       confirmEdit();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      confirmEdit();
+      onTab?.(e.shiftKey);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onCancel();
