@@ -1293,6 +1293,38 @@ fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::V
             .map(serde_json::Value::String)
             .unwrap_or(serde_json::Value::Null);
     }
+    if let Ok(v) = row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>(idx) {
+        return v
+            .map(|dt| serde_json::Value::String(dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<chrono::NaiveDateTime>, _>(idx) {
+        return v
+            .map(|dt| serde_json::Value::String(dt.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<chrono::NaiveDate>, _>(idx) {
+        return v
+            .map(|d| serde_json::Value::String(d.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<chrono::NaiveTime>, _>(idx) {
+        return v
+            .map(|t| serde_json::Value::String(t.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    // MySQL TIME can be negative or > 23:59:59; NaiveTime rejects those, fall back to MySqlTime
+    if let Ok(v) = row.try_get::<Option<sqlx::mysql::types::MySqlTime>, _>(idx) {
+        return v
+            .map(|t| serde_json::Value::String(t.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    // MySQL YEAR type decodes as u16
+    if let Ok(v) = row.try_get::<Option<u16>, _>(idx) {
+        return v
+            .map(|n| serde_json::Value::from(n as i64))
+            .unwrap_or(serde_json::Value::Null);
+    }
     if let Ok(v) = row.try_get::<Option<serde_json::Value>, _>(idx) {
         return v
             .map(|j| serde_json::Value::String(j.to_string()))
@@ -1313,9 +1345,19 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
             .map(|i| serde_json::Value::from(i as i64))
             .unwrap_or(serde_json::Value::Null);
     }
+    if let Ok(v) = row.try_get::<Option<i16>, _>(idx) {
+        return v
+            .map(|i| serde_json::Value::from(i as i64))
+            .unwrap_or(serde_json::Value::Null);
+    }
     if let Ok(v) = row.try_get::<Option<f64>, _>(idx) {
         return v
             .and_then(|f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<f32>, _>(idx) {
+        return v
+            .and_then(|f| serde_json::Number::from_f64(f as f64).map(serde_json::Value::Number))
             .unwrap_or(serde_json::Value::Null);
     }
     if let Ok(v) = row.try_get::<Option<bool>, _>(idx) {
@@ -1326,6 +1368,52 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
     if let Ok(v) = row.try_get::<Option<String>, _>(idx) {
         return v
             .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>(idx) {
+        return v
+            .map(|dt| serde_json::Value::String(dt.to_rfc3339()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<chrono::NaiveDateTime>, _>(idx) {
+        return v
+            .map(|dt| serde_json::Value::String(dt.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<chrono::NaiveDate>, _>(idx) {
+        return v
+            .map(|d| serde_json::Value::String(d.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<chrono::NaiveTime>, _>(idx) {
+        return v
+            .map(|t| serde_json::Value::String(t.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<sqlx::postgres::types::PgTimeTz<chrono::NaiveTime, chrono::FixedOffset>>, _>(idx) {
+        return v
+            .map(|tz| {
+                let offset = tz.offset.local_minus_utc();
+                let (sign, abs_secs) = if offset >= 0 { ('+', offset as u32) } else { ('-', (-offset) as u32) };
+                serde_json::Value::String(format!(
+                    "{}{}{:02}:{:02}",
+                    tz.time.format("%H:%M:%S%.f"),
+                    sign,
+                    abs_secs / 3600,
+                    (abs_secs % 3600) / 60,
+                ))
+            })
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<sqlx::postgres::types::PgInterval>, _>(idx) {
+        return v
+            .map(|interval| {
+                let mut parts = Vec::new();
+                if interval.months != 0 { parts.push(format!("{} months", interval.months)); }
+                if interval.days != 0 { parts.push(format!("{} days", interval.days)); }
+                if interval.microseconds != 0 { parts.push(format!("{} μs", interval.microseconds)); }
+                serde_json::Value::String(if parts.is_empty() { "0".to_string() } else { parts.join(" ") })
+            })
             .unwrap_or(serde_json::Value::Null);
     }
     if let Ok(v) = row.try_get::<Option<serde_json::Value>, _>(idx) {
