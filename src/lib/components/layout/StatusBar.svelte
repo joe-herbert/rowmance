@@ -48,7 +48,8 @@
     const cells = statusBar.pendingCellCount;
     const rows = statusBar.pendingRowCount;
     if (cells === 0) return null;
-    return `${cells} unsaved change${cells !== 1 ? 's' : ''} in ${rows} row${rows !== 1 ? 's' : ''}`;
+    const rowSuffix = cells !== 1 || rows !== 1 ? ` in ${rows} row${rows !== 1 ? 's' : ''}` : '';
+    return `${cells} unsaved change${cells !== 1 ? 's' : ''}${rowSuffix}`;
   });
 </script>
 
