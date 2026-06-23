@@ -31,7 +31,7 @@
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
 
-  const BUILTIN_THEMES = ['system', 'light', 'dark'];
+  const BUILTIN_THEMES = ['system', 'light', 'dark', 'high-contrast'];
 
   let userThemes = $state<ThemeMeta[]>([]);
   let themeError = $state<string | null>(null);
@@ -47,6 +47,7 @@
       { value: 'system', label: 'System' },
       { value: 'light', label: 'Light' },
       { value: 'dark', label: 'Dark' },
+      { value: 'high-contrast', label: 'High Contrast' },
     ]},
     ...(userThemes.length > 0 ? [{ group: 'Custom', options: userThemes.map(t => ({ value: t.name, label: t.name })) }] : []),
   ]);
@@ -55,6 +56,7 @@
     { group: 'Built-in', options: [
       { value: 'light', label: 'Light' },
       { value: 'dark', label: 'Dark' },
+      { value: 'high-contrast', label: 'High Contrast' },
     ]},
     ...(userThemes.length > 0 ? [{ group: 'Custom', options: userThemes.map(t => ({ value: t.name, label: t.name })) }] : []),
   ]);

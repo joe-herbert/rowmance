@@ -57,7 +57,7 @@ export function useSettings() {
 
 // ── Side effects ──────────────────────────────────────────────────────────────
 
-const BUILTIN_THEMES = new Set(['light', 'dark', 'system']);
+const BUILTIN_THEMES = new Set(['light', 'dark', 'system', 'high-contrast']);
 
 function clearCustomThemeStyles() {
   const style = document.documentElement.style;
