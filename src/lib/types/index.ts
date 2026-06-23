@@ -273,6 +273,10 @@ export interface AppSettings {
   systemDatabases: string[];
   systemTablePatterns: string[];
   showSystemItems: boolean;
+  formatKeywordCase: 'upper' | 'lower' | 'preserve';
+  formatIndentStyle: 'standard' | 'tabularLeft' | 'tabularRight';
+  formatLinesBetweenQueries: number;
+  formatCompact: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -298,6 +302,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   systemDatabases: [...BUILTIN_DATABASES],
   systemTablePatterns: [...BUILTIN_TABLE_PATTERNS],
   showSystemItems: true,
+  formatKeywordCase: 'upper',
+  formatIndentStyle: 'standard',
+  formatLinesBetweenQueries: 1,
+  formatCompact: false,
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

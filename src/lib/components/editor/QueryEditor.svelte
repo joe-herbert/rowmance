@@ -479,8 +479,26 @@
   function formatQuery(): void {
     if (!editorView) return;
     const dialect = sqlDialect();
+    const s = settingsStore.settings;
     try {
-      const formatted = sqlFormat(sqlText, { language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'] });
+      let formatted = sqlFormat(sqlText, {
+        language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'],
+        keywordCase: s.formatKeywordCase,
+        indentStyle: s.formatIndentStyle,
+        linesBetweenQueries: s.formatLinesBetweenQueries,
+      });
+      if (s.formatCompact) {
+        // Collapse each statement to a single line, then re-insert the
+        // configured number of blank lines between statements.
+        const separator = ';\n' + '\n'.repeat(s.formatLinesBetweenQueries);
+        formatted = formatted
+          .split(/\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .join(' ')
+          .replace(/\s*;\s*/g, separator)
+          .trim();
+      }
       editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
       });

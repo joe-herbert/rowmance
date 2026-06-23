@@ -362,6 +362,64 @@
         </div>
       </div>
 
+      <h3 class="subsection-title">Format</h3>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Keyword Case</span>
+            <span class="label-hint">Case applied to SQL keywords when formatting</span>
+          </div>
+          <Select
+            value={settings.formatKeywordCase}
+            options={[{ value: 'upper', label: 'UPPER' }, { value: 'lower', label: 'lower' }, { value: 'preserve', label: 'Preserve' }]}
+            onchange={(v) => update('formatKeywordCase', v as 'upper' | 'lower' | 'preserve')}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Compact Mode</span>
+            <span class="label-hint">Keep each query on a single line when formatting</span>
+          </div>
+          <Checkbox
+            checked={settings.formatCompact}
+            onchange={(c) => update('formatCompact', c)}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Indent Style</span>
+            <span class="label-hint">How clauses are indented in expanded format</span>
+          </div>
+          <Select
+            value={settings.formatIndentStyle}
+            options={[{ value: 'standard', label: 'Standard' }, { value: 'tabularLeft', label: 'Tabular left' }, { value: 'tabularRight', label: 'Tabular right' }]}
+            onchange={(v) => update('formatIndentStyle', v as 'standard' | 'tabularLeft' | 'tabularRight')}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Lines Between Queries</span>
+            <span class="label-hint">Blank lines inserted between multiple statements</span>
+          </div>
+          <input
+            class="setting-input setting-input--sm"
+            type="number"
+            min="0"
+            max="10"
+            value={settings.formatLinesBetweenQueries}
+            onchange={(e) => {
+              const v = Math.min(10, Math.max(0, parseInt((e.currentTarget as HTMLInputElement).value, 10) || 0));
+              (e.currentTarget as HTMLInputElement).value = String(v);
+              update('formatLinesBetweenQueries', v);
+            }}
+          />
+        </div>
+      </div>
+
     {:else if activeSection === 'keyboard'}
       <h2 class="section-title">Keyboard Shortcuts</h2>
       <p class="section-description">
@@ -615,6 +673,14 @@
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+  }
+
+  .subsection-title {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-top: var(--spacing-6);
     margin-bottom: var(--spacing-4);
   }
 
