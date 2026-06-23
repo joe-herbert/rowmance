@@ -15,6 +15,9 @@
   import { errorMessage } from '$lib/utils/errors';
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
   import Select from '$lib/components/ui/Select.svelte';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
+  import { portal } from '$lib/actions/portal';
 
   type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
 
@@ -222,6 +225,25 @@
     name: string;
   }
   let savedCtxMenu = $state<SavedCtxMenu | null>(null);
+  let savedCtxMenuEl = $state<HTMLDivElement | undefined>(undefined);
+  let ctxMenuLeft = $state(0);
+  let ctxMenuTop = $state(0);
+
+  $effect(() => {
+    if (!savedCtxMenu) return;
+    ctxMenuLeft = savedCtxMenu.x;
+    ctxMenuTop = savedCtxMenu.y;
+    requestAnimationFrame(() => {
+      if (!savedCtxMenuEl) return;
+      const { width } = savedCtxMenuEl.getBoundingClientRect();
+      ctxMenuLeft = Math.min(savedCtxMenu!.x, window.innerWidth - width - 8);
+    });
+    function onMousedown(e: MouseEvent) {
+      if (!savedCtxMenuEl?.contains(e.target as Node)) savedCtxMenu = null;
+    }
+    document.addEventListener('mousedown', onMousedown, true);
+    return () => document.removeEventListener('mousedown', onMousedown, true);
+  });
 
   async function loadSavedQueries() {
     savedLoading = true;
@@ -246,10 +268,19 @@
   }
 
   function openSavedQuery(query: SavedQuery) {
+    const existing = panelStore.openItems.find(
+      item => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id
+    );
+    if (existing) {
+      panelStore.showItem(existing);
+      return;
+    }
     panelStore.openInFocused({
       kind: 'query_editor',
       connectionId: query.connectionId ?? connectionStore.profiles[0]?.id ?? '',
       initialSql: query.sql,
+      savedQueryId: query.id,
+      savedQueryName: query.name,
     });
   }
 
@@ -281,15 +312,65 @@
     savedCtxMenu = { x: e.clientX, y: e.clientY, kind, id, name };
   }
 
+  let confirmDeleteQueryId = $state<string | null>(null);
+
+  async function confirmDeleteQuery() {
+    if (!confirmDeleteQueryId) return;
+    await savedQueriesApi.deleteSavedQuery(confirmDeleteQueryId);
+    confirmDeleteQueryId = null;
+    await loadSavedQueries();
+  }
+
+  let renamingQueryId = $state<string | null>(null);
+  let renameQueryValue = $state('');
+  let renameQueryInputEl = $state<HTMLInputElement | undefined>(undefined);
+
+  function startRenameQuery(id: string, currentName: string) {
+    savedCtxMenu = null;
+    renamingQueryId = id;
+    renameQueryValue = currentName;
+    requestAnimationFrame(() => {
+      renameQueryInputEl?.focus();
+      renameQueryInputEl?.select();
+    });
+  }
+
+  async function commitRenameQuery(query: SavedQuery) {
+    if (!renameQueryValue.trim()) { renamingQueryId = null; return; }
+    const name = renameQueryValue.trim();
+    renamingQueryId = null;
+    await savedQueriesApi.updateSavedQuery(query.id, { name, sql: query.sql, connectionId: query.connectionId, folderId: query.folderId });
+    const open = panelStore.openItems.find(item => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id);
+    if (open?.content.kind === 'query_editor' && open.content.editorId) {
+      panelStore.updateQueryEditorMeta(open.content.editorId, { savedQueryName: name });
+    }
+    await loadSavedQueries();
+  }
+
+  async function handleSavedCtxDuplicate() {
+    if (!savedCtxMenu || savedCtxMenu.kind !== 'query') return;
+    const original = savedQueries.find(q => q.id === savedCtxMenu?.id);
+    if (!original) return;
+    savedCtxMenu = null;
+    await savedQueriesApi.createSavedQuery({
+      name: `${original.name} (copy)`,
+      sql: original.sql,
+      folderId: original.folderId,
+      connectionId: original.connectionId,
+    });
+    await loadSavedQueries();
+  }
+
   async function handleSavedCtxDelete() {
     if (!savedCtxMenu) return;
     if (savedCtxMenu.kind === 'query') {
-      await savedQueriesApi.deleteSavedQuery(savedCtxMenu.id);
+      confirmDeleteQueryId = savedCtxMenu.id;
+      savedCtxMenu = null;
     } else {
       await savedQueriesApi.deleteFolder(savedCtxMenu.id);
+      savedCtxMenu = null;
+      await loadSavedQueries();
     }
-    savedCtxMenu = null;
-    await loadSavedQueries();
   }
 
   function closeSavedCtxMenu() {
@@ -300,6 +381,14 @@
   $effect(() => {
     if (activePanel === 'saved' && savedFolders.length === 0 && savedQueries.length === 0 && !savedLoading) {
       loadSavedQueries();
+    }
+  });
+
+  // Reload whenever a query is saved from the editor.
+  $effect(() => {
+    savedQueriesInvalidator.version;
+    if (activePanel === 'saved') {
+      untrack(() => loadSavedQueries());
     }
   });
 
@@ -318,7 +407,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="right-sidebar" onclick={() => { savedCtxMenu = null; }}>
+<div class="right-sidebar">
   <!-- Icon tab strip -->
   <div class="tab-strip" role="tablist" aria-label="Right sidebar panels">
     <div class="spacer"></div>
@@ -500,15 +589,30 @@
                 <ul class="folder-children" role="group">
                   {#each queriesByFolder.get(null) ?? [] as query (query.id)}
                     <li class="query-node" role="treeitem" aria-selected={false}>
-                      <button
-                        class="query-btn"
-                        onclick={() => openSavedQuery(query)}
-                        oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
-                        title="Open {query.name}"
-                      >
-                        <span class="query-icon" aria-hidden="true">⌨</span>
-                        <span class="query-name">{query.name}</span>
-                      </button>
+                      {#if renamingQueryId === query.id}
+                        <input
+                          bind:this={renameQueryInputEl}
+                          bind:value={renameQueryValue}
+                          class="query-rename-input"
+                          type="text"
+                          maxlength="120"
+                          autocomplete="off"
+                          spellcheck={false}
+                          onclick={(e) => e.stopPropagation()}
+                          onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRenameQuery(query); } if (e.key === 'Escape') { renamingQueryId = null; } }}
+                          onblur={() => commitRenameQuery(query)}
+                        />
+                      {:else}
+                        <button
+                          class="query-btn"
+                          onclick={() => openSavedQuery(query)}
+                          oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
+                          title="Open {query.name}"
+                        >
+                          <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
+                          <span class="query-name">{query.name}</span>
+                        </button>
+                      {/if}
                     </li>
                   {/each}
                 </ul>
@@ -544,7 +648,7 @@
                           oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
                           title="Open {query.name}"
                         >
-                          <span class="query-icon" aria-hidden="true">⌨</span>
+                          <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
                           <span class="query-name">{query.name}</span>
                         </button>
                       </li>
@@ -710,20 +814,41 @@
 <!-- Saved queries context menu -->
 {#if savedCtxMenu}
   <div
+    bind:this={savedCtxMenuEl}
     class="ctx-menu"
-    style="top: {savedCtxMenu.y}px; left: {savedCtxMenu.x}px;"
+    style="top: {ctxMenuTop}px; left: {ctxMenuLeft}px;"
     role="menu"
     aria-label="Actions for {savedCtxMenu.name}"
+    use:portal
   >
     {#if savedCtxMenu.kind === 'query'}
       <button class="ctx-item" role="menuitem" onclick={() => { openSavedQuery(savedQueries.find(q => q.id === savedCtxMenu?.id)!); closeSavedCtxMenu(); }}>
         Open
       </button>
+      <button class="ctx-item" role="menuitem" onclick={handleSavedCtxDuplicate}>
+        Duplicate
+      </button>
+      <button class="ctx-item" role="menuitem" onclick={() => startRenameQuery(savedCtxMenu!.id, savedCtxMenu!.name)}>
+        Rename
+      </button>
+      <div class="ctx-sep" role="separator"></div>
     {/if}
     <button class="ctx-item danger" role="menuitem" onclick={handleSavedCtxDelete}>
       Delete
     </button>
   </div>
+{/if}
+
+{#if confirmDeleteQueryId !== null}
+  <ConfirmDialog
+    title="Delete query"
+    message="Delete this saved query? This cannot be undone."
+    confirmText="Delete"
+    cancelText="Cancel"
+    danger={true}
+    onconfirm={confirmDeleteQuery}
+    oncancel={() => { confirmDeleteQueryId = null; }}
+  />
 {/if}
 
 <style>
@@ -1002,8 +1127,9 @@
 
   .folder-icon,
   .query-icon {
-    font-size: var(--font-size-xs);
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .folder-name,
@@ -1045,7 +1171,24 @@
 
   .query-node {
     display: flex;
+    align-items: center;
   }
+
+  .query-rename-input {
+    flex: 1;
+    min-width: 0;
+    height: 22px;
+    margin: 2px var(--spacing-2) 2px var(--spacing-3);
+    padding: 0 var(--spacing-1);
+    background: var(--color-bg-input, var(--color-bg-secondary));
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    outline: none;
+  }
+
 
   /* ── Context menu ──────────────────────────────────────────────────────── */
 
@@ -1073,6 +1216,12 @@
 
   .ctx-item:hover {
     background: var(--color-bg-hover);
+  }
+
+  .ctx-sep {
+    height: 1px;
+    margin: var(--spacing-1) 0;
+    background: var(--color-border);
   }
 
   .ctx-item.danger {

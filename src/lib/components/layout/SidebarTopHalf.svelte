@@ -12,6 +12,9 @@
   import type { PanelKind } from '$lib/types';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
+  import * as savedQueriesApi from '$lib/tauri/saved_queries';
+  import { portal } from '$lib/actions/portal';
+  import { queryEditorCache } from '$lib/stores/queryEditorState';
 
 
   const panelStore = usePanels();
@@ -20,7 +23,7 @@
 
   function panelLabel(content: PanelKind): string {
     switch (content.kind) {
-      case 'query_editor': return 'Query';
+      case 'query_editor': return content.savedQueryName ?? 'Query';
       case 'table_browser': return content.table;
       case 'table_structure': return content.table;
       case 'ddl_viewer': return content.objectName;
@@ -100,6 +103,70 @@
 
   let confirmCloseItemId = $state<string | null>(null);
 
+  // ── Context menu + rename ─────────────────────────────────────────────────────
+
+  let contextMenuItemId = $state<string | null>(null);
+  let contextMenuTop = $state(0);
+  let contextMenuLeft = $state(0);
+  let contextMenuEl = $state<HTMLDivElement | undefined>(undefined);
+  let renamingItemId = $state<string | null>(null);
+  let renameValue = $state('');
+  let renameInputEl = $state<HTMLInputElement | undefined>(undefined);
+
+  $effect(() => {
+    if (!contextMenuItemId) return;
+    function onMousedown(e: MouseEvent) {
+      if (!contextMenuEl?.contains(e.target as Node)) contextMenuItemId = null;
+    }
+    document.addEventListener('mousedown', onMousedown, true);
+    return () => document.removeEventListener('mousedown', onMousedown, true);
+  });
+
+  $effect(() => {
+    if (!renamingItemId) return;
+    requestAnimationFrame(() => {
+      renameInputEl?.focus();
+      renameInputEl?.select();
+    });
+  });
+
+  function onContextMenu(e: MouseEvent, item: import('$lib/stores/panels.svelte').OpenItem) {
+    if (item.content.kind !== 'query_editor' || !item.content.savedQueryId) return;
+    e.preventDefault();
+    contextMenuItemId = item.id;
+    contextMenuTop = e.clientY;
+    contextMenuLeft = e.clientX;
+  }
+
+  async function startRename(item: import('$lib/stores/panels.svelte').OpenItem) {
+    contextMenuItemId = null;
+    if (item.content.kind !== 'query_editor') return;
+    renamingItemId = item.id;
+    renameValue = item.content.savedQueryName ?? 'Query';
+  }
+
+  async function commitRename(item: import('$lib/stores/panels.svelte').OpenItem) {
+    if (!renameValue.trim() || item.content.kind !== 'query_editor' || !item.content.savedQueryId) {
+      renamingItemId = null;
+      return;
+    }
+    const name = renameValue.trim();
+    const currentSql = item.content.editorId
+      ? (queryEditorCache.get(item.content.editorId)?.sql ?? item.content.initialSql ?? '')
+      : (item.content.initialSql ?? '');
+    try {
+      await savedQueriesApi.updateSavedQuery(item.content.savedQueryId, {
+        name,
+        sql: currentSql,
+        connectionId: item.content.connectionId,
+      });
+    } catch { /* ignore */ }
+    if (item.content.editorId) {
+      panelStore.updateQueryEditorMeta(item.content.editorId, { savedQueryName: name });
+    }
+    renamingItemId = null;
+  }
+
   function itemIsDirty(item: import('$lib/stores/panels.svelte').OpenItem): boolean {
     const key = dirtyKeyForContent(item.content);
     return key ? panelStore.isItemDirty(key) : false;
@@ -152,6 +219,7 @@
           onclick={() => panelStore.showItem(item)}
           onkeydown={(e) => e.key === 'Enter' && panelStore.showItem(item)}
           onpointerdown={(e) => onPointerDown(e, item.id)}
+          oncontextmenu={(e) => onContextMenu(e, item)}
           tabindex="0"
         >
           <span
@@ -196,7 +264,25 @@
               </svg>
             {/if}
           </span>
-          <span class="panel-label">{panelLabel(item.content)}</span>
+          {#if renamingItemId === item.id}
+            <input
+              bind:this={renameInputEl}
+              bind:value={renameValue}
+              class="rename-input"
+              type="text"
+              maxlength="120"
+              autocomplete="off"
+              spellcheck={false}
+              onclick={(e) => e.stopPropagation()}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitRename(item); }
+                if (e.key === 'Escape') { renamingItemId = null; }
+              }}
+              onblur={() => commitRename(item)}
+            />
+          {:else}
+            <span class="panel-label">{panelLabel(item.content)}</span>
+          {/if}
           {#if itemIsDirty(item)}
             <span class="dirty-dot" title="Unsaved changes" aria-label="Has unsaved changes"></span>
           {/if}
@@ -228,6 +314,23 @@
     </ul>
   {/if}
 </div>
+
+{#if contextMenuItemId !== null}
+  {@const contextItem = panelStore.openItems.find(i => i.id === contextMenuItemId)}
+  {#if contextItem}
+    <div
+      bind:this={contextMenuEl}
+      class="context-menu"
+      role="menu"
+      style="top:{contextMenuTop}px;left:{contextMenuLeft}px"
+      use:portal
+    >
+      <button class="ctx-item" role="menuitem" onclick={() => startRename(contextItem)}>
+        Rename
+      </button>
+    </div>
+  {/if}
+{/if}
 
 {#if confirmCloseItemId !== null}
   {@const itemToClose = panelStore.openItems.find(i => i.id === confirmCloseItemId)}
@@ -396,6 +499,49 @@
     border-radius: 50%;
     background: var(--color-warning, #f59e0b);
     flex-shrink: 0;
+  }
+
+  .rename-input {
+    flex: 1;
+    min-width: 0;
+    height: 20px;
+    padding: 0 var(--spacing-1);
+    background: var(--color-bg-input, var(--color-bg-secondary));
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    font-size: 13px;
+    font-family: var(--font-family-ui);
+    outline: none;
+  }
+
+  .context-menu {
+    position: fixed;
+    z-index: 500;
+    min-width: 160px;
+    padding: var(--spacing-1) 0;
+    background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+  }
+
+  .ctx-item {
+    display: block;
+    width: 100%;
+    padding: var(--spacing-1) var(--spacing-3);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    background: transparent;
+  }
+
+  .ctx-item:hover {
+    background: var(--color-bg-active);
   }
 
   .close-btn {

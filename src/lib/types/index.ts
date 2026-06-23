@@ -230,7 +230,7 @@ export interface DbUser {
 // ── Panels ───────────────────────────────────────────────────────────────────
 
 export type PanelKind =
-  | { kind: 'query_editor'; connectionId: string; database?: string; initialSql?: string; editorId?: string }
+  | { kind: 'query_editor'; connectionId: string; database?: string; initialSql?: string; editorId?: string; savedQueryId?: string; savedQueryName?: string }
   | { kind: 'table_browser'; connectionId: string; database: string; table: string; initialFilter?: string }
   | { kind: 'table_structure'; connectionId: string; database: string; table: string }
   | { kind: 'ddl_viewer'; connectionId: string; database: string; objectName: string; objectType: 'table' | 'view' }

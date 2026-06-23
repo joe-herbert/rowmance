@@ -49,7 +49,7 @@
 >
   {#if panel.content.kind === 'query_editor'}
     {#key panel.content.editorId}
-      <QueryEditor connectionId={panel.content.connectionId} database={panel.content.database} initialSql={panel.content.initialSql} editorId={panel.content.editorId} />
+      <QueryEditor connectionId={panel.content.connectionId} database={panel.content.database} initialSql={panel.content.initialSql} editorId={panel.content.editorId} savedQueryId={panel.content.savedQueryId} savedQueryName={panel.content.savedQueryName} />
     {/key}
   {:else if panel.content.kind === 'table_browser'}
     {#key panel.content}

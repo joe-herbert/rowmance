@@ -44,16 +44,20 @@
   import Select from '$lib/components/ui/Select.svelte';
   import { portal } from '$lib/actions/portal';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
+  import * as savedQueriesApi from '$lib/tauri/saved_queries';
+  import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
 
   interface Props {
     connectionId: string;
     database?: string;
     initialSql?: string;
     editorId?: string;
+    savedQueryId?: string;
+    savedQueryName?: string;
     onExecute?: (_sql: string) => void;
   }
 
-  let { connectionId, database: initialDatabase, initialSql = '', editorId, onExecute }: Props = $props();
+  let { connectionId, database: initialDatabase, initialSql = '', editorId, savedQueryId: initialSavedQueryId, savedQueryName: initialSavedQueryName, onExecute }: Props = $props();
 
   const connections = useConnections();
   const settingsStore = useSettings();
@@ -80,8 +84,28 @@
   $effect(() => {
     if (!editorId) return;
     const dirtyKey = `query:${editorId}`;
-    panelStore.setItemDirty(dirtyKey, sqlText !== initialSql && sqlText.trim() !== '');
+    if (savedSql !== null) {
+      panelStore.setItemDirty(dirtyKey, sqlText !== savedSql);
+    } else {
+      panelStore.setItemDirty(dirtyKey, sqlText.trim() !== '');
+    }
   });
+
+  let currentSavedQueryId = $state<string | undefined>(untrack(() => initialSavedQueryId));
+  let currentSavedQueryName = $state<string | undefined>(untrack(() => initialSavedQueryName));
+  let savedSql = $state<string | null>(untrack(() => initialSavedQueryId ? (cached?.sql ?? initialSql) : null));
+
+  $effect(() => {
+    if (initialSavedQueryName !== undefined) currentSavedQueryName = initialSavedQueryName;
+  });
+  let saveDialogOpen = $state(false);
+  let saveNameInput = $state('');
+  let isSaving = $state(false);
+  let saveDialogTriggerEl = $state<HTMLButtonElement | undefined>(undefined);
+  let saveDialogEl = $state<HTMLDivElement | undefined>(undefined);
+  let saveDialogTop = $state(0);
+  let saveDialogLeft = $state(0);
+  let saveNameInputEl = $state<HTMLInputElement | undefined>(undefined);
 
   let toolbarEl = $state<HTMLDivElement | undefined>(undefined);
   let toolbarWidth = $state(9999);
@@ -124,6 +148,74 @@
     document.addEventListener('mousedown', onMousedown, true);
     return () => document.removeEventListener('mousedown', onMousedown, true);
   });
+
+  $effect(() => {
+    if (!saveDialogOpen) return;
+
+    function positionDialog() {
+      if (!saveDialogTriggerEl || !saveDialogEl) return;
+      const rect = saveDialogTriggerEl.getBoundingClientRect();
+      saveDialogTop = rect.bottom + 4;
+      saveDialogLeft = rect.right - saveDialogEl.offsetWidth;
+    }
+
+    requestAnimationFrame(() => {
+      positionDialog();
+      saveNameInputEl?.focus();
+      saveNameInputEl?.select();
+    });
+
+    function onMousedown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (!saveDialogTriggerEl?.contains(t) && !saveDialogEl?.contains(t)) {
+        saveDialogOpen = false;
+      }
+    }
+
+    document.addEventListener('mousedown', onMousedown, true);
+    return () => document.removeEventListener('mousedown', onMousedown, true);
+  });
+
+  async function saveQuery(): Promise<void> {
+    if (!editorId) return;
+    if (currentSavedQueryId) {
+      isSaving = true;
+      try {
+        await savedQueriesApi.updateSavedQuery(currentSavedQueryId, {
+          name: currentSavedQueryName ?? 'Query',
+          sql: sqlText,
+          connectionId,
+        });
+        savedSql = sqlText;
+        savedQueriesInvalidator.invalidate();
+      } finally {
+        isSaving = false;
+      }
+      return;
+    }
+    saveNameInput = '';
+    saveDialogOpen = true;
+  }
+
+  async function confirmSave(): Promise<void> {
+    if (!editorId || !saveNameInput.trim()) return;
+    isSaving = true;
+    try {
+      const saved = await savedQueriesApi.createSavedQuery({
+        name: saveNameInput.trim(),
+        sql: sqlText,
+        connectionId,
+      });
+      currentSavedQueryId = saved.id;
+      currentSavedQueryName = saved.name;
+      savedSql = sqlText;
+      saveDialogOpen = false;
+      panelStore.updateQueryEditorMeta(editorId, { savedQueryId: saved.id, savedQueryName: saved.name });
+      savedQueriesInvalidator.invalidate();
+    } finally {
+      isSaving = false;
+    }
+  }
 
   let connectionName = $derived(connections.getById(connectionId)?.name ?? connectionId);
   let transactionMode = $derived(settingsStore.settings.transactionMode);
@@ -611,6 +703,49 @@
 
     <div class="toolbar-spacer"></div>
 
+    <button
+      bind:this={saveDialogTriggerEl}
+      class="toolbar-btn toolbar-btn--save"
+      onclick={saveQuery}
+      disabled={isSaving}
+      title={currentSavedQueryId ? 'Save query' : 'Save query as…'}
+      aria-label="Save query"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+        <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>
+    </button>
+
+    {#if saveDialogOpen}
+      <div
+        bind:this={saveDialogEl}
+        class="save-dialog"
+        role="dialog"
+        aria-label="Save query"
+        style="top:{saveDialogTop}px;left:{saveDialogLeft}px"
+        use:portal
+      >
+        <form onsubmit={(e) => { e.preventDefault(); confirmSave(); }}>
+          <input
+            bind:this={saveNameInputEl}
+            bind:value={saveNameInput}
+            class="save-name-input"
+            type="text"
+            placeholder="Query name"
+            maxlength="120"
+            autocomplete="off"
+            spellcheck={false}
+            onkeydown={(e) => { if (e.key === 'Escape') saveDialogOpen = false; }}
+          />
+          <button type="submit" class="save-confirm-btn" disabled={!saveNameInput.trim() || isSaving}>
+            Save
+          </button>
+        </form>
+      </div>
+    {/if}
+
     {#if compact}
       <button
         bind:this={actionsMenuTriggerEl}
@@ -827,6 +962,75 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .toolbar-btn--save {
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--toolbar-height) - var(--spacing-3));
+    padding: 0;
+  }
+
+  /* Save name dialog */
+  .save-dialog {
+    position: fixed;
+    z-index: 9999;
+    background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    padding: var(--spacing-2);
+    animation: dropdown-in var(--transition-md) both;
+    transform-origin: top right;
+  }
+
+  .save-dialog form {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: center;
+  }
+
+  .save-name-input {
+    width: 200px;
+    height: 26px;
+    padding: 0 var(--spacing-2);
+    background: var(--color-bg-input, var(--color-bg-secondary));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    outline: none;
+  }
+
+  .save-name-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .save-confirm-btn {
+    padding: 0 var(--spacing-3);
+    height: 26px;
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast);
+  }
+
+  .save-confirm-btn:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+  }
+
+  .save-confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   /* Actions overflow menu */

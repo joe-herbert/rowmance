@@ -262,6 +262,18 @@ export function usePanels() {
       return dirtyItemKeys.has(key);
     },
 
+    /** Update saved query metadata on a query_editor open item and its panel. */
+    updateQueryEditorMeta(editorId: string, updates: { savedQueryId?: string; savedQueryName?: string }) {
+      const applyUpdate = (content: PanelKind): PanelKind => {
+        if (content.kind === 'query_editor' && content.editorId === editorId) {
+          return { ...content, ...updates };
+        }
+        return content;
+      };
+      openItems = openItems.map(item => ({ ...item, content: applyUpdate(item.content) }));
+      panels = panels.map(p => ({ ...p, content: applyUpdate(p.content) }));
+    },
+
     /** Reorder open items by moving fromId to before/after toId. */
     reorderOpenItems(fromId: string, toId: string, position: 'before' | 'after') {
       if (fromId === toId) return;
