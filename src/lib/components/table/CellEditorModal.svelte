@@ -5,12 +5,17 @@
   import { onMount, untrack } from 'svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import DatePicker from '$lib/components/ui/DatePicker.svelte';
+  import TimePicker from '$lib/components/ui/TimePicker.svelte';
+  import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
+  import { executeQuery } from '$lib/tauri/query';
 
-  function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'text' {
+  function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
     const lower = dt.toLowerCase();
     if (lower.includes('bool')) return 'boolean';
-    if (lower.includes('date') && lower.includes('time')) return 'datetime-local';
+    if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp')) return 'datetime-local';
     if (lower.includes('date')) return 'date';
+    if (lower.includes('time') && !lower.includes('timestamp')) return 'time';
     return 'text';
   }
 
@@ -23,9 +28,11 @@
     dataType: string;
     onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
+    connectionId?: string;
+    database?: string | null;
   }
 
-  let { value, originalValue, colName, dataType, onConfirm, onCancel }: Props = $props();
+  let { value, originalValue, colName, dataType, onConfirm, onCancel, connectionId, database }: Props = $props();
 
   const { settings } = useSettings();
 
@@ -92,6 +99,40 @@
     if (v === null) return 'NULL';
     return v ? 'true' : 'false';
   }
+
+  const showNow = $derived(inputType === 'date' || inputType === 'datetime-local' || inputType === 'time');
+
+  function formatNow(d: Date, type: typeof inputType): string {
+    const p = (n: number) => String(n).padStart(2, '0');
+    const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    if (type === 'date') return date;
+    if (type === 'time') return time;
+    return `${date} ${time}`;
+  }
+
+  function parseDbNow(raw: string, type: typeof inputType): string {
+    const normalized = String(raw).replace('T', ' ').replace(/\.\d+/, '').replace(/[+-]\d{2}:\d{2}$/, '').trim();
+    const [datePart = '', timePart = '00:00:00'] = normalized.split(' ');
+    if (type === 'date') return datePart;
+    if (type === 'time') return timePart;
+    return `${datePart} ${timePart}`;
+  }
+
+  async function handleNow(): Promise<void> {
+    if (settings.nowTimeSource === 'database' && connectionId) {
+      try {
+        const result = await executeQuery(connectionId, 'SELECT NOW()', 1, 1, database ?? null);
+        if (!result.error && result.rows[0]?.[0] != null) {
+          onConfirm(parseDbNow(String(result.rows[0][0]), inputType));
+          return;
+        }
+      } catch {
+        // fall through to user time on error
+      }
+    }
+    onConfirm(formatNow(new Date(), inputType));
+  }
 </script>
 
 <Modal zindex={500} label="Edit {colName}" onbackdropclick={handleBackdropClick}>
@@ -119,25 +160,11 @@
           {boolLabel(boolState)}
         </button>
       {:else if inputType === 'datetime-local'}
-        <input
-          bind:this={inputEl}
-          class="modal-input"
-          type="datetime-local"
-          bind:value={textValue}
-          autocomplete="off"
-          spellcheck="false"
-          aria-label="Edit datetime value"
-        />
+        <DateTimePicker value={textValue} onchange={(v) => { textValue = v; }} />
       {:else if inputType === 'date'}
-        <input
-          bind:this={inputEl}
-          class="modal-input"
-          type="date"
-          bind:value={textValue}
-          autocomplete="off"
-          spellcheck="false"
-          aria-label="Edit date value"
-        />
+        <DatePicker value={textValue} onchange={(v) => { textValue = v; }} />
+      {:else if inputType === 'time'}
+        <TimePicker value={textValue} onchange={(v) => { textValue = v; }} />
       {:else}
         <textarea
           bind:this={inputEl}
@@ -156,6 +183,9 @@
         {inputType === 'boolean' ? 'Click to cycle value' : 'Ctrl+Enter to confirm · Escape to cancel'}
       </span>
       <div class="modal-actions">
+        {#if showNow}
+          <button class="modal-btn btn-now" onclick={handleNow} title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time">NOW</button>
+        {/if}
         <button class="modal-btn btn-null" onclick={() => onConfirm(null)}>Set NULL</button>
         <button class="modal-btn btn-cancel" onclick={onCancel}>Cancel</button>
         <button class="modal-btn btn-confirm" onclick={confirmEdit}>Confirm</button>
@@ -228,24 +258,6 @@
     border-color: var(--color-accent);
   }
 
-  .modal-input {
-    width: 100%;
-    padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    outline: none;
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
-    box-sizing: border-box;
-    transition: border-color var(--transition-fast);
-  }
-
-  .modal-input:focus {
-    border-color: var(--color-accent);
-  }
-
   .bool-toggle {
     align-self: flex-start;
     padding: var(--spacing-2) var(--spacing-4);
@@ -312,6 +324,17 @@
 
   .modal-btn:hover {
     background: var(--color-bg-hover);
+  }
+
+  .btn-now {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-accent);
+  }
+
+  .btn-now:hover {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
   }
 
   .btn-null {

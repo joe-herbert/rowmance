@@ -267,6 +267,7 @@ export interface AppSettings {
   rightSidebarVisible: boolean;
   rightSidebarPanel: string;
   clickOutsideEdit: 'discard' | 'confirm';
+  nowTimeSource: 'user' | 'database';
   systemDatabases: string[];
   systemTablePatterns: string[];
   showSystemItems: boolean;
@@ -290,6 +291,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rightSidebarVisible: false,
   rightSidebarPanel: 'history',
   clickOutsideEdit: 'discard',
+  nowTimeSource: 'user',
   systemDatabases: [...BUILTIN_DATABASES],
   systemTablePatterns: [...BUILTIN_TABLE_PATTERNS],
   showSystemItems: true,

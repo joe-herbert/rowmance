@@ -5,6 +5,11 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { portal } from '$lib/actions/portal';
+  import DatePicker from '$lib/components/ui/DatePicker.svelte';
+  import TimePicker from '$lib/components/ui/TimePicker.svelte';
+  import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
+  import { executeQuery } from '$lib/tauri/query';
 
   type CellValue = string | number | boolean | null;
 
@@ -20,9 +25,11 @@
     onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
     onTab?: (_shiftKey: boolean) => void;
+    connectionId?: string;
+    database?: string | null;
   }
 
-  let { value, originalValue, dataType, top, left, width, height, containerHeight, onConfirm, onCancel, onTab }: Props = $props();
+  let { value, originalValue, dataType, top, left, width, height, containerHeight, onConfirm, onCancel, onTab, connectionId, database }: Props = $props();
 
   const { settings } = useSettings();
 
@@ -38,13 +45,19 @@
 
   export function isDateTimeType(dt: string): boolean {
     const lower = dt.toLowerCase();
-    return lower.includes('date') && lower.includes('time');
+    return (lower.includes('date') && lower.includes('time')) || lower.includes('timestamp');
   }
 
-  export function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'text' {
+  export function isTimeType(dt: string): boolean {
+    const lower = dt.toLowerCase();
+    return lower.includes('time') && !lower.includes('date') && !lower.includes('timestamp');
+  }
+
+  export function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
     if (isBooleanType(dt)) return 'boolean';
     if (isDateTimeType(dt)) return 'datetime-local';
     if (isDateType(dt)) return 'date';
+    if (isTimeType(dt)) return 'time';
     return 'text';
   }
 
@@ -65,18 +78,78 @@
   let inputEl = $state<HTMLInputElement | null>(null);
   let cellEditorEl = $state<HTMLDivElement | null>(null);
   let actionsEl = $state<HTMLDivElement | null>(null);
+  let pickerEl = $state<HTMLDivElement | null>(null);
+
+  const showPicker = $derived(
+    inputType === 'date' || inputType === 'datetime-local' || inputType === 'time',
+  );
+
+  // Off-screen until first position calculation runs
+  let pickerTop = $state(-9999);
+  let pickerLeft = $state(-9999);
+  let pickerOpenUp = $state(false);
+  let actionsTopFixed = $state(-9999);
+  let actionsLeftFixed = $state(-9999);
+
+  // Fallback estimates used only to decide open-up vs open-down before first render
+  const PICKER_HEIGHT_ESTIMATE: Record<string, number> = {
+    'date': 300,
+    'time': 150,
+    'datetime-local': 450,
+  };
 
   // Height of the actions bar — used to decide above/below placement
   const ACTIONS_HEIGHT = 28;
   const ACTIONS_GAP = 3;
 
-  const actionsTop = $derived(
-    top + height + ACTIONS_GAP + ACTIONS_HEIGHT > containerHeight
-      ? top - ACTIONS_GAP - ACTIONS_HEIGHT
-      : top + height + ACTIONS_GAP,
-  );
+  $effect(() => {
+    if (!cellEditorEl) return;
 
-  const actionsCenter = $derived(left + width / 2);
+    function updatePositions(): void {
+      if (!cellEditorEl) return;
+      const rect = cellEditorEl.getBoundingClientRect();
+      const containerTop = rect.top - top;
+      const cellCenterX = rect.left + width / 2;
+
+      // Actions bar: above cell when no room below in container
+      const actionsAbove = top + height + ACTIONS_GAP + ACTIONS_HEIGHT > containerHeight;
+      const actionsTopContainer = actionsAbove
+        ? top - ACTIONS_GAP - ACTIONS_HEIGHT
+        : top + height + ACTIONS_GAP;
+      actionsTopFixed = containerTop + actionsTopContainer;
+      const actionsW = actionsEl?.offsetWidth ?? 100;
+      actionsLeftFixed = Math.max(8, Math.min(window.innerWidth - actionsW - 8, cellCenterX - actionsW / 2));
+
+      // Picker
+      if (showPicker) {
+        const actualH = pickerEl ? pickerEl.offsetHeight : (PICKER_HEIGHT_ESTIMATE[inputType] ?? 300);
+        const estimateH = PICKER_HEIGHT_ESTIMATE[inputType] ?? 300;
+        const belowActionsY = actionsAbove
+          ? rect.bottom + ACTIONS_GAP + 4
+          : actionsTopFixed + ACTIONS_HEIGHT + 4;
+        const aboveActionsY = actionsAbove
+          ? actionsTopFixed - 4
+          : rect.top - 4;
+        const spaceBelow = window.innerHeight - belowActionsY - 8;
+        pickerOpenUp = spaceBelow < estimateH && aboveActionsY > estimateH;
+        pickerTop = pickerOpenUp ? aboveActionsY - actualH : belowActionsY;
+        const pickerW = pickerEl ? pickerEl.offsetWidth : 240;
+        pickerLeft = Math.max(8, Math.min(window.innerWidth - pickerW - 8, cellCenterX - pickerW / 2));
+      }
+    }
+
+    // Two rAF passes: first positions roughly, second uses actual rendered dimensions
+    requestAnimationFrame(() => {
+      updatePositions();
+      requestAnimationFrame(updatePositions);
+    });
+    window.addEventListener('scroll', updatePositions, true);
+    window.addEventListener('resize', updatePositions);
+    return () => {
+      window.removeEventListener('scroll', updatePositions, true);
+      window.removeEventListener('resize', updatePositions);
+    };
+  });
 
   onMount(() => {
     if (inputEl) {
@@ -87,8 +160,9 @@
     function handlePointerDown(e: PointerEvent): void {
       const target = e.target as Node;
       if (
-        cellEditorEl && cellEditorEl.contains(target) ||
-        actionsEl && actionsEl.contains(target)
+        (cellEditorEl && cellEditorEl.contains(target)) ||
+        (actionsEl && actionsEl.contains(target)) ||
+        (pickerEl && pickerEl.contains(target))
       ) return;
       if (settings.clickOutsideEdit === 'confirm') {
         confirmEdit();
@@ -144,6 +218,38 @@
     if (v === null) return 'NULL';
     return v ? 'true' : 'false';
   }
+
+  function formatNow(d: Date, type: typeof inputType): string {
+    const p = (n: number) => String(n).padStart(2, '0');
+    const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    if (type === 'date') return date;
+    if (type === 'time') return time;
+    return `${date} ${time}`;
+  }
+
+  function parseDbNow(raw: string, type: typeof inputType): string {
+    const normalized = String(raw).replace('T', ' ').replace(/\.\d+/, '').replace(/[+-]\d{2}:\d{2}$/, '').trim();
+    const [datePart = '', timePart = '00:00:00'] = normalized.split(' ');
+    if (type === 'date') return datePart;
+    if (type === 'time') return timePart;
+    return `${datePart} ${timePart}`;
+  }
+
+  async function handleNow(): Promise<void> {
+    if (settings.nowTimeSource === 'database' && connectionId) {
+      try {
+        const result = await executeQuery(connectionId, 'SELECT NOW()', 1, 1, database ?? null);
+        if (!result.error && result.rows[0]?.[0] != null) {
+          onConfirm(parseDbNow(String(result.rows[0][0]), inputType));
+          return;
+        }
+      } catch {
+        // fall through to user time on error
+      }
+    }
+    onConfirm(formatNow(new Date(), inputType));
+  }
 </script>
 
 <div
@@ -171,7 +277,7 @@
     <input
       bind:this={inputEl}
       class="editor-input"
-      type="datetime-local"
+      type="text"
       bind:value={textValue}
       autocomplete="off"
       autocorrect="off"
@@ -183,13 +289,25 @@
     <input
       bind:this={inputEl}
       class="editor-input"
-      type="date"
+      type="text"
       bind:value={textValue}
       autocomplete="off"
       autocorrect="off"
       autocapitalize="off"
       spellcheck="false"
       aria-label="Edit date value"
+    />
+  {:else if inputType === 'time'}
+    <input
+      bind:this={inputEl}
+      class="editor-input"
+      type="text"
+      bind:value={textValue}
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+      aria-label="Edit time value"
     />
   {:else}
     <input
@@ -209,16 +327,20 @@
 <div
   bind:this={actionsEl}
   class="editor-actions"
-  style="top: {actionsTop}px; left: {actionsCenter}px; transform: translateX(-50%);"
+  style="top:{actionsTopFixed}px; left:{actionsLeftFixed}px;"
   role="toolbar"
   tabindex="0"
   aria-label="Edit actions"
   onkeydown={handleKeydown}
+  use:portal
 >
   {#if inputType !== 'boolean'}
     <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
   {:else}
     <button class="action-btn confirm-btn" onclick={() => onConfirm(boolState)} title="Confirm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
+  {/if}
+  {#if showPicker}
+    <button class="action-btn now-btn" onclick={handleNow} title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time" aria-label="Set to now">NOW</button>
   {/if}
   <button
     class="action-btn null-btn"
@@ -230,6 +352,28 @@
   </button>
   <button class="action-btn cancel-btn" onclick={onCancel} title="Cancel (Escape)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
 </div>
+
+{#if showPicker}
+  <div
+    bind:this={pickerEl}
+    class="picker-popup"
+    class:picker-popup--up={pickerOpenUp}
+    style="top:{pickerTop}px; left:{pickerLeft}px;"
+    role="dialog"
+    tabindex="-1"
+    aria-label="Pick {inputType === 'date' ? 'date' : inputType === 'time' ? 'time' : 'date and time'}"
+    use:portal
+    onkeydown={handleKeydown}
+  >
+    {#if inputType === 'date'}
+      <DatePicker value={textValue} onchange={(v) => { textValue = v; }} />
+    {:else if inputType === 'time'}
+      <TimePicker value={textValue} onchange={(v) => { textValue = v; }} />
+    {:else if inputType === 'datetime-local'}
+      <DateTimePicker value={textValue} onchange={(v) => { textValue = v; }} />
+    {/if}
+  </div>
+{/if}
 
 <style>
   .cell-editor {
@@ -292,8 +436,8 @@
   }
 
   .editor-actions {
-    position: absolute;
-    z-index: 100;
+    position: fixed;
+    z-index: 9999;
     display: flex;
     align-items: stretch;
     height: 28px;
@@ -331,6 +475,16 @@
     color: var(--color-success);
   }
 
+  .now-btn {
+    font-size: 10px;
+    font-family: var(--font-family-mono);
+    color: var(--color-accent);
+  }
+
+  .now-btn:hover {
+    background: var(--color-accent-subtle);
+  }
+
   .null-btn {
     font-size: 10px;
     font-family: var(--font-family-mono);
@@ -344,5 +498,34 @@
   .cancel-btn:hover {
     background: var(--color-danger-subtle);
     color: var(--color-danger);
+  }
+
+  :global(.picker-popup) {
+    position: fixed;
+    z-index: 9999;
+    background: var(--color-bg-overlay);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    animation: picker-in var(--transition-md) both;
+    transform-origin: top left;
+    outline: none;
+  }
+
+  :global(.picker-popup--up) {
+    animation: picker-in-up var(--transition-md) both;
+    transform-origin: bottom left;
+  }
+
+  @keyframes picker-in {
+    from { opacity: 0; transform: scaleY(0.94) translateY(-4px); }
+    to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
+  }
+
+  @keyframes picker-in-up {
+    from { opacity: 0; transform: scaleY(0.94) translateY(4px); }
+    to   { opacity: 1; transform: scaleY(1)    translateY(0);   }
   }
 </style>

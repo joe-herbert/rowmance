@@ -9,6 +9,8 @@
   import { portal } from '$lib/actions/portal';
   import CellEditor from './CellEditor.svelte';
   import CellEditorModal from './CellEditorModal.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import { executeQuery } from '$lib/tauri/query';
 
   type CellValue = string | number | boolean | null;
   type SortDir = 'asc' | 'desc' | 'none';
@@ -62,6 +64,8 @@
     initialPendingChanges?: Map<string, Map<string, CellValue>>;
     initialOriginalRows?: Map<string, CellValue[]>;
     initialDeletedRows?: Map<string, CellValue[]>;
+    connectionId?: string;
+    database?: string | null;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -169,6 +173,8 @@
     initialPendingChanges,
     initialOriginalRows,
     initialDeletedRows,
+    connectionId,
+    database,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -1069,6 +1075,77 @@
     if (activeMenuDismiss) activeMenuDismiss = null;
   }
 
+  const { settings } = useSettings();
+
+  function isDatetimeishType(dt: string): boolean {
+    const lower = dt.toLowerCase();
+    return lower.includes('date') || lower.includes('timestamp') ||
+      (lower.includes('time') && !lower.includes('timestamp'));
+  }
+
+  function getDatetimeInputType(dt: string): 'date' | 'time' | 'datetime-local' {
+    const lower = dt.toLowerCase();
+    if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp')) return 'datetime-local';
+    if (lower.includes('date')) return 'date';
+    return 'time';
+  }
+
+  const contextMenuColDataType = $derived(
+    contextMenu?.colName ? (columns.find(c => c.name === contextMenu!.colName)?.dataType ?? '') : '',
+  );
+  const contextMenuColIsDatetime = $derived(isDatetimeishType(contextMenuColDataType));
+
+  function formatNow(d: Date, type: 'date' | 'time' | 'datetime-local'): string {
+    const p = (n: number) => String(n).padStart(2, '0');
+    const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    if (type === 'date') return date;
+    if (type === 'time') return time;
+    return `${date} ${time}`;
+  }
+
+  function parseDbNow(raw: string, type: 'date' | 'time' | 'datetime-local'): string {
+    const normalized = String(raw).replace('T', ' ').replace(/\.\d+/, '').replace(/[+-]\d{2}:\d{2}$/, '').trim();
+    const [datePart = '', timePart = '00:00:00'] = normalized.split(' ');
+    if (type === 'date') return datePart;
+    if (type === 'time') return timePart;
+    return `${datePart} ${timePart}`;
+  }
+
+  async function setNowFromContextMenu(): Promise<void> {
+    if (!contextMenu?.colName || !editable || readOnly) return;
+    const { rowKey, row, colName } = contextMenu;
+    const col = columns.find(c => c.name === colName);
+    if (!col) return;
+    const type = getDatetimeInputType(col.dataType);
+
+    let nowValue: string;
+    if (settings.nowTimeSource === 'database' && connectionId) {
+      try {
+        const result = await executeQuery(connectionId, 'SELECT NOW()', 1, 1, database ?? null);
+        if (!result.error && result.rows[0]?.[0] != null) {
+          nowValue = parseDbNow(String(result.rows[0][0]), type);
+        } else {
+          nowValue = formatNow(new Date(), type);
+        }
+      } catch {
+        nowValue = formatNow(new Date(), type);
+      }
+    } else {
+      nowValue = formatNow(new Date(), type);
+    }
+
+    const originalColIndex = columns.findIndex(c => c.name === colName);
+    if (!originalRows.has(rowKey)) {
+      const next = new Map(originalRows);
+      next.set(rowKey, [...row]);
+      originalRows = next;
+    }
+    applyPendingChange(rowKey, colName, row[originalColIndex], nowValue);
+    onChangePending?.(pendingChanges, originalRows);
+    dismissContextMenu();
+  }
+
   function discardCellEdit(): void {
     if (!contextMenu?.colName) return;
     const { rowKey, colName } = contextMenu;
@@ -1859,7 +1936,16 @@
             role="menuitem"
             onclick={() => setSelectionNull()}
           >
-            Set as null
+            Set to NULL
+          </button>
+        {/if}
+        {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={setNowFromContextMenu}
+          >
+            Set to NOW
           </button>
         {/if}
         {#if editable && !readOnly}
@@ -1993,6 +2079,8 @@
       onConfirm={confirmEdit}
       onCancel={cancelEdit}
       onTab={handleTabFromEditor}
+      {connectionId}
+      {database}
     />
   {/if}
 
@@ -2007,6 +2095,8 @@
     dataType={modalTarget.dataType}
     onConfirm={confirmModalEdit}
     onCancel={cancelModalEdit}
+    {connectionId}
+    {database}
   />
 {/if}
 

@@ -277,6 +277,18 @@
             onchange={(v) => update('clickOutsideEdit', v as 'discard' | 'confirm')}
           />
         </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">NOW Button Time Source</span>
+            <span class="label-hint">Time used when clicking NOW in the date/time cell editor<br />If you choose 'Database server', it will fall back to 'My machine' on error</span>
+          </div>
+          <Select
+            value={settings.nowTimeSource}
+            options={[{ value: 'user', label: 'My machine' }, { value: 'database', label: 'Database server' }]}
+            onchange={(v) => update('nowTimeSource', v as 'user' | 'database')}
+          />
+        </div>
       </div>
 
     {:else if activeSection === 'editor'}

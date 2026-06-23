@@ -16,13 +16,19 @@ function isDateType(dt: string): boolean {
 
 function isDateTimeType(dt: string): boolean {
   const lower = dt.toLowerCase();
-  return lower.includes('date') && lower.includes('time');
+  return (lower.includes('date') && lower.includes('time')) || lower.includes('timestamp');
 }
 
-function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'text' {
+function isTimeType(dt: string): boolean {
+  const lower = dt.toLowerCase();
+  return lower.includes('time') && !lower.includes('date') && !lower.includes('timestamp');
+}
+
+function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
   if (isBooleanType(dt)) return 'boolean';
   if (isDateTimeType(dt)) return 'datetime-local';
   if (isDateType(dt)) return 'date';
+  if (isTimeType(dt)) return 'time';
   return 'text';
 }
 
@@ -76,12 +82,38 @@ describe('isDateTimeType', () => {
     expect(isDateTimeType('datetime')).toBe(true);
   });
 
+  it('returns true for TIMESTAMP', () => {
+    expect(isDateTimeType('TIMESTAMP')).toBe(true);
+  });
+
   it('returns false for DATE only', () => {
     expect(isDateTimeType('DATE')).toBe(false);
   });
 
   it('returns false for TIME only', () => {
     expect(isDateTimeType('TIME')).toBe(false);
+  });
+});
+
+describe('isTimeType', () => {
+  it('returns true for TIME', () => {
+    expect(isTimeType('TIME')).toBe(true);
+  });
+
+  it('returns true for time (lowercase)', () => {
+    expect(isTimeType('time')).toBe(true);
+  });
+
+  it('returns false for DATETIME', () => {
+    expect(isTimeType('DATETIME')).toBe(false);
+  });
+
+  it('returns false for TIMESTAMP', () => {
+    expect(isTimeType('TIMESTAMP')).toBe(false);
+  });
+
+  it('returns false for DATE', () => {
+    expect(isTimeType('DATE')).toBe(false);
   });
 });
 
@@ -116,6 +148,14 @@ describe('getInputType', () => {
 
   it('returns "text" for DECIMAL(10,2)', () => {
     expect(getInputType('DECIMAL(10,2)')).toBe('text');
+  });
+
+  it('returns "datetime-local" for TIMESTAMP', () => {
+    expect(getInputType('TIMESTAMP')).toBe('datetime-local');
+  });
+
+  it('returns "time" for TIME', () => {
+    expect(getInputType('TIME')).toBe('time');
   });
 
   it('boolean takes priority over date (e.g. hypothetical type)', () => {

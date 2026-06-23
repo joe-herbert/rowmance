@@ -1219,6 +1219,8 @@
           initialPendingChanges={tableKey === 0 ? _restoredPending?.changes : undefined}
           initialOriginalRows={tableKey === 0 ? _restoredPending?.originalRows : undefined}
           initialDeletedRows={tableKey === 0 ? _restoredPending?.deletedRows : undefined}
+          {connectionId}
+          {database}
         />
       {/key}
     {:else}
@@ -1321,7 +1323,7 @@
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     flex-shrink: 0;
-    max-width: 220px;
+    max-width: calc(100% - calc(28px + var(--spacing-2)));
     overflow: hidden;
     cursor: pointer;
     user-select: none;
