@@ -1,0 +1,1 @@
+ALTER TABLE saved_queries ADD COLUMN position INTEGER NOT NULL DEFAULT 0;

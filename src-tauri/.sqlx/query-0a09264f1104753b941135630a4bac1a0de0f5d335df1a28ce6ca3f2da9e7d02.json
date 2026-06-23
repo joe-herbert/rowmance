@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT MAX(position) FROM saved_queries WHERE folder_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "MAX(position)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0a09264f1104753b941135630a4bac1a0de0f5d335df1a28ce6ca3f2da9e7d02"
+}

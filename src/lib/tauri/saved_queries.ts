@@ -13,6 +13,7 @@ export interface SavedQueryInput {
   folderId?: string | null;
   name: string;
   sql: string;
+  position?: number;
 }
 
 export async function listFolders(): Promise<SavedQueryFolder[]> {

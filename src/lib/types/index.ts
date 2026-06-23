@@ -176,6 +176,7 @@ export interface SavedQuery {
   folderId: string | null;
   name: string;
   sql: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
 }

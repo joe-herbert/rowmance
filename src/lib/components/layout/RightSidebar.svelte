@@ -403,6 +403,132 @@
     }
     return map;
   });
+
+  // ── Drag & Drop ───────────────────────────────────────────────────────────────
+
+  interface DragState { kind: 'query' | 'folder'; id: string; }
+
+  type DropZone =
+    | { type: 'into-folder'; folderId: string }
+    | { type: 'into-unfiled' }
+    | { type: 'before-query'; queryId: string; folderId: string | null }
+    | { type: 'after-query'; queryId: string; folderId: string | null }
+    | { type: 'before-folder'; folderId: string }
+    | { type: 'after-folder'; folderId: string };
+
+  let dragging = $state<DragState | null>(null);
+  let isDragging = $state(false);
+  let dropZone = $state<DropZone | null>(null);
+  let dragStartY = 0;
+  let suppressNextClick = false;
+
+  $effect(() => {
+    if (!dragging) return;
+    function onMove(e: PointerEvent) {
+      if (!isDragging && Math.abs(e.clientY - dragStartY) > 4) isDragging = true;
+      if (!isDragging) return;
+      dropZone = detectDropZone(e.clientX, e.clientY);
+    }
+    function onUp() {
+      const drag = dragging;
+      const zone = dropZone;
+      dragging = null;
+      isDragging = false;
+      dropZone = null;
+      if (drag && zone) { suppressNextClick = true; void commitDrop(drag, zone); }
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+  });
+
+  function startDrag(e: PointerEvent, kind: 'query' | 'folder', id: string) {
+    if (e.button !== 0) return;
+    dragStartY = e.clientY;
+    dragging = { kind, id };
+  }
+
+  function detectDropZone(x: number, y: number): DropZone | null {
+    if (!dragging) return null;
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const node = (el as HTMLElement).closest<HTMLElement>('[data-drop-type]');
+    if (!node) return null;
+    const dropType = node.dataset.dropType!;
+    const rect = node.getBoundingClientRect();
+    const relY = (y - rect.top) / rect.height;
+
+    if (dragging.kind === 'query') {
+      if (dropType === 'unfiled') return { type: 'into-unfiled' };
+      if (dropType === 'folder') return { type: 'into-folder', folderId: node.dataset.folderId! };
+      if (dropType === 'query') {
+        const queryId = node.dataset.queryId!;
+        if (queryId === dragging.id) return null;
+        const folderId = node.dataset.queryFolderId || null;
+        return relY < 0.5 ? { type: 'before-query', queryId, folderId } : { type: 'after-query', queryId, folderId };
+      }
+    }
+
+    if (dragging.kind === 'folder') {
+      if (dropType === 'folder') {
+        const folderId = node.dataset.folderId!;
+        if (folderId === dragging.id) return null;
+        return relY < 0.5 ? { type: 'before-folder', folderId } : { type: 'after-folder', folderId };
+      }
+    }
+    return null;
+  }
+
+  async function commitDrop(drag: DragState, zone: DropZone) {
+    if (drag.kind === 'query') await commitQueryDrop(drag.id, zone);
+    else await commitFolderDrop(drag.id, zone);
+    await loadSavedQueries();
+  }
+
+  async function commitQueryDrop(queryId: string, zone: DropZone) {
+    const query = savedQueries.find(q => q.id === queryId);
+    if (!query) return;
+    if (zone.type === 'into-folder') {
+      const maxPos = savedQueries.filter(q => q.folderId === zone.folderId).reduce((m, q) => Math.max(m, q.position), -1);
+      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: zone.folderId, position: maxPos + 1 });
+    } else if (zone.type === 'into-unfiled') {
+      const maxPos = savedQueries.filter(q => q.folderId === null).reduce((m, q) => Math.max(m, q.position), -1);
+      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: null, position: maxPos + 1 });
+    } else if (zone.type === 'before-query' || zone.type === 'after-query') {
+      const targetFolderId = zone.folderId;
+      const folderQueries = savedQueries.filter(q => q.folderId === targetFolderId);
+      const ordered = folderQueries.filter(q => q.id !== queryId);
+      const refIdx = ordered.findIndex(q => q.id === zone.queryId);
+      if (refIdx === -1) return;
+      ordered.splice(zone.type === 'before-query' ? refIdx : refIdx + 1, 0, query);
+      await Promise.all(ordered.map((q, i) =>
+        savedQueriesApi.updateSavedQuery(q.id, { name: q.name, sql: q.sql, connectionId: q.connectionId, folderId: targetFolderId, position: i })
+      ));
+    }
+  }
+
+  async function commitFolderDrop(folderId: string, zone: DropZone) {
+    if (zone.type !== 'before-folder' && zone.type !== 'after-folder') return;
+    const folder = savedFolders.find(f => f.id === folderId);
+    if (!folder) return;
+    const ordered = savedFolders.filter(f => f.id !== folderId);
+    const refIdx = ordered.findIndex(f => f.id === zone.folderId);
+    if (refIdx === -1) return;
+    ordered.splice(zone.type === 'before-folder' ? refIdx : refIdx + 1, 0, folder);
+    await Promise.all(ordered.map((f, i) =>
+      savedQueriesApi.updateFolder(f.id, { name: f.name, parentId: f.parentId, position: i })
+    ));
+  }
+
+  function handleQueryClick(query: SavedQuery) {
+    if (suppressNextClick) { suppressNextClick = false; return; }
+    openSavedQuery(query);
+  }
+
+  function handleFolderToggle(folderId: string) {
+    if (suppressNextClick) { suppressNextClick = false; return; }
+    toggleFolder(folderId);
+  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -582,40 +708,59 @@
           <div class="error-row">{savedError}</div>
         {:else}
           <ul class="saved-list" role="tree" aria-label="Saved queries">
-            <!-- Unfiled queries -->
-            {#if (queriesByFolder.get(null) ?? []).length > 0}
-              <li class="folder-node" role="treeitem" aria-selected={false}>
+            <!-- Unfiled queries (also shown as a drop target while dragging a query) -->
+            {#if (queriesByFolder.get(null) ?? []).length > 0 || (isDragging && dragging?.kind === 'query')}
+              {@const unfiledQueries = queriesByFolder.get(null) ?? []}
+              <li
+                class="folder-node"
+                class:drop-into={isDragging && dragging?.kind === 'query' && dropZone?.type === 'into-unfiled'}
+                data-drop-type="unfiled"
+                role="treeitem" aria-selected={false}
+              >
                 <span class="folder-label muted">Unfiled</span>
-                <ul class="folder-children" role="group">
-                  {#each queriesByFolder.get(null) ?? [] as query (query.id)}
-                    <li class="query-node" role="treeitem" aria-selected={false}>
-                      {#if renamingQueryId === query.id}
-                        <input
-                          bind:this={renameQueryInputEl}
-                          bind:value={renameQueryValue}
-                          class="query-rename-input"
-                          type="text"
-                          maxlength="120"
-                          autocomplete="off"
-                          spellcheck={false}
-                          onclick={(e) => e.stopPropagation()}
-                          onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRenameQuery(query); } if (e.key === 'Escape') { renamingQueryId = null; } }}
-                          onblur={() => commitRenameQuery(query)}
-                        />
-                      {:else}
-                        <button
-                          class="query-btn"
-                          onclick={() => openSavedQuery(query)}
-                          oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
-                          title="Open {query.name}"
-                        >
-                          <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
-                          <span class="query-name">{query.name}</span>
-                        </button>
-                      {/if}
-                    </li>
-                  {/each}
-                </ul>
+                {#if unfiledQueries.length > 0}
+                  <ul class="folder-children" role="group">
+                    {#each unfiledQueries as query (query.id)}
+                      <li
+                        class="query-node"
+                        class:drop-before={dropZone?.type === 'before-query' && dropZone.queryId === query.id}
+                        class:drop-after={dropZone?.type === 'after-query' && dropZone.queryId === query.id}
+                        class:is-dragging={isDragging && dragging?.id === query.id}
+                        data-drop-type="query"
+                        data-query-id={query.id}
+                        data-query-folder-id=""
+                        role="treeitem" aria-selected={false}
+                      >
+                        {#if renamingQueryId === query.id}
+                          <input
+                            bind:this={renameQueryInputEl}
+                            bind:value={renameQueryValue}
+                            class="query-rename-input"
+                            type="text"
+                            maxlength="120"
+                            autocomplete="off"
+                            spellcheck={false}
+                            onclick={(e) => e.stopPropagation()}
+                            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRenameQuery(query); } if (e.key === 'Escape') { renamingQueryId = null; } }}
+                            onblur={() => commitRenameQuery(query)}
+                          />
+                        {:else}
+                          <button
+                            class="query-btn"
+                            onclick={() => handleQueryClick(query)}
+                            onpointerdown={(e) => startDrag(e, 'query', query.id)}
+                            oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
+                            title="Open {query.name}"
+                          >
+                            <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
+                            <span class="query-name">{query.name}</span>
+                            <span class="drag-handle" aria-hidden="true"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg></span>
+                          </button>
+                        {/if}
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
               </li>
             {/if}
 
@@ -623,34 +768,71 @@
             {#each savedFolders as folder (folder.id)}
               {@const folderQueries = queriesByFolder.get(folder.id) ?? []}
               {@const isOpen = expandedFolders.has(folder.id)}
-              <li class="folder-node" role="treeitem" aria-expanded={isOpen} aria-selected={false}>
+              <li
+                class="folder-node"
+                class:drop-into={isDragging && dragging?.kind === 'query' && dropZone?.type === 'into-folder' && dropZone.folderId === folder.id}
+                class:drop-before={dropZone?.type === 'before-folder' && dropZone.folderId === folder.id}
+                class:drop-after={dropZone?.type === 'after-folder' && dropZone.folderId === folder.id}
+                class:is-dragging={isDragging && dragging?.kind === 'folder' && dragging.id === folder.id}
+                data-drop-type="folder"
+                data-folder-id={folder.id}
+                role="treeitem" aria-expanded={isOpen} aria-selected={false}
+              >
                 <button
                   class="folder-btn"
-                  onclick={() => toggleFolder(folder.id)}
+                  onclick={() => handleFolderToggle(folder.id)}
+                  onpointerdown={(e) => startDrag(e, 'folder', folder.id)}
                   oncontextmenu={(e) => showSavedCtxMenu(e, 'folder', folder.id, folder.name)}
                   aria-label="{isOpen ? 'Collapse' : 'Expand'} folder {folder.name}"
                 >
-                  <span class="chevron" class:open={isOpen} aria-hidden="true">›</span>
+                  <span class="chevron" class:open={isOpen} aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 2 7 5 3 8"/></svg></span>
                   <span class="folder-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
                   <span class="folder-name">{folder.name}</span>
                   {#if folderQueries.length > 0}
                     <span class="count-badge">{folderQueries.length}</span>
                   {/if}
+                  <span class="drag-handle" aria-hidden="true"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg></span>
                 </button>
 
                 {#if isOpen && folderQueries.length > 0}
                   <ul class="folder-children" role="group">
                     {#each folderQueries as query (query.id)}
-                      <li class="query-node" role="treeitem" aria-selected={false}>
-                        <button
-                          class="query-btn"
-                          onclick={() => openSavedQuery(query)}
-                          oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
-                          title="Open {query.name}"
-                        >
-                          <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
-                          <span class="query-name">{query.name}</span>
-                        </button>
+                      <li
+                        class="query-node"
+                        class:drop-before={dropZone?.type === 'before-query' && dropZone.queryId === query.id}
+                        class:drop-after={dropZone?.type === 'after-query' && dropZone.queryId === query.id}
+                        class:is-dragging={isDragging && dragging?.id === query.id}
+                        data-drop-type="query"
+                        data-query-id={query.id}
+                        data-query-folder-id={folder.id}
+                        role="treeitem" aria-selected={false}
+                      >
+                        {#if renamingQueryId === query.id}
+                          <input
+                            bind:this={renameQueryInputEl}
+                            bind:value={renameQueryValue}
+                            class="query-rename-input"
+                            type="text"
+                            maxlength="120"
+                            autocomplete="off"
+                            spellcheck={false}
+                            onclick={(e) => e.stopPropagation()}
+                            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRenameQuery(query); } if (e.key === 'Escape') { renamingQueryId = null; } }}
+                            onblur={() => commitRenameQuery(query)}
+                          />
+                        {:else}
+                          <button
+                            class="query-btn"
+                            onclick={() => handleQueryClick(query)}
+                            onpointerdown={(e) => startDrag(e, 'query', query.id)}
+                            oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
+                            title="Open {query.name}"
+                          >
+                            <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
+                            <span class="query-name">{query.name}</span>
+                            <span class="drag-handle" aria-hidden="true"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg></span>
+                          </button>
+                        {/if}
                       </li>
                     {/each}
                   </ul>
@@ -1153,12 +1335,11 @@
   }
 
   .chevron {
-    font-size: var(--font-size-xs);
     color: var(--color-text-muted);
-    width: 10px;
-    display: inline-block;
-    transition: transform var(--transition-fast);
+    display: flex;
+    align-items: center;
     flex-shrink: 0;
+    transition: transform var(--transition-fast);
   }
 
   .chevron.open {
@@ -1187,6 +1368,70 @@
     font-size: var(--font-size-sm);
     font-family: var(--font-family-ui);
     outline: none;
+  }
+
+  /* ── Drag & Drop ─────────────────────────────────────────────────────────── */
+
+  .drag-handle {
+    opacity: 0;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    width: 14px;
+    transition: opacity var(--transition-fast);
+  }
+
+  .query-btn:hover .drag-handle,
+  .folder-btn:hover .drag-handle {
+    opacity: 0.5;
+  }
+
+  .query-btn,
+  .folder-btn {
+    cursor: grab;
+  }
+
+  .query-node,
+  .folder-node {
+    position: relative;
+  }
+
+  .query-node.drop-before::before,
+  .folder-node.drop-before::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--color-accent);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .query-node.drop-after::after,
+  .folder-node.drop-after::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--color-accent);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .folder-node.drop-into > .folder-btn,
+  .folder-node.drop-into > .folder-label {
+    background: var(--color-accent-subtle) !important;
+    outline: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+  }
+
+  .is-dragging {
+    opacity: 0.35;
   }
 
 

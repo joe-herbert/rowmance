@@ -34,6 +34,7 @@ pub struct SavedQuery {
     pub folder_id: Option<String>,
     pub name: String,
     pub sql: String,
+    pub position: i64,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "updatedAt")]
@@ -48,6 +49,7 @@ pub struct SavedQueryInput {
     pub folder_id: Option<String>,
     pub name: String,
     pub sql: String,
+    pub position: Option<i64>,
 }
 
 // ── SQLite row types ──────────────────────────────────────────────────────────
@@ -78,6 +80,7 @@ struct SavedQueryRow {
     folder_id: Option<String>,
     name: String,
     sql: String,
+    position: i64,
     created_at: String,
     updated_at: String,
 }
@@ -90,6 +93,7 @@ impl From<SavedQueryRow> for SavedQuery {
             folder_id: r.folder_id,
             name: r.name,
             sql: r.sql,
+            position: r.position,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -199,7 +203,7 @@ pub async fn saved_queries_list(
     let rows = match folder_id {
         Some(fid) => {
             sqlx::query_as::<_, SavedQueryRow>(
-                "SELECT * FROM saved_queries WHERE folder_id = ? ORDER BY name",
+                "SELECT * FROM saved_queries WHERE folder_id = ? ORDER BY position, name",
             )
             .bind(fid)
             .fetch_all(sqlite.inner())
@@ -208,7 +212,7 @@ pub async fn saved_queries_list(
         }
         None => {
             sqlx::query_as::<_, SavedQueryRow>(
-                "SELECT * FROM saved_queries ORDER BY name",
+                "SELECT * FROM saved_queries ORDER BY position, name",
             )
             .fetch_all(sqlite.inner())
             .await
@@ -228,16 +232,38 @@ pub async fn saved_queries_create(
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
 
+    let position = if let Some(pos) = input.position {
+        pos
+    } else {
+        let max_pos: Option<i64> = match &input.folder_id {
+            Some(fid) => sqlx::query_scalar!(
+                "SELECT MAX(position) FROM saved_queries WHERE folder_id = ?",
+                fid
+            )
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?,
+            None => sqlx::query_scalar!(
+                "SELECT MAX(position) FROM saved_queries WHERE folder_id IS NULL"
+            )
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?,
+        };
+        max_pos.map(|m| m + 1).unwrap_or(0)
+    };
+
     sqlx::query!(
         r#"
-        INSERT INTO saved_queries (id, connection_id, folder_id, name, sql, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO saved_queries (id, connection_id, folder_id, name, sql, position, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         id,
         input.connection_id,
         input.folder_id,
         input.name,
         input.sql,
+        position,
         now,
         now
     )
@@ -264,22 +290,42 @@ pub async fn saved_queries_update(
 ) -> Result<SavedQuery, AppError> {
     let now = chrono::Utc::now().to_rfc3339();
 
-    sqlx::query!(
-        r#"
-        UPDATE saved_queries
-        SET connection_id = ?, folder_id = ?, name = ?, sql = ?, updated_at = ?
-        WHERE id = ?
-        "#,
-        input.connection_id,
-        input.folder_id,
-        input.name,
-        input.sql,
-        now,
-        id
-    )
-    .execute(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    if let Some(position) = input.position {
+        sqlx::query!(
+            r#"
+            UPDATE saved_queries
+            SET connection_id = ?, folder_id = ?, name = ?, sql = ?, position = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+            input.connection_id,
+            input.folder_id,
+            input.name,
+            input.sql,
+            position,
+            now,
+            id
+        )
+        .execute(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    } else {
+        sqlx::query!(
+            r#"
+            UPDATE saved_queries
+            SET connection_id = ?, folder_id = ?, name = ?, sql = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+            input.connection_id,
+            input.folder_id,
+            input.name,
+            input.sql,
+            now,
+            id
+        )
+        .execute(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    }
 
     let row =
         sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
