@@ -368,6 +368,7 @@
     align-items: center;
     gap: 6px;
     padding: 1px 6px 7px;
+    min-height: 32px;
   }
 
   .header-label {
