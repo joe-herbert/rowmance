@@ -168,8 +168,8 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     action: 'TABLE_DISCARD_CHANGES',
     label: 'Discard Table Changes',
     group: 'Table View',
-    vscode: 'Escape',
-    jetbrains: 'Escape',
+    vscode: '',
+    jetbrains: '',
     vim: 'u',
   },
   {
@@ -255,7 +255,8 @@ function getEffectiveShortcuts(): Map<ShortcutAction, string> {
   const map = new Map<ShortcutAction, string>();
   for (const def of SHORTCUT_DEFINITIONS) {
     const override = overrides.get(def.action);
-    map.set(def.action, override ?? def[preset]);
+    const binding = override ?? def[preset];
+    if (binding) map.set(def.action, binding);
   }
   return map;
 }

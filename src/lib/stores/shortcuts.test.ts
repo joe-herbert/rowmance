@@ -56,12 +56,9 @@ describe('SHORTCUT_DEFINITIONS', () => {
     }
   });
 
-  it('every definition has non-empty label and shortcut strings', () => {
+  it('every definition has a non-empty label; shortcuts may be empty (unbound)', () => {
     for (const def of SHORTCUT_DEFINITIONS) {
       expect(def.label.trim()).not.toBe('');
-      expect(def.vscode.trim()).not.toBe('');
-      expect(def.jetbrains.trim()).not.toBe('');
-      expect(def.vim.trim()).not.toBe('');
     }
   });
 });
@@ -76,11 +73,15 @@ describe('getEffectiveShortcuts', () => {
     expect(effective.get('QUERY_RUN_ALL')).toBe(queryRunDef.vscode);
   });
 
-  it('returns a Map with an entry for every defined action', () => {
+  it('returns a Map with an entry for every bound action (unbound actions are omitted)', () => {
     const shortcuts = useShortcuts();
     const effective = shortcuts.effectiveShortcuts;
     for (const def of SHORTCUT_DEFINITIONS) {
-      expect(effective.has(def.action)).toBe(true);
+      if (def.vscode) {
+        expect(effective.has(def.action)).toBe(true);
+      } else {
+        expect(effective.has(def.action)).toBe(false);
+      }
     }
   });
 

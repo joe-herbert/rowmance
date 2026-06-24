@@ -37,6 +37,7 @@
     const counts = new Map<string, ShortcutAction[]>();
     for (const def of SHORTCUT_DEFINITIONS) {
       const binding = shortcuts.getShortcut(def.action);
+      if (!binding) continue;
       const list = counts.get(binding) ?? [];
       list.push(def.action);
       counts.set(binding, list);
@@ -206,7 +207,7 @@
             <td class="col-binding">
               {#if isRecording}
                 <span class="recording-hint">Press a key combo…</span>
-              {:else}
+              {:else if current}
                 <span class="kbd-wrap">
                   <kbd class="kbd" class:overridden={isOverridden} class:conflict={isConflict} title={bindingTooltip(current)}>{parseBinding(current).map(formatKey).join(' ')}</kbd>
                   {#if isConflict}
@@ -216,6 +217,8 @@
                     </svg>
                   {/if}
                 </span>
+              {:else}
+                <span class="unbound">None</span>
               {/if}
             </td>
             <td class="col-controls">
@@ -385,6 +388,12 @@
   .recording-hint {
     font-size: var(--font-size-xs);
     color: var(--color-accent);
+    font-style: italic;
+  }
+
+  .unbound {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
     font-style: italic;
   }
 
