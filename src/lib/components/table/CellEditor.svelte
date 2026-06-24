@@ -1,6 +1,6 @@
 <!--
   CellEditor — inline cell editor that mounts over a table cell.
-  Positioned absolutely relative to the DataTable container.
+  Portalled to document.body and positioned fixed in viewport coordinates.
 -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
@@ -19,11 +19,12 @@
     originalValue: CellValue;
     dataType: string;
     nullable: boolean;
-    top: number;
-    left: number;
+    initialViewportTop: number;
+    initialViewportLeft: number;
     width: number;
     height: number;
-    containerHeight: number;
+    scrollEl?: HTMLElement | null;
+    panelEl?: HTMLElement | null;
     onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
     onTab?: (_shiftKey: boolean) => void;
@@ -31,7 +32,7 @@
     database?: string | null;
   }
 
-  let { value, originalValue, dataType, nullable, top, left, width, height, containerHeight, onConfirm, onCancel, onTab, connectionId, database }: Props = $props();
+  let { value, originalValue, dataType, nullable, initialViewportTop, initialViewportLeft, width, height, scrollEl = null, panelEl = null, onConfirm, onCancel, onTab, connectionId, database }: Props = $props();
 
   const { settings } = useSettings();
 
@@ -95,6 +96,10 @@
     inputType === 'date' || inputType === 'datetime-local' || inputType === 'time' || inputType === 'boolean',
   );
 
+  // Cell editor fixed viewport position, updated on scroll to follow the cell
+  let currentTop = $state(initialViewportTop);
+  let currentLeft = $state(initialViewportLeft);
+
   // Off-screen until first position calculation runs
   let pickerTop = $state(-9999);
   let pickerLeft = $state(-9999);
@@ -117,20 +122,43 @@
   $effect(() => {
     if (!cellEditorEl) return;
 
+    // Snapshot scroll element and initial offsets as plain locals so the closure
+    // below doesn't need to go through Svelte's reactive prop machinery.
+    const snapScrollEl = scrollEl;
+    const initScrollTop = snapScrollEl?.scrollTop ?? 0;
+    const initScrollLeft = snapScrollEl?.scrollLeft ?? 0;
+
     function updatePositions(): void {
       if (!cellEditorEl) return;
+
+      const rawTop = initialViewportTop - ((snapScrollEl?.scrollTop ?? 0) - initScrollTop);
+      const rawLeft = initialViewportLeft - ((snapScrollEl?.scrollLeft ?? 0) - initScrollLeft);
+
+      // Clamp the cell editor to the panel bounds so the group stays visible.
+      const panel = panelEl?.getBoundingClientRect();
+      const clampedTop = panel ? Math.max(panel.top, Math.min(panel.bottom - height, rawTop)) : rawTop;
+      const clampedLeft = panel ? Math.max(panel.left, Math.min(panel.right - width, rawLeft)) : rawLeft;
+
+      // Apply directly to the DOM so getBoundingClientRect() below is accurate.
+      cellEditorEl.style.top = `${clampedTop}px`;
+      cellEditorEl.style.left = `${clampedLeft}px`;
+      currentTop = clampedTop;
+      currentLeft = clampedLeft;
+
       const rect = cellEditorEl.getBoundingClientRect();
-      const containerTop = rect.top - top;
       const cellCenterX = rect.left + width / 2;
 
-      // Actions bar: above cell when no room below in container
-      const actionsAbove = top + height + ACTIONS_GAP + ACTIONS_HEIGHT > containerHeight;
-      const actionsTopContainer = actionsAbove
-        ? top - ACTIONS_GAP - ACTIONS_HEIGHT
-        : top + height + ACTIONS_GAP;
-      actionsTopFixed = containerTop + actionsTopContainer;
+      const panelBottom = panel?.bottom ?? window.innerHeight;
+      const panelLeft = panel?.left ?? 0;
+      const panelRight = panel?.right ?? window.innerWidth;
+
+      // Actions bar: above cell when no room below within the panel
+      const actionsAbove = rect.bottom + ACTIONS_GAP + ACTIONS_HEIGHT > panelBottom - 4;
+      actionsTopFixed = actionsAbove
+        ? rect.top - ACTIONS_GAP - ACTIONS_HEIGHT
+        : rect.bottom + ACTIONS_GAP;
       const actionsW = actionsEl?.offsetWidth ?? 100;
-      actionsLeftFixed = Math.max(8, Math.min(window.innerWidth - actionsW - 8, cellCenterX - actionsW / 2));
+      actionsLeftFixed = Math.max(panelLeft + 4, Math.min(panelRight - actionsW - 4, cellCenterX - actionsW / 2));
 
       // Picker
       if (showPicker) {
@@ -142,11 +170,11 @@
         const aboveActionsY = actionsAbove
           ? actionsTopFixed - 4
           : rect.top - 4;
-        const spaceBelow = window.innerHeight - belowActionsY - 8;
+        const spaceBelow = panelBottom - belowActionsY - 4;
         pickerOpenUp = spaceBelow < estimateH && aboveActionsY > estimateH;
         pickerTop = pickerOpenUp ? aboveActionsY - actualH : belowActionsY;
         const pickerW = pickerEl ? pickerEl.offsetWidth : 240;
-        pickerLeft = Math.max(8, Math.min(window.innerWidth - pickerW - 8, cellCenterX - pickerW / 2));
+        pickerLeft = Math.max(panelLeft + 4, Math.min(panelRight - pickerW - 4, cellCenterX - pickerW / 2));
       }
     }
 
@@ -155,9 +183,13 @@
       updatePositions();
       requestAnimationFrame(updatePositions);
     });
+    // Listen directly on the table scroll element for table scroll, and on the
+    // window (capture) for any other ancestor scroll or resize.
+    snapScrollEl?.addEventListener('scroll', updatePositions);
     window.addEventListener('scroll', updatePositions, true);
     window.addEventListener('resize', updatePositions);
     return () => {
+      snapScrollEl?.removeEventListener('scroll', updatePositions);
       window.removeEventListener('scroll', updatePositions, true);
       window.removeEventListener('resize', updatePositions);
     };
@@ -269,11 +301,12 @@
 <div
   bind:this={cellEditorEl}
   class="cell-editor"
-  style="top: {top}px; left: {left}px; width: {width}px; height: {height}px;"
+  style="top: {currentTop}px; left: {currentLeft}px; width: {width}px; height: {height}px;"
   role="dialog"
   aria-label="Edit cell"
   tabindex="-1"
   onkeydown={handleKeydown}
+  use:portal
 >
   {#if inputType === 'boolean'}
     <span
@@ -393,9 +426,9 @@
 {/if}
 
 <style>
-  .cell-editor {
-    position: absolute;
-    z-index: 100;
+  :global(.cell-editor) {
+    position: fixed;
+    z-index: 9999;
     display: flex;
     align-items: stretch;
     background: var(--color-bg-overlay);

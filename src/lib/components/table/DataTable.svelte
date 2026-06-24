@@ -606,7 +606,6 @@
         const firstTd = newRowEl.querySelectorAll('.data-cell')[0] as HTMLTableCellElement | undefined;
         if (!firstTd) return;
 
-        const containerRect = tableContainerEl.getBoundingClientRect();
         const tdRect = firstTd.getBoundingClientRect();
 
         focusedCell = null;
@@ -618,11 +617,10 @@
           originalValue: null,
           dataType: firstVisCol.col.dataType,
           nullable: firstVisCol.col.nullable,
-          top: tdRect.top - containerRect.top,
-          left: tdRect.left - containerRect.left,
+          initialViewportTop: tdRect.top,
+          initialViewportLeft: tdRect.left,
           width: Math.max(tdRect.width, 160),
           height: tdRect.height,
-          containerHeight: containerRect.height,
         };
       });
     });
@@ -657,11 +655,10 @@
     originalValue: CellValue;
     dataType: string;
     nullable: boolean;
-    top: number;
-    left: number;
+    initialViewportTop: number;
+    initialViewportLeft: number;
     width: number;
     height: number;
-    containerHeight: number;
   }
 
   let editTarget = $state<EditTarget | null>(null);
@@ -727,7 +724,6 @@
     }
 
     const td = e.currentTarget as HTMLTableCellElement;
-    const containerRect = tableContainerEl!.getBoundingClientRect();
     const tdRect = td.getBoundingClientRect();
 
     editTarget = {
@@ -738,11 +734,10 @@
       originalValue: row[originalColIndex],
       dataType: col.dataType,
       nullable: col.nullable,
-      top: tdRect.top - containerRect.top,
-      left: tdRect.left - containerRect.left,
+      initialViewportTop: tdRect.top,
+      initialViewportLeft: tdRect.left,
       width: Math.max(tdRect.width, 160),
       height: tdRect.height,
-      containerHeight: containerRect.height,
     };
   }
 
@@ -1350,7 +1345,6 @@
   ): void {
     if (!editable || readOnly) return;
     const td = e.currentTarget as HTMLTableCellElement;
-    const containerRect = tableContainerEl!.getBoundingClientRect();
     const tdRect = td.getBoundingClientRect();
 
     focusedCell = null;
@@ -1362,11 +1356,10 @@
       originalValue: currentValue,
       dataType: col.dataType,
       nullable: col.nullable,
-      top: tdRect.top - containerRect.top,
-      left: tdRect.left - containerRect.left,
+      initialViewportTop: tdRect.top,
+      initialViewportLeft: tdRect.left,
       width: Math.max(tdRect.width, 160),
       height: tdRect.height,
-      containerHeight: containerRect.height,
     };
   }
 
@@ -2262,11 +2255,12 @@
       originalValue={editTarget.originalValue}
       dataType={editTarget.dataType}
       nullable={editTarget.nullable}
-      top={editTarget.top}
-      left={editTarget.left}
+      initialViewportTop={editTarget.initialViewportTop}
+      initialViewportLeft={editTarget.initialViewportLeft}
       width={editTarget.width}
       height={editTarget.height}
-      containerHeight={editTarget.containerHeight}
+      scrollEl={tableScrollEl}
+      panelEl={tableContainerEl}
       onConfirm={confirmEdit}
       onCancel={cancelEdit}
       onTab={handleTabFromEditor}
