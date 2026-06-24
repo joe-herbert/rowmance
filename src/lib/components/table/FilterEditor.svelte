@@ -330,7 +330,7 @@
 
   function updateRuleColumn(groupId: string, ruleId: string, column: string): void {
     draft.groups = draft.groups.map((g) =>
-      g.id === groupId ? { ...g, rules: g.rules.map((r) => r.id === ruleId ? { ...r, column, value: '' } : r) } : g,
+      g.id === groupId ? { ...g, rules: g.rules.map((r) => r.id === ruleId ? { ...r, column } : r) } : g,
     );
   }
 
