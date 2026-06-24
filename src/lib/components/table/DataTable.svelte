@@ -589,7 +589,16 @@
       pendingNewRows = [...pendingNewRows, { key }];
 
       const updated = new Map(pendingChanges);
-      updated.set(key, new Map());
+      const newRowMap = new Map<string, unknown>();
+      for (const col of columns) {
+        if (col.isAutoIncrement) continue;
+        if (col.defaultValue != null) {
+          newRowMap.set(col.name, parseDefaultValue(col.defaultValue, col.dataType));
+        } else if (!col.nullable) {
+          newRowMap.set(col.name, '');
+        }
+      }
+      updated.set(key, newRowMap);
       pendingChanges = updated;
       onChangePending?.(pendingChanges, originalRows);
 
@@ -1087,6 +1096,15 @@
     if (/^bool/.test(dt) || dt === 'tinyint(1)') return 'boolean';
     if (/^json/.test(dt)) return 'json';
     return 'text';
+  }
+
+  function parseDefaultValue(value: string, dataType: string): CellValue {
+    const category = getDataTypeCategory(dataType);
+    if (category === 'boolean') {
+      const truthy = value === '1' || value.toLowerCase() === 'true';
+      return dataType.toLowerCase() === 'tinyint(1)' ? (truthy ? 1 : 0) : truthy;
+    }
+    return value;
   }
 
   // ── Row selection ─────────────────────────────────────────────────────────
@@ -1836,7 +1854,7 @@
               {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
               {@const isPending = hasPendingChange(rowKey, col.name)}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
-              {@const isRequiredEmpty = isPending && cellValue === null && !col.nullable && !col.isAutoIncrement && col.defaultValue == null}
+              {@const isRequiredEmpty = isPending && (cellValue === null || cellValue === '') && !col.nullable && !col.isAutoIncrement && col.defaultValue == null}
               <td
                 class="data-cell"
                 class:cell-number={typeCategory === 'number'}
@@ -2001,9 +2019,8 @@
               <span class="new-row-indicator" aria-label="New row">+</span>
             </td>
             {#each visibleColumns as { col, originalIndex }}
-              {@const isExplicitlySet = pendingChanges.get(newRow.key)?.has(col.name) ?? false}
               {@const currentValue = pendingChanges.get(newRow.key)?.get(col.name) ?? null}
-              {@const isRequiredEmpty = !col.nullable && !col.isAutoIncrement && col.defaultValue == null && !isExplicitlySet}
+              {@const isRequiredEmpty = !col.nullable && !col.isAutoIncrement && col.defaultValue == null && (currentValue === null || currentValue === '')}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
               <td
                 class="data-cell"
