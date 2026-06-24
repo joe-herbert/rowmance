@@ -930,6 +930,11 @@
   let focusedCell = $state<{ row: number; col: number } | null>(null);
   let anchorCell = $state<{ row: number; col: number } | null>(null);
   let isDraggingSelection = $state(false);
+  let isDraggingRowSelect = $state(false);
+  let rowSelectionMode = $state(false);
+  let rowAnchor = $state<number | null>(null);
+  let rowFocus = $state<number | null>(null);
+  let additionalSelectedRowIndices = $state<Set<number>>(new Set());
   // Non-reactive flag: prevents onfocus from resetting anchor during programmatic focus
   let skipNextFocusReset = false;
   // Non-contiguous cells selected via option/alt+click, keyed as "row,col"
@@ -938,6 +943,7 @@
   function cellKey(row: number, col: number): string { return `${row},${col}`; }
 
   function isCellInSelection(row: number, col: number): boolean {
+    if (rowSelectionMode) return false;
     if (additionalSelectedCells.size > 0) return additionalSelectedCells.has(cellKey(row, col));
     if (!anchorCell || !focusedCell) return false;
     const minRow = Math.min(anchorCell.row, focusedCell.row);
@@ -965,11 +971,30 @@
     if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
       if (window.getSelection()?.toString()) return;
       e.preventDefault();
-      copySelection();
+      if (rowSelectionMode) {
+        if (selectedRowKeys.size > 1) copySelectedRowsTabSeparated();
+        else { const idx = rowFocus ?? rowAnchor; if (idx !== null) { const r = pageRows[idx]; if (r) copyRowTabSeparated(r); } }
+      } else {
+        copySelection();
+      }
       return;
     }
     if ((e.metaKey || e.ctrlKey) && e.key === 'x') {
       e.preventDefault();
+      if (rowSelectionMode) {
+        if (!editable || readOnly) return;
+        if (selectedRowKeys.size > 1) copySelectedRowsTabSeparated();
+        else { const idx = rowFocus ?? rowAnchor; if (idx !== null) { const r = pageRows[idx]; if (r) copyRowTabSeparated(r); } }
+        const next = new Map(pendingDeletedRows);
+        for (let r = 0; r < pageRows.length; r++) {
+          const rowData = pageRows[r];
+          const key = buildRowKey(rowData, columns, pageOffset + r);
+          if (selectedRowKeys.has(key)) next.set(key, [...rowData]);
+        }
+        pendingDeletedRows = next;
+        onDeleteRowsPending?.(pendingDeletedRows);
+        return;
+      }
       cutSelection();
       return;
     }
@@ -1016,6 +1041,54 @@
       return;
     }
 
+    if (rowSelectionMode) {
+      if (e.key === 'Escape') {
+        rowSelectionMode = false;
+        rowAnchor = null;
+        rowFocus = null;
+        additionalSelectedRowIndices = new Set();
+        return;
+      }
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const current = rowFocus ?? rowAnchor ?? 0;
+        const next = e.key === 'ArrowUp' ? Math.max(0, current - 1) : Math.min(rowCount - 1, current + 1);
+        additionalSelectedRowIndices = new Set();
+        if (e.shiftKey) {
+          if (rowAnchor === null) rowAnchor = current;
+          rowFocus = next;
+        } else {
+          rowAnchor = next;
+          rowFocus = next;
+        }
+        scrollRowIntoView(next);
+        return;
+      }
+      if (e.key === 'ArrowRight' && rowAnchor !== null) {
+        e.preventDefault();
+        const anchor = rowAnchor;
+        const focus = rowFocus ?? rowAnchor;
+        const nonContiguous = additionalSelectedRowIndices;
+        rowSelectionMode = false;
+        rowAnchor = null;
+        rowFocus = null;
+        additionalSelectedRowIndices = new Set();
+        if (nonContiguous.size > 0) {
+          additionalSelectedCells = new Set([...nonContiguous].map((r) => cellKey(r, 0)));
+          const firstIdx = Math.min(...nonContiguous);
+          anchorCell = { row: firstIdx, col: 0 };
+          focusedCell = { row: firstIdx, col: 0 };
+        } else {
+          anchorCell = { row: Math.min(anchor, focus), col: 0 };
+          focusedCell = { row: Math.max(anchor, focus), col: 0 };
+        }
+        skipNextFocusReset = true;
+        scrollFocusedCellIntoView(anchorCell);
+        return;
+      }
+      return;
+    }
+
     if (!focusedCell) {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         const newCell = { row: 0, col: 0 };
@@ -1024,6 +1097,41 @@
         skipNextFocusReset = true;
         scrollFocusedCellIntoView(newCell);
       }
+      return;
+    }
+
+    const allInCol0 = additionalSelectedCells.size > 0
+      ? [...additionalSelectedCells].every((k) => k.endsWith(',0'))
+      : focusedCell.col === 0 && (anchorCell?.col ?? 0) === 0;
+    if (e.key === 'ArrowLeft' && !e.shiftKey && allInCol0) {
+      e.preventDefault();
+      let firstRow: number;
+      if (additionalSelectedCells.size > 0) {
+        const rowIndices = [...additionalSelectedCells].map((k) => parseInt(k.split(',')[0]));
+        firstRow = Math.min(...rowIndices);
+        anchorCell = null;
+        focusedCell = null;
+        additionalSelectedCells = new Set();
+        rowSelectionMode = true;
+        rowAnchor = firstRow;
+        rowFocus = firstRow;
+        additionalSelectedRowIndices = new Set(rowIndices);
+      } else {
+        const minRow = Math.min(anchorCell?.row ?? focusedCell.row, focusedCell.row);
+        const maxRow = Math.max(anchorCell?.row ?? focusedCell.row, focusedCell.row);
+        firstRow = minRow;
+        anchorCell = null;
+        focusedCell = null;
+        additionalSelectedCells = new Set();
+        rowSelectionMode = true;
+        rowAnchor = minRow;
+        rowFocus = maxRow;
+        additionalSelectedRowIndices = new Set();
+      }
+      requestAnimationFrame(() => {
+        const tr = tableContainerEl?.querySelector<HTMLTableRowElement>(`tbody tr:nth-child(${firstRow + 1})`);
+        tr?.querySelector<HTMLElement>('.rownum-cell')?.focus();
+      });
       return;
     }
 
@@ -1057,6 +1165,10 @@
       anchorCell = null;
       focusedCell = null;
       additionalSelectedCells = new Set();
+      rowSelectionMode = false;
+      rowAnchor = null;
+      rowFocus = null;
+      additionalSelectedRowIndices = new Set();
       return;
     } else {
       return;
@@ -1093,6 +1205,13 @@
     });
   }
 
+  function scrollRowIntoView(rowIdx: number): void {
+    requestAnimationFrame(() => {
+      const tr = tableContainerEl?.querySelector<HTMLTableRowElement>(`tbody tr:nth-child(${rowIdx + 1})`);
+      tr?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
   // ── Cell formatting ───────────────────────────────────────────────────────
 
   function formatCell(value: CellValue): string {
@@ -1120,22 +1239,53 @@
     return value;
   }
 
+  function coercePasteValue(raw: string, col: { dataType: string }): CellValue {
+    if (raw === '') return null;
+    if (getDataTypeCategory(col.dataType) === 'boolean') {
+      const truthy = raw === '1' || raw.toLowerCase() === 'true';
+      return col.dataType.toLowerCase() === 'tinyint(1)' ? (truthy ? 1 : 0) : truthy;
+    }
+    return raw;
+  }
+
   // ── Row selection ─────────────────────────────────────────────────────────
 
   let selectedRowKeys = $state<Set<string>>(new Set());
 
   $effect(() => {
-    if (anchorCell && focusedCell) {
-      const minRow = Math.min(anchorCell.row, focusedCell.row);
-      const maxRow = Math.max(anchorCell.row, focusedCell.row);
-      const newKeys = new Set<string>();
-      for (let r = minRow; r <= maxRow; r++) {
-        const rowData = pageRows[r];
-        if (rowData) newKeys.add(buildRowKey(rowData, columns, pageOffset + r));
+    if (rowSelectionMode) {
+      if (rowAnchor === null) { selectedRowKeys = new Set(); return; }
+      const focus = rowFocus ?? rowAnchor;
+      if (additionalSelectedRowIndices.size > 0) {
+        const newKeys = new Set<string>();
+        for (const idx of additionalSelectedRowIndices) {
+          const rowData = pageRows[idx];
+          if (rowData) newKeys.add(buildRowKey(rowData, columns, pageOffset + idx));
+        }
+        selectedRowKeys = newKeys;
+      } else {
+        const minRow = Math.min(rowAnchor, focus);
+        const maxRow = Math.max(rowAnchor, focus);
+        const newKeys = new Set<string>();
+        for (let r = minRow; r <= maxRow; r++) {
+          const rowData = pageRows[r];
+          if (rowData) newKeys.add(buildRowKey(rowData, columns, pageOffset + r));
+        }
+        selectedRowKeys = newKeys;
       }
-      selectedRowKeys = newKeys;
     } else {
-      selectedRowKeys = new Set();
+      if (anchorCell && focusedCell) {
+        const minRow = Math.min(anchorCell.row, focusedCell.row);
+        const maxRow = Math.max(anchorCell.row, focusedCell.row);
+        const newKeys = new Set<string>();
+        for (let r = minRow; r <= maxRow; r++) {
+          const rowData = pageRows[r];
+          if (rowData) newKeys.add(buildRowKey(rowData, columns, pageOffset + r));
+        }
+        selectedRowKeys = newKeys;
+      } else {
+        selectedRowKeys = new Set();
+      }
     }
   });
 
@@ -1147,9 +1297,10 @@
   }
 
   function handleRowClick(e: MouseEvent, rowKey: string): void {
+    if (rowSelectionMode) return;
     if (e.metaKey || e.ctrlKey) {
       toggleRowSelection(rowKey);
-    } else {
+    } else if (!e.shiftKey) {
       selectedRowKeys = new Set([rowKey]);
     }
   }
@@ -1209,14 +1360,21 @@
   let contextMenuSnapshotHasFocus = $state(false);
   let contextMenuSnapshotIsMultiCell = $state(false);
   let contextMenuSnapshotIsMultiCol = $state(false);
+  let contextMenuSnapshotIsRowSelection = $state(false);
 
   function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number, colName: string | null = null): void {
     e.preventDefault();
     activeMenuDismiss?.();
     const rowKey = buildRowKey(row, columns, pageOffset + rowIndex);
+    if (rowSelectionMode && !selectedRowKeys.has(rowKey)) {
+      rowAnchor = rowIndex;
+      rowFocus = rowIndex;
+      additionalSelectedRowIndices = new Set();
+    }
     contextMenu = { x: e.clientX, y: e.clientY, rowKey, row, colName };
     contextMenuSnapshotHasFocus = focusedCell !== null;
     contextMenuSnapshotIsMultiCell = selectionIsMultiCell();
+    contextMenuSnapshotIsRowSelection = rowSelectionMode;
     const range = getSelectionRange();
     contextMenuSnapshotIsMultiCol = range ? range.minCol !== range.maxCol : false;
     activeMenuDismiss = () => { contextMenu = null; };
@@ -1533,6 +1691,32 @@
 
   async function pasteFromClipboard(): Promise<void> {
     if (!editable || readOnly) return;
+    if (rowSelectionMode) {
+      let text: string;
+      try { text = await navigator.clipboard.readText(); } catch { return; }
+      if (!text) return;
+      const clipLines = text.split('\n').filter((l) => l !== '');
+      if (clipLines.length === 0) return;
+      const selectedIndices: number[] = [];
+      for (let r = 0; r < pageRows.length; r++) {
+        const key = buildRowKey(pageRows[r], columns, pageOffset + r);
+        if (selectedRowKeys.has(key)) selectedIndices.push(r);
+      }
+      for (let i = 0; i < selectedIndices.length; i++) {
+        const r = selectedIndices[i];
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
+        const lineValues = clipLines[i % clipLines.length].split('\t');
+        visibleColumns.forEach(({ col, originalIndex }, c) => {
+          const pasteValue = lineValues[c] ?? '';
+          applyPendingChange(rowKey, col.name, rowData[originalIndex], coercePasteValue(pasteValue, col));
+        });
+      }
+      onChangePending?.(pendingChanges, originalRows);
+      return;
+    }
     if (!focusedCell) return;
     let text: string;
     try {
@@ -1556,7 +1740,7 @@
         if (!col) continue;
         const pasteValue = clipValues[clipIndex % clipValues.length];
         clipIndex++;
-        applyPendingChange(rowKey, col.name, rowData[originalIndex], pasteValue === '' ? null : pasteValue);
+        applyPendingChange(rowKey, col.name, rowData[originalIndex], coercePasteValue(pasteValue, col));
       }
     } else {
       const range = getSelectionRange();
@@ -1578,7 +1762,7 @@
           if (!col) continue;
           const pasteValue = clipValues[clipIndex % clipValues.length];
           clipIndex++;
-          applyPendingChange(rowKey, col.name, rowData[originalIndex], pasteValue === '' ? null : pasteValue);
+          applyPendingChange(rowKey, col.name, rowData[originalIndex], coercePasteValue(pasteValue, col));
         }
       }
     }
@@ -1762,12 +1946,18 @@
 
   function deleteRow(): void {
     if (!contextMenu || !editable || readOnly) return;
-    const { row, rowKey } = contextMenu;
     const next = new Map(pendingDeletedRows);
-    if (next.has(rowKey)) {
-      next.delete(rowKey);
+    if (contextMenuSnapshotIsRowSelection && selectedRowKeys.size > 1) {
+      const allDeleted = [...selectedRowKeys].every((k) => next.has(k));
+      for (let r = 0; r < pageRows.length; r++) {
+        const rowData = pageRows[r];
+        const key = buildRowKey(rowData, columns, pageOffset + r);
+        if (!selectedRowKeys.has(key)) continue;
+        if (allDeleted) next.delete(key); else next.set(key, [...rowData]);
+      }
     } else {
-      next.set(rowKey, [...row]);
+      const { row, rowKey } = contextMenu;
+      if (next.has(rowKey)) next.delete(rowKey); else next.set(rowKey, [...row]);
     }
     pendingDeletedRows = next;
     onDeleteRowsPending?.(pendingDeletedRows);
@@ -1792,10 +1982,16 @@
   function handleWindowClick(e: MouseEvent): void {
     if (!(e.target as Element | null)?.closest('.context-menu')) dismissContextMenu();
     if (!(e.target as Element | null)?.closest('.context-menu')) headerContextMenu = null;
+    if (!(e.target as Element | null)?.closest('.data-table-wrapper')) {
+      rowSelectionMode = false;
+      rowAnchor = null;
+      rowFocus = null;
+      additionalSelectedRowIndices = new Set();
+    }
   }
 </script>
 
-<svelte:window onclick={handleWindowClick} onmouseup={() => { isDraggingSelection = false; }} />
+<svelte:window onclick={handleWindowClick} onmouseup={() => { isDraggingSelection = false; isDraggingRowSelect = false; }} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -1912,10 +2108,44 @@
             <td
               class="rownum-cell"
               tabindex="-1"
-              onclick={() => {
-                anchorCell = { row: rowIndex, col: 0 };
-                focusedCell = { row: rowIndex, col: 0 };
+              onmousedown={(e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                anchorCell = null;
+                focusedCell = null;
+                additionalSelectedCells = new Set();
+                if (e.altKey) {
+                  if (!rowSelectionMode) {
+                    rowSelectionMode = true;
+                    additionalSelectedRowIndices = new Set([rowIndex]);
+                    rowAnchor = rowIndex;
+                    rowFocus = rowIndex;
+                  } else {
+                    const next = new Set(additionalSelectedRowIndices);
+                    if (next.size === 0 && rowAnchor !== null) {
+                      const lo = Math.min(rowAnchor, rowFocus ?? rowAnchor);
+                      const hi = Math.max(rowAnchor, rowFocus ?? rowAnchor);
+                      for (let i = lo; i <= hi; i++) next.add(i);
+                    }
+                    if (next.has(rowIndex)) next.delete(rowIndex); else next.add(rowIndex);
+                    additionalSelectedRowIndices = next;
+                  }
+                } else if (e.shiftKey && rowSelectionMode && rowAnchor !== null) {
+                  additionalSelectedRowIndices = new Set();
+                  rowFocus = rowIndex;
+                } else {
+                  rowSelectionMode = true;
+                  rowAnchor = rowIndex;
+                  rowFocus = rowIndex;
+                  additionalSelectedRowIndices = new Set();
+                  isDraggingRowSelect = true;
+                }
                 onDeselect?.();
+                (e.currentTarget as HTMLElement).focus();
+              }}
+              onclick={(e) => e.stopPropagation()}
+              onmouseenter={() => {
+                if (isDraggingRowSelect && rowAnchor !== null) rowFocus = rowIndex;
               }}
             >
               {#if isDeleted}
@@ -1944,7 +2174,7 @@
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
-                oncontextmenu={(e) => { e.stopPropagation(); if (!isCellInSelection(rowIndex, colIndex)) { anchorCell = { row: rowIndex, col: colIndex }; focusedCell = { row: rowIndex, col: colIndex }; } handleRowContextMenu(e, row, processedRowIndex, col.name); }}
+                oncontextmenu={(e) => { e.stopPropagation(); if (!rowSelectionMode && !isCellInSelection(rowIndex, colIndex)) { anchorCell = { row: rowIndex, col: colIndex }; focusedCell = { row: rowIndex, col: colIndex }; } handleRowContextMenu(e, row, processedRowIndex, col.name); }}
                 onmousedown={(e) => {
                   if (e.button === 0 && e.metaKey && e.shiftKey && col.isForeignKey && cellValue !== null) {
                     e.stopPropagation();
@@ -1974,10 +2204,18 @@
                   }
                   if (e.shiftKey && focusedCell) {
                     additionalSelectedCells = new Set();
+                    rowSelectionMode = false;
+                    rowAnchor = null;
+                    rowFocus = null;
+                    additionalSelectedRowIndices = new Set();
                     skipNextFocusReset = true;
                     focusedCell = { row: rowIndex, col: colIndex };
                   } else {
                     additionalSelectedCells = new Set();
+                    rowSelectionMode = false;
+                    rowAnchor = null;
+                    rowFocus = null;
+                    additionalSelectedRowIndices = new Set();
                     skipNextFocusReset = true;
                     anchorCell = { row: rowIndex, col: colIndex };
                     focusedCell = { row: rowIndex, col: colIndex };
@@ -1986,6 +2224,7 @@
                 }}
                 onmouseenter={() => {
                   if (isDraggingSelection) focusedCell = { row: rowIndex, col: colIndex };
+                  if (isDraggingRowSelect) rowFocus = rowIndex;
                 }}
                 onfocus={() => {
                   if (skipNextFocusReset) {
@@ -1993,6 +2232,7 @@
                     onCellSelect?.(originalIndex, row);
                     return;
                   }
+                  if (rowSelectionMode) return;
                   anchorCell = { row: rowIndex, col: colIndex };
                   focusedCell = { row: rowIndex, col: colIndex };
                   onCellSelect?.(originalIndex, row);
@@ -2175,6 +2415,35 @@
         >
           Discard new row
         </button>
+      {:else if contextMenuSnapshotIsRowSelection}
+        {#if selectedRowKeys.size > 1}
+          <button class="context-menu-item" role="menuitem" onclick={() => copySelectedRowsTabSeparated()}>
+            Copy {selectedRowKeys.size} rows (tab-separated)
+          </button>
+        {:else}
+          <button class="context-menu-item" role="menuitem" onclick={() => copyRowTabSeparated(contextMenu!.row)}>
+            Copy row (tab-separated)
+          </button>
+        {/if}
+        <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
+          {selectedRowKeys.size > 1 ? `Copy ${selectedRowKeys.size} rows as JSON` : 'Copy row as JSON'}
+        </button>
+        <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
+          {selectedRowKeys.size > 1 ? `Copy ${selectedRowKeys.size} rows as CSV` : 'Copy row as CSV'}
+        </button>
+        {#if editable && !readOnly}
+          <div class="context-menu-separator"></div>
+          {#if selectedRowKeys.size === 1}
+            <button class="context-menu-item" role="menuitem" onclick={() => cloneRow()}>
+              Clone row
+            </button>
+          {/if}
+          <button class="context-menu-item context-menu-item-danger" role="menuitem" onclick={() => deleteRow()}>
+            {selectedRowKeys.size > 1
+              ? (([...selectedRowKeys].every((k) => pendingDeletedRows.has(k))) ? `Undelete ${selectedRowKeys.size} rows` : `Delete ${selectedRowKeys.size} rows`)
+              : (pendingDeletedRows.has(contextMenu!.rowKey) ? 'Undelete row' : 'Delete row')}
+          </button>
+        {/if}
       {:else}
         {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
           <button
