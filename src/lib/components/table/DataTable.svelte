@@ -2015,7 +2015,7 @@
 
         {#each pendingNewRows as newRow}
           <tr class="data-row new-row" data-new-row-key={newRow.key}>
-            <td class="rownum-cell">
+            <td class="rownum-cell" oncontextmenu={(e) => { e.preventDefault(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: null, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}>
               <span class="new-row-indicator" aria-label="New row">+</span>
             </td>
             {#each visibleColumns as { col, originalIndex }}
@@ -2083,7 +2083,7 @@
           role="menuitem"
           onclick={() => deleteNewRow(contextMenu!.rowKey)}
         >
-          Delete new row
+          Discard new row
         </button>
       {:else}
         {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
