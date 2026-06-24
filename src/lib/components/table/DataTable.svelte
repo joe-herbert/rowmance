@@ -932,14 +932,25 @@
   let isDraggingSelection = $state(false);
   // Non-reactive flag: prevents onfocus from resetting anchor during programmatic focus
   let skipNextFocusReset = false;
+  // Non-contiguous cells selected via option/alt+click, keyed as "row,col"
+  let additionalSelectedCells = $state<Set<string>>(new Set());
+
+  function cellKey(row: number, col: number): string { return `${row},${col}`; }
 
   function isCellInSelection(row: number, col: number): boolean {
+    if (additionalSelectedCells.size > 0) return additionalSelectedCells.has(cellKey(row, col));
     if (!anchorCell || !focusedCell) return false;
     const minRow = Math.min(anchorCell.row, focusedCell.row);
     const maxRow = Math.max(anchorCell.row, focusedCell.row);
     const minCol = Math.min(anchorCell.col, focusedCell.col);
     const maxCol = Math.max(anchorCell.col, focusedCell.col);
     return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
+  }
+
+  function getAltSelectedCells(): { row: number; col: number }[] {
+    return [...additionalSelectedCells]
+      .map((k) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; })
+      .sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col);
   }
 
   function handleTableKeydown(e: KeyboardEvent): void {
@@ -1045,12 +1056,14 @@
       cancelEdit();
       anchorCell = null;
       focusedCell = null;
+      additionalSelectedCells = new Set();
       return;
     } else {
       return;
     }
 
     if (isArrow) {
+      additionalSelectedCells = new Set();
       if (e.shiftKey) {
         if (!anchorCell) anchorCell = focusedCell;
       } else {
@@ -1404,12 +1417,35 @@
   }
 
   function selectionIsMultiCell(): boolean {
+    if (additionalSelectedCells.size > 0) return additionalSelectedCells.size > 1;
     const r = getSelectionRange();
     if (!r) return false;
     return r.minRow !== r.maxRow || r.minCol !== r.maxCol;
   }
 
   function getSelectionText(): string {
+    if (additionalSelectedCells.size > 0) {
+      const cells = getAltSelectedCells();
+      const rowMap = new Map<number, number[]>();
+      for (const { row, col } of cells) {
+        if (!rowMap.has(row)) rowMap.set(row, []);
+        rowMap.get(row)!.push(col);
+      }
+      const lines: string[] = [];
+      for (const [r, cols] of [...rowMap.entries()].sort((a, b) => a[0] - b[0])) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        const cellTexts = cols.sort((a, b) => a - b).map((c) => {
+          const { originalIndex } = visibleColumns[c];
+          const col = columns[originalIndex];
+          const val = getPendingValue(rowKey, col.name, rowData[originalIndex]);
+          return val === null ? '' : String(val);
+        });
+        lines.push(cellTexts.join('\t'));
+      }
+      return lines.join('\n');
+    }
     const range = getSelectionRange();
     if (!range) return '';
     const { minRow, maxRow, minCol, maxCol } = range;
@@ -1461,23 +1497,35 @@
 
   function cutSelection(): void {
     if (!editable || readOnly) return;
-    const range = getSelectionRange();
-    if (!range) return;
     copySelection();
-    const { minRow, maxRow, minCol, maxCol } = range;
-    for (let r = minRow; r <= maxRow; r++) {
-      const rowData = pageRows[r];
-      if (!rowData) continue;
-      const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-      if (!originalRows.has(rowKey)) {
-        const next = new Map(originalRows);
-        next.set(rowKey, [...rowData]);
-        originalRows = next;
-      }
-      for (let c = minCol; c <= maxCol; c++) {
+    if (additionalSelectedCells.size > 0) {
+      for (const { row: r, col: c } of getAltSelectedCells()) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
         const { originalIndex } = visibleColumns[c];
         const col = columns[originalIndex];
         if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
+      }
+    } else {
+      const range = getSelectionRange();
+      if (!range) return;
+      const { minRow, maxRow, minCol, maxCol } = range;
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (!originalRows.has(rowKey)) {
+          const next = new Map(originalRows);
+          next.set(rowKey, [...rowData]);
+          originalRows = next;
+        }
+        for (let c = minCol; c <= maxCol; c++) {
+          const { originalIndex } = visibleColumns[c];
+          const col = columns[originalIndex];
+          if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
+        }
       }
     }
     onChangePending?.(pendingChanges, originalRows);
@@ -1493,29 +1541,45 @@
       return;
     }
     if (!text) return;
-    const range = getSelectionRange();
-    if (!range) return;
     // Flatten clipboard into a linear list, looped across selected cells
     const clipValues = text.split('\n').flatMap((line) => line.split('\t'));
     if (clipValues.length === 0) return;
-    const { minRow, maxRow, minCol, maxCol } = range;
-    let clipIndex = 0;
-    for (let r = minRow; r <= maxRow; r++) {
-      const rowData = pageRows[r];
-      if (!rowData) continue;
-      const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-      if (!originalRows.has(rowKey)) {
-        const next = new Map(originalRows);
-        next.set(rowKey, [...rowData]);
-        originalRows = next;
-      }
-      for (let c = minCol; c <= maxCol; c++) {
+    if (additionalSelectedCells.size > 0) {
+      let clipIndex = 0;
+      for (const { row: r, col: c } of getAltSelectedCells()) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
         const { originalIndex } = visibleColumns[c];
         const col = columns[originalIndex];
         if (!col) continue;
         const pasteValue = clipValues[clipIndex % clipValues.length];
         clipIndex++;
         applyPendingChange(rowKey, col.name, rowData[originalIndex], pasteValue === '' ? null : pasteValue);
+      }
+    } else {
+      const range = getSelectionRange();
+      if (!range) return;
+      const { minRow, maxRow, minCol, maxCol } = range;
+      let clipIndex = 0;
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (!originalRows.has(rowKey)) {
+          const next = new Map(originalRows);
+          next.set(rowKey, [...rowData]);
+          originalRows = next;
+        }
+        for (let c = minCol; c <= maxCol; c++) {
+          const { originalIndex } = visibleColumns[c];
+          const col = columns[originalIndex];
+          if (!col) continue;
+          const pasteValue = clipValues[clipIndex % clipValues.length];
+          clipIndex++;
+          applyPendingChange(rowKey, col.name, rowData[originalIndex], pasteValue === '' ? null : pasteValue);
+        }
       }
     }
     onChangePending?.(pendingChanges, originalRows);
@@ -1554,22 +1618,34 @@
 
   function setSelectionNull(): void {
     if (!editable || readOnly) return;
-    const range = getSelectionRange();
-    if (!range) return;
-    const { minRow, maxRow, minCol, maxCol } = range;
-    for (let r = minRow; r <= maxRow; r++) {
-      const rowData = pageRows[r];
-      if (!rowData) continue;
-      const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-      if (!originalRows.has(rowKey)) {
-        const next = new Map(originalRows);
-        next.set(rowKey, [...rowData]);
-        originalRows = next;
-      }
-      for (let c = minCol; c <= maxCol; c++) {
+    if (additionalSelectedCells.size > 0) {
+      for (const { row: r, col: c } of getAltSelectedCells()) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
         const { originalIndex } = visibleColumns[c];
         const col = columns[originalIndex];
         if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
+      }
+    } else {
+      const range = getSelectionRange();
+      if (!range) return;
+      const { minRow, maxRow, minCol, maxCol } = range;
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (!originalRows.has(rowKey)) {
+          const next = new Map(originalRows);
+          next.set(rowKey, [...rowData]);
+          originalRows = next;
+        }
+        for (let c = minCol; c <= maxCol; c++) {
+          const { originalIndex } = visibleColumns[c];
+          const col = columns[originalIndex];
+          if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
+        }
       }
     }
     onChangePending?.(pendingChanges, originalRows);
@@ -1733,6 +1809,7 @@
       anchorCell = null;
       focusedCell = null;
       isDraggingSelection = false;
+      additionalSelectedCells = new Set();
     }
   }}
 >
@@ -1884,10 +1961,23 @@
                     return;
                   }
                   if (e.button !== 0) return;
+                  if (e.altKey && !e.shiftKey && !e.metaKey) {
+                    const key = cellKey(rowIndex, colIndex);
+                    const next = new Set(additionalSelectedCells);
+                    if (next.size === 0 && anchorCell) next.add(cellKey(anchorCell.row, anchorCell.col));
+                    if (next.has(key)) { next.delete(key); } else { next.add(key); }
+                    additionalSelectedCells = next;
+                    skipNextFocusReset = true;
+                    anchorCell = { row: rowIndex, col: colIndex };
+                    focusedCell = { row: rowIndex, col: colIndex };
+                    return;
+                  }
                   if (e.shiftKey && focusedCell) {
+                    additionalSelectedCells = new Set();
                     skipNextFocusReset = true;
                     focusedCell = { row: rowIndex, col: colIndex };
                   } else {
+                    additionalSelectedCells = new Set();
                     skipNextFocusReset = true;
                     anchorCell = { row: rowIndex, col: colIndex };
                     focusedCell = { row: rowIndex, col: colIndex };
