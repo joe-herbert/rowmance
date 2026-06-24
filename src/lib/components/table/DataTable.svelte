@@ -187,39 +187,66 @@
     }
   });
 
-  let draggingColName = $state<string | null>(null);
-  let dragOverColName = $state<string | null>(null);
+  let colDragName = $state<string | null>(null);
+  let colIsDragging = $state(false);
+  let colDropTarget = $state<{ name: string; position: 'before' | 'after' } | null>(null);
+  let colPointerStartX = 0;
 
-  function onHeaderDragStart(colName: string): void {
-    draggingColName = colName;
-  }
+  $effect(() => {
+    if (!colDragName) return;
 
-  function onHeaderDragOver(e: DragEvent, colName: string): void {
-    e.preventDefault();
-    dragOverColName = colName;
-  }
+    function onMove(e: PointerEvent) {
+      if (!colIsDragging && Math.abs(e.clientX - colPointerStartX) > 4) {
+        colIsDragging = true;
+      }
+      if (!colIsDragging) return;
 
-  function onHeaderDrop(targetColName: string): void {
-    if (!draggingColName || draggingColName === targetColName) {
-      draggingColName = null;
-      dragOverColName = null;
-      return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const th = el?.closest<HTMLElement>('[data-col-name]');
+      const targetName = th?.dataset.colName;
+
+      if (!targetName || targetName === colDragName) {
+        colDropTarget = null;
+        return;
+      }
+
+      const rect = th!.getBoundingClientRect();
+      const position = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+      colDropTarget = { name: targetName, position };
     }
-    const fromOriginal = columns.findIndex((c) => c.name === draggingColName);
-    const toOriginal = columns.findIndex((c) => c.name === targetColName);
-    const fromDisplay = columnOrder.indexOf(fromOriginal);
-    const toDisplay = columnOrder.indexOf(toOriginal);
-    columnOrder = reorderColumns(columnOrder, fromDisplay, toDisplay);
-    if (onColumnOrderChange) {
-      onColumnOrderChange(columnOrder.map(i => columns[i].name));
-    }
-    draggingColName = null;
-    dragOverColName = null;
-  }
 
-  function onHeaderDragEnd(): void {
-    draggingColName = null;
-    dragOverColName = null;
+    function onUp() {
+      if (colIsDragging && colDropTarget) {
+        const fromOriginal = columns.findIndex((c) => c.name === colDragName);
+        const toOriginal = columns.findIndex((c) => c.name === colDropTarget!.name);
+        const fromDisplay = columnOrder.indexOf(fromOriginal);
+        const toDisplay = columnOrder.indexOf(toOriginal);
+        let toIdx = toDisplay + (colDropTarget.position === 'after' ? 1 : 0);
+        if (fromDisplay < toDisplay) toIdx -= 1;
+        columnOrder = reorderColumns(columnOrder, fromDisplay, toIdx);
+        if (onColumnOrderChange) {
+          onColumnOrderChange(columnOrder.map(i => columns[i].name));
+        }
+      }
+      colDragName = null;
+      colIsDragging = false;
+      colDropTarget = null;
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  });
+
+  function onColHeaderPointerDown(e: PointerEvent, colName: string): void {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('.resize-handle')) return;
+    colPointerStartX = e.clientX;
+    colDragName = colName;
   }
 
   // ── Visible columns (after ordering and hiding) ───────────────────────────
@@ -1627,19 +1654,18 @@
           >#</th>
           {#each visibleColumns as { col, originalIndex }}
             {@const isSorted = sortColIndex === originalIndex}
-            {@const isDragging = draggingColName === col.name}
-            {@const isDragOver = dragOverColName === col.name && draggingColName !== col.name}
+            {@const isDragging = colDragName === col.name && colIsDragging}
+            {@const isDropBefore = colDropTarget?.name === col.name && colDropTarget.position === 'before'}
+            {@const isDropAfter = colDropTarget?.name === col.name && colDropTarget.position === 'after'}
             <th
               class="header-cell"
               class:dragging={isDragging}
-              class:drag-over={isDragOver}
+              class:drop-before={isDropBefore}
+              class:drop-after={isDropAfter}
+              data-col-name={col.name}
               style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
               title="{col.name} ({col.dataType})"
-              draggable={true}
-              ondragstart={() => onHeaderDragStart(col.name)}
-              ondragover={(e) => onHeaderDragOver(e, col.name)}
-              ondrop={() => onHeaderDrop(col.name)}
-              ondragend={onHeaderDragEnd}
+              onpointerdown={(e) => onColHeaderPointerDown(e, col.name)}
             >
               <button
                 class="header-btn"
@@ -1669,8 +1695,6 @@
                 class="resize-handle"
                 role="separator"
                 aria-label="Resize {col.name} column"
-                draggable={false}
-                ondragstart={(e) => e.stopPropagation()}
                 onpointerdown={(e) => onResizePointerDown(e, originalIndex)}
               ></div>
             </th>
@@ -2308,8 +2332,12 @@
     opacity: 0.4;
   }
 
-  .header-cell.drag-over {
+  .header-cell.drop-before {
     box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+
+  .header-cell.drop-after {
+    box-shadow: inset -2px 0 0 var(--color-accent);
   }
 
   /* ── Data rows ──────────────────────────────────────────────────────────── */
