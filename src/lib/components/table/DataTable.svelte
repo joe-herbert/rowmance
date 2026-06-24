@@ -59,6 +59,7 @@
     onConnectColumn?: (_colName: string) => void;
     initialColWidths?: Record<string, number>;
     initialColumnOrder?: string[];
+    columnOrderOverride?: string[];
     onColWidthsChange?: (_widths: Record<string, number>) => void;
     onColumnOrderChange?: (_order: string[]) => void;
     initialPendingChanges?: Map<string, Map<string, CellValue>>;
@@ -66,6 +67,8 @@
     initialDeletedRows?: Map<string, CellValue[]>;
     connectionId?: string;
     database?: string | null;
+    columnRenames?: Record<string, string>;
+    onRenameColumn?: (_colName: string, _label: string) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -168,6 +171,7 @@
     onConnectColumn,
     initialColWidths,
     initialColumnOrder,
+    columnOrderOverride,
     onColWidthsChange,
     onColumnOrderChange,
     initialPendingChanges,
@@ -175,6 +179,8 @@
     initialDeletedRows,
     connectionId,
     database,
+    columnRenames = {},
+    onRenameColumn,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -185,6 +191,21 @@
     if (columnOrder.length !== columns.length) {
       columnOrder = columns.map((_, i) => i);
     }
+  });
+
+  $effect(() => {
+    const override = columnOrderOverride;
+    if (!override || override.length === 0) return;
+    const nameToIdx = new Map(columns.map((c, i) => [c.name, i] as const));
+    const order: number[] = [];
+    for (const name of override) {
+      const idx = nameToIdx.get(name);
+      if (idx !== undefined) order.push(idx);
+    }
+    for (let i = 0; i < columns.length; i++) {
+      if (!order.includes(i)) order.push(i);
+    }
+    if (order.length === columns.length) columnOrder = order;
   });
 
   let colDragName = $state<string | null>(null);
@@ -1107,6 +1128,44 @@
     }
   }
 
+  // ── Header context menu / rename ─────────────────────────────────────────
+
+  let headerContextMenu = $state<{ x: number; y: number; colName: string } | null>(null);
+  let renamingHeader = $state<{ colName: string; value: string } | null>(null);
+  let renameHeaderInputEl = $state<HTMLInputElement | null>(null);
+
+  function openHeaderContextMenu(e: MouseEvent, colName: string): void {
+    e.preventDefault();
+    e.stopPropagation();
+    activeMenuDismiss?.();
+    headerContextMenu = { x: e.clientX, y: e.clientY, colName };
+    activeMenuDismiss = () => { headerContextMenu = null; };
+  }
+
+  function startHeaderRename(colName: string): void {
+    headerContextMenu = null;
+    renamingHeader = { colName, value: columnRenames[colName] ?? colName };
+    tick().then(() => renameHeaderInputEl?.select());
+  }
+
+  function commitHeaderRename(): void {
+    if (!renamingHeader) return;
+    const { colName } = renamingHeader;
+    const trimmed = renamingHeader.value.trim();
+    renamingHeader = null;
+    if (!onRenameColumn) return;
+    onRenameColumn(colName, trimmed === '' ? colName : trimmed);
+  }
+
+  function cancelHeaderRename(): void {
+    renamingHeader = null;
+  }
+
+  function handleHeaderRenameKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Enter') { e.preventDefault(); commitHeaderRename(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelHeaderRename(); }
+  }
+
   // ── Context menu ──────────────────────────────────────────────────────────
 
   interface ContextMenu {
@@ -1645,6 +1704,7 @@
 
   function handleWindowClick(e: MouseEvent): void {
     if (!(e.target as Element | null)?.closest('.context-menu')) dismissContextMenu();
+    if (!(e.target as Element | null)?.closest('.context-menu')) headerContextMenu = null;
   }
 </script>
 
@@ -1683,6 +1743,9 @@
               (colDropTarget?.name === col.name && colDropTarget.position === 'before') ||
               (prevColName !== null && colDropTarget?.name === prevColName && colDropTarget.position === 'after')}
             {@const isDropAfterLast = i === visibleColumns.length - 1 && colDropTarget?.name === col.name && colDropTarget.position === 'after'}
+            {@const colLabel = columnRenames[col.name] ?? col.name}
+            {@const colIsRenamed = columnRenames[col.name] !== undefined && columnRenames[col.name] !== col.name}
+            {@const isRenamingThis = renamingHeader?.colName === col.name}
             <th
               class="header-cell"
               class:dragging={isDragging}
@@ -1690,32 +1753,46 @@
               class:drop-after-last={isDropAfterLast}
               data-col-name={col.name}
               style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
-              title="{col.name} ({col.dataType})"
-              onpointerdown={(e) => onColHeaderPointerDown(e, col.name)}
+              title="{colLabel} ({col.dataType}){colIsRenamed ? ` — original: ${col.name}` : ''}"
+              onpointerdown={(e) => { if (!isRenamingThis) onColHeaderPointerDown(e, col.name); }}
+              oncontextmenu={(e) => { if (onRenameColumn) openHeaderContextMenu(e, col.name); }}
             >
-              <button
-                class="header-btn"
-                onclick={() => toggleSort(originalIndex)}
-                aria-label="Sort by {col.name}"
-                title="Sort by {col.name}"
-              >
-                {#if col.isPrimaryKey}
-                  <svg class="pk-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="8" cy="9" r="4"></circle>
-                    <path d="M11 12l7 7"></path>
-                    <path d="M16 17l2-2"></path>
-                  </svg>
-                {/if}
-                <span class="header-label">
-                  <span class="header-name">{col.name}</span>
-                  <span class="header-type">{col.dataType}</span>
-                </span>
-                {#if isSorted && sortDir !== 'none'}
-                  <span class="sort-indicator" aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}>
-                    {sortDir === 'asc' ? '▲' : '▼'}
+              {#if isRenamingThis}
+                <input
+                  bind:this={renameHeaderInputEl}
+                  class="header-rename-input"
+                  type="text"
+                  bind:value={renamingHeader!.value}
+                  onkeydown={handleHeaderRenameKeydown}
+                  onblur={commitHeaderRename}
+                  onclick={(e) => e.stopPropagation()}
+                  aria-label="Rename column {col.name}"
+                />
+              {:else}
+                <button
+                  class="header-btn"
+                  onclick={() => toggleSort(originalIndex)}
+                  aria-label="Sort by {colLabel}"
+                  title="Sort by {colLabel}"
+                >
+                  {#if col.isPrimaryKey}
+                    <svg class="pk-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="8" cy="9" r="4"></circle>
+                      <path d="M11 12l7 7"></path>
+                      <path d="M16 17l2-2"></path>
+                    </svg>
+                  {/if}
+                  <span class="header-label">
+                    <span class="header-name" class:header-name--renamed={colIsRenamed}>{colLabel}</span>
+                    <span class="header-type">{col.dataType}</span>
                   </span>
-                {/if}
-              </button>
+                  {#if isSorted && sortDir !== 'none'}
+                    <span class="sort-indicator" aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}>
+                      {sortDir === 'asc' ? '▲' : '▼'}
+                    </span>
+                  {/if}
+                </button>
+              {/if}
 
               <div
                 class="resize-handle"
@@ -2148,6 +2225,36 @@
     </div>
   {/if}
 
+  <!-- Header context menu -->
+  {#if headerContextMenu !== null}
+    <div
+      class="context-menu"
+      role="menu"
+      tabindex="-1"
+      style="left: {headerContextMenu.x}px; top: {headerContextMenu.y}px;"
+      onclick={(e) => e.stopPropagation()}
+      onmousedown={(e) => e.preventDefault()}
+      use:portal
+    >
+      <button
+        class="context-menu-item"
+        role="menuitem"
+        onclick={() => startHeaderRename(headerContextMenu!.colName)}
+      >
+        Rename column
+      </button>
+      {#if columnRenames[headerContextMenu.colName] !== undefined && columnRenames[headerContextMenu.colName] !== headerContextMenu.colName}
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => { onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName); headerContextMenu = null; }}
+        >
+          Reset name
+        </button>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Inline cell editor overlay -->
   {#if editTarget !== null}
     <CellEditor
@@ -2320,6 +2427,24 @@
   .header-name {
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-secondary);
+  }
+
+  .header-name--renamed {
+    font-style: italic;
+  }
+
+  .header-rename-input {
+    width: calc(100% - 8px);
+    margin: 0 4px;
+    padding: 2px 4px;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    outline: none;
   }
 
   .header-type {

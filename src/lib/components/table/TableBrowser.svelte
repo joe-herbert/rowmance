@@ -343,6 +343,9 @@
   let hiddenColumns = $state<Set<string>>(new Set());
   let initialColWidths = $state<Record<string, number> | undefined>(undefined);
   let initialColumnOrder = $state<string[] | undefined>(undefined);
+  let currentColumnOrder = $state<string[]>([]);
+  let columnOrderOverride = $state<string[] | undefined>(undefined);
+  let columnRenames = $state<Record<string, string>>({});
 
   // Load column prefs from DB whenever connection/db/table change.
   $effect(() => {
@@ -350,12 +353,28 @@
     hiddenColumns = new Set();
     initialColWidths = undefined;
     initialColumnOrder = undefined;
+    currentColumnOrder = [];
+    columnOrderOverride = undefined;
+    columnRenames = {};
     loadColPrefs(conn, db, tbl).then((prefs) => {
       hiddenColumns = new Set(prefs?.hiddenColumns ?? []);
       initialColWidths = prefs?.colWidths;
       initialColumnOrder = prefs?.columnOrder?.length ? prefs.columnOrder : undefined;
+      currentColumnOrder = initialColumnOrder ?? [];
+      columnRenames = prefs?.columnRenames ?? {};
     });
   });
+
+  function handleRenameColumn(colName: string, label: string): void {
+    const next = { ...columnRenames };
+    if (label === colName) {
+      delete next[colName];
+    } else {
+      next[colName] = label;
+    }
+    columnRenames = next;
+    saveColPrefs(connectionId, database, table, { columnRenames: next });
+  }
 
   let showColumnPicker = $state(false);
   let columnPickerAnchorEl = $state<HTMLButtonElement | null>(null);
@@ -1265,12 +1284,15 @@
           initialColWidths={initialColWidths}
           initialColumnOrder={initialColumnOrder}
           onColWidthsChange={(widths) => saveColPrefs(connectionId, database, table, { colWidths: widths })}
-          onColumnOrderChange={(order) => saveColPrefs(connectionId, database, table, { columnOrder: order })}
+          onColumnOrderChange={(order) => { currentColumnOrder = order; saveColPrefs(connectionId, database, table, { columnOrder: order }); }}
+          {columnOrderOverride}
           initialPendingChanges={tableKey === 0 ? _restoredPending?.changes : undefined}
           initialOriginalRows={tableKey === 0 ? _restoredPending?.originalRows : undefined}
           initialDeletedRows={tableKey === 0 ? _restoredPending?.deletedRows : undefined}
           {connectionId}
           {database}
+          {columnRenames}
+          onRenameColumn={handleRenameColumn}
         />
       {/key}
     {:else}
@@ -1285,8 +1307,24 @@
       <ColumnPicker
         columns={currentColumns}
         {hiddenColumns}
+        columnOrder={currentColumnOrder.length > 0 ? currentColumnOrder : currentColumns.map(c => c.name)}
         onToggle={toggleColumn}
         onClose={() => (showColumnPicker = false)}
+        onReorder={(order) => {
+          currentColumnOrder = order;
+          columnOrderOverride = [...order];
+          saveColPrefs(connectionId, database, table, { columnOrder: order });
+        }}
+        onReset={() => {
+          hiddenColumns = new Set();
+          columnRenames = {};
+          const dbOrder = currentColumns.map(c => c.name);
+          currentColumnOrder = dbOrder;
+          columnOrderOverride = [...dbOrder];
+          saveColPrefs(connectionId, database, table, { hiddenColumns: [], columnOrder: [], columnRenames: {} });
+        }}
+        {columnRenames}
+        onRename={handleRenameColumn}
       />
     </div>
   {/if}

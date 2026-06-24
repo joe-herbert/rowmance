@@ -4,6 +4,7 @@ interface ColPrefs {
   hiddenColumns: string[];
   colWidths: Record<string, number>;
   columnOrder: string[];
+  columnRenames: Record<string, string>;
 }
 
 const PREFIX = 'col_prefs:';
@@ -38,6 +39,7 @@ export async function saveColPrefs(
       hiddenColumns: [],
       colWidths: {},
       columnOrder: [],
+      columnRenames: {},
     };
     await invoke<void>('settings_set', { key, value: { ...existing, ...prefs } });
   } catch {
