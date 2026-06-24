@@ -240,6 +240,11 @@
   import type { ColumnMeta } from '$lib/types';
   import Select from '$lib/components/ui/Select.svelte';
   import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import DatePicker from '$lib/components/ui/DatePicker.svelte';
+  import TimePicker from '$lib/components/ui/TimePicker.svelte';
+  import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
+  import { portal } from '$lib/actions/portal';
 
   interface Props {
     columns: ColumnMeta[];
@@ -250,6 +255,8 @@
   }
 
   let { columns, value, dbType, onApply, onClose }: Props = $props();
+
+  const settings = useSettings();
 
   function quoteIdentifier(name: string): string {
     return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;
@@ -281,6 +288,12 @@
     sql: value.sql,
   })));
   let panelEl = $state<HTMLDivElement | null>(null);
+  let openPickerRuleId = $state<string | null>(null);
+  let pickerTriggerEl = $state<HTMLButtonElement | null>(null);
+  let pickerPopupEl = $state<HTMLDivElement | null>(null);
+  let pickerTop = $state(0);
+  let pickerLeft = $state(0);
+  let pickerOpenUp = $state(false);
 
   const OPERATORS: FilterOperator[] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL', 'IN'];
   const VALUE_LESS_OPS: FilterOperator[] = ['IS NULL', 'IS NOT NULL'];
@@ -289,13 +302,82 @@
     return !VALUE_LESS_OPS.includes(op);
   }
 
-  function getValueInputType(columnName: string): 'datetime-local' | 'date' | 'text' {
+  function getDateCategory(columnName: string): 'datetime' | 'date' | 'time' | null {
     const col = columns.find((c) => c.name === columnName);
-    if (!col) return 'text';
+    if (!col) return null;
     const dt = col.dataType.toLowerCase();
-    if (dt.includes('datetime') || dt.includes('timestamp')) return 'datetime-local';
+    if (dt.includes('datetime') || dt.includes('timestamp')) return 'datetime';
+    if (dt.startsWith('time')) return 'time';
     if (dt.startsWith('date')) return 'date';
-    return 'text';
+    return null;
+  }
+
+  function positionPicker(): void {
+    if (!pickerTriggerEl) return;
+    const rect = pickerTriggerEl.getBoundingClientRect();
+    const h = pickerPopupEl ? pickerPopupEl.offsetHeight : 300;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    pickerOpenUp = spaceBelow < h && rect.top > h;
+    pickerTop = pickerOpenUp ? rect.top - h - 4 : rect.bottom + 4;
+    pickerLeft = rect.left;
+  }
+
+  function openPicker(ruleId: string, triggerEl: HTMLButtonElement): void {
+    openPickerRuleId = ruleId;
+    pickerTriggerEl = triggerEl;
+    requestAnimationFrame(() => { positionPicker(); requestAnimationFrame(positionPicker); });
+  }
+
+  function closePicker(): void {
+    openPickerRuleId = null;
+    pickerTriggerEl = null;
+  }
+
+  function formatDateDisplay(value: string, category: 'datetime' | 'date' | 'time'): string {
+    if (!value) return category === 'datetime' ? 'Pick date & time…' : category === 'time' ? 'Pick time…' : 'Pick date…';
+    return value;
+  }
+
+  function isBooleanColumn(columnName: string): boolean {
+    const col = columns.find((c) => c.name === columnName);
+    if (!col) return false;
+    const dt = col.dataType.toLowerCase();
+    return /^bool/.test(dt) || dt === 'tinyint(1)';
+  }
+
+  function getEnumValues(columnName: string): string[] | null {
+    const col = columns.find((c) => c.name === columnName);
+    if (!col) return null;
+    const match = col.dataType.match(/^enum\((.+)\)$/i);
+    if (!match) return null;
+    const raw = match[1];
+    const values: string[] = [];
+    let i = 0;
+    while (i < raw.length) {
+      if (raw[i] === "'") {
+        let j = i + 1;
+        while (j < raw.length && raw[j] !== "'") j++;
+        values.push(raw.slice(i + 1, j));
+        i = j + 2; // skip closing quote and comma
+      } else {
+        i++;
+      }
+    }
+    return values.length > 0 ? values : null;
+  }
+
+  function booleanTrueLabel(): string {
+    const fmt = settings.settings.booleanDisplay ?? 'tick-cross';
+    if (fmt === 'true-false') return 'True';
+    if (fmt === '1-0') return '1';
+    return '✓';
+  }
+
+  function booleanFalseLabel(): string {
+    const fmt = settings.settings.booleanDisplay ?? 'tick-cross';
+    if (fmt === 'true-false') return 'False';
+    if (fmt === '1-0') return '0';
+    return '✗';
   }
 
   function newRule(): FilterRule {
@@ -372,12 +454,23 @@
   function handleDocumentClick(e: MouseEvent): void {
     const target = e.target as Node;
     if (!target.isConnected) return;
+    if (openPickerRuleId !== null) {
+      if (!pickerTriggerEl?.contains(target) && !pickerPopupEl?.contains(target)) closePicker();
+      return;
+    }
     if (panelEl && !panelEl.contains(target)) onClose();
   }
 
   function handleDocumentKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Escape') onClose();
+    if (e.key === 'Escape') {
+      if (openPickerRuleId !== null) { closePicker(); return; }
+      onClose();
+    }
   }
+
+  $effect(() => {
+    if (pickerPopupEl) requestAnimationFrame(positionPicker);
+  });
 
   onMount(() => {
     const timer = setTimeout(() => {
@@ -472,15 +565,54 @@
                     />
 
                     {#if needsValue(rule.operator)}
-                      <input
-                        class="fe-value-input"
-                        type={getValueInputType(rule.column)}
-                        value={rule.value}
-                        placeholder={rule.operator === 'LIKE' || rule.operator === 'NOT LIKE' ? '%value%' : rule.operator === 'IN' ? "'a','b','c'" : 'value'}
-                        oninput={(e) => updateRuleValue(group.id, rule.id, (e.target as HTMLInputElement).value)}
-                        aria-label="Filter value"
-                        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                      />
+                      {@const enumValues = getEnumValues(rule.column)}
+                      {#if isBooleanColumn(rule.column)}
+                        <div class="fe-bool-picker" aria-label="Filter value">
+                          <button
+                            class="fe-bool-btn fe-bool-btn--true"
+                            class:fe-bool-btn--selected={rule.value === 'true' || rule.value === '1'}
+                            onclick={() => updateRuleValue(group.id, rule.id, settings.settings.booleanDisplay === '1-0' ? '1' : 'true')}
+                            type="button"
+                          >{booleanTrueLabel()}</button>
+                          <button
+                            class="fe-bool-btn fe-bool-btn--false"
+                            class:fe-bool-btn--selected={rule.value === 'false' || rule.value === '0'}
+                            onclick={() => updateRuleValue(group.id, rule.id, settings.settings.booleanDisplay === '1-0' ? '0' : 'false')}
+                            type="button"
+                          >{booleanFalseLabel()}</button>
+                        </div>
+                      {:else if enumValues !== null}
+                        <Select
+                          value={rule.value || undefined}
+                          options={[{ value: '', label: '— pick value —' }, ...enumValues.map(v => ({ value: v, label: v }))]}
+                          onchange={(v) => updateRuleValue(group.id, rule.id, v)}
+                          aria-label="Filter value"
+                          size="xs"
+                          mono
+                          style="flex:1; min-width:0"
+                        />
+                      {:else}
+                        {@const dateCategory = getDateCategory(rule.column)}
+                        {#if dateCategory !== null}
+                          <button
+                            class="fe-date-trigger"
+                            class:fe-date-trigger--empty={!rule.value}
+                            type="button"
+                            aria-label="Filter value"
+                            onclick={(e) => openPicker(rule.id, e.currentTarget)}
+                          >{formatDateDisplay(rule.value, dateCategory)}</button>
+                        {:else}
+                          <input
+                            class="fe-value-input"
+                            type="text"
+                            value={rule.value}
+                            placeholder={rule.operator === 'LIKE' || rule.operator === 'NOT LIKE' ? '%value%' : rule.operator === 'IN' ? "'a','b','c'" : 'value'}
+                            oninput={(e) => updateRuleValue(group.id, rule.id, (e.target as HTMLInputElement).value)}
+                            aria-label="Filter value"
+                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                          />
+                        {/if}
+                      {/if}
                     {:else}
                       <span class="fe-value-spacer"></span>
                     {/if}
@@ -525,6 +657,33 @@
     <button class="fe-apply-btn" onclick={applyFilter}>Apply</button>
   </div>
 </div>
+
+{#if openPickerRuleId !== null}
+  {@const activeRule = draft.groups.flatMap(g => g.rules).find(r => r.id === openPickerRuleId)}
+  {@const activeGroup = draft.groups.find(g => g.rules.some(r => r.id === openPickerRuleId))}
+  {@const dateCategory = activeRule ? getDateCategory(activeRule.column) : null}
+  {#if activeRule && activeGroup && dateCategory}
+    <div
+      bind:this={pickerPopupEl}
+      class="picker-popup"
+      class:picker-popup--up={pickerOpenUp}
+      style="top:{pickerTop}px; left:{pickerLeft}px"
+      use:portal
+      onkeydown={(e) => { if (e.key === 'Escape') closePicker(); }}
+      role="dialog"
+      aria-label="Pick {dateCategory === 'datetime' ? 'date and time' : dateCategory}"
+      tabindex="-1"
+    >
+      {#if dateCategory === 'date'}
+        <DatePicker value={activeRule.value} onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)} />
+      {:else if dateCategory === 'time'}
+        <TimePicker value={activeRule.value} onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)} />
+      {:else}
+        <DateTimePicker value={activeRule.value} onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)} />
+      {/if}
+    </div>
+  {/if}
+{/if}
 
 <style>
   .filter-editor {
@@ -730,6 +889,59 @@
   .fe-value-input::placeholder { color: var(--color-text-muted); font-family: var(--font-family-ui); }
   .fe-value-input--raw { border-style: dashed; }
   .fe-value-spacer { flex: 1; }
+
+  .fe-bool-picker {
+    display: flex;
+    flex: 1;
+    gap: var(--spacing-1);
+    min-width: 0;
+  }
+
+  .fe-bool-btn {
+    flex: 1;
+    padding: 3px var(--spacing-2);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .fe-bool-btn--true { color: var(--color-success); }
+  .fe-bool-btn--false { color: var(--color-danger); }
+
+  .fe-bool-btn:hover { background: var(--color-bg-hover); border-color: var(--color-border-strong); }
+
+  .fe-bool-btn--true.fe-bool-btn--selected {
+    background: var(--color-success-subtle);
+    border-color: var(--color-success);
+  }
+
+  .fe-bool-btn--false.fe-bool-btn--selected {
+    background: var(--color-danger-subtle);
+    border-color: var(--color-danger);
+  }
+
+  .fe-date-trigger {
+    flex: 0 1 auto;
+    padding: 3px var(--spacing-1);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color var(--transition-fast);
+    white-space: nowrap;
+  }
+
+  .fe-date-trigger:hover { border-color: var(--color-border-strong); background: var(--color-bg-hover); }
+  .fe-date-trigger--empty { color: var(--color-text-muted); }
 
   .raw-sql-tag {
     flex-shrink: 0;
