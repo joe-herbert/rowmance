@@ -195,11 +195,33 @@
   $effect(() => {
     if (!colDragName) return;
 
+    let lastPointerX = colPointerStartX;
+    let scrollRafId: number | null = null;
+
+    function scrollStep() {
+      if (colIsDragging && tableScrollEl) {
+        const EDGE = 60;
+        const MAX_SPEED = 12;
+        const rect = tableScrollEl.getBoundingClientRect();
+        const distLeft = lastPointerX - rect.left;
+        const distRight = rect.right - lastPointerX;
+        if (distLeft < EDGE && distLeft >= 0) {
+          tableScrollEl.scrollLeft -= Math.round(MAX_SPEED * (1 - distLeft / EDGE));
+        } else if (distRight < EDGE && distRight >= 0) {
+          tableScrollEl.scrollLeft += Math.round(MAX_SPEED * (1 - distRight / EDGE));
+        }
+      }
+      scrollRafId = requestAnimationFrame(scrollStep);
+    }
+    scrollRafId = requestAnimationFrame(scrollStep);
+
     function onMove(e: PointerEvent) {
       if (!colIsDragging && Math.abs(e.clientX - colPointerStartX) > 4) {
         colIsDragging = true;
       }
       if (!colIsDragging) return;
+
+      lastPointerX = e.clientX;
 
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const th = el?.closest<HTMLElement>('[data-col-name]');
@@ -237,6 +259,7 @@
     window.addEventListener('pointerup', onUp);
 
     return () => {
+      if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
@@ -1652,16 +1675,19 @@
             class="rownum-header-cell"
             onclick={() => { focusedCell = null; onDeselect?.(); }}
           >#</th>
-          {#each visibleColumns as { col, originalIndex }}
+          {#each visibleColumns as { col, originalIndex }, i}
             {@const isSorted = sortColIndex === originalIndex}
             {@const isDragging = colDragName === col.name && colIsDragging}
-            {@const isDropBefore = colDropTarget?.name === col.name && colDropTarget.position === 'before'}
-            {@const isDropAfter = colDropTarget?.name === col.name && colDropTarget.position === 'after'}
+            {@const prevColName = i > 0 ? visibleColumns[i - 1].col.name : null}
+            {@const isDropIndicator =
+              (colDropTarget?.name === col.name && colDropTarget.position === 'before') ||
+              (prevColName !== null && colDropTarget?.name === prevColName && colDropTarget.position === 'after')}
+            {@const isDropAfterLast = i === visibleColumns.length - 1 && colDropTarget?.name === col.name && colDropTarget.position === 'after'}
             <th
               class="header-cell"
               class:dragging={isDragging}
-              class:drop-before={isDropBefore}
-              class:drop-after={isDropAfter}
+              class:drop-indicator={isDropIndicator}
+              class:drop-after-last={isDropAfterLast}
               data-col-name={col.name}
               style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
               title="{col.name} ({col.dataType})"
@@ -2332,11 +2358,11 @@
     opacity: 0.4;
   }
 
-  .header-cell.drop-before {
+  .header-cell.drop-indicator {
     box-shadow: inset 2px 0 0 var(--color-accent);
   }
 
-  .header-cell.drop-after {
+  .header-cell.drop-after-last {
     box-shadow: inset -2px 0 0 var(--color-accent);
   }
 
