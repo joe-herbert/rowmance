@@ -40,9 +40,14 @@
       : null
   );
 
-  const rowCountText = $derived(
-    statusBar.rowCount !== null ? `${statusBar.rowCount.toLocaleString()} rows` : null
-  );
+  const rowCountText = $derived.by(() => {
+    if (statusBar.rowCount === null) return null;
+    const filtered = statusBar.rowCount.toLocaleString();
+    if (statusBar.totalRowCount !== null && statusBar.totalRowCount !== statusBar.rowCount) {
+      return `${filtered} of ${statusBar.totalRowCount.toLocaleString()} rows`;
+    }
+    return `${filtered} rows`;
+  });
 
   const dirtyText = $derived.by(() => {
     const cells = statusBar.pendingCellCount;

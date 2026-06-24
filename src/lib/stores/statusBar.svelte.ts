@@ -12,6 +12,7 @@
 let pendingCellCount = $state(0);
 let pendingRowCount = $state(0);
 let rowCount = $state<number | null>(null);
+let totalRowCount = $state<number | null>(null);
 let lastQueryMs = $state<number | null>(null);
 let isSaving = $state(false);
 let onSave = $state<(() => Promise<void>) | null>(null);
@@ -22,6 +23,7 @@ export function useStatusBar() {
     get pendingCellCount() { return pendingCellCount; },
     get pendingRowCount() { return pendingRowCount; },
     get rowCount() { return rowCount; },
+    get totalRowCount() { return totalRowCount; },
     get lastQueryMs() { return lastQueryMs; },
     get isSaving() { return isSaving; },
     get onSave() { return onSave; },
@@ -31,6 +33,7 @@ export function useStatusBar() {
       pendingCellCount?: number;
       pendingRowCount?: number;
       rowCount?: number | null;
+      totalRowCount?: number | null;
       lastQueryMs?: number | null;
       isSaving?: boolean;
       onSave?: (() => Promise<void>) | null;
@@ -39,6 +42,7 @@ export function useStatusBar() {
       if (patch.pendingCellCount !== undefined) pendingCellCount = patch.pendingCellCount;
       if (patch.pendingRowCount !== undefined) pendingRowCount = patch.pendingRowCount;
       if (patch.rowCount !== undefined) rowCount = patch.rowCount;
+      if (patch.totalRowCount !== undefined) totalRowCount = patch.totalRowCount;
       if (patch.lastQueryMs !== undefined) lastQueryMs = patch.lastQueryMs;
       if (patch.isSaving !== undefined) isSaving = patch.isSaving;
       if (patch.onSave !== undefined) onSave = patch.onSave;
@@ -49,6 +53,7 @@ export function useStatusBar() {
       pendingCellCount = 0;
       pendingRowCount = 0;
       rowCount = null;
+      totalRowCount = null;
       lastQueryMs = null;
       isSaving = false;
       onSave = null;

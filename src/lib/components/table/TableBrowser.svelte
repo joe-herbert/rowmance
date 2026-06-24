@@ -16,7 +16,7 @@
 
 <script lang="ts">
   import { untrack, tick } from 'svelte';
-  import { executeQuery, updateRows, insertRow, deleteRows } from '$lib/tauri/query';
+  import { executeQuery, executeSelection, updateRows, insertRow, deleteRows } from '$lib/tauri/query';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
   import { useConnections } from '$lib/stores/connections.svelte';
@@ -83,6 +83,7 @@
   let filterEditorTop = $state(0);
   let filterEditorLeft = $state(0);
   let result = $state<QueryResult | null>(null);
+  let unfilteredTotal = $state<number | null>(null);
   let foreignKeys = $state<ForeignKeyInfo[]>([]);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -540,13 +541,25 @@
     error = null;
     const t0 = performance.now();
     try {
-      const [queryResult, schemaColumns, indexes, fks] = await Promise.all([
+      const filterActive = filterStateIsActive(filterEditorState);
+      const quotedDb = quoteIdentifier(database);
+      const quotedTable = quoteIdentifier(table);
+      const countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
+      const [queryResult, schemaColumns, indexes, fks, countResult] = await Promise.all([
         executeQuery(connectionId, buildSql(), untrack(() => page), PAGE_SIZE),
         listColumns(connectionId, database, table).catch(() => []),
         listIndexes(connectionId, database, table).catch(() => []),
         listForeignKeys(connectionId, database, table).catch(() => []),
+        filterActive ? executeSelection(connectionId, countSql, database) : Promise.resolve(null),
       ]);
       foreignKeys = fks;
+
+      if (countResult && !countResult.error) {
+        const raw = countResult.rows[0]?.[0];
+        unfilteredTotal = raw !== null && raw !== undefined ? Number(raw) : null;
+      } else if (!filterActive) {
+        unfilteredTotal = null;
+      }
 
       if (queryResult.error) {
         error = queryResult.error;
@@ -921,6 +934,7 @@
       pendingCellCount,
       pendingRowCount,
       rowCount,
+      totalRowCount: filterStateIsActive(filterEditorState) ? unfilteredTotal : null,
       lastQueryMs,
       isSaving,
       onSave: pendingRowCount > 0 ? saveChanges : null,
