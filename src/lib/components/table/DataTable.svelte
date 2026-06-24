@@ -931,6 +931,7 @@
   let anchorCell = $state<{ row: number; col: number } | null>(null);
   let isDraggingSelection = $state(false);
   let isDraggingRowSelect = $state(false);
+  let justFinishedRowDrag = false;
   let rowSelectionMode = $state(false);
   let rowAnchor = $state<number | null>(null);
   let rowFocus = $state<number | null>(null);
@@ -1991,7 +1992,7 @@
   }
 </script>
 
-<svelte:window onclick={handleWindowClick} onmouseup={() => { isDraggingSelection = false; isDraggingRowSelect = false; }} />
+<svelte:window onclick={handleWindowClick} onmouseup={() => { isDraggingSelection = false; if (isDraggingRowSelect) justFinishedRowDrag = true; isDraggingRowSelect = false; }} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -2010,7 +2011,7 @@
   }}
 >
 
-  <div class="table-scroll" class:selecting={isDraggingSelection} bind:this={tableScrollEl} ondblclick={(e) => { if (editable && !readOnly && !(e.target as Element).closest('tr')) onAddRow?.(); }}>
+  <div class="table-scroll" class:selecting={isDraggingSelection} bind:this={tableScrollEl} ondblclick={(e) => { if (editable && !readOnly && !(e.target as Element).closest('tr')) onAddRow?.(); }} onclick={(e) => { if (justFinishedRowDrag) { justFinishedRowDrag = false; return; } if (rowSelectionMode && !(e.target as Element).closest('tr')) { rowSelectionMode = false; rowAnchor = null; rowFocus = null; additionalSelectedRowIndices = new Set(); } }}>
     <table class="data-table">
       <thead>
         <tr class="header-row">
