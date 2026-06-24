@@ -1795,6 +1795,7 @@
               ></div>
             </th>
           {/each}
+          <th class="filler-header-cell"></th>
         </tr>
       </thead>
 
@@ -1921,10 +1922,11 @@
                 </div>
               </td>
             {/each}
+            <td class="filler-cell"></td>
           </tr>
           {#if quickViewState?.triggerRowKey === rowKey}
             <tr class="quick-view-row">
-              <td class="quick-view-cell" colspan={visibleColumns.length + 1} tabindex="-1">
+              <td class="quick-view-cell" colspan={visibleColumns.length + 2} tabindex="-1">
                 {#if quickViewState.loading}
                   <div class="quick-view-panel">
                     <div class="quick-view-header" style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))">
@@ -2327,6 +2329,7 @@
     border-spacing: 0;
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
+    table-layout: fixed;
     width: max-content;
     min-width: 100%;
   }
@@ -2511,6 +2514,20 @@
 
   .data-row.row-selected:hover {
     background: var(--color-accent-subtle);
+  }
+
+  /* ── Filler column (absorbs extra width so rownum stays fixed) ──────────── */
+
+  .filler-header-cell {
+    width: 100%;
+    border-bottom: 1px solid var(--color-border-strong);
+    padding: 0;
+  }
+
+  .filler-cell {
+    width: 100%;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0;
   }
 
   /* ── Row number column ──────────────────────────────────────────────────── */
