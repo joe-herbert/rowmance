@@ -28,11 +28,12 @@
     onConfirm: (_newValue: CellValue) => void;
     onCancel: () => void;
     onTab?: (_shiftKey: boolean) => void;
+    onTabConfirm?: (_newValue: CellValue, _shiftKey: boolean) => void;
     connectionId?: string;
     database?: string | null;
   }
 
-  let { value, originalValue, dataType, nullable, initialViewportTop, initialViewportLeft, width, height, scrollEl = null, panelEl = null, onConfirm, onCancel, onTab, connectionId, database }: Props = $props();
+  let { value, originalValue, dataType, nullable, initialViewportTop, initialViewportLeft, width, height, scrollEl = null, panelEl = null, onConfirm, onCancel, onTab, onTabConfirm, connectionId, database }: Props = $props();
 
   const { settings } = useSettings();
 
@@ -199,6 +200,8 @@
     if (inputEl) {
       inputEl.focus();
       inputEl.select();
+    } else {
+      requestAnimationFrame(() => actionsEl?.focus());
     }
 
     function handlePointerDown(e: PointerEvent): void {
@@ -224,23 +227,30 @@
     return isTinyInt1(dataType) ? (v ? 1 : 0) : v;
   }
 
-  function confirmEdit(): void {
-    if (inputType === 'boolean') {
-      onConfirm(boolToDbValue(boolState));
-    } else if (textValue === '') {
-      // Empty text — keep as empty string, not null (user can click Set NULL for that)
-      onConfirm('');
-    } else if (inputType === 'text') {
-      // Try to coerce numbers back if the original DB value was a number
+  function getConfirmedValue(): CellValue {
+    if (inputType === 'boolean') return boolToDbValue(boolState);
+    if (textValue === '') return '';
+    if (inputType === 'text') {
       const asNum = Number(textValue);
-      if (typeof originalValue === 'number' && !isNaN(asNum) && textValue.trim() !== '') {
-        onConfirm(asNum);
-      } else {
-        onConfirm(textValue);
-      }
-    } else {
-      onConfirm(textValue);
+      if (typeof originalValue === 'number' && !isNaN(asNum) && textValue.trim() !== '') return asNum;
+      return textValue;
     }
+    return textValue;
+  }
+
+  function confirmEdit(): void {
+    onConfirm(getConfirmedValue());
+  }
+
+  const boolCycleOrder: (boolean | null)[] = [true, false, null];
+
+  function cycleBool(dir: 1 | -1): void {
+    const idx = boolCycleOrder.indexOf(boolState);
+    boolState = boolCycleOrder[(idx + dir + boolCycleOrder.length) % boolCycleOrder.length];
+  }
+
+  export function cycle(dir: 1 | -1): void {
+    if (inputType === 'boolean') cycleBool(dir);
   }
 
   function handleKeydown(e: KeyboardEvent): void {
@@ -249,11 +259,24 @@
       confirmEdit();
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      confirmEdit();
-      onTab?.(e.shiftKey);
+      if (onTabConfirm) {
+        onTabConfirm(getConfirmedValue(), e.shiftKey);
+      } else {
+        confirmEdit();
+        onTab?.(e.shiftKey);
+      }
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       onCancel();
+    } else if (inputType === 'boolean' && e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      cycleBool(1);
+    } else if (inputType === 'boolean' && e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      cycleBool(-1);
     }
   }
 
@@ -297,6 +320,14 @@
     onConfirm(formatNow(new Date(), inputType));
   }
 </script>
+
+<svelte:document onkeydown={(e) => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); }
+  if (inputType === 'boolean') {
+    if (e.key === 'ArrowDown') { e.preventDefault(); cycleBool(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); cycleBool(-1); }
+  }
+}} />
 
 <div
   bind:this={cellEditorEl}

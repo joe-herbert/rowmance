@@ -672,6 +672,7 @@
 
   let editTarget = $state<EditTarget | null>(null);
   let modalTarget = $state<EditTarget | null>(null);
+  let cellEditorInstance = $state<{ cycle: (dir: 1 | -1) => void } | null>(null);
   let tableContainerEl = $state<HTMLDivElement | null>(null);
   let tableScrollEl = $state<HTMLDivElement | null>(null);
   let tableScrollWidth = $state(0);
@@ -835,8 +836,9 @@
   }
 
   function cancelEdit(): void {
+    const wasEditing = editTarget !== null;
     editTarget = null;
-    refocusCell();
+    if (wasEditing) refocusCell();
   }
 
   function handleTabFromEditor(shiftKey: boolean): void {
@@ -861,6 +863,101 @@
     focusedCell = { row, col };
     skipNextFocusReset = true;
     scrollFocusedCellIntoView(focusedCell);
+  }
+
+  // Called from CellEditor when Tab is pressed. Reads editTarget BEFORE confirmEdit
+  // clears it, so the current cell position is still available.
+  function handleTabConfirm(newValue: CellValue, shiftKey: boolean): void {
+    if (!editTarget) return;
+
+    // Find current visual position from editTarget
+    const visColIndex = visibleColumns.findIndex((vc) => vc.originalIndex === editTarget!.colIndex);
+    const rowIndex = pageRows.findIndex(
+      (r, i) => buildRowKey(r, columns, pageOffset + i) === editTarget!.rowKey,
+    );
+    if (visColIndex < 0 || rowIndex < 0) {
+      // Fallback: just confirm without tab navigation
+      confirmEdit(newValue);
+      return;
+    }
+
+    // Compute next cell
+    const rowCount = pageRows.length;
+    const colCount = visibleColumns.length;
+    let nextRow = rowIndex;
+    let nextCol = visColIndex;
+    if (shiftKey) {
+      nextCol -= 1;
+      if (nextCol < 0) { nextCol = colCount - 1; nextRow = Math.max(nextRow - 1, 0); }
+    } else {
+      nextCol += 1;
+      if (nextCol >= colCount) { nextCol = 0; nextRow = Math.min(nextRow + 1, rowCount - 1); }
+    }
+
+    // Confirm current edit (without refocusCell — we'll open the next editor instead)
+    const { rowKey, colName, originalValue } = editTarget;
+    const isNewRow = rowKey.startsWith('__new__');
+    const updated = new Map(pendingChanges);
+    if (isNewRow) {
+      if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+      updated.get(rowKey)!.set(colName, newValue);
+    } else {
+      if (cellValuesEqual(newValue, originalValue)) {
+        const rowMap = updated.get(rowKey);
+        if (rowMap) {
+          rowMap.delete(colName);
+          if (rowMap.size === 0) {
+            updated.delete(rowKey);
+            const nextOrig = new Map(originalRows);
+            nextOrig.delete(rowKey);
+            originalRows = nextOrig;
+          }
+        }
+      } else {
+        if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+        updated.get(rowKey)!.set(colName, newValue);
+      }
+    }
+    pendingChanges = updated;
+    onChangePending?.(pendingChanges, originalRows);
+    editTarget = null;
+
+    // Update selection to reflect the next cell
+    anchorCell = { row: nextRow, col: nextCol };
+    focusedCell = { row: nextRow, col: nextCol };
+    skipNextFocusReset = true;
+
+    // Open the next cell's editor after Svelte has unmounted the current CellEditor
+    requestAnimationFrame(() => {
+      const el = getFocusedCellEl(nextRow, nextCol);
+      if (!el) return;
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const { originalIndex } = visibleColumns[nextCol] ?? {};
+      const rowData = pageRows[nextRow];
+      if (rowData === undefined || originalIndex === undefined) return;
+      const colDef = columns[originalIndex];
+      if (!colDef) return;
+      const nextRowKey = buildRowKey(rowData, columns, pageOffset + nextRow);
+      if (!originalRows.has(nextRowKey)) {
+        const next = new Map(originalRows);
+        next.set(nextRowKey, [...rowData]);
+        originalRows = next;
+      }
+      const tdRect = el.getBoundingClientRect();
+      editTarget = {
+        rowKey: nextRowKey,
+        colName: colDef.name,
+        colIndex: originalIndex,
+        value: getPendingValue(nextRowKey, colDef.name, rowData[originalIndex]),
+        originalValue: rowData[originalIndex],
+        dataType: colDef.dataType,
+        nullable: colDef.nullable,
+        initialViewportTop: tdRect.top,
+        initialViewportLeft: tdRect.left,
+        width: Math.max(tdRect.width, 160),
+        height: tdRect.height,
+      };
+    });
   }
 
   function confirmModalEdit(newValue: CellValue): void {
@@ -901,7 +998,14 @@
 
   function refocusCell(): void {
     if (!focusedCell) return;
-    scrollFocusedCellIntoView(focusedCell);
+    const cell = focusedCell;
+    requestAnimationFrame(() => {
+      focusedCell = cell;
+      skipNextFocusReset = true;
+      const el = getFocusedCellEl(cell.row, cell.col);
+      el?.focus();
+      el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
   }
 
   // ── Shortcut: TABLE_EDIT_IN_MODAL ────────────────────────────────────────
@@ -961,7 +1065,16 @@
   }
 
   function handleTableKeydown(e: KeyboardEvent): void {
-    if (editTarget !== null) return;
+    if (editTarget !== null) {
+      if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        cellEditorInstance?.cycle(e.key === 'ArrowDown' ? 1 : -1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+      }
+      return;
+    }
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 
@@ -1164,6 +1277,9 @@
       }
       cancelEdit();
       anchorCell = null;
+      if (focusedCell) {
+        getFocusedCellEl(focusedCell.row, focusedCell.col)?.blur();
+      }
       focusedCell = null;
       additionalSelectedCells = new Set();
       rowSelectionMode = false;
@@ -2002,7 +2118,7 @@
   onpointerup={onResizePointerUp}
   onkeydown={(e) => { handleContextMenuKeydown(e); handleTableKeydown(e); }}
   onfocusout={(e) => {
-    if (!tableContainerEl?.contains(e.relatedTarget as Node | null)) {
+    if (!tableContainerEl?.contains(e.relatedTarget as Node | null) && editTarget === null) {
       anchorCell = null;
       focusedCell = null;
       isDraggingSelection = false;
@@ -2630,6 +2746,7 @@
   <!-- Inline cell editor overlay -->
   {#if editTarget !== null}
     <CellEditor
+      bind:this={cellEditorInstance}
       value={editTarget.value}
       originalValue={editTarget.originalValue}
       dataType={editTarget.dataType}
@@ -2643,6 +2760,7 @@
       onConfirm={confirmEdit}
       onCancel={cancelEdit}
       onTab={handleTabFromEditor}
+      onTabConfirm={handleTabConfirm}
       {connectionId}
       {database}
     />
