@@ -222,12 +222,24 @@
     )
   );
 
-  const tabs: { id: Tab; label: string }[] = [
+  const allTabs: { id: Tab; label: string }[] = [
     { id: 'basic', label: 'Basic' },
     { id: 'ssh', label: 'SSH' },
     { id: 'ssl', label: 'SSL' },
     { id: 'advanced', label: 'Advanced' },
   ];
+
+  const tabs = $derived(
+    dbType === 'sqlite'
+      ? allTabs.filter((t) => t.id !== 'ssh' && t.id !== 'ssl')
+      : allTabs
+  );
+
+  $effect(() => {
+    if (dbType === 'sqlite' && (activeTab === 'ssh' || activeTab === 'ssl')) {
+      activeTab = 'basic';
+    }
+  });
 
 </script>
 
