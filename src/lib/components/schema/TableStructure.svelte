@@ -8,6 +8,7 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import { errorMessage } from '$lib/utils/errors';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
@@ -587,19 +588,9 @@
                   {#if isFrom}
                     <span class="mono fk-cols">{localCol}</span>
                     <span class="fk-arrow">→</span>
-                    <span class="mono fk-ref vr-other-ref">
-                      {#if otherRef.connectionId !== connectionId}
-                        <span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>
-                      {/if}
-                      {otherRef.database}.{otherRef.table}.{otherRef.column}
-                    </span>
+                    <span class="mono fk-ref vr-other-ref">{#if otherRef.connectionId !== connectionId}<span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>{/if}{otherRef.database}.{otherRef.table}.{otherRef.column}</span>
                   {:else}
-                    <span class="mono fk-ref vr-other-ref">
-                      {#if otherRef.connectionId !== connectionId}
-                        <span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>
-                      {/if}
-                      {otherRef.database}.{otherRef.table}.{otherRef.column}
-                    </span>
+                    <span class="mono fk-ref vr-other-ref">{#if otherRef.connectionId !== connectionId}<span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>{/if}{otherRef.database}.{otherRef.table}.{otherRef.column}</span>
                     <span class="fk-arrow">→</span>
                     <span class="mono fk-cols">{localCol}</span>
                   {/if}
@@ -738,8 +729,7 @@
         </div>
         {#if !(isSqlite && form.mode === 'edit')}
           <div class="form-check-row">
-            <input type="checkbox" id="col-nullable" checked={form.nullable}
-              onchange={(e) => { columnForm!.nullable = (e.target as HTMLInputElement).checked; }} />
+            <Checkbox id="col-nullable" checked={form.nullable} onchange={(c) => { columnForm!.nullable = c; }} />
             <label for="col-nullable" class="form-check-label">Allow NULL</label>
           </div>
           <div class="form-row">
@@ -750,8 +740,7 @@
           </div>
           {#if isMysql}
             <div class="form-check-row">
-              <input type="checkbox" id="col-ai" checked={form.autoIncrement}
-                onchange={(e) => { columnForm!.autoIncrement = (e.target as HTMLInputElement).checked; }} />
+              <Checkbox id="col-ai" checked={form.autoIncrement} onchange={(c) => { columnForm!.autoIncrement = c; }} />
               <label for="col-ai" class="form-check-label">Auto Increment</label>
             </div>
             <div class="form-row">
@@ -796,27 +785,29 @@
           <div class="form-label">Columns</div>
           <div class="col-selector">
             {#each columns as col}
-              <label class="col-selector-item">
-                <input type="checkbox" checked={form.selectedColumns.includes(col.name)}
+              {@const cbId = `idx-col-${col.name}`}
+              <div class="col-selector-item">
+                <Checkbox id={cbId} size="sm" checked={form.selectedColumns.includes(col.name)}
                   onchange={() => { indexForm!.selectedColumns = toggleColSel(col.name, indexForm!.selectedColumns); }} />
-                <span class="mono">{col.name}</span>
-                <span class="col-type-hint">{col.dataType}</span>
-              </label>
+                <label class="col-selector-label" for={cbId}>
+                  <span class="mono">{col.name}</span>
+                  <span class="col-type-hint">{col.dataType}</span>
+                </label>
+              </div>
             {/each}
           </div>
         </div>
         {#if !form.isPrimary}
           <div class="form-check-row">
-            <input type="checkbox" id="idx-unique" checked={form.unique}
-              onchange={(e) => { indexForm!.unique = (e.target as HTMLInputElement).checked; }} />
+            <Checkbox id="idx-unique" checked={form.unique} onchange={(c) => { indexForm!.unique = c; }} />
             <label for="idx-unique" class="form-check-label">Unique</label>
           </div>
         {/if}
         {#if !isSqlite}
           <div class="form-check-row">
-            <input type="checkbox" id="idx-pk" checked={form.isPrimary}
-              onchange={(e) => {
-                indexForm!.isPrimary = (e.target as HTMLInputElement).checked;
+            <Checkbox id="idx-pk" checked={form.isPrimary}
+              onchange={(c) => {
+                indexForm!.isPrimary = c;
                 if (indexForm!.isPrimary) indexForm!.unique = true;
               }} />
             <label for="idx-pk" class="form-check-label">Primary Key</label>
@@ -856,12 +847,15 @@
           <div class="form-label">Local Columns</div>
           <div class="col-selector">
             {#each columns as col}
-              <label class="col-selector-item">
-                <input type="checkbox" checked={form.selectedColumns.includes(col.name)}
+              {@const cbId = `fk-col-${col.name}`}
+              <div class="col-selector-item">
+                <Checkbox id={cbId} size="sm" checked={form.selectedColumns.includes(col.name)}
                   onchange={() => { fkForm!.selectedColumns = toggleColSel(col.name, fkForm!.selectedColumns); }} />
-                <span class="mono">{col.name}</span>
-                <span class="col-type-hint">{col.dataType}</span>
-              </label>
+                <label class="col-selector-label" for={cbId}>
+                  <span class="mono">{col.name}</span>
+                  <span class="col-type-hint">{col.dataType}</span>
+                </label>
+              </div>
             {/each}
           </div>
         </div>
@@ -1632,14 +1626,6 @@
     gap: var(--spacing-2);
   }
 
-  .form-check-row input[type="checkbox"] {
-    width: 14px;
-    height: 14px;
-    accent-color: var(--color-accent);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
   .form-check-label {
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
@@ -1675,12 +1661,13 @@
     background: var(--color-bg-hover);
   }
 
-  .col-selector-item input[type="checkbox"] {
-    width: 13px;
-    height: 13px;
-    accent-color: var(--color-accent);
+  .col-selector-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    flex: 1;
     cursor: pointer;
-    flex-shrink: 0;
+    min-width: 0;
   }
 
   .col-type-hint {
