@@ -93,9 +93,11 @@
     keychainApi.keychainRetrieve(profile.id, 'db_password').then((v) => {
       if (v) password = v;
     });
-    keychainApi.keychainRetrieve(profile.id, 'ssh_password').then((v) => {
-      if (v) sshPassword = v;
-    });
+    if (profile.sshEnabled) {
+      keychainApi.keychainRetrieve(profile.id, 'ssh_password').then((v) => {
+        if (v) sshPassword = v;
+      });
+    }
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────────

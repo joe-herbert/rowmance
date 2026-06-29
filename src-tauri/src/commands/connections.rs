@@ -1,5 +1,4 @@
 /// Tauri commands for managing connection profiles and groups.
-use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::sync::Arc;
@@ -162,10 +161,8 @@ pub struct ConnectionProfileInput {
 }
 
 fn retrieve_keychain_password(connection_id: &str) -> String {
-    let name = format!("{connection_id}:db_password");
-    Entry::new("rowmance", &name)
-        .ok()
-        .and_then(|e| e.get_password().ok())
+    let account = format!("{connection_id}:db_password");
+    crate::commands::keychain::read_keychain_secret("rowmance", &account)
         .unwrap_or_default()
 }
 
