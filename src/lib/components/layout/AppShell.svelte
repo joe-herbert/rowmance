@@ -4,7 +4,7 @@
   Handles horizontal resize of both sidebars via pointer-drag.
 -->
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { slide, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import Sidebar from './Sidebar.svelte';
@@ -105,11 +105,6 @@
   let updateDismissed = $state(false);
   let installing = $state(false);
 
-  $effect(() => {
-    const _theme = settings.theme;
-    tick().then(syncTrafficLightPosition);
-  });
-
   onMount(() => {
     shortcutsStore.load(settings.shortcutPreset);
 
@@ -128,8 +123,11 @@
       unlistenFn = unlisten;
     });
 
+    window.addEventListener('resize', syncTrafficLightPosition);
+
     return () => {
       unlistenFn?.();
+      window.removeEventListener('resize', syncTrafficLightPosition);
     };
   });
 

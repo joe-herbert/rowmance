@@ -56,6 +56,12 @@ pub fn run() {
             app.manage(connection_manager);
             app.manage(ssh_tunnel_manager);
 
+            // Swizzle _NSTitlebarContainerView.setFrame: so macOS applies our custom
+            // titlebar height/position synchronously on every resize (no JS round-trip,
+            // no flicker).
+            #[cfg(target_os = "macos")]
+            commands::window::install_titlebar_swizzle();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

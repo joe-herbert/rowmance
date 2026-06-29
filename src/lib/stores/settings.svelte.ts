@@ -6,6 +6,7 @@
 import { DEFAULT_SETTINGS, type AppSettings } from '$lib/types';
 import { getAllSettings, setSetting } from '$lib/tauri/settings';
 import { themesRead } from '$lib/tauri/themes';
+import { syncTrafficLightPosition } from '$lib/tauri/window';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export function useSettings() {
 
       await applyTheme(settings.theme);
       applyFontToDocument(settings.fontFamily, settings.fontSize);
+      syncTrafficLightPosition();
       loaded = true;
     },
 
@@ -45,6 +47,7 @@ export function useSettings() {
       if (key === 'theme') {
         await applyTheme(value as string);
         applyFontToDocument(settings.fontFamily, settings.fontSize);
+        syncTrafficLightPosition();
       }
       if (key === 'fontFamily' || key === 'fontSize') {
         applyFontToDocument(settings.fontFamily, settings.fontSize);
