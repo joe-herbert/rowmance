@@ -392,6 +392,7 @@
     const id = connCtx.profile.id;
     connCtx = null;
     await connectionStore.disconnect(id);
+    panelStore.closeItemsForConnection(id, { skipDirty: true });
     expandedConnections = new Set([...expandedConnections].filter(i => i !== id));
   }
 

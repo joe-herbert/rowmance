@@ -174,11 +174,16 @@ export function usePanels() {
       panels = panels.map((p, i) => (i === focusedIndex ? { ...p, content: item.content } : p));
     },
 
-    /** Close all open items associated with a specific connection. */
-    closeItemsForConnection(connectionId: string) {
+    /** Close all open items associated with a specific connection, optionally skipping dirty items. */
+    closeItemsForConnection(connectionId: string, { skipDirty = false } = {}) {
       const toClose = openItems.filter(item => {
         const c = item.content;
-        return 'connectionId' in c && c.connectionId === connectionId;
+        if (!('connectionId' in c) || c.connectionId !== connectionId) return false;
+        if (skipDirty) {
+          const key = dirtyKeyForContent(c);
+          if (key && dirtyItemKeys.has(key)) return false;
+        }
+        return true;
       });
       for (const item of toClose) {
         if (item.content.kind === 'query_editor' && item.content.editorId) {

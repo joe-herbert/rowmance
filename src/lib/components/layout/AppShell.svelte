@@ -279,8 +279,10 @@
   async function handleDisconnect() {
     if (!activeConnection) return;
     disconnecting = true;
+    const id = activeConnection.id;
     try {
-      await connectionsStore.disconnect(activeConnection.id);
+      await connectionsStore.disconnect(id);
+      panelStore.closeItemsForConnection(id, { skipDirty: true });
     } finally {
       disconnecting = false;
       connChipOpen = false;
