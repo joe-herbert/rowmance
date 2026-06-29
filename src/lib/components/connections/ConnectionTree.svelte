@@ -395,10 +395,20 @@
     expandedConnections = new Set([...expandedConnections].filter(i => i !== id));
   }
 
-  function ctxManageUsers() {
+  async function ctxNewQueryEditor() {
     if (!connCtx) return;
-    panelStore.openInFocused({ kind: 'user_manager', connectionId: connCtx.profile.id });
+    const profile = connCtx.profile;
     connCtx = null;
+    if (!isConnected(profile.id)) await connectionStore.connect(profile.id);
+    panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id });
+  }
+
+  async function ctxManageUsers() {
+    if (!connCtx) return;
+    const profile = connCtx.profile;
+    connCtx = null;
+    if (!isConnected(profile.id)) await connectionStore.connect(profile.id);
+    panelStore.openInFocused({ kind: 'user_manager', connectionId: profile.id });
   }
 
   function ctxOpenTable() {
@@ -915,7 +925,7 @@
 {#if connCtx}
   {@const connConnected = isConnected(connCtx.profile.id)}
   <div class="ctx-menu" role="menu" style="top:{connCtx.y}px;left:{connCtx.x}px" use:portal>
-    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: connCtx.profile.id }); connCtx = null; } }}>New Query Editor</button>
+    <button class="ctx-item" role="menuitem" onclick={ctxNewQueryEditor}>New Query Editor</button>
     {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dbType !== 'sqlite'}
       <button class="ctx-item" role="menuitem" onclick={ctxNewDatabase}>New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</button>
     {/if}
