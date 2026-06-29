@@ -6,6 +6,7 @@
 import type { ConnectionProfile, ConnectionGroup, ConnectionProfileInput } from '$lib/types';
 import * as api from '$lib/tauri/connections';
 import { errorMessage } from '$lib/utils/errors';
+import { usePanels } from './panels.svelte';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ export function useConnections() {
         await this.disconnect(id);
       }
       await api.deleteConnection(id);
+      usePanels().closeItemsForConnection(id);
       profiles = profiles.filter((p) => p.id !== id);
     },
 

@@ -447,6 +447,7 @@
         confirmState = null;
         try {
           await schemaApi.executeDdl(connectionId, sql);
+          panelStore.closeItemsForTable(connectionId, database, table.name);
           const connMap = new Map(schemaCache.get(connectionId) ?? []);
           connMap.set(database, []);
           schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
@@ -481,6 +482,7 @@
         confirmState = null;
         try {
           await schemaApi.executeDdl(connectionId, sql);
+          panelStore.closeItemsForDatabase(connectionId, database);
           const connMap = new Map(schemaCache.get(connectionId) ?? []);
           connMap.delete(database);
           schemaCache = new Map([...schemaCache, [connectionId, connMap]]);

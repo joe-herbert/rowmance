@@ -174,6 +174,61 @@ export function usePanels() {
       panels = panels.map((p, i) => (i === focusedIndex ? { ...p, content: item.content } : p));
     },
 
+    /** Close all open items associated with a specific connection. */
+    closeItemsForConnection(connectionId: string) {
+      const toClose = openItems.filter(item => {
+        const c = item.content;
+        return 'connectionId' in c && c.connectionId === connectionId;
+      });
+      for (const item of toClose) {
+        if (item.content.kind === 'query_editor' && item.content.editorId) {
+          queryEditorCache.delete(item.content.editorId);
+        }
+        openItems = openItems.filter(i => i.id !== item.id);
+        panels = panels.map(p =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        );
+      }
+      focusedIndex = Math.min(focusedIndex, panels.length - 1);
+    },
+
+    /** Close all open items associated with a specific table. */
+    closeItemsForTable(connectionId: string, database: string, table: string) {
+      const toClose = openItems.filter(item => {
+        const c = item.content;
+        if (c.kind === 'table_browser') return c.connectionId === connectionId && c.database === database && c.table === table;
+        if (c.kind === 'table_structure') return c.connectionId === connectionId && c.database === database && c.table === table;
+        if (c.kind === 'ddl_viewer') return c.connectionId === connectionId && c.database === database && c.objectName === table;
+        return false;
+      });
+      for (const item of toClose) {
+        openItems = openItems.filter(i => i.id !== item.id);
+        panels = panels.map(p =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        );
+      }
+      focusedIndex = Math.min(focusedIndex, panels.length - 1);
+    },
+
+    /** Close all open items associated with a specific database. */
+    closeItemsForDatabase(connectionId: string, database: string) {
+      const toClose = openItems.filter(item => {
+        const c = item.content;
+        if (c.kind === 'table_browser') return c.connectionId === connectionId && c.database === database;
+        if (c.kind === 'table_structure') return c.connectionId === connectionId && c.database === database;
+        if (c.kind === 'ddl_viewer') return c.connectionId === connectionId && c.database === database;
+        if (c.kind === 'erd') return c.connectionId === connectionId && c.database === database;
+        return false;
+      });
+      for (const item of toClose) {
+        openItems = openItems.filter(i => i.id !== item.id);
+        panels = panels.map(p =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        );
+      }
+      focusedIndex = Math.min(focusedIndex, panels.length - 1);
+    },
+
     /** Remove an item from the open list and reset any panel showing it to empty. */
     closeOpenItem(itemId: string) {
       const item = openItems.find(i => i.id === itemId);
