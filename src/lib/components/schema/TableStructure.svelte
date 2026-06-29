@@ -37,6 +37,12 @@
   let indexes = $state<IndexInfo[]>([]);
   let foreignKeys = $state<ForeignKeyInfo[]>([]);
 
+  const uniqueColumns = $derived(new Set(
+    indexes
+      .filter(idx => idx.unique && idx.columns.length === 1)
+      .map(idx => idx.columns[0])
+  ));
+
   function loadData() {
     isLoading = true;
     loadError = null;
@@ -326,6 +332,20 @@
     )
   );
 
+  let vrColPickModal = $state<{ selectedColumn: string } | null>(null);
+
+  function openAddVrFromHeader() {
+    if (!columns.length) return;
+    vrColPickModal = { selectedColumn: columns[0].name };
+  }
+
+  function submitVrColPick() {
+    if (!vrColPickModal) return;
+    const col = vrColPickModal.selectedColumn;
+    vrColPickModal = null;
+    openAddVr(col);
+  }
+
   function openAddVr(colName: string) {
     vrModal = { from: { connectionId, database, table, column: colName } };
   }
@@ -359,7 +379,6 @@
       <span class="object-path">{database}.{table}</span>
     </span>
     {#if !isLoading && !loadError}
-      <span class="col-count">{columns.length} columns</span>
       {#if !isReadOnly}
         <button
           class="edit-toggle"
@@ -387,21 +406,22 @@
 
         <!-- Columns ──────────────────────────────────────────────────────── -->
         <section class="section">
-          {#if editMode}
-            <div class="section-header section-header--flex">
-              <span>Columns ({columns.length})</span>
+          <div class="section-header section-header--flex">
+            <span>Columns ({columns.length})</span>
+            {#if editMode}
               <button class="add-btn" onclick={openAddCol}>+ Add Column</button>
-            </div>
-          {/if}
-          <table class="col-table">
+            {/if}
+          </div>
+          <table class="col-table" class:col-table--editing={editMode}>
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Type</th>
                 <th class="th-narrow">Key</th>
                 <th class="th-narrow" title="Nullable">Null</th>
+                <th class="th-narrow" title="Unique">Uniq</th>
                 <th>Default</th>
-                <th class="th-actions"></th>
+                {#if editMode}<th class="th-actions">Actions</th>{/if}
               </tr>
             </thead>
             <tbody>
@@ -415,35 +435,40 @@
                     {#if col.isForeignKey}<span class="badge badge--fk" title="Foreign Key">FK</span>{/if}
                   </td>
                   <td class="col-null center-cell">{#if col.nullable}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{/if}</td>
+                  <td class="col-unique center-cell">
+                    {#if uniqueColumns.has(col.name) || col.isPrimaryKey}
+                      <svg class="icon-yes" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                    {:else}
+                      <svg class="icon-no" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    {/if}
+                  </td>
                   <td class="col-default mono">{col.defaultValue ?? ''}</td>
+                  {#if editMode}
                   <td class="col-actions">
                     <div class="row-actions">
-                      {#if editMode}
-                        <button class="act-btn" title="Edit column" onclick={() => openEditCol(col)}>
-                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z"/>
-                          </svg>
-                        </button>
-                        <button class="act-btn act-btn--danger" title="Drop column" onclick={() => requestDrop(`Drop column "${col.name}"?`, [buildDropColSql(col.name)])}>
-                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <polyline points="3,6 13,6"/>
-                            <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
-                          </svg>
-                        </button>
-                      {/if}
+                      <button class="act-btn" title="Edit column" onclick={() => openEditCol(col)}>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z"/>
+                        </svg>
+                      </button>
+                      <button class="act-btn act-btn--danger" title="Drop column" onclick={() => requestDrop(`Drop column "${col.name}"?`, [buildDropColSql(col.name)])}>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9"/>
+                        </svg>
+                      </button>
                       <button class="act-btn act-btn--connect" title="Add virtual connection" onclick={() => openAddVr(col.name)}>
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M4 8h8M10 5l3 3-3 3"/>
-                          <circle cx="2" cy="8" r="1.5"/>
-                          <circle cx="14" cy="8" r="1.5"/>
+                          <path d="M6.5 9.5a3.5 3.5 0 0 0 4.95 0l2-2a3.5 3.5 0 0 0-4.95-4.95l-1 1"/>
+                          <path d="M9.5 6.5a3.5 3.5 0 0 0-4.95 0l-2 2a3.5 3.5 0 0 0 4.95 4.95l1-1"/>
                         </svg>
                       </button>
                     </div>
                   </td>
+                  {/if}
                 </tr>
                 {#if col.comment}
                   <tr class="comment-row">
-                    <td colspan="6" class="col-comment">{col.comment}</td>
+                    <td colspan={editMode ? 7 : 6} class="col-comment">{col.comment}</td>
                   </tr>
                 {/if}
               {/each}
@@ -475,8 +500,7 @@
                     <div class="row-actions row-actions--shown">
                       <button class="act-btn act-btn--danger" title="Drop index" onclick={() => requestDrop(`Drop index "${idx.name}"?`, [buildDropIdxSql(idx.name)])}>
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <polyline points="3,6 13,6"/>
-                          <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
+                          <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9"/>
                         </svg>
                       </button>
                     </div>
@@ -488,47 +512,55 @@
         {/if}
 
         <!-- Foreign Keys ─────────────────────────────────────────────────── -->
-        <section class="section">
-          <div class="section-header section-header--flex">
-            <span>Foreign Keys ({foreignKeys.length})</span>
-            {#if editMode && !isSqlite}
-              <button class="add-btn" onclick={openAddFk}>+ Add Foreign Key</button>
-            {/if}
-          </div>
-          <div class="fk-list">
-            {#each foreignKeys as fk (fk.constraintName)}
-              <div class="fk-card" class:fk-card--edit={editMode}>
-                {#if editMode}
-                  <button class="act-btn act-btn--danger fk-drop-btn" title="Drop foreign key" onclick={() => requestDrop(`Drop foreign key "${fk.constraintName}"?`, [buildDropFkSql(fk.constraintName)])}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <polyline points="3,6 13,6"/>
-                      <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
-                    </svg>
-                  </button>
-                {/if}
-                <div class="fk-name mono">{fk.constraintName}</div>
-                <div class="fk-relation">
-                  <span class="mono fk-cols">{fk.columns.join(', ')}</span>
-                  <span class="fk-arrow">→</span>
-                  <span class="mono fk-ref">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span>
+        {#if foreignKeys.length > 0 || editMode}
+          <section class="section">
+            <div class="section-header section-header--flex">
+              <span>Foreign Keys ({foreignKeys.length})</span>
+              {#if editMode && !isSqlite}
+                <button class="add-btn" onclick={openAddFk}>+ Add Foreign Key</button>
+              {/if}
+            </div>
+            <div class="fk-list">
+              {#each foreignKeys as fk (fk.constraintName)}
+                <div class="fk-card" class:fk-card--edit={editMode}>
+                  {#if editMode}
+                    <button class="act-btn act-btn--danger fk-drop-btn" title="Drop foreign key" onclick={() => requestDrop(`Drop foreign key "${fk.constraintName}"?`, [buildDropFkSql(fk.constraintName)])}>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9"/>
+                      </svg>
+                    </button>
+                  {/if}
+                  <div class="fk-name mono">{fk.constraintName}</div>
+                  <div class="fk-relation">
+                    <span class="mono fk-cols">{fk.columns.join(', ')}</span>
+                    <span class="fk-arrow">→</span>
+                    <span class="mono fk-ref">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span>
+                  </div>
+                  <div class="fk-actions">
+                    <span class="fk-action-label">ON DELETE</span> {fk.onDelete}
+                    <span class="fk-sep">·</span>
+                    <span class="fk-action-label">ON UPDATE</span> {fk.onUpdate}
+                  </div>
                 </div>
-                <div class="fk-actions">
-                  <span class="fk-action-label">ON DELETE</span> {fk.onDelete}
-                  <span class="fk-sep">·</span>
-                  <span class="fk-action-label">ON UPDATE</span> {fk.onUpdate}
-                </div>
-              </div>
-            {/each}
-            {#if editMode && isSqlite}
-              <div class="sqlite-note">SQLite does not support adding foreign key constraints to existing tables.</div>
-            {/if}
-          </div>
-        </section>
+              {/each}
+              {#if foreignKeys.length === 0 && editMode && !isSqlite}
+                <div class="empty-hint">No foreign keys defined.</div>
+              {/if}
+              {#if editMode && isSqlite}
+                <div class="sqlite-note">SQLite does not support adding foreign key constraints to existing tables.</div>
+              {/if}
+            </div>
+          </section>
+        {/if}
 
         <!-- Virtual Connections ──────────────────────────────────────────── -->
+        {#if tableVirtualRelations.length > 0 || editMode}
         <section class="section">
           <div class="section-header section-header--flex">
             <span>Virtual Connections ({tableVirtualRelations.length})</span>
+            {#if editMode}
+              <button class="add-btn" onclick={openAddVrFromHeader}>+ Add Virtual Connection</button>
+            {/if}
           </div>
           <div class="fk-list">
             {#each tableVirtualRelations as vr (vr.id)}
@@ -544,8 +576,7 @@
                   </button>
                   <button class="act-btn act-btn--danger" title="Remove connection" onclick={() => { vrStore.remove(vr.id); }}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <polyline points="3,6 13,6"/>
-                      <path d="M8 6V2M5 6l.5 9h5l.5-9"/>
+                      <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9"/>
                     </svg>
                   </button>
                 </div>
@@ -553,27 +584,118 @@
                   <div class="fk-name">{vr.label}</div>
                 {/if}
                 <div class="fk-relation">
-                  <span class="mono fk-cols">{localCol}</span>
-                  <span class="fk-arrow">↔</span>
-                  <span class="mono fk-ref vr-other-ref">
-                    {#if otherRef.connectionId !== connectionId}
-                      <span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>
-                    {/if}
-                    {otherRef.database}.{otherRef.table}.{otherRef.column}
-                  </span>
+                  {#if isFrom}
+                    <span class="mono fk-cols">{localCol}</span>
+                    <span class="fk-arrow">→</span>
+                    <span class="mono fk-ref vr-other-ref">
+                      {#if otherRef.connectionId !== connectionId}
+                        <span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>
+                      {/if}
+                      {otherRef.database}.{otherRef.table}.{otherRef.column}
+                    </span>
+                  {:else}
+                    <span class="mono fk-ref vr-other-ref">
+                      {#if otherRef.connectionId !== connectionId}
+                        <span class="vr-conn-hint">{connName(otherRef.connectionId)}/</span>
+                      {/if}
+                      {otherRef.database}.{otherRef.table}.{otherRef.column}
+                    </span>
+                    <span class="fk-arrow">→</span>
+                    <span class="mono fk-cols">{localCol}</span>
+                  {/if}
                 </div>
                 <div class="fk-actions">
                   <span class="badge badge--vr">virtual</span>
                 </div>
               </div>
             {/each}
+            {#if tableVirtualRelations.length === 0 && editMode}
+              <div class="empty-hint">No virtual connections defined.</div>
+            {/if}
           </div>
         </section>
+        {/if}
 
       </div>
     {/if}
   </div>
 </div>
+
+<!-- ── Column type suggestions ────────────────────────────────────────────── -->
+<datalist id="col-dtype-opts">
+  {#if isMysql}
+    <option value="INT"></option>
+    <option value="BIGINT"></option>
+    <option value="SMALLINT"></option>
+    <option value="TINYINT"></option>
+    <option value="TINYINT(1)"></option>
+    <option value="VARCHAR(255)"></option>
+    <option value="VARCHAR(100)"></option>
+    <option value="CHAR(36)"></option>
+    <option value="TEXT"></option>
+    <option value="MEDIUMTEXT"></option>
+    <option value="LONGTEXT"></option>
+    <option value="DECIMAL(10,2)"></option>
+    <option value="FLOAT"></option>
+    <option value="DOUBLE"></option>
+    <option value="BOOLEAN"></option>
+    <option value="DATE"></option>
+    <option value="DATETIME"></option>
+    <option value="TIMESTAMP"></option>
+    <option value="JSON"></option>
+  {:else if isPostgres}
+    <option value="integer"></option>
+    <option value="bigint"></option>
+    <option value="smallint"></option>
+    <option value="serial"></option>
+    <option value="bigserial"></option>
+    <option value="text"></option>
+    <option value="varchar(255)"></option>
+    <option value="char(36)"></option>
+    <option value="boolean"></option>
+    <option value="numeric(10,2)"></option>
+    <option value="float"></option>
+    <option value="double precision"></option>
+    <option value="date"></option>
+    <option value="timestamp"></option>
+    <option value="timestamptz"></option>
+    <option value="uuid"></option>
+    <option value="jsonb"></option>
+    <option value="json"></option>
+    <option value="bytea"></option>
+  {:else}
+    <option value="INTEGER"></option>
+    <option value="TEXT"></option>
+    <option value="REAL"></option>
+    <option value="BLOB"></option>
+    <option value="NUMERIC"></option>
+  {/if}
+</datalist>
+
+<!-- ── Virtual Connection Column Picker ───────────────────────────────────── -->
+{#if vrColPickModal}
+  {@const form = vrColPickModal}
+  <Modal label="Add Virtual Connection" onbackdropclick={() => (vrColPickModal = null)}>
+    <div class="modal-card modal-card--sm">
+      <div class="modal-title">Add Virtual Connection</div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-label">Local Column</div>
+          <Select
+            options={columns.map(c => ({ value: c.name, label: c.name }))}
+            value={form.selectedColumn}
+            onchange={(v) => { vrColPickModal!.selectedColumn = v; }}
+            size="md"
+          />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick={() => (vrColPickModal = null)}>Cancel</button>
+        <button class="btn btn--primary" onclick={submitVrColPick}>Next</button>
+      </div>
+    </div>
+  </Modal>
+{/if}
 
 <!-- ── Virtual Relation Modal ─────────────────────────────────────────────── -->
 {#if vrModal}
@@ -609,7 +731,7 @@
               <span class="form-hint">(SQLite: rename only)</span>
             {/if}
           </label>
-          <input id="col-type" class="form-input" value={form.dataType}
+          <input id="col-type" class="form-input" list="col-dtype-opts" value={form.dataType}
             oninput={(e) => { columnForm!.dataType = (e.target as HTMLInputElement).value; }}
             placeholder={isMysql ? 'VARCHAR(255)' : 'TEXT'}
             disabled={isSqlite && form.mode === 'edit'} />
@@ -859,19 +981,8 @@
     min-width: 0;
   }
 
-  .col-count {
-    margin-left: auto;
-    font-size: 10px;
-    color: var(--color-text-muted);
-    flex-shrink: 0;
-    background: var(--color-bg-tertiary, var(--color-bg-hover));
-    padding: 2px 7px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    letter-spacing: 0.02em;
-  }
-
   .edit-toggle {
+    margin-left: auto;
     flex-shrink: 0;
     height: 22px;
     padding: 0 10px;
@@ -916,6 +1027,7 @@
     display: flex;
     flex-direction: column;
     padding-bottom: var(--spacing-4);
+    min-width: fit-content;
   }
 
   .section {
@@ -927,7 +1039,11 @@
   }
 
   .section-header {
-    padding: 6px var(--spacing-3);
+    height: 29px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--spacing-3);
     font-size: 10px;
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-muted);
@@ -936,9 +1052,6 @@
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
     border-bottom: 1px solid var(--color-border);
-    position: sticky;
-    top: 0;
-    z-index: 1;
   }
 
   .section-header--flex {
@@ -981,16 +1094,10 @@
     font-size: var(--font-size-xs);
   }
 
-  .col-table thead {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-  }
-
   .col-table thead tr {
     background: var(--color-table-header-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
   }
 
   .col-table th {
@@ -1015,6 +1122,11 @@
     width: 52px;
   }
 
+  .col-table--editing .th-actions,
+  .col-table--editing .col-actions {
+    width: 74px;
+  }
+
   .col-table td {
     padding: 7px var(--spacing-3);
     border-bottom: 1px solid var(--color-border);
@@ -1030,8 +1142,20 @@
     background: var(--color-table-row-hover);
   }
 
+  .pk-row td {
+    background: rgba(124, 92, 255, 0.03);
+  }
+
+  .col-table tbody tr.pk-row:hover td {
+    background: var(--color-table-row-hover);
+  }
+
   .pk-row .col-name {
     color: var(--color-accent);
+  }
+
+  .center-cell {
+    text-align: center;
   }
 
   .col-name {
@@ -1053,6 +1177,18 @@
   .col-null {
     text-align: center;
     color: var(--color-success);
+  }
+
+  .col-unique {
+    text-align: center;
+  }
+
+  .col-unique .icon-yes {
+    color: var(--color-success);
+  }
+
+  .col-unique .icon-no {
+    color: var(--color-border-strong);
   }
 
   .col-default {
@@ -1086,17 +1222,6 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-  }
-
-  .row-actions--shown {
-    opacity: 1;
-  }
-
-  tr:hover .row-actions,
-  .index-row:hover .row-actions {
-    opacity: 1;
   }
 
   .act-btn {
@@ -1234,10 +1359,10 @@
   /* ── Foreign Keys ──────────────────────────────────────────────────────── */
 
   .fk-list {
-    padding: var(--spacing-2) var(--spacing-3);
+    padding: var(--spacing-3);
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-2);
+    gap: var(--spacing-3);
   }
 
   .fk-card {
@@ -1266,12 +1391,6 @@
     position: absolute;
     top: var(--spacing-2);
     right: var(--spacing-2);
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-  }
-
-  .fk-card:hover .fk-drop-btn {
-    opacity: 1;
   }
 
   .fk-name {
@@ -1289,7 +1408,7 @@
   .fk-relation {
     display: flex;
     align-items: center;
-    gap: var(--spacing-1);
+    gap: var(--spacing-1) var(--spacing-2);
     margin-bottom: 6px;
     flex-wrap: wrap;
     font-family: var(--font-family-mono);
@@ -1334,17 +1453,7 @@
     margin: 0 5px;
   }
 
-  .act-btn--connect {
-    color: var(--color-accent);
-    opacity: 0;
-  }
-
-  tr:hover .act-btn--connect {
-    opacity: 0.6;
-  }
-
-  tr:hover .act-btn--connect:hover {
-    opacity: 1;
+  .act-btn--connect:hover {
     background: var(--color-accent-subtle);
     border-color: rgba(124, 92, 255, 0.22);
   }
@@ -1366,12 +1475,6 @@
     right: var(--spacing-2);
     display: flex;
     gap: 2px;
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-  }
-
-  .vr-card:hover .vr-actions {
-    opacity: 1;
   }
 
   .vr-other-ref {
@@ -1383,23 +1486,18 @@
     font-size: 10px;
   }
 
-  .vr-empty {
-    padding: var(--spacing-2) var(--spacing-3);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    font-style: italic;
-  }
-
-  .vr-empty-hint {
-    font-style: normal;
-    color: var(--color-accent);
-  }
-
   .sqlite-note {
     font-size: var(--font-size-xs);
     color: var(--color-text-disabled);
     font-style: italic;
     padding: var(--spacing-1) 0;
+  }
+
+  .empty-hint {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-disabled);
+    font-style: italic;
   }
 
   /* ── State overlays ────────────────────────────────────────────────────── */
