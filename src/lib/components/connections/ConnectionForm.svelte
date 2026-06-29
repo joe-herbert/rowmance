@@ -76,6 +76,58 @@
   let poolMin = $state(untrack(() => profile?.poolMin ?? 1));
   let poolMax = $state(untrack(() => profile?.poolMax ?? 5));
 
+  // ── URL import ────────────────────────────────────────────────────────────────
+
+  let showUrlInput = $state(false);
+  let connectionUrl = $state('');
+  let urlError = $state('');
+
+  function applyConnectionUrl() {
+    urlError = '';
+    const url = connectionUrl.trim();
+    if (!url) return;
+
+    try {
+      if (url.toLowerCase().startsWith('sqlite:')) {
+        const path = url.replace(/^sqlite:\/\/\//, '/').replace(/^sqlite:\/\//, '').replace(/^sqlite:/i, '');
+        dbType = 'sqlite';
+        filePath = path;
+        showUrlInput = false;
+        connectionUrl = '';
+        return;
+      }
+
+      const parsed = new URL(url);
+      const scheme = parsed.protocol.replace(':', '').toLowerCase();
+      const schemeMap: Partial<Record<string, DbType>> = {
+        postgres: 'postgres',
+        postgresql: 'postgres',
+        mysql: 'mysql',
+        mariadb: 'mariadb',
+      };
+      const type = schemeMap[scheme];
+      if (!type) {
+        urlError = `Unsupported scheme "${scheme}". Use postgres, mysql, mariadb, or sqlite.`;
+        return;
+      }
+
+      dbType = type;
+      host = parsed.hostname || 'localhost';
+      port = parsed.port ? parseInt(parsed.port, 10) : DEFAULT_PORTS[type];
+      database = parsed.pathname.replace(/^\//, '');
+      username = parsed.username ? decodeURIComponent(parsed.username) : '';
+      if (parsed.password) {
+        password = decodeURIComponent(parsed.password);
+        passwordDirty = true;
+      }
+
+      showUrlInput = false;
+      connectionUrl = '';
+    } catch {
+      urlError = 'Invalid URL — expected format: postgres://user:pass@host:5432/dbname';
+    }
+  }
+
   // ── Status ────────────────────────────────────────────────────────────────────
 
   let saving = $state(false);
@@ -249,6 +301,12 @@
   <div class="dialog">
     <header class="dialog-header">
       <h2 class="dialog-title">{title}</h2>
+      {#if !isEditing}
+        <button type="button" class="url-toggle-btn" onclick={() => { showUrlInput = !showUrlInput; urlError = ''; if (!showUrlInput) connectionUrl = ''; }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          From URL
+        </button>
+      {/if}
       <button class="close-btn" aria-label="Close" onclick={onclose}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </header>
 
@@ -274,6 +332,30 @@
           <label for="conn-name" class="label">Name</label>
           <input id="conn-name" class="input" type="text" bind:value={name} placeholder="My Database" required autocomplete="off" />
         </div>
+
+        {#if showUrlInput}
+          <div class="url-import-section">
+            <div class="field">
+              <div class="url-import-header">
+                <label for="conn-url" class="label">Connection URL</label>
+              </div>
+              <div class="url-row">
+                <input
+                  id="conn-url"
+                  class="input"
+                  type="text"
+                  bind:value={connectionUrl}
+                  placeholder="postgres://user:pass@localhost:5432/mydb"
+                  autocomplete="off"
+                  onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyConnectionUrl(); } }}
+                />
+                <button type="button" class="btn btn--ghost btn--sm" onclick={applyConnectionUrl}>Apply</button>
+              </div>
+              {#if urlError}<p class="url-error">{urlError}</p>{/if}
+            </div>
+            <div class="url-import-divider"><span>or fill in manually</span></div>
+          </div>
+        {/if}
 
         <div class="field-row">
           <div class="field field--grow">
@@ -813,5 +895,70 @@
   .btn--ghost:not(:disabled):hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
+  }
+
+  .url-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-muted);
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    padding: 0 var(--spacing-2);
+    height: 24px;
+    font-family: var(--font-family-ui);
+    transition: color var(--transition-fast), background var(--transition-fast);
+    margin-right: var(--spacing-2);
+    flex-shrink: 0;
+  }
+
+  .url-toggle-btn:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .url-import-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+  }
+
+  .url-import-header {
+    display: flex;
+    align-items: center;
+  }
+
+  .url-row {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: center;
+  }
+
+  .url-row .input { flex: 1; }
+
+  .url-error {
+    font-size: var(--font-size-xs);
+    color: var(--color-danger);
+    margin: var(--spacing-1) 0 0;
+  }
+
+  .url-import-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+  }
+
+  .url-import-divider::before,
+  .url-import-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
   }
 </style>
