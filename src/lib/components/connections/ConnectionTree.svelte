@@ -121,6 +121,7 @@
         if (connectionStore.isActive(profile.id)) await connectionStore.disconnect(profile.id);
         try {
           await connectionsApi.deleteConnection(profile.id);
+          panelStore.closeItemsForConnection(profile.id);
           await connectionStore.load();
           onDone?.();
         } catch { /* ignore */ }
