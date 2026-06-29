@@ -1026,7 +1026,9 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: var(--panel-spacing);
+    /* Minimum 10px so the handle is always grabbable even when --panel-spacing: 0 */
+    width: max(10px, var(--panel-spacing));
+    transform: translateX(-50%);
     z-index: 20;
     cursor: col-resize;
     background: transparent;
@@ -1036,18 +1038,33 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: var(--panel-spacing);
+    width: max(10px, var(--panel-spacing));
+    transform: translateX(50%);
     z-index: 20;
     cursor: col-resize;
     background: transparent;
   }
 
-  .left-resize:hover,
-  .left-resize.dragging,
-  .right-resize:hover,
-  .right-resize.dragging {
-    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
-    border-radius: var(--radius-sm);
+  .left-resize::after,
+  .right-resize::after {
+    content: '';
+    position: absolute;
+    top: var(--panel-radius);
+    bottom: var(--panel-radius);
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: var(--color-accent);
+    border-radius: 1px;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .left-resize:hover::after,
+  .left-resize.dragging::after,
+  .right-resize:hover::after,
+  .right-resize.dragging::after {
+    opacity: 0.5;
   }
 
   /* ── Status bar row (status bar + sidebar toggles) ─────────────────────── */

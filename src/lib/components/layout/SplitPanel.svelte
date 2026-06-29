@@ -59,7 +59,7 @@
   const gridTemplateColumns = $derived(() => {
     const { splitMode } = panelStore;
     if (splitMode === 'horizontal' || splitMode === 'quad') {
-      return `${colSplitPct}% 4px calc(${100 - colSplitPct}% - 4px)`;
+      return `${colSplitPct}% 8px calc(${100 - colSplitPct}% - 8px)`;
     }
     return '1fr';
   });
@@ -67,7 +67,7 @@
   const gridTemplateRows = $derived(() => {
     const { splitMode } = panelStore;
     if (splitMode === 'vertical' || splitMode === 'quad') {
-      return `${rowSplitPct}% 4px calc(${100 - rowSplitPct}% - 4px)`;
+      return `${rowSplitPct}% 8px calc(${100 - rowSplitPct}% - 8px)`;
     }
     return '1fr';
   });
@@ -157,28 +157,51 @@
 
   .divider--col {
     cursor: col-resize;
-    background: var(--color-border);
-    transition: background var(--transition-fast);
+    background: transparent;
     z-index: 5;
-    width: 1px;
-    margin: 0 1.5px;
+    width: 8px;
+    position: relative;
   }
 
   .divider--row {
     cursor: row-resize;
-    background: var(--color-border);
-    transition: background var(--transition-fast);
+    background: transparent;
     z-index: 5;
-    height: 1px;
-    margin: 1.5px 0;
+    height: 8px;
+    position: relative;
   }
 
-  .divider--col:hover,
-  .divider--col.dragging,
-  .divider--row:hover,
-  .divider--row.dragging {
+  .divider--col::after,
+  .divider--row::after {
+    content: '';
+    position: absolute;
+    background: var(--color-border);
+    transition: background var(--transition-fast), opacity var(--transition-fast);
+    border-radius: 1px;
+  }
+
+  .divider--col::after {
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+  }
+
+  .divider--row::after {
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+
+  .divider--col:hover::after,
+  .divider--col.dragging::after,
+  .divider--row:hover::after,
+  .divider--row.dragging::after {
     background: var(--color-accent);
-    opacity: 0.5;
+    opacity: 0.6;
   }
 
   .divider-spacer {
