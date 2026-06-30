@@ -68,33 +68,36 @@
       </span>
     {/if}
     {#if connType}
-      <span class="item">{connType}</span>
+      <span class="item hide-xs">{connType}</span>
     {/if}
     {#if host}
-      <span class="item faint">{host}</span>
+      <span class="item faint hide-sm">{host}</span>
     {/if}
   </div>
 
   <div class="spacer"></div>
 
   <!-- Right: stats -->
-  {#if dirtyText}
-    <span class="item dirty">{dirtyText}</span>
-  {/if}
+  <div class="right">
+    {#if dirtyText}
+      <span class="item dirty">{dirtyText}</span>
+    {/if}
 
-  {#if rowCountText}
-    <span class="item">{rowCountText}</span>
-  {/if}
+    {#if rowCountText}
+      <span class="item hide-xs">{rowCountText}</span>
+    {/if}
 
-  <span class="item faint">UTF-8</span>
+    <span class="item faint hide-sm">UTF-8</span>
 
-  {#if timingText}
-    <span class="item accent">{timingText}</span>
-  {/if}
+    {#if timingText}
+      <span class="item accent">{timingText}</span>
+    {/if}
+  </div>
 </div>
 
 <style>
   .status-bar {
+    container-type: inline-size;
     flex: 1;
     min-width: 0;
     display: flex;
@@ -111,22 +114,37 @@
     font-family: var(--font-family-mono);
     color: var(--color-text-muted);
     opacity: var(--panel-opacity);
+    overflow: hidden;
+    white-space: nowrap;
   }
 
   .left {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+    flex-shrink: 1;
+  }
+
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
   }
 
   .spacer {
     flex: 1;
+    min-width: 0;
   }
 
   .conn-status {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .conn-dot {
@@ -139,10 +157,13 @@
   .conn-name {
     color: var(--color-text-secondary);
     font-weight: var(--font-weight-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .item {
     color: var(--color-text-muted);
+    flex-shrink: 0;
   }
 
   .faint {
@@ -160,4 +181,15 @@
     color: var(--color-accent);
   }
 
+  @container (max-width: 500px) {
+    .hide-sm {
+      display: none;
+    }
+  }
+
+  @container (max-width: 320px) {
+    .hide-xs {
+      display: none;
+    }
+  }
 </style>
