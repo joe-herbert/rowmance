@@ -38,6 +38,11 @@ impl ConnectionManager {
         })
     }
 
+    /// Pre-register a connection name so error messages use it even before the pool is opened.
+    pub fn register_name(&self, id: &str, name: &str) {
+        self.names.insert(id.to_owned(), name.to_owned());
+    }
+
     /// Open a new pool for the given connection profile and register it.
     /// If a pool already exists for this id it is replaced.
     #[allow(clippy::too_many_arguments)]

@@ -27,6 +27,7 @@
     columnNames: string[];
     loading: boolean;
     error: string | null;
+    expanded: boolean;
     virtual?: boolean;
     vrId?: string;
     targetConnectionId?: string;
@@ -41,6 +42,8 @@
   let relations = $state<RelationEntry[]>([]);
   let globalLoading = $state(false);
   let globalError = $state<string | null>(null);
+  let forwardExpanded = $state(true);
+  let reverseExpanded = $state(true);
 
   function quoteId(name: string, dbType: DbType): string {
     return dbType === 'postgres' ? `"${name.replace(/"/g, '""')}"` : `\`${name.replace(/`/g, '``')}\``;
@@ -82,6 +85,7 @@
             columnNames: [],
             loading: true,
             error: null,
+            expanded: true,
           });
         }
       }
@@ -101,6 +105,7 @@
             columnNames: [],
             loading: true,
             error: null,
+            expanded: true,
           });
         }
       }
@@ -123,6 +128,7 @@
           columnNames: [],
           loading: true,
           error: null,
+          expanded: true,
           virtual: true,
           vrId: vr.id,
           targetConnectionId: vr.to.connectionId,
@@ -148,6 +154,7 @@
           columnNames: [],
           loading: true,
           error: null,
+          expanded: true,
           virtual: true,
           vrId: vr.id,
           targetConnectionId: vr.from.connectionId,
@@ -175,6 +182,7 @@
               relations[i].loading = false;
               relations[i].rows = result.rows;
               relations[i].columnNames = result.columns.map((c) => c.name);
+              if (result.rows.length === 0) relations[i].expanded = false;
             }
           } catch (err) {
             relations[i].loading = false;
@@ -231,7 +239,6 @@
   const sel = $derived(cellSelectionStore.current);
   const forwardRelations = $derived(relations.filter((r) => r.direction === 'forward'));
   const reverseRelations = $derived(relations.filter((r) => r.direction === 'reverse'));
-  const MAX_COLS = 3;
 
   function getRelKey(rel: RelationEntry, i: number): string {
     if (rel.virtual && rel.vrId) return `vr-${rel.vrId}`;
@@ -246,142 +253,221 @@
 <div class="relations-panel">
   {#if !sel}
     <div class="empty-state">
-      <p>Select a cell in a table to see its relations.</p>
+      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" stroke-linecap="round"/>
+        <path d="M10.172 13.828a4 4 0 015.656 0l4 4a4 4 0 01-5.656 5.656l-1.1-1.1" stroke-linecap="round"/>
+      </svg>
+      <p>Select a table cell to explore its relations</p>
     </div>
   {:else if sel.cellValue === null}
     <div class="empty-state">
-      <p>Cell is NULL — no relations to show.</p>
+      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round"/>
+      </svg>
+      <p>Cell is NULL — no relations to show</p>
     </div>
   {:else}
     <div class="context-bar">
-      <span class="context-table">{sel.table}</span><span class="context-dot">.</span><span
-        class="context-col">{sel.columnName}</span
-      ><span class="context-eq">&nbsp;=&nbsp;</span><span class="context-val"
-        >{formatValue(sel.cellValue)}</span
-      >
+      <div class="context-cell">
+        <span class="context-table">{sel.table}</span><span class="context-dot">.</span><span class="context-col">{sel.columnName}</span>
+      </div>
+      <div class="context-value-row">
+        <span class="context-eq-label">value</span>
+        <span class="context-val">{formatValue(sel.cellValue)}</span>
+      </div>
     </div>
 
     {#if globalLoading}
-      <div class="state-row"><Loader /></div>
+      <div class="global-state"><Loader /><span>Loading relations…</span></div>
     {:else if globalError}
-      <div class="error-row">{globalError}</div>
+      <div class="global-error">{globalError}</div>
     {:else if relations.length === 0}
       <div class="empty-state">
-        <p>No relations found for this column.</p>
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        <p>No relations found for <span class="inline-col">{sel.columnName}</span></p>
       </div>
     {:else}
-      {#if forwardRelations.length > 0}
-        <div class="section-header">
-          <span class="section-arrow">↗</span>
-          <span class="section-label">REFERENCES</span>
-        </div>
-        {#each forwardRelations as rel, i (getRelKey(rel, i))}
-          {@const previewCols = rel.columnNames.slice(0, MAX_COLS)}
-          <div class="relation-card" class:virtual-card={rel.virtual}>
-            <div class="relation-title">
-              <div class="rel-title-row">
-                <span class="rel-table">{rel.targetTable}</span>
-                {#if rel.virtual}<span class="virtual-badge">virtual</span>{/if}
+      <div class="relations-list">
+        {#if forwardRelations.length > 0}
+          <div class="section">
+            <button class="section-header" onclick={() => (forwardExpanded = !forwardExpanded)}>
+              <div class="section-icon forward-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M3 8h10M9 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
               </div>
-              {#if rel.virtual && rel.targetConnectionId}
-                <span class="rel-via">{connName(rel.targetConnectionId)} / {rel.targetDatabase} · {rel.filterColumn}</span>
-              {:else if rel.edge}
-                <span class="rel-via">via {rel.edge.fromColumns.join(', ')} → {rel.edge.toColumns.join(', ')}</span>
-              {/if}
-            </div>
-            {#if rel.loading}
-              <div class="rel-state"><Loader /></div>
-            {:else if rel.error}
-              <div class="rel-error">{rel.error}</div>
-            {:else if rel.rows.length === 0}
-              <div class="rel-state">No matching row found.</div>
-            {:else}
-              <div class="mini-table-wrap">
-                <table class="mini-table">
-                  <thead>
-                    <tr>
-                      {#each previewCols as col}<th class="mini-th" title={col}>{col}</th>{/each}
-                      {#if rel.columnNames.length > MAX_COLS}<th class="mini-th extra">+{rel.columnNames.length - MAX_COLS}</th>{/if}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each rel.rows as row, ri (ri)}
-                      <tr class="mini-row">
-                        {#each previewCols as _col, ci (ci)}
-                          <td class="mini-td" title={formatValue(row[ci])}>
-                            {#if row[ci] === null}<span class="null-val">NULL</span>{:else}{formatValue(row[ci])}{/if}
-                          </td>
-                        {/each}
-                        {#if rel.columnNames.length > MAX_COLS}<td class="mini-td extra"></td>{/if}
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
+              <div class="section-info">
+                <span class="section-label">References</span>
+                <span class="section-desc">{sel.table} → foreign key targets</span>
               </div>
-            {/if}
-            <button class="open-btn" onclick={() => openRelation(sel, rel)}>
-              Open {rel.targetTable} ›
+              <span class="section-count">{forwardRelations.length}</span>
+              <svg class="section-chevron" class:collapsed={!forwardExpanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </button>
-          </div>
-        {/each}
-      {/if}
 
-      {#if reverseRelations.length > 0}
-        <div class="section-header">
-          <span class="section-arrow">↙</span>
-          <span class="section-label">REFERENCED BY</span>
-        </div>
-        {#each reverseRelations as rel, i (getRelKey(rel, i + 1000))}
-          {@const previewCols = rel.columnNames.slice(0, MAX_COLS)}
-          <div class="relation-card" class:virtual-card={rel.virtual}>
-            <div class="relation-title">
-              <div class="rel-title-row">
-                <span class="rel-table">{rel.targetTable}</span>
-                {#if rel.virtual}<span class="virtual-badge">virtual</span>{/if}
+            <div class="section-body" class:collapsed={!forwardExpanded}>
+              <div class="section-body-inner">
+            {#each forwardRelations as rel, i (getRelKey(rel, i))}
+              <div class="relation-card">
+                <div class="card-header" role="button" tabindex="0" onclick={() => (rel.expanded = !rel.expanded)} onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}>
+                  <svg class="table-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="2" y="3" width="12" height="10" rx="1"/>
+                    <path d="M2 7h12M6 7v6"/>
+                  </svg>
+                  <span class="card-header-text">
+                    <span class="card-table">{rel.targetTable}</span>
+                    <span class="card-filter">{rel.filterColumn}</span>
+                    {#if rel.virtual}
+                      <span class="virtual-badge" title="Virtual connection">{#if rel.targetConnectionId}<span class="card-via">{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span>{:else}Virtual{/if}</span>
+                    {/if}
+                  </span>
+                  {#if !rel.loading && !rel.error}
+                    <span class="card-row-count">{rel.rows.length}</span>
+                  {/if}
+                  <button class="card-open-btn" title="Open in panel" onclick={(e) => { e.stopPropagation(); openRelation(sel, rel); }}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                  <svg class="card-chevron" class:collapsed={!rel.expanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+
+                <div class="card-collapse" class:collapsed={!rel.expanded}>
+                  <div class="card-body">
+                    {#if rel.loading}
+                      <div class="card-state"><Loader /></div>
+                    {:else if rel.error}
+                      <div class="card-error">{rel.error}</div>
+                    {:else if rel.rows.length > 0}
+                      <div class="table-scroll">
+                        <table class="data-table">
+                          <thead>
+                            <tr>
+                              {#each rel.columnNames as col}
+                                <th class="data-th" class:filter-col={col === rel.filterColumn} title={col}>{col}</th>
+                              {/each}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {#each rel.rows as row, ri (ri)}
+                              <tr class="data-row">
+                                {#each rel.columnNames as _col, ci (ci)}
+                                  <td class="data-td" class:filter-col={ci === rel.columnNames.indexOf(rel.filterColumn)} title={formatValue(row[ci])}>
+                                    {#if row[ci] === null}<span class="null-val">NULL</span>{:else}{formatValue(row[ci])}{/if}
+                                  </td>
+                                {/each}
+                              </tr>
+                            {/each}
+                          </tbody>
+                        </table>
+                      </div>
+                    {:else}
+                      <div class="card-empty">No rows found</div>
+                    {/if}
+                  </div>
+                </div>
               </div>
-              {#if rel.virtual && rel.targetConnectionId}
-                <span class="rel-via">{connName(rel.targetConnectionId)} / {rel.targetDatabase} · {rel.filterColumn}</span>
-              {:else if rel.edge}
-                <span class="rel-via">via {rel.filterColumn}</span>
-              {/if}
+            {/each}
+              </div>
             </div>
-            {#if rel.loading}
-              <div class="rel-state"><Loader /></div>
-            {:else if rel.error}
-              <div class="rel-error">{rel.error}</div>
-            {:else if rel.rows.length === 0}
-              <div class="rel-state">No referencing rows found.</div>
-            {:else}
-              <div class="row-count-hint">{rel.rows.length} row{rel.rows.length !== 1 ? 's' : ''} shown</div>
-              <div class="mini-table-wrap">
-                <table class="mini-table">
-                  <thead>
-                    <tr>
-                      {#each previewCols as col}<th class="mini-th" title={col}>{col}</th>{/each}
-                      {#if rel.columnNames.length > MAX_COLS}<th class="mini-th extra">+{rel.columnNames.length - MAX_COLS}</th>{/if}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each rel.rows as row, ri (ri)}
-                      <tr class="mini-row">
-                        {#each previewCols as _col, ci (ci)}
-                          <td class="mini-td" title={formatValue(row[ci])}>
-                            {#if row[ci] === null}<span class="null-val">NULL</span>{:else}{formatValue(row[ci])}{/if}
-                          </td>
-                        {/each}
-                        {#if rel.columnNames.length > MAX_COLS}<td class="mini-td extra"></td>{/if}
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-            {/if}
-            <button class="open-btn" onclick={() => openRelation(sel, rel)}>
-              Open {rel.targetTable} ›
-            </button>
           </div>
-        {/each}
-      {/if}
+        {/if}
+
+        {#if reverseRelations.length > 0}
+          <div class="section">
+            <button class="section-header" onclick={() => (reverseExpanded = !reverseExpanded)}>
+              <div class="section-icon reverse-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M13 8H3M7 4L3 8l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="section-info">
+                <span class="section-label">Referenced by</span>
+                <span class="section-desc">tables pointing to {sel.table}</span>
+              </div>
+              <span class="section-count">{reverseRelations.length}</span>
+              <svg class="section-chevron" class:collapsed={!reverseExpanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+
+            <div class="section-body" class:collapsed={!reverseExpanded}>
+              <div class="section-body-inner">
+            {#each reverseRelations as rel, i (getRelKey(rel, i + 1000))}
+              <div class="relation-card">
+                <div class="card-header" role="button" tabindex="0" onclick={() => (rel.expanded = !rel.expanded)} onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}>
+                  <svg class="table-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="2" y="3" width="12" height="10" rx="1"/>
+                    <path d="M2 7h12M6 7v6"/>
+                  </svg>
+                  <span class="card-header-text">
+                    <span class="card-table">{rel.targetTable}</span>
+                    <span class="card-filter">{rel.filterColumn}</span>
+                    {#if rel.virtual}
+                      <span class="virtual-badge" title="Virtual connection">{#if rel.targetConnectionId}<span class="card-via">{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span>{:else}Virtual{/if}</span>
+                    {/if}
+                  </span>
+                  {#if !rel.loading && !rel.error}
+                    <span class="card-row-count">{rel.rows.length}</span>
+                  {/if}
+                  <button class="card-open-btn" title="Open in panel" onclick={(e) => { e.stopPropagation(); openRelation(sel, rel); }}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                  <svg class="card-chevron" class:collapsed={!rel.expanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+
+                <div class="card-collapse" class:collapsed={!rel.expanded}>
+                  <div class="card-body">
+                    {#if rel.loading}
+                      <div class="card-state"><Loader /></div>
+                    {:else if rel.error}
+                      <div class="card-error">{rel.error}</div>
+                    {:else if rel.rows.length > 0}
+                      <div class="table-scroll">
+                        <table class="data-table">
+                          <thead>
+                            <tr>
+                              {#each rel.columnNames as col}
+                                <th class="data-th" class:filter-col={col === rel.filterColumn} title={col}>{col}</th>
+                              {/each}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {#each rel.rows as row, ri (ri)}
+                              <tr class="data-row">
+                                {#each rel.columnNames as _col, ci (ci)}
+                                  <td class="data-td" class:filter-col={ci === rel.columnNames.indexOf(rel.filterColumn)} title={formatValue(row[ci])}>
+                                    {#if row[ci] === null}<span class="null-val">NULL</span>{:else}{formatValue(row[ci])}{/if}
+                                  </td>
+                                {/each}
+                              </tr>
+                            {/each}
+                          </tbody>
+                        </table>
+                      </div>
+                    {:else}
+                      <div class="card-empty">No rows found</div>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            {/each}
+              </div>
+            </div>
+          </div>
+        {/if}
+      </div>
     {/if}
   {/if}
 </div>
@@ -395,23 +481,54 @@
     min-height: 0;
   }
 
+  /* ── Empty / null states ── */
+
   .empty-state {
-    padding: var(--spacing-3);
-    font-size: var(--font-size-xs);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-6) var(--spacing-4);
     color: var(--color-text-muted);
-    font-style: italic;
-    line-height: var(--line-height-normal);
+    text-align: center;
+    flex: 1;
   }
+
+  .empty-icon {
+    width: 28px;
+    height: 28px;
+    opacity: 0.4;
+  }
+
+  .empty-state p {
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-normal);
+    margin: 0;
+  }
+
+  .inline-col {
+    font-family: var(--font-family-mono);
+    color: var(--color-accent);
+  }
+
+  /* ── Context bar ── */
 
   .context-bar {
     display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    padding: var(--spacing-2);
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--spacing-2) var(--spacing-3);
     background: var(--color-bg-secondary);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+  }
+
+  .context-cell {
+    display: flex;
+    align-items: baseline;
     gap: 0;
+    overflow: hidden;
   }
 
   .context-table {
@@ -419,44 +536,63 @@
     font-family: var(--font-family-mono);
     color: var(--color-text-secondary);
     font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .context-dot {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
+    flex-shrink: 0;
   }
 
   .context-col {
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
     color: var(--color-accent);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .context-eq {
-    font-size: var(--font-size-xs);
+  .context-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-1);
+  }
+
+  .context-eq-label {
+    font-size: 10px;
     color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
   }
 
   .context-val {
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
     color: var(--color-text-primary);
-    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .state-row {
-    padding: var(--spacing-3) var(--spacing-2);
+  /* ── Global loading / error ── */
+
+  .global-state {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3) var(--spacing-3);
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
-    font-style: italic;
   }
 
-  .error-row {
-    margin: var(--spacing-2);
+  .global-error {
+    margin: var(--spacing-2) var(--spacing-3);
     padding: var(--spacing-2);
     font-size: var(--font-size-xs);
     color: var(--color-danger);
@@ -466,180 +602,355 @@
     user-select: text;
   }
 
+  /* ── Sections ── */
+
+  .relations-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    padding-top: var(--spacing-2);
+    flex-shrink: 0;
+  }
+
+  .section {
+    display: flex;
+    flex-direction: column;
+  }
+
   .section-header {
     display: flex;
     align-items: center;
-    gap: var(--spacing-1);
-    padding: var(--spacing-2) var(--spacing-2) var(--spacing-1);
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    border-bottom: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
   }
 
-  .section-arrow {
-    font-size: var(--font-size-sm);
+  .section-header:hover {
+    background: var(--color-bg-tertiary);
+  }
+
+  .section-chevron {
+    width: 13px;
+    height: 13px;
     color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: transform 180ms ease;
+  }
+
+  .section-chevron.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  .section-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 180ms ease;
+  }
+
+  .section-body.collapsed {
+    grid-template-rows: 0fr;
+  }
+
+  .section-body-inner {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    padding: 0 var(--spacing-2);
+  }
+
+  .section-body-inner .relation-card:first-child {
+    margin-top: var(--spacing-2);
+  }
+
+  .section-body-inner .relation-card:last-child {
+    margin-bottom: var(--spacing-2);
+  }
+
+  .section-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+
+  .section-icon svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .forward-icon {
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    color: var(--color-accent);
+  }
+
+  .reverse-icon {
+    background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
+    color: var(--color-text-secondary);
+  }
+
+  .section-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
   }
 
   .section-label {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
+    color: var(--color-text-primary);
+    line-height: 1.2;
   }
 
+  .section-desc {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .section-count {
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 0 6px;
+    line-height: 18px;
+    flex-shrink: 0;
+  }
+
+  /* ── Relation cards ── */
+
   .relation-card {
-    margin: 0 var(--spacing-2) var(--spacing-2);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     overflow: hidden;
   }
 
-  .virtual-card {
-    border-style: dashed;
-  }
-
-  .relation-title {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    padding: var(--spacing-1) var(--spacing-2);
-    background: var(--color-bg-secondary);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .rel-title-row {
+  .card-header {
     display: flex;
     align-items: center;
     gap: var(--spacing-1);
+    padding: 5px 5px 5px var(--spacing-2);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background var(--transition-fast);
   }
 
-  .rel-table {
+  .card-header:hover {
+    background: var(--color-bg-tertiary);
+  }
+
+  .card-chevron {
+    width: 12px;
+    height: 12px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: transform 180ms ease;
+  }
+
+  .card-chevron.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  .table-icon {
+    width: 13px;
+    height: 13px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .card-header-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px;
+  }
+
+  .card-table {
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
-    flex: 1;
+  }
+
+  .card-filter {
+    font-size: 10px;
+    color: var(--color-text-muted);
+    font-family: var(--font-family-mono);
+  }
+
+  .card-open-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .card-open-btn:hover {
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+  }
+
+  .card-open-btn svg {
+    width: 11px;
+    height: 11px;
   }
 
   .virtual-badge {
     font-size: 9px;
-    padding: 1px 4px;
+    padding: 1px 5px;
     background: var(--color-accent-subtle);
     color: var(--color-accent);
-    border-radius: var(--radius-sm);
+    border-radius: 10px;
     font-weight: var(--font-weight-semibold);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    flex-shrink: 0;
   }
 
-  .delete-vr-btn {
-    font-size: 14px;
-    color: var(--color-text-muted);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0 2px;
-    line-height: 1;
-    border-radius: var(--radius-sm);
-    flex-shrink: 0;
-    transition: color var(--transition-fast);
-  }
-
-  .delete-vr-btn:hover {
-    color: var(--color-danger);
-  }
-
-  .rel-via {
+  .card-via {
     font-size: 10px;
-    color: var(--color-text-muted);
-    font-family: var(--font-family-mono);
+    letter-spacing: initial;
+    text-transform: initial;
   }
 
-  .rel-state {
-    padding: var(--spacing-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    font-style: italic;
+  /* ── Card collapse / body ── */
+
+  .card-collapse {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 180ms ease;
   }
 
-  .rel-error {
-    padding: var(--spacing-2);
+  .card-collapse.collapsed {
+    grid-template-rows: 0fr;
+  }
+
+  .card-body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card-state {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-2) var(--spacing-3);
+  }
+
+  .card-error {
+    padding: var(--spacing-2) var(--spacing-3);
     font-size: var(--font-size-xs);
     color: var(--color-danger);
     -webkit-user-select: text;
     user-select: text;
   }
 
-  .row-count-hint {
-    padding: 2px var(--spacing-2);
-    font-size: 10px;
+  .card-empty {
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     font-style: italic;
   }
 
-  .mini-table-wrap {
-    overflow-x: auto;
-    border-bottom: 1px solid var(--color-border);
+  .card-row-count {
+    font-size: 10px;
+    font-family: var(--font-family-mono);
+    color: var(--color-text-muted);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 0 5px;
+    line-height: 16px;
+    align-self: center;
+    margin-left: auto;
+    flex-shrink: 0;
   }
 
-  .mini-table {
-    width: 100%;
+  /* ── Data table ── */
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .table-scroll::-webkit-scrollbar {
+    height: 0;
+  }
+
+  .data-table {
+    width: max-content;
+    min-width: 100%;
     border-collapse: collapse;
     font-size: var(--font-size-xs);
   }
 
-  .mini-th {
-    padding: 3px var(--spacing-1);
-    background: var(--color-table-header-bg);
+  .data-th {
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-bg-secondary);
     color: var(--color-text-muted);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-semibold);
     font-size: 10px;
     text-align: left;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 80px;
-    border-right: 1px solid var(--color-border);
-  }
-
-  .mini-th:last-child {
-    border-right: none;
-  }
-
-  .mini-th.extra {
-    color: var(--color-text-muted);
-    font-style: italic;
-    font-weight: normal;
-  }
-
-  .mini-row {
     border-bottom: 1px solid var(--color-border);
+    letter-spacing: 0.02em;
   }
 
-  .mini-row:last-child {
-    border-bottom: none;
+  .data-th.filter-col {
+    color: var(--color-accent);
   }
 
-  .mini-td {
-    padding: 3px var(--spacing-1);
+  .data-row:not(:last-child) {
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+  }
+
+  .data-row:hover .data-td {
+    background: var(--color-bg-secondary);
+  }
+
+  .data-td {
+    padding: var(--spacing-1) var(--spacing-2);
     font-family: var(--font-family-mono);
     font-size: var(--font-size-xs);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 80px;
-    border-right: 1px solid var(--color-border);
     vertical-align: middle;
     -webkit-user-select: text;
     user-select: text;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-text-primary);
   }
 
-  .mini-td:last-child {
-    border-right: none;
-  }
-
-  .mini-td.extra {
-    color: var(--color-text-muted);
+  .data-td.filter-col {
+    color: var(--color-accent);
+    font-weight: var(--font-weight-medium);
   }
 
   .null-val {
@@ -648,20 +959,4 @@
     font-size: 10px;
   }
 
-  .open-btn {
-    display: block;
-    width: 100%;
-    padding: var(--spacing-1) var(--spacing-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-accent);
-    text-align: right;
-    cursor: pointer;
-    background: transparent;
-    border: none;
-    transition: background var(--transition-fast);
-  }
-
-  .open-btn:hover {
-    background: var(--color-accent-subtle);
-  }
 </style>

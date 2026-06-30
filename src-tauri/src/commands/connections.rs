@@ -187,6 +187,7 @@ pub async fn connections_list(
 #[tauri::command]
 pub async fn connections_create(
     sqlite: State<'_, SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
     input: ConnectionProfileInput,
 ) -> Result<ConnectionProfile, AppError> {
     let id = Uuid::new_v4().to_string();
@@ -244,6 +245,8 @@ pub async fn connections_create(
             .await
             .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
+    connections.register_name(&id, &row.name);
+
     Ok(ConnectionProfile::from(row))
 }
 
@@ -251,6 +254,7 @@ pub async fn connections_create(
 #[tauri::command]
 pub async fn connections_update(
     sqlite: State<'_, SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
     id: String,
     input: ConnectionProfileInput,
 ) -> Result<ConnectionProfile, AppError> {
@@ -303,6 +307,8 @@ pub async fn connections_update(
             .fetch_one(sqlite.inner())
             .await
             .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    connections.register_name(&id, &row.name);
 
     Ok(ConnectionProfile::from(row))
 }

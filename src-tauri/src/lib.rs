@@ -129,6 +129,19 @@ pub fn run() {
             let connection_manager = ConnectionManager::new();
             let ssh_tunnel_manager = SshTunnelManager::new();
 
+            // Pre-register all profile names so error messages use the human-readable
+            // name even for connections that haven't been opened yet this session.
+            let _ = tauri::async_runtime::block_on(async {
+                let rows: Vec<(String, String)> =
+                    sqlx::query_as("SELECT id, name FROM connection_profiles")
+                        .fetch_all(&sqlite)
+                        .await?;
+                for (id, name) in rows {
+                    connection_manager.register_name(&id, &name);
+                }
+                Ok::<_, sqlx::Error>(())
+            });
+
             app.manage(sqlite);
             app.manage(connection_manager);
             app.manage(ssh_tunnel_manager);
