@@ -2114,6 +2114,8 @@
 <div
   bind:this={tableContainerEl}
   class="data-table-wrapper"
+  class:cell-multiline={settings.cellMaxLines > 1}
+  style:--cell-max-lines={settings.cellMaxLines}
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
   onkeydown={(e) => { handleContextMenuKeydown(e); handleTableKeydown(e); }}
@@ -3105,9 +3107,22 @@
 
   .cell-content {
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: pre;
     min-width: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: var(--cell-max-lines, 1);
+    -webkit-box-orient: vertical;
+    white-space: pre-wrap;
+  }
+
+  .cell-multiline .data-cell {
+    height: auto;
+    min-height: 38px;
+  }
+
+  .cell-multiline .cell-inner {
+    height: auto;
+    align-items: flex-start;
+    padding: 9px 0;
   }
 
   .data-cell.cell-number {

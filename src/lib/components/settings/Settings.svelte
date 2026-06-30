@@ -242,6 +242,21 @@
 
         <div class="setting-row">
           <div class="setting-label">
+            <span class="label-text">Cell Max Lines</span>
+            <span class="label-hint">Maximum number of lines shown per cell (1 = single line)</span>
+          </div>
+          <input
+            class="setting-input setting-input--sm"
+            type="number"
+            min="1"
+            max="20"
+            value={settings.cellMaxLines}
+            onchange={(e) => update('cellMaxLines', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
             <span class="label-text">Transaction Mode</span>
             <span class="label-hint">Show transaction toolbar in query editor</span>
           </div>

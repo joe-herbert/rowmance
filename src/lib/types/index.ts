@@ -278,6 +278,7 @@ export interface AppSettings {
   formatLinesBetweenQueries: number;
   formatCompact: boolean;
   openItemsLocation: 'sidebar' | 'top';
+  cellMaxLines: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -308,6 +309,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formatLinesBetweenQueries: 1,
   formatCompact: false,
   openItemsLocation: 'sidebar',
+  cellMaxLines: 1,
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────
