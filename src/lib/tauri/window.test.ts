@@ -22,10 +22,10 @@ describe('openNewWindow', () => {
     expect(options!.url).toBe('/');
   });
 
-  it('sets title to "rowmance"', () => {
+  it('sets title to "Rowmance"', () => {
     openNewWindow();
     const [, options] = MockWebviewWindow.mock.calls[0];
-    expect(options!.title).toBe('rowmance');
+    expect(options!.title).toBe('Rowmance');
   });
 
   it('uses a unique label on every call', () => {

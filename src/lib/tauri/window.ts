@@ -19,7 +19,7 @@ export function openNewWindow(): void {
   const label = `rowmance-${++windowCount}`;
   const win = new WebviewWindow(label, {
     url: '/',
-    title: 'rowmance',
+    title: 'Rowmance',
     width: 800,
     height: 600,
     titleBarStyle: 'overlay',

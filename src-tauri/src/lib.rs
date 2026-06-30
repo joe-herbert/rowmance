@@ -21,8 +21,35 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // ── Rowmance app menu ──────────────────────────────────────────
             let settings_item = MenuItem::with_id(app, "settings", "Settings", true, Some("cmd+,"))?;
-            let app_submenu = Submenu::with_items(app, "Rowmance", true, &[&settings_item])?;
+            let check_updates_item = MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?;
+            let app_submenu = Submenu::with_items(app, "Rowmance", true, &[
+                &settings_item,
+                &PredefinedMenuItem::separator(app)?,
+                &check_updates_item,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::hide(app, None)?,
+                &PredefinedMenuItem::hide_others(app, None)?,
+                &PredefinedMenuItem::show_all(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::quit(app, None)?,
+            ])?;
+
+            // ── File menu ──────────────────────────────────────────────────
+            let new_query_item = MenuItem::with_id(app, "new-query", "New Query Editor", true, None::<&str>)?;
+            let new_window_file_item = MenuItem::with_id(app, "new-window", "New Window", true, None::<&str>)?;
+            let import_csv_item = MenuItem::with_id(app, "import-csv", "Import CSV…", true, None::<&str>)?;
+            let import_sql_item = MenuItem::with_id(app, "import-sql", "Import SQL…", true, None::<&str>)?;
+            let file_submenu = Submenu::with_items(app, "File", true, &[
+                &new_query_item,
+                &new_window_file_item,
+                &PredefinedMenuItem::separator(app)?,
+                &import_csv_item,
+                &import_sql_item,
+            ])?;
+
+            // ── Edit menu ──────────────────────────────────────────────────
             let edit_submenu = Submenu::with_items(app, "Edit", true, &[
                 &PredefinedMenuItem::undo(app, None)?,
                 &PredefinedMenuItem::redo(app, None)?,
@@ -32,11 +59,61 @@ pub fn run() {
                 &PredefinedMenuItem::paste(app, None)?,
                 &PredefinedMenuItem::select_all(app, None)?,
             ])?;
-            let menu = Menu::with_items(app, &[&app_submenu, &edit_submenu])?;
+
+            // ── View menu ──────────────────────────────────────────────────
+            let toggle_left_item = MenuItem::with_id(app, "toggle-left-sidebar", "Toggle Left Sidebar", true, None::<&str>)?;
+            let toggle_right_item = MenuItem::with_id(app, "toggle-right-sidebar", "Toggle Right Sidebar", true, None::<&str>)?;
+            let toggle_system_item = MenuItem::with_id(app, "toggle-system-items", "Toggle System Items", true, None::<&str>)?;
+            let command_palette_item = MenuItem::with_id(app, "command-palette", "Command Palette", true, None::<&str>)?;
+            let view_submenu = Submenu::with_items(app, "View", true, &[
+                &toggle_left_item,
+                &toggle_right_item,
+                &PredefinedMenuItem::separator(app)?,
+                &toggle_system_item,
+                &PredefinedMenuItem::separator(app)?,
+                &command_palette_item,
+            ])?;
+
+            // ── Window menu ────────────────────────────────────────────────
+            let new_window_win_item = MenuItem::with_id(app, "new-window-win", "New Window", true, None::<&str>)?;
+            let window_submenu = Submenu::with_items(app, "Window", true, &[
+                &PredefinedMenuItem::minimize(app, None)?,
+                &PredefinedMenuItem::maximize(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &new_window_win_item,
+            ])?;
+
+            // ── Help menu ──────────────────────────────────────────────────
+            let help_updates_item = MenuItem::with_id(app, "help-check-updates", "Check for Updates…", true, None::<&str>)?;
+            let help_submenu = Submenu::with_items(app, "Help", true, &[
+                &help_updates_item,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::about(app, None, None)?,
+            ])?;
+
+            let menu = Menu::with_items(app, &[
+                &app_submenu,
+                &file_submenu,
+                &edit_submenu,
+                &view_submenu,
+                &window_submenu,
+                &help_submenu,
+            ])?;
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
-                if event.id() == "settings" {
-                    let _ = app.emit("menu:open-settings", ());
+                let id = event.id().as_ref();
+                match id {
+                    "settings" => { let _ = app.emit("menu:open-settings", ()); }
+                    "check-updates" | "help-check-updates" => { let _ = app.emit("menu:check-updates", ()); }
+                    "new-query" => { let _ = app.emit("menu:new-query", ()); }
+                    "new-window" | "new-window-win" => { let _ = app.emit("menu:new-window", ()); }
+                    "import-csv" => { let _ = app.emit("menu:import-csv", ()); }
+                    "import-sql" => { let _ = app.emit("menu:import-sql", ()); }
+                    "toggle-left-sidebar" => { let _ = app.emit("menu:toggle-left-sidebar", ()); }
+                    "toggle-right-sidebar" => { let _ = app.emit("menu:toggle-right-sidebar", ()); }
+                    "toggle-system-items" => { let _ = app.emit("menu:toggle-system-items", ()); }
+                    "command-palette" => { let _ = app.emit("menu:command-palette", ()); }
+                    _ => {}
                 }
             });
 
@@ -146,6 +223,8 @@ pub fn run() {
             // Updater
             commands::updater::updater_check,
             commands::updater::updater_install,
+            // Menu
+            commands::menu::menu_set_import_csv_enabled,
             // Window
             commands::window::window_set_traffic_light_position,
             // Explain

@@ -926,6 +926,18 @@
     return () => window.removeEventListener('shortcut-action', handleShortcutAction);
   });
 
+  $effect(() => {
+    if (!isFocused) return;
+    function onMenuImportCsv() { importSource = 'file'; showCsvImport = true; }
+    function onMenuImportSql() { importSource = 'file'; showSqlImport = true; }
+    document.addEventListener('menu-import-csv', onMenuImportCsv);
+    document.addEventListener('menu-import-sql', onMenuImportSql);
+    return () => {
+      document.removeEventListener('menu-import-csv', onMenuImportCsv);
+      document.removeEventListener('menu-import-sql', onMenuImportSql);
+    };
+  });
+
   // Register this panel's state with the status bar when focused.
   $effect(() => {
     if (!isFocused) return;

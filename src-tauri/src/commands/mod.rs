@@ -1,4 +1,5 @@
 pub mod connections;
+pub mod menu;
 pub mod erd;
 pub mod export;
 pub mod history;

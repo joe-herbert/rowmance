@@ -24,6 +24,7 @@
   import * as updaterApi from '$lib/tauri/updater';
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
+  import { invoke } from '@tauri-apps/api/core';
   import TabBar from './TabBar.svelte';
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -60,6 +61,11 @@
   });
 
   const isConnected = $derived(activeConnection ? connectionsStore.isActive(activeConnection.id) : false);
+
+  $effect(() => {
+    const isTableBrowser = focusedContent.kind === 'table_browser';
+    invoke('menu_set_import_csv_enabled', { enabled: isTableBrowser }).catch(() => {});
+  });
 
   type ViewMode = 'data' | 'structure' | 'sql';
 
@@ -120,8 +126,31 @@
     }
 
     let unlistenFn: (() => void) | undefined;
-    listen('menu:open-settings', openSettings).then((unlisten) => {
-      unlistenFn = unlisten;
+    Promise.all([
+      listen('menu:open-settings', openSettings),
+      listen('menu:new-query', () => {
+        const focused = panelStore.focusedPanel.content;
+        const connectionId = 'connectionId' in focused ? focused.connectionId : null;
+        if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
+      }),
+      listen('menu:new-window', () => openNewWindow()),
+      listen('menu:toggle-left-sidebar', () => toggleLeftSidebar()),
+      listen('menu:toggle-right-sidebar', () => toggleRightSidebar()),
+      listen('menu:toggle-system-items', () => settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems)),
+      listen('menu:command-palette', () => openPalette()),
+      listen('menu:check-updates', async () => {
+        try {
+          const result = await updaterApi.updaterCheck();
+          if (result.available && result.version) {
+            pendingUpdate = { version: result.version, notes: result.notes };
+            updateDismissed = false;
+          }
+        } catch { /* silently ignore */ }
+      }),
+      listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),
+      listen('menu:import-sql', () => document.dispatchEvent(new CustomEvent('menu-import-sql'))),
+    ]).then((unlisteners) => {
+      unlistenFn = () => unlisteners.forEach(u => u());
     });
 
     window.addEventListener('resize', syncTrafficLightPosition);
