@@ -547,6 +547,18 @@
             onchange={(c) => update('sidebarFloating', c)}
           />
         </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Open Tabs Location</span>
+            <span class="label-hint">Where open tabs are displayed</span>
+          </div>
+          <Select
+            value={settings.openItemsLocation}
+            options={[{ value: 'sidebar', label: 'Open panel (sidebar)' }, { value: 'top', label: 'Tab bar (top of main area)' }]}
+            onchange={(v) => update('openItemsLocation', v as 'sidebar' | 'top')}
+          />
+        </div>
       </div>
 
 

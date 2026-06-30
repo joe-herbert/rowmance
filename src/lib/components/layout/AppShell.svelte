@@ -24,6 +24,7 @@
   import * as updaterApi from '$lib/tauri/updater';
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
+  import TabBar from './TabBar.svelte';
 
   // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -462,7 +463,12 @@
 
   <!-- Main split-panel area -->
   <main id="main-content" class="main-area">
-    <SplitPanel />
+    {#if settings.openItemsLocation === 'top'}
+      <TabBar />
+    {/if}
+    <div class="split-panel-wrapper">
+      <SplitPanel />
+    </div>
   </main>
 
   <!-- Resize handle: main area ↔ right sidebar -->
@@ -1014,6 +1020,12 @@
     border: 1px solid var(--color-border);
     border-radius: var(--panel-radius);
     opacity: var(--panel-opacity);
+  }
+
+  .split-panel-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
   /* ── Right sidebar card ────────────────────────────────────────────────── */

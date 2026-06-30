@@ -277,6 +277,7 @@ export interface AppSettings {
   formatIndentStyle: 'standard' | 'tabularLeft' | 'tabularRight';
   formatLinesBetweenQueries: number;
   formatCompact: boolean;
+  openItemsLocation: 'sidebar' | 'top';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -306,6 +307,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formatIndentStyle: 'standard',
   formatLinesBetweenQueries: 1,
   formatCompact: false,
+  openItemsLocation: 'sidebar',
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

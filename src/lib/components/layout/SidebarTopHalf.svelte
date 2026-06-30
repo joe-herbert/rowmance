@@ -179,6 +179,7 @@
   }
 </script>
 
+{#if settingsStore.settings.openItemsLocation !== 'top'}
 <div class="section">
   <div class="section-header no-select">
     <span class="header-label">OPEN</span>
@@ -314,6 +315,7 @@
     </ul>
   {/if}
 </div>
+{/if}
 
 {#if contextMenuItemId !== null}
   {@const contextItem = panelStore.openItems.find(i => i.id === contextMenuItemId)}
