@@ -70,6 +70,7 @@
     database?: string | null;
     columnRenames?: Record<string, string>;
     onRenameColumn?: (_colName: string, _label: string) => void;
+    searchTerm?: string;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -182,6 +183,7 @@
     database,
     columnRenames = {},
     onRenameColumn,
+    searchTerm = '',
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -1344,6 +1346,25 @@
     return String(value);
   }
 
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function highlightText(text: string, term: string): string {
+    const lowerText = text.toLowerCase();
+    const lowerTerm = term.toLowerCase();
+    const parts: string[] = [];
+    let i = 0;
+    while (i < text.length) {
+      const idx = lowerText.indexOf(lowerTerm, i);
+      if (idx === -1) { parts.push(escapeHtml(text.slice(i))); break; }
+      if (idx > i) parts.push(escapeHtml(text.slice(i, idx)));
+      parts.push(`<mark class="search-highlight">${escapeHtml(text.slice(idx, idx + term.length))}</mark>`);
+      i = idx + term.length;
+    }
+    return parts.join('');
+  }
+
   // ── Data type categorisation ──────────────────────────────────────────────
 
   function getDataTypeCategory(dataType: string): 'number' | 'timestamp' | 'boolean' | 'json' | 'text' {
@@ -2359,6 +2380,7 @@
               {@const isPending = hasPendingChange(rowKey, col.name)}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
               {@const isRequiredEmpty = isPending && (cellValue === null || cellValue === '') && !col.nullable && !col.isAutoIncrement && col.defaultValue == null}
+              {@const cellMatches = !!searchTerm && cellValue !== null && String(cellValue).toLowerCase().includes(searchTerm.toLowerCase())}
               <td
                 class="data-cell"
                 class:cell-number={typeCategory === 'number'}
@@ -2368,6 +2390,7 @@
                 class:cell-focused={focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
                 class:cell-required-empty={isRequiredEmpty}
                 class:cell-fk={col.isForeignKey && cellValue !== null && !!onForeignKeyClick}
+                class:cell-search-match={cellMatches}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
@@ -2457,6 +2480,8 @@
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         {/if}
                       </span>
+                    {:else if cellMatches}
+                      {@html highlightText(formatCell(cellValue), searchTerm)}
                     {:else}
                       {formatCell(cellValue)}
                     {/if}
@@ -3382,6 +3407,19 @@
     text-underline-offset: 2px;
     text-decoration-style: dotted;
     text-decoration-color: var(--color-text-muted);
+  }
+
+  /* ── Search highlighting ────────────────────────────────────────────────── */
+
+  .data-cell.cell-search-match {
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  }
+
+  :global(.search-highlight) {
+    background: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    color: var(--color-text-primary);
+    border-radius: 2px;
+    padding: 0 1px;
   }
 
   /* ── Quick view ─────────────────────────────────────────────────────────── */

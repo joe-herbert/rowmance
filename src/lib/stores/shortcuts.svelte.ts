@@ -30,6 +30,7 @@ export type ShortcutAction =
   | 'TABLE_SAVE_CHANGES'
   | 'TABLE_DISCARD_CHANGES'
   | 'TABLE_EDIT_IN_MODAL'
+  | 'TABLE_SEARCH'
   | 'PAGE_NEXT'
   | 'PAGE_PREV'
   | 'COMMAND_PALETTE'
@@ -37,7 +38,8 @@ export type ShortcutAction =
   | 'NEW_WINDOW'
   | 'OPEN_SETTINGS'
   | 'TOGGLE_SYSTEM_ITEMS'
-  | 'CLOSE_OTHER_TABS';
+  | 'CLOSE_OTHER_TABS'
+  | 'GLOBAL_SEARCH';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 
@@ -81,9 +83,9 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     action: 'QUERY_FORMAT',
     label: 'Format Query',
     group: 'Query Editor',
-    vscode: 'Mod+Shift+F',
+    vscode: 'Mod+Alt+F',
     jetbrains: 'Mod+Alt+L',
-    vim: 'Mod+Shift+F',
+    vim: 'Mod+Alt+F',
   },
   {
     action: 'QUERY_EXPLAIN',
@@ -182,6 +184,14 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vim: 'Shift+Enter',
   },
   {
+    action: 'TABLE_SEARCH',
+    label: 'Search Table',
+    group: 'Table View',
+    vscode: 'Mod+F',
+    jetbrains: 'Mod+F',
+    vim: 'Mod+F',
+  },
+  {
     action: 'PAGE_NEXT',
     label: 'Next Page',
     group: 'Table View',
@@ -244,6 +254,14 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+Shift+W',
     jetbrains: 'Mod+Shift+W',
     vim: 'Mod+Shift+W',
+  },
+  {
+    action: 'GLOBAL_SEARCH',
+    label: 'Global Search',
+    group: 'General',
+    vscode: 'Mod+Shift+F',
+    jetbrains: 'Mod+Shift+F',
+    vim: 'Mod+Shift+F',
   },
 ];
 

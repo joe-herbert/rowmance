@@ -402,10 +402,15 @@
     const quotedDb = quoteIdentifier(database);
     const quotedTable = quoteIdentifier(table);
     let base = `SELECT * FROM ${quotedDb}.${quotedTable}`;
-    const where = buildWhereClause(filterEditorState, quoteIdentifier);
-    if (where) {
-      base += ` WHERE ${where}`;
+    const conditions: string[] = [];
+    const filterWhere = buildWhereClause(filterEditorState, quoteIdentifier);
+    if (filterWhere) conditions.push(filterWhere);
+    const searchTrimmed = localSearchTerm.trim();
+    if (searchTrimmed) {
+      const searchWhere = buildSearchWhere(searchTrimmed);
+      if (searchWhere) conditions.push(searchWhere);
     }
+    if (conditions.length > 0) base += ` WHERE ${conditions.join(' AND ')}`;
     return base;
   }
 
@@ -653,6 +658,50 @@
   let importSource = $state<'file' | 'clipboard'>('file');
   let addRowTrigger = $state(0);
 
+  // ── Local search ──────────────────────────────────────────────────────────
+
+  let showLocalSearch = $state(false);
+  let localSearchTerm = $state('');
+  let localSearchInputEl = $state<HTMLInputElement | null>(null);
+
+  function buildSearchWhere(term: string): string {
+    const columns = result?.columns ?? [];
+    if (columns.length === 0) return '';
+    const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const pattern = `'%${escaped}%'`;
+    if (dbType === 'postgres') {
+      return '(' + columns.map((c) => `CAST(${quoteIdentifier(c.name)} AS TEXT) ILIKE ${pattern}`).join(' OR ') + ')';
+    }
+    return '(' + columns.map((c) => `CAST(${quoteIdentifier(c.name)} AS CHAR) LIKE ${pattern}`).join(' OR ') + ')';
+  }
+
+  // Re-load with debounce when search term changes while the bar is open.
+  $effect(() => {
+    if (!showLocalSearch) return;
+    const _term = localSearchTerm;
+    const timer = setTimeout(() => {
+      page = 1;
+      untrack(() => load());
+    }, 250);
+    return () => clearTimeout(timer);
+  });
+
+  function openLocalSearch(): void {
+    showLocalSearch = true;
+    tick().then(() => localSearchInputEl?.focus());
+  }
+
+  function closeLocalSearch(): void {
+    showLocalSearch = false;
+    localSearchTerm = '';
+    page = 1;
+    load();
+  }
+
+  function handleLocalSearchKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') closeLocalSearch();
+  }
+
   const EXPORT_FORMATS: { label: string; format: ExportFormat; needsTableName: boolean }[] = [
     { label: 'CSV', format: 'csv', needsTableName: false },
     { label: 'JSON', format: 'json', needsTableName: false },
@@ -898,6 +947,9 @@
         break;
       case 'TABLE_DISCARD_CHANGES':
         if (pendingRowCount > 0) discardChanges();
+        break;
+      case 'TABLE_SEARCH':
+        openLocalSearch();
         break;
       case 'PAGE_NEXT':
         nextTablePage();
@@ -1219,6 +1271,33 @@
     </div>
   {/if}
 
+  {#if showLocalSearch}
+    <div class="local-search-bar">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input
+        bind:this={localSearchInputEl}
+        bind:value={localSearchTerm}
+        class="local-search-input"
+        type="text"
+        placeholder="Search in table…"
+        onkeydown={handleLocalSearchKeydown}
+        aria-label="Search table rows"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck={false}
+      />
+      {#if localSearchTerm && dtPageInfo !== null}
+        <span class="local-search-count">
+          {dtPageInfo.processedRowsLength.toLocaleString()} match{dtPageInfo.processedRowsLength !== 1 ? 'es' : ''}
+        </span>
+      {/if}
+      <button class="local-search-close" onclick={closeLocalSearch} aria-label="Close search" title="Close (Esc)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  {/if}
+
   {#if showTableNameInput}
     <div class="table-name-export-bar">
       <label class="table-name-label" for="tb-export-table-name">Table name for SQL INSERT:</label>
@@ -1293,6 +1372,7 @@
           columns={result.columns}
           rows={result.rows}
           totalRows={result.totalRows}
+          searchTerm={localSearchTerm || undefined}
           rowOffset={(page - 1) * PAGE_SIZE}
           pageSize={PAGE_SIZE}
           bind:pageIndex={dtPageIndex}
@@ -2089,5 +2169,65 @@
 
   .table-name-input:focus {
     border-color: var(--color-accent);
+  }
+
+  /* ── Local search bar ────────────────────────────────────────────────────── */
+
+  .local-search-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-1) var(--spacing-3);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+  }
+
+  .local-search-input {
+    flex: 1;
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    color: var(--color-text-primary);
+    outline: none;
+    min-width: 0;
+    transition: border-color var(--transition-fast);
+  }
+
+  .local-search-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .local-search-count {
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .local-search-close {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .local-search-close:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 </style>

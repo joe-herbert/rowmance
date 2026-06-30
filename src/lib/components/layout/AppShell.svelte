@@ -240,6 +240,7 @@
       const connectionId = 'connectionId' in focused ? focused.connectionId : null;
       if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
     }
+    if (action === 'GLOBAL_SEARCH') openGlobalSearch();
   }
 
   let paletteOpen = $state(false);
@@ -351,16 +352,8 @@
     return () => document.removeEventListener('shortcut-action', handleShortcutAction);
   });
 
-  function handleGlobalKeydown(e: KeyboardEvent) {
-    if (shortcutsStore.isRecording) return;
-    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && !paletteOpen) {
-      e.preventDefault();
-      globalSearchOpen = true;
-    }
-  }
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} />
 
 <a class="skip-link" href="#main-content">Skip to main content</a>
 
