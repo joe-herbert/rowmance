@@ -441,14 +441,14 @@
 >
   <!-- Left sidebar (toggleable) -->
   {#if leftVisible}
-    <aside class="left-sidebar" style="width: {leftWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
+    <aside class="left-sidebar" class:floating={settings.sidebarFloating} style="width: {leftWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
       <Sidebar />
     </aside>
   {/if}
 
 
   <!-- Resize handle: left sidebar ↔ main area -->
-  {#if leftVisible}
+  {#if leftVisible && !settings.sidebarFloating}
     <div
       class="resize-handle resize-handle--horizontal left-resize"
       role="separator"
@@ -466,7 +466,7 @@
   </main>
 
   <!-- Resize handle: main area ↔ right sidebar -->
-  {#if rightVisible}
+  {#if rightVisible && !settings.sidebarFloating}
     <div
       class="resize-handle resize-handle--horizontal right-resize"
       role="separator"
@@ -480,7 +480,7 @@
 
   <!-- Right sidebar (toggleable) -->
   {#if rightVisible}
-    <aside class="right-sidebar" style="width: {rightWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
+    <aside class="right-sidebar" class:floating={settings.sidebarFloating} style="width: {rightWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
       <RightSidebar initialPanel={activeRightPanel} onPanelChange={(p) => { activeRightPanel = (p ?? 'history') as RightPanel; settingsStore.set('rightSidebarPanel', activeRightPanel); }} />
     </aside>
   {/if}
@@ -990,6 +990,15 @@
     opacity: var(--panel-opacity);
   }
 
+  .left-sidebar.floating {
+    position: absolute;
+    left: var(--panel-spacing);
+    top: var(--panel-spacing);
+    bottom: var(--panel-spacing);
+    z-index: 15;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+  }
+
   /* ── Main content area ─────────────────────────────────────────────────── */
 
   .main-area {
@@ -1018,6 +1027,15 @@
     backdrop-filter: var(--glass-blur);
     border-radius: var(--panel-radius);
     opacity: var(--panel-opacity);
+  }
+
+  .right-sidebar.floating {
+    position: absolute;
+    right: var(--panel-spacing);
+    top: var(--panel-spacing);
+    bottom: var(--panel-spacing);
+    z-index: 15;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
   }
 
   /* ── Resize handles ─────────────────────────────────────────────────────── */
