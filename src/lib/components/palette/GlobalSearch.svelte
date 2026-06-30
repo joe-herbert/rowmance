@@ -24,6 +24,16 @@
   let query = $state('');
   let selectedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | undefined>(undefined);
+  type KindFilter = 'connection' | 'database' | 'table' | 'column' | null;
+  let filterKind = $state<KindFilter>(null);
+
+  const filterOptions: Array<{ label: string; value: KindFilter }> = [
+    { label: 'All', value: null },
+    { label: 'Connections', value: 'connection' },
+    { label: 'Databases', value: 'database' },
+    { label: 'Tables', value: 'table' },
+    { label: 'Columns', value: 'column' },
+  ];
 
   // ── Schema data ────────────────────────────────────────────────────────────
 
@@ -189,21 +199,24 @@
 
   const filtered = $derived.by<ResultItem[]>(() => {
     const q = query.trim();
+    const fk = filterKind;
+
     if (!q) {
-      return connections.profiles.slice(0, 5).map((p) => ({
+      const all: ResultItem[] = connections.profiles.slice(0, 5).map((p) => ({
         kind: 'connection' as const,
         id: p.id,
         name: p.name,
         dbType: p.dbType,
         color: p.color,
       }));
+      return fk ? all.filter((r) => r.kind === fk) : all;
     }
 
     const results: ResultItem[] = [];
-    for (const r of fuseConnections.search(q).slice(0, 3)) results.push(r.item);
-    for (const r of fuseDatabases.search(q).slice(0, 5)) results.push({ kind: 'database', ...r.item });
-    for (const r of fuseTables.search(q).slice(0, 8)) results.push({ kind: 'table', ...r.item });
-    for (const r of fuseColumns.search(q).slice(0, 8)) results.push({ kind: 'column', ...r.item });
+    if (!fk || fk === 'connection') for (const r of fuseConnections.search(q).slice(0, 3)) results.push(r.item);
+    if (!fk || fk === 'database') for (const r of fuseDatabases.search(q).slice(0, 5)) results.push({ kind: 'database', ...r.item });
+    if (!fk || fk === 'table') for (const r of fuseTables.search(q).slice(0, 8)) results.push({ kind: 'table', ...r.item });
+    if (!fk || fk === 'column') for (const r of fuseColumns.search(q).slice(0, 8)) results.push({ kind: 'column', ...r.item });
     return results.slice(0, 30);
   });
 
@@ -255,6 +268,7 @@
 
   $effect(() => {
     query;
+    filterKind;
     selectedIndex = 0;
   });
 
@@ -351,6 +365,18 @@
           </svg>
         </span>
       {/if}
+    </div>
+
+    <div class="filter-row" role="group" aria-label="Filter by type">
+      {#each filterOptions as opt}
+        <button
+          class="filter-chip"
+          class:active={filterKind === opt.value}
+          onclick={() => { filterKind = opt.value; inputEl?.focus(); }}
+          tabindex="0"
+          type="button"
+        >{opt.label}</button>
+      {/each}
     </div>
 
     <ul id="global-search-list" class="results-list" role="listbox">
@@ -494,6 +520,41 @@
 
   .spin {
     animation: spin 0.8s linear infinite;
+  }
+
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .filter-chip {
+    padding: 2px var(--spacing-2);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    line-height: 1.6;
+  }
+
+  .filter-chip:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-strong);
+  }
+
+  .filter-chip.active {
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
   }
 
   .results-list {
