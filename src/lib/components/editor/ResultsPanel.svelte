@@ -1,20 +1,31 @@
 <script lang="ts">
+  import { tick, untrack } from 'svelte';
   import type { QueryResult } from '$lib/types';
+  import type { ColumnMeta } from '$lib/types';
   import DataTable from '$lib/components/table/DataTable.svelte';
+  import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
   import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
+  import { useConnections } from '$lib/stores/connections.svelte';
+  import type { RowChange, RowDelete } from '$lib/tauri/query';
+  import { updateRows, insertRow, deleteRows } from '$lib/tauri/query';
   import { portal } from '$lib/actions/portal';
 
   const toast = useToast();
+  const connections = useConnections();
 
   interface Props {
     results: QueryResult[];
     statements?: string[];
+    connectionId?: string;
+    database?: string;
   }
 
-  let { results, statements = [] }: Props = $props();
+  let { results, statements = [], connectionId, database }: Props = $props();
+
+  type CellValue = string | number | boolean | null;
 
   let activeTab = $state(0);
 
@@ -41,6 +52,226 @@
 
   // Whether we have a meaningful data payload (successful query with columns).
   let hasData = $derived(result !== null && result.error === null && result.columns.length > 0);
+
+  // ── Editing state ─────────────────────────────────────────────────────────
+
+  let pendingChanges = $state<Map<string, Map<string, CellValue>>>(new Map());
+  let originalRows = $state<Map<string, CellValue[]>>(new Map());
+  let pendingDeletedRows = $state<Map<string, CellValue[]>>(new Map());
+  let addRowTrigger = $state(0);
+  let tableKey = $state(0);
+  let isSaving = $state(false);
+  let saveError = $state<string | null>(null);
+
+  // Column management (session-only, no persistence for query results)
+  let hiddenColumns = $state<Set<string>>(new Set());
+  let colWidths = $state<Record<string, number>>({});
+  let columnOrder = $state<string[]>([]);
+  let columnOrderOverride = $state<string[] | undefined>(undefined);
+
+  // Search
+  let showLocalSearch = $state(false);
+  let localSearchTerm = $state('');
+  let localSearchInputEl = $state<HTMLInputElement | null>(null);
+
+  // Column picker
+  let showColumnPicker = $state(false);
+  let columnPickerAnchorEl = $state<HTMLButtonElement | null>(null);
+  let pickerTop = $state(0);
+  let pickerLeft = $state(0);
+
+  // ── Derived editing values ────────────────────────────────────────────────
+
+  let connectionReadOnly = $derived(connectionId ? (connections.getById(connectionId)?.readOnly ?? false) : true);
+  let canEdit = $derived(!!connectionId && !connectionReadOnly && hasData);
+
+  // Extract table name from the active statement's SQL
+  let detectedTable = $derived.by(() => {
+    const stmt = statements[activeTab];
+    if (!stmt) return null;
+    const m = stmt.match(/\bFROM\s+(?:[`"']?\w+[`"']?\s*\.\s*)?[`"']?(\w+)[`"']?\b/i);
+    return m ? m[1] : null;
+  });
+
+  // Also try to detect database from SQL (e.g., FROM mydb.users)
+  let detectedDatabase = $derived.by(() => {
+    const stmt = statements[activeTab];
+    if (!stmt || !database) return database ?? null;
+    const m = stmt.match(/\bFROM\s+[`"']?(\w+)[`"']?\s*\.\s*[`"']?\w+[`"']?\b/i);
+    return m ? m[1] : (database ?? null);
+  });
+
+  let canSave = $derived(canEdit && detectedTable !== null && !!detectedDatabase);
+  let pendingCount = $derived(
+    [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) + pendingDeletedRows.size
+  );
+
+  // Client-side filtered rows for local search
+  let displayRows = $derived.by(() => {
+    if (!result) return [];
+    const term = localSearchTerm.trim().toLowerCase();
+    if (!term) return result.rows;
+    return result.rows.filter(row =>
+      row.some(cell => cell !== null && String(cell).toLowerCase().includes(term))
+    );
+  });
+
+  let currentColumns = $derived<ColumnMeta[]>(result?.columns ?? []);
+
+  // ── Reset effects ─────────────────────────────────────────────────────────
+
+  $effect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    results;
+    untrack(() => {
+      pendingChanges = new Map();
+      originalRows = new Map();
+      pendingDeletedRows = new Map();
+      addRowTrigger = 0;
+      saveError = null;
+      hiddenColumns = new Set();
+      colWidths = {};
+      columnOrder = [];
+      columnOrderOverride = undefined;
+      showLocalSearch = false;
+      localSearchTerm = '';
+      tableKey++;
+    });
+  });
+
+  $effect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    activeTab;
+    untrack(() => {
+      pendingChanges = new Map();
+      originalRows = new Map();
+      pendingDeletedRows = new Map();
+      addRowTrigger = 0;
+      saveError = null;
+      tableKey++;
+    });
+  });
+
+  // ── Editing callbacks ─────────────────────────────────────────────────────
+
+  function handleChangePending(changes: Map<string, Map<string, CellValue>>, rows: Map<string, CellValue[]>): void {
+    pendingChanges = new Map([...changes].map(([k, v]) => [k, new Map(v)]));
+    originalRows = new Map([...rows].map(([k, v]) => [k, [...v]]));
+  }
+
+  function handleDeleteRowsPending(deletedRows: Map<string, CellValue[]>): void {
+    pendingDeletedRows = new Map([...deletedRows].map(([k, v]) => [k, [...v]]));
+  }
+
+  function discardChanges(): void {
+    pendingChanges = new Map();
+    originalRows = new Map();
+    pendingDeletedRows = new Map();
+    addRowTrigger = 0;
+    tableKey++;
+  }
+
+  async function saveChanges(): Promise<void> {
+    if (!result || !detectedTable || !detectedDatabase || !connectionId) return;
+    isSaving = true;
+    saveError = null;
+    try {
+      const pkColumns = result.columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
+      const hasPk = pkColumns.length > 0;
+      const rowChanges: RowChange[] = [];
+      const insertValues: Record<string, unknown>[] = [];
+
+      for (const [rowKey, colMap] of pendingChanges) {
+        if (rowKey.startsWith('__new__')) {
+          const vals: Record<string, unknown> = Object.fromEntries(colMap);
+          for (const col of result.columns) {
+            if (col.name in vals) continue;
+            if (col.isAutoIncrement) continue;
+            if (col.nullable && col.defaultValue == null) vals[col.name] = null;
+          }
+          if (Object.keys(vals).length > 0) insertValues.push(vals);
+          continue;
+        }
+        if (pendingDeletedRows.has(rowKey)) continue;
+        const origRow = originalRows.get(rowKey);
+        if (!origRow) continue;
+        const primaryKeys: Record<string, unknown> = {};
+        if (hasPk) {
+          pkColumns.forEach((pkCol) => {
+            const idx = result!.columns.findIndex((c) => c.name === pkCol);
+            primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
+          });
+        } else {
+          result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+        }
+        const changes: Record<string, unknown> = {};
+        for (const [col, val] of colMap) { changes[col] = val; }
+        rowChanges.push({ primaryKeys, changes });
+      }
+
+      const deleteChanges: RowDelete[] = [];
+      for (const [rowKey, origRow] of pendingDeletedRows) {
+        if (rowKey.startsWith('__new__')) continue;
+        const primaryKeys: Record<string, unknown> = {};
+        if (hasPk) {
+          pkColumns.forEach((pkCol) => {
+            const idx = result!.columns.findIndex((c) => c.name === pkCol);
+            primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
+          });
+        } else {
+          result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+        }
+        deleteChanges.push({ primaryKeys });
+      }
+
+      await updateRows(connectionId, detectedDatabase, detectedTable, rowChanges);
+      for (const values of insertValues) {
+        await insertRow(connectionId, detectedDatabase, detectedTable, values);
+      }
+      if (deleteChanges.length > 0) {
+        await deleteRows(connectionId, detectedDatabase, detectedTable, deleteChanges);
+      }
+      pendingChanges = new Map();
+      pendingDeletedRows = new Map();
+      addRowTrigger = 0;
+      tableKey++;
+      toast.addToast('Changes saved', 'success', 2000);
+    } catch (err) {
+      saveError = errorMessage(err);
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  function toggleColumn(name: string): void {
+    const next = new Set(hiddenColumns);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    hiddenColumns = next;
+  }
+
+  function openColumnPicker(): void {
+    if (columnPickerAnchorEl) {
+      const rect = columnPickerAnchorEl.getBoundingClientRect();
+      pickerTop = rect.bottom + 4;
+      pickerLeft = rect.right - 320;
+    }
+    showColumnPicker = true;
+  }
+
+  function openLocalSearch(): void {
+    showLocalSearch = true;
+    tick().then(() => localSearchInputEl?.focus());
+  }
+
+  function closeLocalSearch(): void {
+    showLocalSearch = false;
+    localSearchTerm = '';
+  }
+
+  function handleLocalSearchKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') closeLocalSearch();
+  }
 
   // ── Export state ──────────────────────────────────────────────────────────
 
@@ -192,9 +423,91 @@
         <span class="error-message">{result.error}</span>
       </div>
     {:else if hasData}
-      <div class="table-wrapper">
-        <DataTable columns={result.columns} rows={result.rows} />
+      <div class="results-toolbar">
+        {#if canEdit}
+          <button class="toolbar-btn" onclick={() => { addRowTrigger++; }}>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="1" x2="5" y2="9"/><line x1="1" y1="5" x2="9" y2="5"/></svg>
+            Add Row
+          </button>
+        {/if}
+        <button bind:this={columnPickerAnchorEl} class="toolbar-btn" onclick={openColumnPicker}>
+          Columns
+        </button>
+        <button class="toolbar-btn" onclick={openLocalSearch}>
+          Search
+        </button>
+        <div class="toolbar-spacer"></div>
+        {#if pendingCount > 0}
+          <span class="pending-label">{pendingCount} pending</span>
+          {#if canSave}
+            <button class="toolbar-btn toolbar-btn--save" onclick={saveChanges} disabled={isSaving}>
+              {isSaving ? 'Saving…' : 'Save'}
+            </button>
+          {/if}
+          <button class="toolbar-btn toolbar-btn--discard" onclick={discardChanges}>
+            Discard
+          </button>
+        {/if}
       </div>
+
+      {#if showLocalSearch}
+        <div class="local-search-bar">
+          <input
+            bind:this={localSearchInputEl}
+            class="local-search-input"
+            type="text"
+            placeholder="Search results…"
+            bind:value={localSearchTerm}
+            onkeydown={handleLocalSearchKeydown}
+          />
+          <button class="local-search-close" onclick={closeLocalSearch}>✕</button>
+        </div>
+      {/if}
+
+      <div class="table-wrapper">
+        {#key tableKey}
+          <DataTable
+            columns={result.columns}
+            rows={displayRows}
+            editable={canEdit}
+            {hiddenColumns}
+            {addRowTrigger}
+            onAddRow={() => { addRowTrigger++; }}
+            onChangePending={handleChangePending}
+            onDeleteRowsPending={handleDeleteRowsPending}
+            initialColWidths={Object.keys(colWidths).length > 0 ? colWidths : undefined}
+            initialColumnOrder={columnOrder.length > 0 ? columnOrder : undefined}
+            {columnOrderOverride}
+            onColWidthsChange={(widths) => { colWidths = widths; }}
+            onColumnOrderChange={(order) => { columnOrder = order; }}
+            {connectionId}
+            database={detectedDatabase ?? undefined}
+          />
+        {/key}
+      </div>
+
+      {#if showColumnPicker && currentColumns.length > 0}
+        <div use:portal class="picker-positioner" style="top: {pickerTop}px; left: {pickerLeft}px;">
+          <ColumnPicker
+            columns={currentColumns}
+            {hiddenColumns}
+            columnOrder={columnOrder.length > 0 ? columnOrder : currentColumns.map(c => c.name)}
+            onToggle={toggleColumn}
+            onClose={() => { showColumnPicker = false; }}
+            onReorder={(order) => {
+              columnOrder = order;
+              columnOrderOverride = [...order];
+            }}
+            onReset={() => {
+              hiddenColumns = new Set();
+              const dbOrder = currentColumns.map(c => c.name);
+              columnOrder = dbOrder;
+              columnOrderOverride = [...dbOrder];
+            }}
+          />
+        </div>
+      {/if}
+
       {#if showTableNameInput}
         <div class="export-details-bar">
           <div class="table-name-input-row">
@@ -221,6 +534,11 @@
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
           </div>
+        </div>
+      {/if}
+      {#if saveError}
+        <div class="save-error-bar">
+          <span class="save-error">{saveError}</span>
         </div>
       {/if}
       <div class="status-bar">
@@ -474,6 +792,148 @@
 
   .status-item {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Results toolbar ─────────────────────────────────────────────────────── */
+
+  .results-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: 0 var(--spacing-2);
+    height: 30px;
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .toolbar-btn:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .toolbar-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .toolbar-btn--save {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .toolbar-btn--save:hover:not(:disabled) {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+  }
+
+  .toolbar-btn--discard {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
+  .toolbar-btn--discard:hover:not(:disabled) {
+    background: var(--color-danger-subtle);
+  }
+
+  .toolbar-spacer {
+    flex: 1;
+  }
+
+  .pending-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Local search ────────────────────────────────────────────────────────── */
+
+  .local-search-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .local-search-input {
+    flex: 1;
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-primary);
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .local-search-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .local-search-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .local-search-close:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  /* ── Column picker positioner ────────────────────────────────────────────── */
+
+  .picker-positioner {
+    position: fixed;
+    z-index: 300;
+  }
+
+  /* ── Save error ──────────────────────────────────────────────────────────── */
+
+  .save-error-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-1) var(--spacing-3);
+    background: var(--color-danger-subtle);
+    border-top: 1px solid var(--color-danger);
+  }
+
+  .save-error {
+    font-size: var(--font-size-xs);
+    color: var(--color-danger);
+    font-family: var(--font-family-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   /* ── Export ─────────────────────────────────────────────────────────────── */

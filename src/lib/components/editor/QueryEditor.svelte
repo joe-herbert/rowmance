@@ -868,7 +868,7 @@
   </div>
 
   <div class="results-wrapper">
-    <ResultsPanel {results} statements={executedStatements} />
+    <ResultsPanel {results} statements={executedStatements} {connectionId} database={selectedDatabase || undefined} />
   </div>
 </div>
 
