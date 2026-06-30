@@ -21,8 +21,8 @@
     --color-border-strong: rgba(255, 255, 255, 0.16);
 
     --color-text-primary: #eef0f8;
-    --color-text-secondary: rgba(238, 240, 248, 0.62);
-    --color-text-muted: rgba(238, 240, 248, 0.42);
+    --color-text-secondary: rgba(238, 240, 248, 0.82);
+    --color-text-muted: rgba(238, 240, 248, 0.62);
     --color-text-disabled: rgba(238, 240, 248, 0.22);
 
     --color-accent: #a69afd;
@@ -83,8 +83,8 @@
   --color-border-strong: rgba(255, 255, 255, 0.16);
 
   --color-text-primary: #eef0f8;
-  --color-text-secondary: rgba(238, 240, 248, 0.62);
-  --color-text-muted: rgba(238, 240, 248, 0.42);
+  --color-text-secondary: rgba(238, 240, 248, 0.82);
+  --color-text-muted: rgba(238, 240, 248, 0.62);
   --color-text-disabled: rgba(238, 240, 248, 0.22);
 
   --color-accent: #a69afd;
