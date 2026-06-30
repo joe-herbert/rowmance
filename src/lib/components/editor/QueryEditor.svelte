@@ -185,6 +185,7 @@
           name: currentSavedQueryName ?? 'Query',
           sql: sqlText,
           connectionId,
+          database: selectedDatabase || null,
         });
         savedSql = sqlText;
         savedQueriesInvalidator.invalidate();
@@ -205,6 +206,7 @@
         name: saveNameInput.trim(),
         sql: sqlText,
         connectionId,
+        database: selectedDatabase || null,
       });
       currentSavedQueryId = saved.id;
       currentSavedQueryName = saved.name;

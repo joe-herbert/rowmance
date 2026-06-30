@@ -278,6 +278,7 @@
     panelStore.openInFocused({
       kind: 'query_editor',
       connectionId: query.connectionId ?? connectionStore.profiles[0]?.id ?? '',
+      database: query.database ?? undefined,
       initialSql: query.sql,
       savedQueryId: query.id,
       savedQueryName: query.name,
@@ -339,7 +340,7 @@
     if (!renameQueryValue.trim()) { renamingQueryId = null; return; }
     const name = renameQueryValue.trim();
     renamingQueryId = null;
-    await savedQueriesApi.updateSavedQuery(query.id, { name, sql: query.sql, connectionId: query.connectionId, folderId: query.folderId });
+    await savedQueriesApi.updateSavedQuery(query.id, { name, sql: query.sql, connectionId: query.connectionId, folderId: query.folderId, database: query.database });
     const open = panelStore.openItems.find(item => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id);
     if (open?.content.kind === 'query_editor' && open.content.editorId) {
       panelStore.updateQueryEditorMeta(open.content.editorId, { savedQueryName: name });
@@ -490,10 +491,10 @@
     if (!query) return;
     if (zone.type === 'into-folder') {
       const maxPos = savedQueries.filter(q => q.folderId === zone.folderId).reduce((m, q) => Math.max(m, q.position), -1);
-      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: zone.folderId, position: maxPos + 1 });
+      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: zone.folderId, database: query.database, position: maxPos + 1 });
     } else if (zone.type === 'into-unfiled') {
       const maxPos = savedQueries.filter(q => q.folderId === null).reduce((m, q) => Math.max(m, q.position), -1);
-      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: null, position: maxPos + 1 });
+      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: null, database: query.database, position: maxPos + 1 });
     } else if (zone.type === 'before-query' || zone.type === 'after-query') {
       const targetFolderId = zone.folderId;
       const folderQueries = savedQueries.filter(q => q.folderId === targetFolderId);
@@ -502,7 +503,7 @@
       if (refIdx === -1) return;
       ordered.splice(zone.type === 'before-query' ? refIdx : refIdx + 1, 0, query);
       await Promise.all(ordered.map((q, i) =>
-        savedQueriesApi.updateSavedQuery(q.id, { name: q.name, sql: q.sql, connectionId: q.connectionId, folderId: targetFolderId, position: i })
+        savedQueriesApi.updateSavedQuery(q.id, { name: q.name, sql: q.sql, connectionId: q.connectionId, folderId: targetFolderId, database: q.database, position: i })
       ));
     }
   }

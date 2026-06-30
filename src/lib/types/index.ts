@@ -174,6 +174,7 @@ export interface SavedQuery {
   id: string;
   connectionId: string | null;
   folderId: string | null;
+  database: string | null;
   name: string;
   sql: string;
   position: number;

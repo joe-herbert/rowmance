@@ -11,6 +11,7 @@ export interface SavedQueryFolderInput {
 export interface SavedQueryInput {
   connectionId?: string | null;
   folderId?: string | null;
+  database?: string | null;
   name: string;
   sql: string;
   position?: number;

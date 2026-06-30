@@ -32,6 +32,7 @@ pub struct SavedQuery {
     pub connection_id: Option<String>,
     #[serde(rename = "folderId")]
     pub folder_id: Option<String>,
+    pub database: Option<String>,
     pub name: String,
     pub sql: String,
     pub position: i64,
@@ -47,6 +48,7 @@ pub struct SavedQueryInput {
     pub connection_id: Option<String>,
     #[serde(rename = "folderId")]
     pub folder_id: Option<String>,
+    pub database: Option<String>,
     pub name: String,
     pub sql: String,
     pub position: Option<i64>,
@@ -78,6 +80,7 @@ struct SavedQueryRow {
     id: String,
     connection_id: Option<String>,
     folder_id: Option<String>,
+    database: Option<String>,
     name: String,
     sql: String,
     position: i64,
@@ -91,6 +94,7 @@ impl From<SavedQueryRow> for SavedQuery {
             id: r.id,
             connection_id: r.connection_id,
             folder_id: r.folder_id,
+            database: r.database,
             name: r.name,
             sql: r.sql,
             position: r.position,
@@ -255,12 +259,13 @@ pub async fn saved_queries_create(
 
     sqlx::query!(
         r#"
-        INSERT INTO saved_queries (id, connection_id, folder_id, name, sql, position, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO saved_queries (id, connection_id, folder_id, database, name, sql, position, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         id,
         input.connection_id,
         input.folder_id,
+        input.database,
         input.name,
         input.sql,
         position,
@@ -294,11 +299,12 @@ pub async fn saved_queries_update(
         sqlx::query!(
             r#"
             UPDATE saved_queries
-            SET connection_id = ?, folder_id = ?, name = ?, sql = ?, position = ?, updated_at = ?
+            SET connection_id = ?, folder_id = ?, database = ?, name = ?, sql = ?, position = ?, updated_at = ?
             WHERE id = ?
             "#,
             input.connection_id,
             input.folder_id,
+            input.database,
             input.name,
             input.sql,
             position,
@@ -312,11 +318,12 @@ pub async fn saved_queries_update(
         sqlx::query!(
             r#"
             UPDATE saved_queries
-            SET connection_id = ?, folder_id = ?, name = ?, sql = ?, updated_at = ?
+            SET connection_id = ?, folder_id = ?, database = ?, name = ?, sql = ?, updated_at = ?
             WHERE id = ?
             "#,
             input.connection_id,
             input.folder_id,
+            input.database,
             input.name,
             input.sql,
             now,
@@ -432,8 +439,10 @@ mod tests {
             id: "q-1".to_owned(),
             connection_id: Some("c-1".to_owned()),
             folder_id: Some("f-1".to_owned()),
+            database: Some("mydb".to_owned()),
             name: "Get users".to_owned(),
             sql: "SELECT * FROM users".to_owned(),
+            position: 0,
             created_at: "2024-01-01T00:00:00Z".to_owned(),
             updated_at: "2024-01-02T00:00:00Z".to_owned(),
         };
@@ -441,6 +450,7 @@ mod tests {
         assert_eq!(query.id, "q-1");
         assert_eq!(query.connection_id.as_deref(), Some("c-1"));
         assert_eq!(query.folder_id.as_deref(), Some("f-1"));
+        assert_eq!(query.database.as_deref(), Some("mydb"));
         assert_eq!(query.name, "Get users");
         assert_eq!(query.sql, "SELECT * FROM users");
     }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE saved_queries\n            SET connection_id = ?, folder_id = ?, database = ?, name = ?, sql = ?, position = ?, updated_at = ?\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "bb0630777ca3a6c114216cee0d08a795aba6e5b1ff674280e95108fedb5a8de9"
+}
