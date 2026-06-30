@@ -8,6 +8,7 @@
   import { syncTrafficLightPosition } from '$lib/tauri/window';
   import type { ThemeData } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { useToast } from '$lib/stores/toast.svelte';
   import { VARIABLE_GROUPS } from './theme-variables';
 
   interface Props {
@@ -18,11 +19,10 @@
   }
 
   const { themeName, onrename, ondelete, onexport }: Props = $props();
+  const toast = useToast();
 
   let themeData = $state<ThemeData | null>(null);
   let loadError = $state<string | null>(null);
-  let saveError = $state<string | null>(null);
-  let renameError = $state<string | null>(null);
   let editingName = $state('');
 
   $effect(() => {
@@ -68,10 +68,9 @@
     if (!trimmed || trimmed === themeName || !onrename) return;
     try {
       await onrename(trimmed);
-      renameError = null;
     } catch (err) {
       editingName = themeName;
-      renameError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     }
   }
 
@@ -86,9 +85,8 @@
       try {
         await themesApi.themesWrite(themeName, updated);
         themeData = updated;
-        saveError = null;
       } catch (err) {
-        saveError = errorMessage(err);
+        toast.addToast(errorMessage(err), 'error', 0);
       }
     }, 500);
   }
@@ -115,11 +113,6 @@
           <span class="theme-name">{themeData.name}</span>
         {/if}
         <span class="theme-extends">based on: {themeData.extends}</span>
-        {#if renameError}
-          <span class="save-error">{renameError}</span>
-        {:else if saveError}
-          <span class="save-error">{saveError}</span>
-        {/if}
       </div>
       <div class="editor-meta-actions">
         {#if onexport}
@@ -277,12 +270,6 @@
   .theme-extends {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
-  }
-
-  .save-error {
-    margin-left: auto;
-    font-size: var(--font-size-xs);
-    color: var(--color-danger);
   }
 
   .var-group {

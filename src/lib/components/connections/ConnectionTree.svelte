@@ -14,6 +14,7 @@
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
+  import { useToast } from '$lib/stores/toast.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
@@ -24,6 +25,7 @@
   const connectionStore = useConnections();
   const panelStore = usePanels();
   const settingsStore = useSettings();
+  const toast = useToast();
 
   // ── Add / edit forms ──────────────────────────────────────────────────────
 
@@ -37,7 +39,6 @@
   let expandedConnections = $state<Set<string>>(new Set());
   let expandedDatabases = $state<Set<string>>(new Set());
   let loadingKeys = $state<Set<string>>(new Set());
-  let loadErrors = $state<Map<string, string>>(new Map());
 
   // ── Group UI state ────────────────────────────────────────────────────────
 
@@ -107,9 +108,12 @@
 
   async function handleConnect(profile: ConnectionProfile) {
     if (isConnected(profile.id)) return;
-    await connectionStore.connect(profile.id);
-    // Auto-expand schema when connection succeeds
-    if (isConnected(profile.id)) toggleExpand(profile.id);
+    try {
+      await connectionStore.connect(profile.id);
+      if (isConnected(profile.id)) toggleExpand(profile.id);
+    } catch (err) {
+      toast.addToast(`${profile.name}: ${errorMessage(err)}`, 'error', 0);
+    }
   }
 
   function deleteConnection(profile: ConnectionProfile, onDone?: () => void) {
@@ -143,14 +147,13 @@
   async function loadDatabases(connectionId: string) {
     if (schemaCache.has(connectionId)) return;
     loadingKeys = new Set([...loadingKeys, connectionId]);
-    loadErrors = new Map([...loadErrors].filter(([k]) => k !== connectionId));
     try {
       const databases = await schemaApi.listDatabases(connectionId);
       const dbMap = new Map<string, TableInfo[]>();
       databases.forEach(db => dbMap.set(db, []));
       schemaCache = new Map([...schemaCache, [connectionId, dbMap]]);
     } catch (err) {
-      loadErrors = new Map([...loadErrors, [connectionId, errorMessage(err)]]);
+      toast.addToast(errorMessage(err), 'error', 0);
     } finally {
       loadingKeys = new Set([...loadingKeys].filter(k => k !== connectionId));
     }
@@ -171,14 +174,13 @@
     const existing = schemaCache.get(connectionId)?.get(database);
     if (existing && existing.length > 0) return;
     loadingKeys = new Set([...loadingKeys, key]);
-    loadErrors = new Map([...loadErrors].filter(([k]) => k !== key));
     try {
       const tables = await schemaApi.listTables(connectionId, database);
       const connMap = new Map(schemaCache.get(connectionId) ?? []);
       connMap.set(database, tables);
       schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
     } catch (err) {
-      loadErrors = new Map([...loadErrors, [key, errorMessage(err)]]);
+      toast.addToast(errorMessage(err), 'error', 0);
     } finally {
       loadingKeys = new Set([...loadingKeys].filter(k => k !== key));
     }
@@ -800,34 +802,22 @@
       </div>
     </div>
 
-    <!-- Error banner -->
-    {#if errored}
-      <div class="error-row">
-        <span class="error-msg">{connError(profile.id)}</span>
-        <button class="retry-btn" onclick={() => handleConnect(profile)}>Retry</button>
-      </div>
-    {/if}
-
     <!-- Schema tree when expanded -->
     {#if expanded && connected}
       {@const databases = schemaCache.get(profile.id)}
       {@const isLoadingConn = loadingKeys.has(profile.id)}
-      {@const connLoadError = loadErrors.get(profile.id)}
 
       <div class="schema-children">
         {#if isLoadingConn}
           <div class="loading-row">
             <span class="loading-dots" aria-label="Loading">Loading…</span>
           </div>
-        {:else if connLoadError}
-          <div class="load-error">{connLoadError}</div>
         {:else if databases}
           {#each [...databases.keys()].filter(db => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
             {@const dbKey = `${profile.id}/${database}`}
             {@const isDbExpanded = expandedDatabases.has(dbKey)}
             {@const isDbLoading = loadingKeys.has(dbKey)}
             {@const tables = databases.get(database) ?? []}
-            {@const dbLoadError = loadErrors.get(dbKey)}
 
             {@const isDbSystem = checkSystemDatabase(database)}
             <div class="db-item" class:system-item={isDbSystem}>
@@ -847,10 +837,6 @@
                   <span class="loading-dots" aria-label="Loading">…</span>
                 {/if}
               </button>
-
-              {#if dbLoadError}
-                <div class="load-error db-load-error">{dbLoadError}</div>
-              {/if}
 
               {#if isDbExpanded && tables.length > 0}
                 <div class="table-list">
@@ -1812,7 +1798,11 @@
   .field-input:focus { border-color: var(--color-accent); }
 
   .field-error {
-    font-size: 11.5px;
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--color-danger-subtle);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
     color: var(--color-danger);
   }
 

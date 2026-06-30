@@ -14,6 +14,7 @@
   import * as themesApi from '$lib/tauri/themes';
   import type { AppSettings, ThemeMeta } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { useToast } from '$lib/stores/toast.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
@@ -30,6 +31,7 @@
   });
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
+  const toast = useToast();
 
   const BUILTIN_THEMES = ['system', 'light', 'dark', 'high-contrast'];
 
@@ -65,7 +67,7 @@
     try {
       userThemes = await themesApi.themesList();
     } catch (err) {
-      themeError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     }
   });
 
@@ -143,9 +145,8 @@
       const meta = await themesApi.themesRename(oldName, newName);
       userThemes = userThemes.map((t) => t.name === oldName ? meta : t);
       await update('theme', meta.name);
-      themeError = null;
     } catch (err) {
-      themeError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     }
   }
 
@@ -158,7 +159,7 @@
       await update('theme', 'system');
       confirmingDelete = false;
     } catch (err) {
-      themeError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     }
   }
 
@@ -171,7 +172,7 @@
     try {
       await themesApi.themesExport(settings.theme, filePath);
     } catch (err) {
-      themeError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     }
   }
 
@@ -190,7 +191,7 @@
       }
       await update('theme', meta.name);
     } catch (err) {
-      themeError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     }
   }
 
@@ -529,10 +530,6 @@
 
     {:else if activeSection === 'appearance'}
       <h2 class="section-title">Appearance</h2>
-
-      {#if themeError}
-        <p class="section-description" style="color: var(--color-danger);">{themeError}</p>
-      {/if}
 
       <div class="setting-group">
         <div class="setting-row">
@@ -923,6 +920,10 @@
   }
 
   .modal-error {
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--color-danger-subtle);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
     color: var(--color-danger);
   }

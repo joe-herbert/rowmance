@@ -13,6 +13,7 @@
   import * as schemaApi from '$lib/tauri/schema';
   import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { useToast } from '$lib/stores/toast.svelte';
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -31,6 +32,7 @@
   const connectionStore = useConnections();
   const panelStore = usePanels();
   const cellSelectionStore = useCellSelection();
+  const toast = useToast();
 
   let activePanel = $state<ActivePanel>(untrack(() => initialPanel));
 
@@ -47,7 +49,6 @@
   // ── Column Inspector ─────────────────────────────────────────────────────────
 
   let columnInfoLoading = $state(false);
-  let columnInfoError = $state<string | null>(null);
   let columnInfoData = $state<ColumnInfo | null>(null);
   let columnIndexes = $state<IndexInfo[]>([]);
   let columnForeignKeys = $state<ForeignKeyInfo[]>([]);
@@ -68,7 +69,6 @@
     }
 
     columnInfoLoading = true;
-    columnInfoError = null;
     Promise.all([
       schemaApi.listColumns(sel.connectionId, sel.database, sel.table),
       schemaApi.listIndexes(sel.connectionId, sel.database, sel.table),
@@ -79,7 +79,7 @@
       columnForeignKeys = fks.filter((fk) => fk.columns.includes(sel.columnName));
       columnInfoLoading = false;
     }).catch((err) => {
-      columnInfoError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
       columnInfoLoading = false;
     });
   });
@@ -88,7 +88,6 @@
 
   let historyEntries = $state<QueryHistoryEntry[]>([]);
   let historyLoading = $state(false);
-  let historyError = $state<string | null>(null);
   let selectedHistoryConnectionId = $state<string>('');
 
   const activeProfiles = $derived(
@@ -106,11 +105,10 @@
   async function loadHistory() {
     if (!selectedHistoryConnectionId) return;
     historyLoading = true;
-    historyError = null;
     try {
       historyEntries = await historyApi.listHistory(selectedHistoryConnectionId, 100, 0);
     } catch (err) {
-      historyError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     } finally {
       historyLoading = false;
     }
@@ -163,7 +161,6 @@
   let savedFolders = $state<SavedQueryFolder[]>([]);
   let savedQueries = $state<SavedQuery[]>([]);
   let savedLoading = $state(false);
-  let savedError = $state<string | null>(null);
   let expandedFolders = $state<Set<string>>(new Set());
 
   // Inline new-folder input
@@ -206,14 +203,13 @@
 
   async function loadSavedQueries() {
     savedLoading = true;
-    savedError = null;
     try {
       [savedFolders, savedQueries] = await Promise.all([
         savedQueriesApi.listFolders(),
         savedQueriesApi.listSavedQueries(),
       ]);
     } catch (err) {
-      savedError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     } finally {
       savedLoading = false;
     }
@@ -575,8 +571,6 @@
 
         {#if historyLoading}
           <div class="loading-row">Loading…</div>
-        {:else if historyError}
-          <div class="error-row">{historyError}</div>
         {:else if historyEntries.length === 0}
           <div class="empty-row">No history yet.</div>
         {:else}
@@ -652,8 +646,6 @@
 
         {#if savedLoading}
           <div class="loading-row">Loading…</div>
-        {:else if savedError}
-          <div class="error-row">{savedError}</div>
         {:else}
           <ul class="saved-list" role="tree" aria-label="Saved queries">
             <!-- Unfiled queries (also shown as a drop target while dragging a query) -->
@@ -803,8 +795,6 @@
           <div class="placeholder-panel"><p>Select a cell in a table to inspect its column.</p></div>
         {:else if columnInfoLoading}
           <div class="loading-row">Loading…</div>
-        {:else if columnInfoError}
-          <div class="error-row">{columnInfoError}</div>
         {:else if !columnInfoData}
           <div class="placeholder-panel"><p>Column not found.</p></div>
         {:else}
@@ -1037,15 +1027,6 @@
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     font-style: italic;
-  }
-
-  .error-row {
-    padding: var(--spacing-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-danger);
-    background: var(--color-danger-subtle);
-    border-radius: var(--radius-sm);
-    margin: var(--spacing-1) var(--spacing-2);
   }
 
   /* ── History panel ─────────────────────────────────────────────────────── */

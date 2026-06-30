@@ -13,6 +13,7 @@
   import { executeQuery } from '$lib/tauri/query';
   import type { ErdRelation, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { useToast } from '$lib/stores/toast.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
 
   type CellValue = string | number | boolean | null;
@@ -26,7 +27,6 @@
     rows: CellValue[][];
     columnNames: string[];
     loading: boolean;
-    error: string | null;
     expanded: boolean;
     virtual?: boolean;
     vrId?: string;
@@ -38,10 +38,10 @@
   const connectionStore = useConnections();
   const vrStore = useVirtualRelations();
   const panelStore = usePanels();
+  const toast = useToast();
 
   let relations = $state<RelationEntry[]>([]);
   let globalLoading = $state(false);
-  let globalError = $state<string | null>(null);
   let forwardExpanded = $state(true);
   let reverseExpanded = $state(true);
 
@@ -63,7 +63,6 @@
   async function loadRelations(sel: CellSelection) {
     const dbType = connectionStore.getById(sel.connectionId)?.dbType ?? 'mysql';
     globalLoading = true;
-    globalError = null;
     relations = [];
 
     try {
@@ -84,7 +83,6 @@
             rows: [],
             columnNames: [],
             loading: true,
-            error: null,
             expanded: true,
           });
         }
@@ -104,7 +102,6 @@
             rows: [],
             columnNames: [],
             loading: true,
-            error: null,
             expanded: true,
           });
         }
@@ -177,7 +174,7 @@
             const result = await executeQuery(connId, sql, 1, rel.direction === 'forward' ? 20 : 10);
             if (result.error) {
               relations[i].loading = false;
-              relations[i].error = result.error;
+              toast.addToast(result.error, 'error', 0);
             } else {
               relations[i].loading = false;
               relations[i].rows = result.rows;
@@ -186,13 +183,13 @@
             }
           } catch (err) {
             relations[i].loading = false;
-            relations[i].error = errorMessage(err);
+            toast.addToast(errorMessage(err), 'error', 0);
           }
         }),
       );
     } catch (err) {
       globalLoading = false;
-      globalError = errorMessage(err);
+      toast.addToast(errorMessage(err), 'error', 0);
     }
   }
 
@@ -229,7 +226,6 @@
       } else {
         relations = [];
         globalLoading = false;
-        globalError = null;
       }
     }, 200);
 
@@ -280,8 +276,6 @@
 
     {#if globalLoading}
       <div class="global-state"><Loader /><span>Loading relations…</span></div>
-    {:else if globalError}
-      <div class="global-error">{globalError}</div>
     {:else if relations.length === 0}
       <div class="empty-state">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -326,7 +320,7 @@
                       <span class="virtual-badge" title="Virtual connection">{#if rel.targetConnectionId}<span class="card-via">{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span>{:else}Virtual{/if}</span>
                     {/if}
                   </span>
-                  {#if !rel.loading && !rel.error}
+                  {#if !rel.loading}
                     <span class="card-row-count">{rel.rows.length}</span>
                   {/if}
                   <button class="card-open-btn" title="Open in panel" onclick={(e) => { e.stopPropagation(); openRelation(sel, rel); }}>
@@ -343,8 +337,6 @@
                   <div class="card-body">
                     {#if rel.loading}
                       <div class="card-state"><Loader /></div>
-                    {:else if rel.error}
-                      <div class="card-error">{rel.error}</div>
                     {:else if rel.rows.length > 0}
                       <div class="table-scroll">
                         <table class="data-table">
@@ -414,7 +406,7 @@
                       <span class="virtual-badge" title="Virtual connection">{#if rel.targetConnectionId}<span class="card-via">{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span>{:else}Virtual{/if}</span>
                     {/if}
                   </span>
-                  {#if !rel.loading && !rel.error}
+                  {#if !rel.loading}
                     <span class="card-row-count">{rel.rows.length}</span>
                   {/if}
                   <button class="card-open-btn" title="Open in panel" onclick={(e) => { e.stopPropagation(); openRelation(sel, rel); }}>
@@ -431,8 +423,6 @@
                   <div class="card-body">
                     {#if rel.loading}
                       <div class="card-state"><Loader /></div>
-                    {:else if rel.error}
-                      <div class="card-error">{rel.error}</div>
                     {:else if rel.rows.length > 0}
                       <div class="table-scroll">
                         <table class="data-table">
@@ -589,17 +579,6 @@
     padding: var(--spacing-3) var(--spacing-3);
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
-  }
-
-  .global-error {
-    margin: var(--spacing-2) var(--spacing-3);
-    padding: var(--spacing-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-danger);
-    background: var(--color-danger-subtle);
-    border-radius: var(--radius-sm);
-    -webkit-user-select: text;
-    user-select: text;
   }
 
   /* ── Sections ── */
@@ -862,14 +841,6 @@
     display: flex;
     align-items: center;
     padding: var(--spacing-2) var(--spacing-3);
-  }
-
-  .card-error {
-    padding: var(--spacing-2) var(--spacing-3);
-    font-size: var(--font-size-xs);
-    color: var(--color-danger);
-    -webkit-user-select: text;
-    user-select: text;
   }
 
   .card-empty {

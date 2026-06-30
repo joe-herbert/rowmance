@@ -351,7 +351,7 @@
                 />
                 <button type="button" class="btn btn--ghost btn--sm" onclick={applyConnectionUrl}>Apply</button>
               </div>
-              {#if urlError}<p class="url-error">{urlError}</p>{/if}
+              {#if urlError}<div class="url-error">{urlError}</div>{/if}
             </div>
             <div class="url-import-divider"><span>or fill in manually</span></div>
           </div>
@@ -941,9 +941,13 @@
   .url-row .input { flex: 1; }
 
   .url-error {
-    font-size: var(--font-size-xs);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--color-danger-subtle);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
     color: var(--color-danger);
-    margin: var(--spacing-1) 0 0;
+    margin-top: var(--spacing-1);
   }
 
   .url-import-divider {
