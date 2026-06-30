@@ -10,6 +10,7 @@
   import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
   import { getDdl } from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
+  import Loader from '$lib/components/ui/Loader.svelte';
 
   interface Props {
     connectionId: string;
@@ -129,7 +130,7 @@
   <div class="content">
     {#if isLoading}
       <div class="state-overlay">
-        <span class="loading-text">Loading DDL…</span>
+        <Loader />
       </div>
     {:else if loadError}
       <div class="state-overlay state-overlay--error">

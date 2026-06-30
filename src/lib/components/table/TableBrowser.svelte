@@ -17,6 +17,7 @@
 <script lang="ts">
   import { untrack, tick } from 'svelte';
   import { executeQuery, executeSelection, updateRows, insertRow, deleteRows } from '$lib/tauri/query';
+  import Loader from '$lib/components/ui/Loader.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
   import { useConnections } from '$lib/stores/connections.svelte';
@@ -1274,7 +1275,7 @@
   <div class="content">
     {#if isLoading}
       <div class="loading">
-        <span class="loading-text">Loading…</span>
+        <Loader />
       </div>
     {:else if error !== null}
       <div class="error-box" role="alert">

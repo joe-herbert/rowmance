@@ -13,6 +13,7 @@
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
   import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
+  import Loader from '$lib/components/ui/Loader.svelte';
 
   interface Props {
     connectionId: string;
@@ -529,7 +530,7 @@
       <div class="user-list-col">
         {#if isLoading}
           <div class="state-overlay">
-            <span class="loading-text">Loading…</span>
+            <Loader />
           </div>
         {:else if loadError}
           <div class="state-overlay state-overlay--error">{loadError}</div>
@@ -613,7 +614,7 @@
             </div>
 
             {#if grantsLoading}
-              <div class="grants-loading">Loading grants…</div>
+              <div class="grants-loading"><Loader /></div>
             {:else if grantsError}
               <div class="grants-error">{grantsError}</div>
             {:else if grants.length === 0}

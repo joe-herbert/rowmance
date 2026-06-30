@@ -13,6 +13,7 @@
   import { executeQuery } from '$lib/tauri/query';
   import type { ErdRelation, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import Loader from '$lib/components/ui/Loader.svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -261,7 +262,7 @@
     </div>
 
     {#if globalLoading}
-      <div class="state-row">Loading…</div>
+      <div class="state-row"><Loader /></div>
     {:else if globalError}
       <div class="error-row">{globalError}</div>
     {:else if relations.length === 0}
@@ -289,7 +290,7 @@
               {/if}
             </div>
             {#if rel.loading}
-              <div class="rel-state">Loading…</div>
+              <div class="rel-state"><Loader /></div>
             {:else if rel.error}
               <div class="rel-error">{rel.error}</div>
             {:else if rel.rows.length === 0}
@@ -345,7 +346,7 @@
               {/if}
             </div>
             {#if rel.loading}
-              <div class="rel-state">Loading…</div>
+              <div class="rel-state"><Loader /></div>
             {:else if rel.error}
               <div class="rel-error">{rel.error}</div>
             {:else if rel.rows.length === 0}

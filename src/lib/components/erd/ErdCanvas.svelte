@@ -12,6 +12,7 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import { errorMessage } from '$lib/utils/errors';
   import type { LayoutResult, LayoutEdge } from './erd-worker';
+  import Loader from '$lib/components/ui/Loader.svelte';
 
   interface Props {
     connectionId: string;
@@ -200,7 +201,7 @@
   </div>
 
   {#if loading}
-    <div class="erd-state">Computing layout…</div>
+    <div class="erd-state"><Loader /></div>
   {:else if error}
     <div class="erd-state erd-error">{error}</div>
   {:else if layout}

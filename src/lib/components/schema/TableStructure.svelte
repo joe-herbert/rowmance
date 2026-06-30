@@ -12,6 +12,7 @@
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
+  import Loader from '$lib/components/ui/Loader.svelte';
 
   interface Props {
     connectionId: string;
@@ -396,7 +397,7 @@
   <div class="content">
     {#if isLoading}
       <div class="state-overlay">
-        <span class="loading-text">Loading…</span>
+        <Loader />
       </div>
     {:else if loadError}
       <div class="state-overlay state-overlay--error">
