@@ -9,6 +9,7 @@
   import { portal } from '$lib/actions/portal';
   import CellEditor from './CellEditor.svelte';
   import CellEditorModal from './CellEditorModal.svelte';
+  import CellViewModal from './CellViewModal.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { executeQuery } from '$lib/tauri/query';
 
@@ -672,6 +673,13 @@
 
   let editTarget = $state<EditTarget | null>(null);
   let modalTarget = $state<EditTarget | null>(null);
+
+  interface ViewTarget {
+    colName: string;
+    value: CellValue;
+    dataType: string;
+  }
+  let viewModalTarget = $state<ViewTarget | null>(null);
   let cellEditorInstance = $state<{ cycle: (dir: 1 | -1) => void } | null>(null);
   let tableContainerEl = $state<HTMLDivElement | null>(null);
   let tableScrollEl = $state<HTMLDivElement | null>(null);
@@ -1642,6 +1650,22 @@
     dismissContextMenu();
   }
 
+  function openViewModalFromContextMenu(): void {
+    if (!contextMenu?.colName) return;
+    const { row, rowKey, colName } = contextMenu;
+    const originalColIndex = columns.findIndex((c) => c.name === colName);
+    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    const currentValue = getPendingValue(rowKey, colName, row[originalColIndex]);
+    const col = columns[originalColIndex];
+
+    viewModalTarget = {
+      colName,
+      value: currentValue,
+      dataType: col.dataType,
+    };
+    dismissContextMenu();
+  }
+
   function handleNewRowCellDblClick(
     e: MouseEvent,
     newRowKey: string,
@@ -2580,6 +2604,16 @@
             Edit in modal
           </button>
         {/if}
+        {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell}
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => openViewModalFromContextMenu()}
+          >
+            View in modal
+          </button>
+        {/if}
+        <div class="context-menu-separator"></div>
         {#if editable && !readOnly}
           <button
             class="context-menu-item"
@@ -2636,35 +2670,36 @@
               Paste
             </button>
           {/if}
-          <div class="context-menu-separator"></div>
         {/if}
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copyColumnNames()}
-        >
-          {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
-        </button>
+        <div class="context-menu-separator"></div>
         <button
           class="context-menu-item"
           role="menuitem"
           onclick={() => copyAsJson()}
         >
-          Copy as JSON
+          Copy cell as JSON
         </button>
         <button
           class="context-menu-item"
           role="menuitem"
           onclick={() => copyAsSql()}
         >
-          Copy as SQL
+          Copy cell as SQL
         </button>
         <button
           class="context-menu-item"
           role="menuitem"
           onclick={() => copyAsCsv()}
         >
-          Copy as CSV
+          Copy cell as CSV
+        </button>
+        <div class="context-menu-separator"></div>
+        <button
+          class="context-menu-item"
+          role="menuitem"
+          onclick={() => copyColumnNames()}
+        >
+          {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
         </button>
         {#if contextMenu.colName && onConnectColumn && !contextMenuSnapshotIsMultiCell}
           <div class="context-menu-separator"></div>
@@ -2782,6 +2817,16 @@
     onCancel={cancelModalEdit}
     {connectionId}
     {database}
+  />
+{/if}
+
+<!-- Modal cell viewer (portal, full-screen, readonly) -->
+{#if viewModalTarget !== null}
+  <CellViewModal
+    value={viewModalTarget.value}
+    colName={viewModalTarget.colName}
+    dataType={viewModalTarget.dataType}
+    onClose={() => { viewModalTarget = null; }}
   />
 {/if}
 
