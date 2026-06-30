@@ -589,7 +589,8 @@
     untrack(() => {
       const id = nextNewRowId++;
       const key = `__new__${id}`;
-      pendingNewRows = [...pendingNewRows, { key }];
+      const addAtTop = settings.newRowPosition === 'top';
+      pendingNewRows = addAtTop ? [{ key }, ...pendingNewRows] : [...pendingNewRows, { key }];
 
       const updated = new Map(pendingChanges);
       const newRowMap = new Map<string, unknown>();
@@ -608,7 +609,10 @@
       tick().then(() => {
         if (!tableContainerEl) return;
         const scrollEl = tableContainerEl.querySelector('.table-scroll') as HTMLElement | null;
-        if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+        if (scrollEl) {
+          if (addAtTop) scrollEl.scrollTop = 0;
+          else scrollEl.scrollTop = scrollEl.scrollHeight;
+        }
 
         const firstVisCol = visibleColumns[0];
         if (!firstVisCol) return;
@@ -2309,6 +2313,49 @@
       </thead>
 
       <tbody>
+        {#if settings.newRowPosition === 'top'}
+          {#each pendingNewRows as newRow}
+            <tr class="data-row new-row" data-new-row-key={newRow.key}>
+              <td class="rownum-cell" oncontextmenu={(e) => { e.preventDefault(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: null, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}>
+                <span class="new-row-indicator" aria-label="New row">+</span>
+              </td>
+              {#each visibleColumns as { col, originalIndex }}
+                {@const currentValue = pendingChanges.get(newRow.key)?.get(col.name) ?? null}
+                {@const isRequiredEmpty = !col.nullable && !col.isAutoIncrement && col.defaultValue == null && (currentValue === null || currentValue === '')}
+                {@const typeCategory = getDataTypeCategory(col.dataType)}
+                <td
+                  class="data-cell"
+                  class:cell-number={typeCategory === 'number'}
+                  class:cell-timestamp={typeCategory === 'timestamp'}
+                  class:cell-editable={editable && !readOnly}
+                  class:cell-required-empty={isRequiredEmpty}
+                  style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
+                  tabindex="0"
+                  ondblclick={(e) => handleNewRowCellDblClick(e, newRow.key, currentValue, col, originalIndex)}
+                  oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: col.name, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}
+                  onfocus={() => { focusedCell = null; }}
+                >
+                  <div class="cell-inner">
+                    <span class="cell-content">
+                      {#if currentValue === null}
+                        <span class="null-value">NULL</span>
+                      {:else if currentValue === ''}
+                        <span class="empty-value">EMPTY</span>
+                      {:else if typeCategory === 'boolean' && (typeof currentValue === 'boolean' || typeof currentValue === 'number')}
+                        <span class="bool-value" class:bool-true={currentValue} class:bool-false={!currentValue}>
+                          {#if currentValue}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>{/if}
+                        </span>
+                      {:else}
+                        {formatCell(currentValue)}
+                      {/if}
+                    </span>
+                  </div>
+                </td>
+              {/each}
+            </tr>
+          {/each}
+        {/if}
+
         {#each pageRows as row, rowIndex (rowIndex)}
           {@const processedRowIndex = rowIndex}
           {@const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex)}
@@ -2565,6 +2612,7 @@
           {/if}
         {/each}
 
+        {#if settings.newRowPosition !== 'top'}
         {#each pendingNewRows as newRow}
           <tr class="data-row new-row" data-new-row-key={newRow.key}>
             <td class="rownum-cell" oncontextmenu={(e) => { e.preventDefault(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: null, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}>
@@ -2605,6 +2653,7 @@
             {/each}
           </tr>
         {/each}
+        {/if}
 
         {#if processedRows.length === 0}
           <tr>

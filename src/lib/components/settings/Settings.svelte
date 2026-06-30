@@ -317,6 +317,18 @@
             onchange={(v) => update('nowTimeSource', v as 'user' | 'database')}
           />
         </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">New Row Position</span>
+            <span class="label-hint">Where new rows appear when inserted into a table</span>
+          </div>
+          <Select
+            value={settings.newRowPosition}
+            options={[{ value: 'bottom', label: 'Bottom' }, { value: 'top', label: 'Top' }]}
+            onchange={(v) => update('newRowPosition', v as 'top' | 'bottom')}
+          />
+        </div>
       </div>
 
     {:else if activeSection === 'editor'}

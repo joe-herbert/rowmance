@@ -280,6 +280,7 @@ export interface AppSettings {
   formatCompact: boolean;
   openItemsLocation: 'sidebar' | 'top';
   cellMaxLines: number;
+  newRowPosition: 'top' | 'bottom';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -311,6 +312,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formatCompact: false,
   openItemsLocation: 'sidebar',
   cellMaxLines: 1,
+  newRowPosition: 'bottom',
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────
