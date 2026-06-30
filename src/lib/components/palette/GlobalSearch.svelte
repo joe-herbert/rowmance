@@ -59,7 +59,6 @@
   let columnEntries = $state<ColumnEntry[]>([]);
   let loadingDatabases = $state(true);
   let loadingTables = $state(false);
-  let columnsLoadedFor = $state<Set<string>>(new Set());
 
   onMount(async () => {
     const profiles = connections.profiles;
@@ -116,29 +115,28 @@
     }
     tableEntries = newTables;
     loadingTables = false;
-  });
 
-  async function loadColumnsForTable(entry: TableEntry) {
-    const key = `${entry.connectionId}::${entry.database}::${entry.name}`;
-    if (columnsLoadedFor.has(key)) return;
-    columnsLoadedFor = new Set([...columnsLoadedFor, key]);
-    try {
-      const cols = await listColumns(entry.connectionId, entry.database, entry.name);
-      const newCols: ColumnEntry[] = cols.map((c: ColumnInfo) => ({
-        connectionId: entry.connectionId,
-        connectionName: entry.connectionName,
-        connectionColor: entry.connectionColor,
-        database: entry.database,
-        table: entry.name,
-        name: c.name,
-        dataType: c.dataType,
-        isPrimaryKey: c.isPrimaryKey,
-      }));
-      columnEntries = [...columnEntries, ...newCols];
-    } catch {
-      // Silently ignore
-    }
-  }
+    await Promise.allSettled(
+      newTables.map(async (entry) => {
+        try {
+          const cols = await listColumns(entry.connectionId, entry.database, entry.name);
+          const newCols: ColumnEntry[] = cols.map((c: ColumnInfo) => ({
+            connectionId: entry.connectionId,
+            connectionName: entry.connectionName,
+            connectionColor: entry.connectionColor,
+            database: entry.database,
+            table: entry.name,
+            name: c.name,
+            dataType: c.dataType,
+            isPrimaryKey: c.isPrimaryKey,
+          }));
+          columnEntries = [...columnEntries, ...newCols];
+        } catch {
+          // Silently ignore
+        }
+      }),
+    );
+  });
 
   // ── Result types ───────────────────────────────────────────────────────────
 
@@ -207,17 +205,6 @@
     for (const r of fuseTables.search(q).slice(0, 8)) results.push({ kind: 'table', ...r.item });
     for (const r of fuseColumns.search(q).slice(0, 8)) results.push({ kind: 'column', ...r.item });
     return results.slice(0, 30);
-  });
-
-  // Trigger column loading for tables visible in results
-  const visibleTableEntries = $derived(
-    filtered.filter((r): r is TableEntry & { kind: 'table' } => r.kind === 'table'),
-  );
-
-  $effect(() => {
-    for (const entry of visibleTableEntries) {
-      loadColumnsForTable(entry);
-    }
   });
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
