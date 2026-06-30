@@ -19,7 +19,7 @@
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
   import { portal } from '$lib/actions/portal';
 
-  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
+  type ActivePanel = 'history' | 'saved' | 'column' | 'relations' | null;
 
   interface Props {
     initialPanel?: ActivePanel;
@@ -40,7 +40,6 @@
     if (panel === 'history') loadHistory();
     if (panel === 'saved') loadSavedQueries();
     if (panel === 'column') columnInspectorKey = null;
-    if (panel === 'table-info') tableInfoKey = null;
   }
 
   // ── Relations panel ───────────────────────────────────────────────────────
@@ -82,46 +81,6 @@
     }).catch((err) => {
       columnInfoError = errorMessage(err);
       columnInfoLoading = false;
-    });
-  });
-
-  // ── Table Info ───────────────────────────────────────────────────────────────
-
-  let tableInfoLoading = $state(false);
-  let tableInfoError = $state<string | null>(null);
-  let tableColumns = $state<ColumnInfo[]>([]);
-  let tableIndexes = $state<IndexInfo[]>([]);
-  let tableForeignKeys = $state<ForeignKeyInfo[]>([]);
-  let tableInfoKey = $state<string | null>(null);
-
-  $effect(() => {
-    const sel = cellSelectionStore.current;
-    if (activePanel !== 'table-info') return;
-    const key = sel ? `${sel.connectionId}:${sel.database}:${sel.table}` : null;
-    if (key === tableInfoKey) return;
-    tableInfoKey = key;
-
-    if (!sel) {
-      tableColumns = [];
-      tableIndexes = [];
-      tableForeignKeys = [];
-      return;
-    }
-
-    tableInfoLoading = true;
-    tableInfoError = null;
-    Promise.all([
-      schemaApi.listColumns(sel.connectionId, sel.database, sel.table),
-      schemaApi.listIndexes(sel.connectionId, sel.database, sel.table),
-      schemaApi.listForeignKeys(sel.connectionId, sel.database, sel.table),
-    ]).then(([cols, idxs, fks]) => {
-      tableColumns = cols;
-      tableIndexes = idxs;
-      tableForeignKeys = fks;
-      tableInfoLoading = false;
-    }).catch((err) => {
-      tableInfoError = errorMessage(err);
-      tableInfoLoading = false;
     });
   });
 
@@ -576,18 +535,6 @@
 
     <button
       class="tab-btn"
-      class:active={activePanel === 'table-info'}
-      role="tab"
-      aria-selected={activePanel === 'table-info'}
-      aria-controls="panel-table-info"
-      title="Table Info"
-      onclick={(e) => { e.stopPropagation(); selectPanel('table-info'); }}
-    >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8" stroke-width="2.5"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-    </button>
-
-    <button
-      class="tab-btn"
       class:active={activePanel === 'relations'}
       role="tab"
       aria-selected={activePanel === 'relations'}
@@ -906,75 +853,6 @@
                 <div class="fk-card">
                   <div class="fk-name mono">{fk.constraintName}</div>
                   <div class="fk-ref">→ <span class="mono">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span></div>
-                  <div class="fk-actions">ON DELETE {fk.onDelete} · ON UPDATE {fk.onUpdate}</div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        {/if}
-      </div>
-
-    {:else if activePanel === 'table-info'}
-      <div id="panel-table-info" role="tabpanel" aria-label="Table Info">
-        <div class="panel-toolbar">
-          <span class="panel-title">Table Info</span>
-        </div>
-        {#if !cellSelectionStore.current}
-          <div class="placeholder-panel"><p>Select a cell in a table to see its details.</p></div>
-        {:else if tableInfoLoading}
-          <div class="loading-row">Loading…</div>
-        {:else if tableInfoError}
-          <div class="error-row">{tableInfoError}</div>
-        {:else}
-          {@const sel = cellSelectionStore.current}
-          <div class="context-bar">
-            <span class="ctx-table">{sel!.table}</span>
-            <span class="ctx-sub">{sel!.database}</span>
-          </div>
-          {#if tableColumns.length > 0}
-            <div class="info-section">
-              <div class="info-section-title">Columns ({tableColumns.length})</div>
-              <table class="col-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th title="Nullable">N</th>
-                    <th title="Primary Key">PK</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each tableColumns as col (col.name)}
-                    <tr class:selected-col={col.name === sel!.columnName}>
-                      <td class="mono">{col.name}</td>
-                      <td class="mono type-cell">{col.dataType}</td>
-                      <td class="center-cell">{#if col.nullable}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{/if}</td>
-                      <td class="center-cell">{#if col.isPrimaryKey}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{/if}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {/if}
-          {#if tableIndexes.length > 0}
-            <div class="info-section">
-              <div class="info-section-title">Indexes ({tableIndexes.length})</div>
-              {#each tableIndexes as idx (idx.name)}
-                <div class="tag-row">
-                  <span class="tag-name mono">{idx.name}</span>
-                  {#if idx.unique}<span class="tag-badge">UNIQUE</span>{/if}
-                  <span class="tag-type">{idx.columns.join(', ')}</span>
-                </div>
-              {/each}
-            </div>
-          {/if}
-          {#if tableForeignKeys.length > 0}
-            <div class="info-section">
-              <div class="info-section-title">Foreign Keys ({tableForeignKeys.length})</div>
-              {#each tableForeignKeys as fk (fk.constraintName)}
-                <div class="fk-card">
-                  <div class="fk-name mono">{fk.constraintName}</div>
-                  <div class="fk-ref"><span class="mono">{fk.columns.join(', ')}</span> → <span class="mono">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span></div>
                   <div class="fk-actions">ON DELETE {fk.onDelete} · ON UPDATE {fk.onUpdate}</div>
                 </div>
               {/each}
@@ -1518,12 +1396,6 @@
     font-weight: var(--font-weight-medium);
   }
 
-  .ctx-sub {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-left: var(--spacing-1);
-  }
-
   .info-section {
     border-bottom: 1px solid var(--color-border);
     padding: var(--spacing-2) 0;
@@ -1635,47 +1507,6 @@
     font-size: 10px;
     color: var(--color-text-muted);
     margin-top: 1px;
-  }
-
-  .col-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--font-size-xs);
-  }
-
-  .col-table th {
-    padding: 3px var(--spacing-2);
-    background: var(--color-table-header-bg);
-    color: var(--color-text-muted);
-    font-weight: var(--font-weight-medium);
-    font-size: 10px;
-    text-align: left;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .col-table td {
-    padding: 3px var(--spacing-2);
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    vertical-align: middle;
-  }
-
-  .col-table tr.selected-col td {
-    background: var(--color-accent-subtle);
-    color: var(--color-text-primary);
-  }
-
-  .type-cell {
-    color: var(--color-text-muted);
-    max-width: 70px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .center-cell {
-    text-align: center;
-    color: var(--color-accent);
   }
 
   .relations-tabpanel {
