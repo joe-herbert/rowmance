@@ -330,7 +330,7 @@
       {#if activeTab === 'basic'}
         <div class="field">
           <label for="conn-name" class="label">Name</label>
-          <input id="conn-name" class="input" type="text" bind:value={name} placeholder="My Database" required autocomplete="off" />
+          <input id="conn-name" class="input" type="text" bind:value={name} placeholder="My Database" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
         </div>
 
         {#if showUrlInput}
@@ -347,6 +347,9 @@
                   bind:value={connectionUrl}
                   placeholder="postgres://user:pass@localhost:5432/mydb"
                   autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
                   onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyConnectionUrl(); } }}
                 />
                 <button type="button" class="btn btn--ghost btn--sm" onclick={applyConnectionUrl}>Apply</button>
@@ -388,7 +391,7 @@
           <div class="field">
             <label for="conn-file" class="label">File Path</label>
             <div class="file-row">
-              <input id="conn-file" class="input" type="text" bind:value={filePath} placeholder="/path/to/database.db" autocomplete="off" />
+              <input id="conn-file" class="input" type="text" bind:value={filePath} placeholder="/path/to/database.db" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
               <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') filePath = p; }); }}>Browse</button>
             </div>
           </div>
@@ -396,23 +399,23 @@
           <div class="field-row">
             <div class="field field--grow">
               <label for="conn-host" class="label">Host</label>
-              <input id="conn-host" class="input" type="text" bind:value={host} placeholder="localhost" required autocomplete="off" />
+              <input id="conn-host" class="input" type="text" bind:value={host} placeholder="localhost" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
             </div>
             <div class="field field--port">
               <label for="conn-port" class="label">Port</label>
-              <input id="conn-port" class="input" type="number" bind:value={port} min="1" max="65535" required />
+              <input id="conn-port" class="input" type="number" bind:value={port} min="1" max="65535" required autocomplete="off" />
             </div>
           </div>
 
           <div class="field">
             <label for="conn-database" class="label">Database</label>
-            <input id="conn-database" class="input" type="text" bind:value={database} placeholder="my_database" required autocomplete="off" />
+            <input id="conn-database" class="input" type="text" bind:value={database} placeholder="my_database" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           </div>
 
           <div class="field-row">
             <div class="field field--grow">
               <label for="conn-username" class="label">Username</label>
-              <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="username" />
+              <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
             </div>
             <div class="field field--grow">
               <label for="conn-password" class="label">Password</label>
@@ -424,7 +427,10 @@
                   bind:value={password}
                   oninput={() => (passwordDirty = true)}
                   placeholder={isEditing ? '••••••••' : ''}
-                  autocomplete="current-password"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
                 />
                 <button
                   type="button"
@@ -456,17 +462,17 @@
           <div class="field-row">
             <div class="field field--grow">
               <label for="ssh-host" class="label">SSH Host</label>
-              <input id="ssh-host" class="input" type="text" bind:value={sshHost} placeholder="ssh.example.com" autocomplete="off" />
+              <input id="ssh-host" class="input" type="text" bind:value={sshHost} placeholder="ssh.example.com" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
             </div>
             <div class="field field--port">
               <label for="ssh-port" class="label">Port</label>
-              <input id="ssh-port" class="input" type="number" bind:value={sshPort} min="1" max="65535" />
+              <input id="ssh-port" class="input" type="number" bind:value={sshPort} min="1" max="65535" autocomplete="off" />
             </div>
           </div>
 
           <div class="field">
             <label for="ssh-user" class="label">SSH User</label>
-            <input id="ssh-user" class="input" type="text" bind:value={sshUser} placeholder="ubuntu" autocomplete="off" />
+            <input id="ssh-user" class="input" type="text" bind:value={sshUser} placeholder="ubuntu" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           </div>
 
           <div class="field">
@@ -483,7 +489,7 @@
             <div class="field">
               <label for="ssh-password" class="label">SSH Password</label>
               <div class="password-row">
-                <input id="ssh-password" class="input" type={showSshPassword ? 'text' : 'password'} bind:value={sshPassword} placeholder={isEditing ? '••••••••' : ''} />
+                <input id="ssh-password" class="input" type={showSshPassword ? 'text' : 'password'} bind:value={sshPassword} placeholder={isEditing ? '••••••••' : ''} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
                 <button
                   type="button"
                   class="btn btn--ghost btn--sm btn--icon"
@@ -496,7 +502,7 @@
             <div class="field">
               <label for="ssh-key" class="label">Private Key File</label>
               <div class="file-row">
-                <input id="ssh-key" class="input" type="text" bind:value={sshKeyPath} placeholder="/Users/you/.ssh/id_rsa" readonly />
+                <input id="ssh-key" class="input" type="text" bind:value={sshKeyPath} placeholder="/Users/you/.ssh/id_rsa" readonly autocomplete="off" spellcheck="false" />
                 <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sshKeyPath = p; }); }}>Browse</button>
               </div>
             </div>
@@ -520,7 +526,7 @@
           <div class="field">
             <label for="ssl-ca" class="label">CA Certificate</label>
             <div class="file-row">
-              <input id="ssl-ca" class="input" type="text" bind:value={sslCaPath} placeholder="/path/to/ca.pem" readonly />
+              <input id="ssl-ca" class="input" type="text" bind:value={sslCaPath} placeholder="/path/to/ca.pem" readonly autocomplete="off" spellcheck="false" />
               <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslCaPath = p; }); }}>Browse</button>
             </div>
           </div>
@@ -528,7 +534,7 @@
           <div class="field">
             <label for="ssl-cert" class="label">Client Certificate</label>
             <div class="file-row">
-              <input id="ssl-cert" class="input" type="text" bind:value={sslCertPath} placeholder="/path/to/client-cert.pem" readonly />
+              <input id="ssl-cert" class="input" type="text" bind:value={sslCertPath} placeholder="/path/to/client-cert.pem" readonly autocomplete="off" spellcheck="false" />
               <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslCertPath = p; }); }}>Browse</button>
             </div>
           </div>
@@ -536,7 +542,7 @@
           <div class="field">
             <label for="ssl-key" class="label">Client Key</label>
             <div class="file-row">
-              <input id="ssl-key" class="input" type="text" bind:value={sslKeyPath} placeholder="/path/to/client-key.pem" readonly />
+              <input id="ssl-key" class="input" type="text" bind:value={sslKeyPath} placeholder="/path/to/client-key.pem" readonly autocomplete="off" spellcheck="false" />
               <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslKeyPath = p; }); }}>Browse</button>
             </div>
           </div>
@@ -549,12 +555,12 @@
       {:else if activeTab === 'advanced'}
         <div class="field">
           <label for="pool-min" class="label">Minimum Pool Connections</label>
-          <input id="pool-min" class="input" type="number" bind:value={poolMin} min="1" max="50" />
+          <input id="pool-min" class="input" type="number" bind:value={poolMin} min="1" max="50" autocomplete="off" />
         </div>
 
         <div class="field">
           <label for="pool-max" class="label">Maximum Pool Connections</label>
-          <input id="pool-max" class="input" type="number" bind:value={poolMax} min="1" max="100" />
+          <input id="pool-max" class="input" type="number" bind:value={poolMax} min="1" max="100" autocomplete="off" />
         </div>
 
         <div class="field field--inline">

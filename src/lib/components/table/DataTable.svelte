@@ -1433,8 +1433,35 @@
   // ── Header context menu / rename ─────────────────────────────────────────
 
   let headerContextMenu = $state<{ x: number; y: number; colName: string } | null>(null);
+  let headerContextMenuEl = $state<HTMLElement | null>(null);
+  let hdrCtxMenuLeft = $state(0);
+  let hdrCtxMenuTop = $state(0);
   let renamingHeader = $state<{ colName: string; value: string } | null>(null);
   let renameHeaderInputEl = $state<HTMLInputElement | null>(null);
+
+  let hdrCtxMenuMaxHeight = $state<number | null>(null);
+
+  $effect(() => {
+    if (!headerContextMenu) return;
+    const { x, y } = headerContextMenu;
+    hdrCtxMenuLeft = x;
+    hdrCtxMenuTop = y;
+    hdrCtxMenuMaxHeight = null;
+    tick().then(() => {
+      if (!headerContextMenuEl || !headerContextMenu) return;
+      const { width, height } = headerContextMenuEl.getBoundingClientRect();
+      const margin = 8;
+      const maxH = window.innerHeight - margin * 2;
+      hdrCtxMenuLeft = Math.min(x, window.innerWidth - width - margin);
+      if (height > maxH) {
+        hdrCtxMenuTop = margin;
+        hdrCtxMenuMaxHeight = maxH;
+      } else {
+        hdrCtxMenuTop = Math.min(y, window.innerHeight - height - margin);
+        hdrCtxMenuMaxHeight = null;
+      }
+    });
+  });
 
   function openHeaderContextMenu(e: MouseEvent, colName: string): void {
     e.preventDefault();
@@ -1486,6 +1513,33 @@
   let contextMenuSnapshotIsMultiCell = $state(false);
   let contextMenuSnapshotIsMultiCol = $state(false);
   let contextMenuSnapshotIsRowSelection = $state(false);
+  let contextMenuEl = $state<HTMLElement | null>(null);
+  let ctxMenuLeft = $state(0);
+  let ctxMenuTop = $state(0);
+
+  let ctxMenuMaxHeight = $state<number | null>(null);
+
+  $effect(() => {
+    if (!contextMenu) return;
+    const { x, y } = contextMenu;
+    ctxMenuLeft = x;
+    ctxMenuTop = y;
+    ctxMenuMaxHeight = null;
+    tick().then(() => {
+      if (!contextMenuEl || !contextMenu) return;
+      const { width, height } = contextMenuEl.getBoundingClientRect();
+      const margin = 8;
+      const maxH = window.innerHeight - margin * 2;
+      ctxMenuLeft = Math.min(x, window.innerWidth - width - margin);
+      if (height > maxH) {
+        ctxMenuTop = margin;
+        ctxMenuMaxHeight = maxH;
+      } else {
+        ctxMenuTop = Math.min(y, window.innerHeight - height - margin);
+        ctxMenuMaxHeight = null;
+      }
+    });
+  });
 
   function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number, colName: string | null = null): void {
     e.preventDefault();
@@ -2544,7 +2598,8 @@
       class="context-menu"
       role="menu"
       tabindex="-1"
-      style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+      style="left: {ctxMenuLeft}px; top: {ctxMenuTop}px;{ctxMenuMaxHeight !== null ? ` max-height: ${ctxMenuMaxHeight}px;` : ''}"
+      bind:this={contextMenuEl}
       onclick={(e) => e.stopPropagation()}
       onmousedown={(e) => e.preventDefault()}
       onkeydown={handleContextMenuKeydown}
@@ -2756,7 +2811,8 @@
       class="context-menu"
       role="menu"
       tabindex="-1"
-      style="left: {headerContextMenu.x}px; top: {headerContextMenu.y}px;"
+      style="left: {hdrCtxMenuLeft}px; top: {hdrCtxMenuTop}px;{hdrCtxMenuMaxHeight !== null ? ` max-height: ${hdrCtxMenuMaxHeight}px;` : ''}"
+      bind:this={headerContextMenuEl}
       onclick={(e) => e.stopPropagation()}
       onmousedown={(e) => e.preventDefault()}
       use:portal
@@ -3259,6 +3315,7 @@
     z-index: 400;
     min-width: 220px;
     padding: var(--spacing-1) 0;
+    overflow-y: auto;
   }
 
   .context-menu-item {
