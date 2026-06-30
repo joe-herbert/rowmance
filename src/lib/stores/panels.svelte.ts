@@ -249,6 +249,21 @@ export function usePanels() {
       focusedIndex = Math.min(focusedIndex, panels.length - 1);
     },
 
+    /** Close all open items except the one with the given id. */
+    closeOtherItems(keepItemId: string) {
+      const toClose = openItems.filter(i => i.id !== keepItemId);
+      for (const item of toClose) {
+        if (item.content.kind === 'query_editor' && item.content.editorId) {
+          queryEditorCache.delete(item.content.editorId);
+        }
+        openItems = openItems.filter(i => i.id !== item.id);
+        panels = panels.map(p =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        );
+      }
+      focusedIndex = Math.min(focusedIndex, panels.length - 1);
+    },
+
     /**
      * Close the open item currently shown in the focused panel.
      * If other open items exist, the next one (or previous if at the end) is shown

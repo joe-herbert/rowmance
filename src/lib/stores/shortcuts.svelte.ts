@@ -36,7 +36,8 @@ export type ShortcutAction =
   | 'NEW_QUERY_EDITOR'
   | 'NEW_WINDOW'
   | 'OPEN_SETTINGS'
-  | 'TOGGLE_SYSTEM_ITEMS';
+  | 'TOGGLE_SYSTEM_ITEMS'
+  | 'CLOSE_OTHER_TABS';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 
@@ -235,6 +236,14 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+Shift+H',
     jetbrains: 'Mod+Shift+H',
     vim: 'Mod+Shift+H',
+  },
+  {
+    action: 'CLOSE_OTHER_TABS',
+    label: 'Close Other Tabs',
+    group: 'Navigation',
+    vscode: 'Mod+Shift+W',
+    jetbrains: 'Mod+Shift+W',
+    vim: 'Mod+Shift+W',
   },
 ];
 

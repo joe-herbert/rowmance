@@ -14,7 +14,7 @@
   import Toast from '$lib/components/ui/Toast.svelte';
   import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
-  import { usePanels, dirtyKeyForContent } from '$lib/stores/panels.svelte';
+  import { usePanels, dirtyKeyForContent, sameContent } from '$lib/stores/panels.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { useShortcuts } from '$lib/stores/shortcuts.svelte';
@@ -230,6 +230,11 @@
     }
     if (action === 'PANEL_NEXT') panelStore.focusNext();
     if (action === 'PANEL_PREV') panelStore.focusPrev();
+    if (action === 'CLOSE_OTHER_TABS') {
+      const focusedContent = panelStore.focusedPanel.content;
+      const focusedItem = panelStore.openItems.find(i => sameContent(i.content, focusedContent));
+      if (focusedItem) panelStore.closeOtherItems(focusedItem.id);
+    }
     if (action === 'NEW_QUERY_EDITOR') {
       const focused = panelStore.focusedPanel.content;
       const connectionId = 'connectionId' in focused ? focused.connectionId : null;

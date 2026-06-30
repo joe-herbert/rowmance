@@ -946,6 +946,7 @@
     {:else}
       <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</button>
     {/if}
+    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { panelStore.closeItemsForConnection(connCtx.profile.id); connCtx = null; } }}>Close All Tabs</button>
     <div class="ctx-sep" role="separator"></div>
     {#if connectionStore.groups.length > 0}
       <div

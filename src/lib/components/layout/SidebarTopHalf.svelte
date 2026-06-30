@@ -131,7 +131,10 @@
   });
 
   function onContextMenu(e: MouseEvent, item: import('$lib/stores/panels.svelte').OpenItem) {
-    if (item.content.kind !== 'query_editor' || !item.content.savedQueryId) return;
+    const hasSavedQuery = item.content.kind === 'query_editor' && !!item.content.savedQueryId;
+    const hasConnection = 'connectionId' in item.content;
+    const hasOtherTabs = panelStore.openItems.length > 1;
+    if (!hasSavedQuery && !hasConnection && !hasOtherTabs) return;
     e.preventDefault();
     contextMenuItemId = item.id;
     contextMenuTop = e.clientY;
@@ -327,9 +330,23 @@
       style="top:{contextMenuTop}px;left:{contextMenuLeft}px"
       use:portal
     >
-      <button class="ctx-item" role="menuitem" onclick={() => startRename(contextItem)}>
-        Rename
-      </button>
+      {#if contextItem.content.kind === 'query_editor' && contextItem.content.savedQueryId}
+        <button class="ctx-item" role="menuitem" onclick={() => startRename(contextItem)}>Rename</button>
+      {/if}
+      {#if panelStore.openItems.length > 1}
+        <button class="ctx-item" role="menuitem" onclick={() => {
+          const id = contextItem.id;
+          contextMenuItemId = null;
+          panelStore.closeOtherItems(id);
+        }}>Close other tabs</button>
+      {/if}
+      {#if 'connectionId' in contextItem.content}
+        <button class="ctx-item" role="menuitem" onclick={() => {
+          const connId = (contextItem.content as { connectionId: string }).connectionId;
+          contextMenuItemId = null;
+          panelStore.closeItemsForConnection(connId);
+        }}>Close all tabs for this connection</button>
+      {/if}
     </div>
   {/if}
 {/if}
