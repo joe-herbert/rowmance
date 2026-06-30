@@ -387,6 +387,16 @@
     });
   }
 
+  async function ctxDisconnectAll() {
+    panelCtx = null;
+    const activeIds = [...connectionStore.activeIds];
+    await Promise.all(activeIds.map(id => connectionStore.disconnect(id)));
+    for (const id of activeIds) {
+      panelStore.closeItemsForConnection(id, { skipDirty: true });
+    }
+    expandedConnections = new Set([...expandedConnections].filter(i => !activeIds.includes(i)));
+  }
+
   async function ctxConnDisconnect() {
     if (!connCtx) return;
     const id = connCtx.profile.id;
@@ -877,6 +887,10 @@
   <div class="ctx-menu" role="menu" style="top:{panelCtx.y}px;left:{panelCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={() => { panelCtx = null; newConnectionGroupId = undefined; showAddForm = true; }}>New Connection</button>
     <button class="ctx-item" role="menuitem" onclick={startCreateGroup}>New Group</button>
+    {#if connectionStore.activeIds.size > 0}
+      <div class="ctx-sep" role="separator"></div>
+      <button class="ctx-item" role="menuitem" onclick={ctxDisconnectAll}>Disconnect All</button>
+    {/if}
   </div>
 {/if}
 
