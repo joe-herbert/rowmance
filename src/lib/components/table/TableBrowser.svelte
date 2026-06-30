@@ -942,6 +942,9 @@
     if (!hasFocus) return;
 
     switch (action) {
+      case 'TABLE_REFRESH':
+        load();
+        break;
       case 'TABLE_SAVE_CHANGES':
         if (pendingRowCount > 0) saveChanges();
         break;

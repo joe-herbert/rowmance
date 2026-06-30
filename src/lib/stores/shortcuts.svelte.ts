@@ -160,6 +160,14 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vim: 'Mod+B',
   },
   {
+    action: 'TABLE_REFRESH',
+    label: 'Refresh Table',
+    group: 'Table View',
+    vscode: 'Mod+R',
+    jetbrains: 'Mod+R',
+    vim: 'Mod+R',
+  },
+  {
     action: 'TABLE_SAVE_CHANGES',
     label: 'Save Table Changes',
     group: 'Table View',
