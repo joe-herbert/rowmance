@@ -108,6 +108,10 @@
             onblur={commitRename}
             onkeydown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); if (e.key === 'Escape') { editingName = themeName; (e.currentTarget as HTMLInputElement).blur(); } }}
             aria-label="Theme name"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
           />
         {:else}
           <span class="theme-name">{themeData.name}</span>
@@ -147,6 +151,10 @@
                   value={value}
                   onchange={(e) => handleChange(varName, (e.currentTarget as HTMLInputElement).value)}
                   aria-label="Colour value for {varName}"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
                 />
               </div>
             {:else}
@@ -156,6 +164,10 @@
                 value={value}
                 onchange={(e) => handleChange(varName, (e.currentTarget as HTMLInputElement).value)}
                 aria-label="Value for {varName}"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
               />
             {/if}
           </div>

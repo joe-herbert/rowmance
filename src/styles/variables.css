@@ -73,6 +73,10 @@
   --color-connection-connecting: #d97706;
   --color-connection-error: #dc2626;
 
+  /* ── Active connection colour ───────────────────────────────────────────── */
+  /* Set per-component via style="--color-connection: {color}" when a connection has a colour */
+  --color-connection: var(--color-accent);
+
   /* ── Scrollbar ──────────────────────────────────────────────────────────── */
   --color-scrollbar-thumb: rgba(100, 90, 160, 0.18);
   --color-scrollbar-thumb-hover: rgba(100, 90, 160, 0.32);

@@ -63,6 +63,16 @@
   const isConnected = $derived(activeConnection ? connectionsStore.isActive(activeConnection.id) : false);
 
   $effect(() => {
+    void settings.theme; // re-run after theme switches, which clear documentElement inline styles
+    const color = activeConnection?.color;
+    if (color) {
+      document.documentElement.style.setProperty('--color-connection', color);
+    } else {
+      document.documentElement.style.removeProperty('--color-connection');
+    }
+  });
+
+  $effect(() => {
     const isTableBrowser = focusedContent.kind === 'table_browser';
     invoke('menu_set_import_csv_enabled', { enabled: isTableBrowser }).catch(() => {});
   });
