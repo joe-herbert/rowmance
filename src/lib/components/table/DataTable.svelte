@@ -3210,16 +3210,15 @@
           {/each}
         {/if}
 
-        {#if processedRows.length === 0}
-          <tr>
-            <td class="empty-cell" colspan={visibleColumns.length + 1}>
-              {rows.length === 0 ? 'No rows to display.' : 'No rows match the current filters.'}
-            </td>
-          </tr>
-        {/if}
       </tbody>
     </table>
   </div>
+
+  {#if processedRows.length === 0}
+    <div class="empty-overlay">
+      {rows.length === 0 ? 'No rows to display.' : 'No rows match the current filters.'}
+    </div>
+  {/if}
 
   <!-- Context menu -->
   {#if contextMenu !== null}
@@ -3938,11 +3937,18 @@
     color: var(--color-danger);
   }
 
-  .empty-cell {
-    padding: var(--spacing-8) var(--spacing-4);
-    text-align: center;
+  .empty-overlay {
+    position: absolute;
+    top: 35px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
+    pointer-events: none;
   }
 
   /* ── Context menu ───────────────────────────────────────────────────────── */
