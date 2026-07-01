@@ -27,6 +27,17 @@
   const settingsStore = useSettings();
   const toast = useToast();
 
+  let treeScrollEl = $state<HTMLDivElement | undefined>(undefined);
+
+  $effect(() => {
+    function handleFocusSchemaTree() {
+      const firstBtn = treeScrollEl?.querySelector<HTMLElement>('button');
+      (firstBtn ?? treeScrollEl)?.focus();
+    }
+    document.addEventListener('focus-schema-tree', handleFocusSchemaTree);
+    return () => document.removeEventListener('focus-schema-tree', handleFocusSchemaTree);
+  });
+
   // ── Add / edit forms ──────────────────────────────────────────────────────
 
   let showAddForm = $state(false);
@@ -669,7 +680,7 @@
 
   <!-- Scrollable list -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="tree-scroll gscroll" oncontextmenu={(e) => { if ((e.target as Element).closest('.conn-item,.group-section,.ctx-menu')) return; showPanelCtx(e); }}>
+  <div class="tree-scroll gscroll" bind:this={treeScrollEl} tabindex="-1" oncontextmenu={(e) => { if ((e.target as Element).closest('.conn-item,.group-section,.ctx-menu')) return; showPanelCtx(e); }}>
     {#if connectionStore.profiles.length === 0 && connectionStore.groups.length === 0}
       <div class="empty-state">
         <p>No connections yet.</p>

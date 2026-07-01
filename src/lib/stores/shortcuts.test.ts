@@ -32,9 +32,11 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
   'PANEL_CLOSE',
   'TOGGLE_LEFT_SIDEBAR',
   'TOGGLE_RIGHT_SIDEBAR',
+  'TABLE_REFRESH',
   'TABLE_SAVE_CHANGES',
   'TABLE_DISCARD_CHANGES',
   'TABLE_EDIT_IN_MODAL',
+  'TABLE_SEARCH',
   'PAGE_NEXT',
   'PAGE_PREV',
   'COMMAND_PALETTE',
@@ -42,11 +44,13 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
   'NEW_WINDOW',
   'OPEN_SETTINGS',
   'TOGGLE_SYSTEM_ITEMS',
+  'CLOSE_OTHER_TABS',
+  'GLOBAL_SEARCH',
 ];
 
 describe('SHORTCUT_DEFINITIONS', () => {
-  it('contains exactly 23 action definitions', () => {
-    expect(SHORTCUT_DEFINITIONS).toHaveLength(23);
+  it('contains exactly 27 action definitions', () => {
+    expect(SHORTCUT_DEFINITIONS).toHaveLength(27);
   });
 
   it('contains all expected action IDs', () => {

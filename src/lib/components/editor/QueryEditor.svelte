@@ -65,8 +65,14 @@
 
   const cached = editorId ? queryEditorCache.get(editorId) : undefined;
 
+  const isFocusedPanel = $derived(
+    panelStore.focusedPanel?.content?.kind === 'query_editor' &&
+    panelStore.focusedPanel?.content?.editorId === editorId
+  );
+
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
   let editorView = $state<EditorView | undefined>(undefined);
+  let resultsWrapperEl = $state<HTMLDivElement | undefined>(undefined);
   let sqlText = $state(untrack(() => cached?.sql ?? initialSql));
   let results = $state<QueryResult[]>(untrack(() => cached?.results ?? []));
   let executedStatements = $state<string[]>(untrack(() => cached?.executedStatements ?? []));
@@ -622,6 +628,12 @@
       case 'QUERY_EXPLAIN':
         runExplain();
         break;
+      case 'FOCUS_EDITOR':
+        if (isFocusedPanel) editorView?.focus();
+        break;
+      case 'FOCUS_RESULTS':
+        if (isFocusedPanel) resultsWrapperEl?.focus();
+        break;
     }
   }
 
@@ -867,7 +879,7 @@
     <div class="editor-container" bind:this={editorContainer}></div>
   </div>
 
-  <div class="results-wrapper">
+  <div class="results-wrapper" bind:this={resultsWrapperEl} tabindex="-1">
     <ResultsPanel {results} statements={executedStatements} {connectionId} database={selectedDatabase || undefined} />
   </div>
 </div>

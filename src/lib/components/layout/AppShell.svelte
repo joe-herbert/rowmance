@@ -251,6 +251,7 @@
       if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
     }
     if (action === 'GLOBAL_SEARCH') openGlobalSearch();
+    if (action === 'FOCUS_SCHEMA_TREE') document.dispatchEvent(new CustomEvent('focus-schema-tree'));
   }
 
   let paletteOpen = $state(false);
