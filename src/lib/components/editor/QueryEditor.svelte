@@ -85,7 +85,7 @@
   let results = $state<QueryResult[]>(untrack(() => cached?.results ?? []));
   let executedStatements = $state<string[]>(untrack(() => cached?.executedStatements ?? []));
   let isRunning = $state(false);
-  let transactionActive = $state(false);
+  let transactionActive = $derived(connections.isTransactionActive(connectionId));
 
   let databases = $state<string[]>([]);
   let selectedDatabase = $state<string>(
@@ -252,9 +252,6 @@
   }
 
   let connectionName = $derived(connections.getById(connectionId)?.name ?? connectionId);
-  let transactionMode = $derived(settingsStore.settings.transactionMode);
-  let showTransactionToolbar = $derived(transactionMode || transactionActive);
-
   const DB_TYPE_DIALECT: Record<string, string> = {
     mysql: 'mysql',
     mariadb: 'mysql',
@@ -580,77 +577,6 @@
     }
   }
 
-  // ── Transaction controls ──────────────────────────────────────────────────
-
-  async function beginTransaction(): Promise<void> {
-    const profile = connections.getById(connectionId);
-    const sql =
-      profile?.dbType === 'mysql' || profile?.dbType === 'mariadb' ? 'START TRANSACTION' : 'BEGIN';
-    isRunning = true;
-    try {
-      await executeMultiQuery(connectionId, sql);
-      transactionActive = true;
-    } catch (err) {
-      results = [
-        {
-          queryId: '',
-          columns: [],
-          rows: [],
-          totalRows: null,
-          durationMs: 0,
-          affectedRows: null,
-          error: errorMessage(err),
-        },
-      ];
-    } finally {
-      isRunning = false;
-    }
-  }
-
-  async function commitTransaction(): Promise<void> {
-    isRunning = true;
-    try {
-      await executeMultiQuery(connectionId, 'COMMIT');
-      transactionActive = false;
-    } catch (err) {
-      results = [
-        {
-          queryId: '',
-          columns: [],
-          rows: [],
-          totalRows: null,
-          durationMs: 0,
-          affectedRows: null,
-          error: errorMessage(err),
-        },
-      ];
-    } finally {
-      isRunning = false;
-    }
-  }
-
-  async function rollbackTransaction(): Promise<void> {
-    isRunning = true;
-    try {
-      await executeMultiQuery(connectionId, 'ROLLBACK');
-      transactionActive = false;
-    } catch (err) {
-      results = [
-        {
-          queryId: '',
-          columns: [],
-          rows: [],
-          totalRows: null,
-          durationMs: 0,
-          affectedRows: null,
-          error: errorMessage(err),
-        },
-      ];
-    } finally {
-      isRunning = false;
-    }
-  }
-
   // ── Shortcut action listener ──────────────────────────────────────────────
 
   function handleShortcutAction(e: Event) {
@@ -794,10 +720,6 @@
       />
     {:else if selectedDatabase}
       <span class="connection-badge" title="Database">{selectedDatabase}</span>
-    {/if}
-
-    {#if transactionActive}
-      <span class="tx-badge" title="Transaction in progress">TXN</span>
     {/if}
 
     <div class="toolbar-spacer"></div>
@@ -969,27 +891,8 @@
         Explain
       </button>
     {/if}
-  </div>
 
-  {#if showTransactionToolbar}
-    <div class="tx-toolbar" class:tx-active={transactionActive}>
-      <span class="tx-label">
-        {transactionActive ? 'Transaction active' : 'Transaction mode'}
-      </span>
-      <div class="tx-actions">
-        {#if !transactionActive}
-          <button class="tx-btn" onclick={beginTransaction} disabled={isRunning}>Begin</button>
-        {:else}
-          <button class="tx-btn tx-btn--commit" onclick={commitTransaction} disabled={isRunning}
-            >Commit</button
-          >
-          <button class="tx-btn tx-btn--rollback" onclick={rollbackTransaction} disabled={isRunning}
-            >Rollback</button
-          >
-        {/if}
-      </div>
-    </div>
-  {/if}
+  </div>
 
   <div class="editor-wrapper">
     <div class="editor-container" bind:this={editorContainer}></div>
@@ -1063,20 +966,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: default;
-  }
-
-  .tx-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--spacing-2);
-    height: calc(var(--toolbar-height) - var(--spacing-3));
-    background: var(--color-warning-subtle, #fff3cd);
-    border: 1px solid var(--color-warning, #f59e0b);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-warning, #f59e0b);
-    letter-spacing: 0.05em;
   }
 
   .toolbar-spacer {
@@ -1257,79 +1146,6 @@
   }
 
   /* Transaction toolbar */
-  .tx-toolbar {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-3);
-    padding: 0 var(--spacing-3);
-    height: 32px;
-    background: var(--color-bg-secondary);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .tx-toolbar.tx-active {
-    background: var(--color-warning-subtle, #fff3cd);
-    border-bottom-color: var(--color-warning, #f59e0b);
-  }
-
-  .tx-label {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    flex: 1;
-  }
-
-  .tx-active .tx-label {
-    color: var(--color-warning, #f59e0b);
-    font-weight: var(--font-weight-medium);
-  }
-
-  .tx-actions {
-    display: flex;
-    gap: var(--spacing-1);
-  }
-
-  .tx-btn {
-    padding: 0 var(--spacing-2);
-    height: 22px;
-    font-size: var(--font-size-xs);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background: var(--color-bg-primary);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: background var(--transition-fast);
-    white-space: nowrap;
-  }
-
-  .tx-btn:hover:not(:disabled) {
-    background: var(--color-bg-hover);
-    color: var(--color-text-primary);
-  }
-
-  .tx-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .tx-btn--commit {
-    border-color: var(--color-success);
-    color: var(--color-success);
-  }
-
-  .tx-btn--commit:hover:not(:disabled) {
-    background: var(--color-success-subtle);
-  }
-
-  .tx-btn--rollback {
-    border-color: var(--color-danger);
-    color: var(--color-danger);
-  }
-
-  .tx-btn--rollback:hover:not(:disabled) {
-    background: var(--color-danger-subtle);
-  }
-
   .editor-wrapper {
     flex: 0 0 40%;
     overflow: hidden;

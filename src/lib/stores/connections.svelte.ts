@@ -15,6 +15,7 @@ let activeIds = $state<Set<string>>(new Set());
 let connectingIds = $state<Set<string>>(new Set());
 let errorIds = $state<Map<string, string>>(new Map());
 let connectedAt = $state<Map<string, Date>>(new Map());
+let transactionIds = $state<Set<string>>(new Set());
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
@@ -126,11 +127,26 @@ export function useConnections() {
       await api.disconnectFromDatabase(id);
       activeIds = new Set([...activeIds].filter((i) => i !== id));
       connectedAt = new Map([...connectedAt].filter(([k]) => k !== id));
+      transactionIds = new Set([...transactionIds].filter((i) => i !== id));
     },
 
     /** Check whether a given profile ID is currently connected. */
     isActive(id: string): boolean {
       return activeIds.has(id);
+    },
+
+    /** Check whether a transaction is active for the given connection. */
+    isTransactionActive(id: string): boolean {
+      return transactionIds.has(id);
+    },
+
+    /** Mark a transaction as started or ended for the given connection. */
+    setTransactionActive(id: string, active: boolean): void {
+      if (active) {
+        transactionIds = new Set([...transactionIds, id]);
+      } else {
+        transactionIds = new Set([...transactionIds].filter((i) => i !== id));
+      }
     },
 
     /** Return the profile with the given ID, or undefined. */

@@ -14,6 +14,7 @@
   import Toast from '$lib/components/ui/Toast.svelte';
   import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { useToast } from '$lib/stores/toast.svelte';
   import { usePanels, dirtyKeyForContent, sameContent } from '$lib/stores/panels.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -22,6 +23,8 @@
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
   import GlobalSearch from '$lib/components/palette/GlobalSearch.svelte';
   import * as updaterApi from '$lib/tauri/updater';
+  import * as txApi from '$lib/tauri/transactions';
+  import { errorMessage } from '$lib/utils/errors';
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
@@ -51,6 +54,7 @@
   const panelStore = usePanels();
   const shortcutsStore = useShortcuts();
   const connectionsStore = useConnections();
+  const toast = useToast();
 
   // ── Active connection + view mode (derived from focused panel) ────────────
 
@@ -388,6 +392,56 @@
     }
   }
 
+  // ── Transaction controls (in connection popup) ────────────────────────────
+
+  let txBusy = $state(false);
+
+  async function handleBeginTransaction() {
+    if (!activeConnection) return;
+    const id = activeConnection.id;
+    txBusy = true;
+    try {
+      const c = focusedContent;
+      const database =
+        'database' in c && typeof c.database === 'string' ? c.database : undefined;
+      await txApi.beginTransaction(id, database);
+      connectionsStore.setTransactionActive(id, true);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error');
+    } finally {
+      txBusy = false;
+    }
+  }
+
+  async function handleCommitTransaction() {
+    if (!activeConnection) return;
+    const id = activeConnection.id;
+    txBusy = true;
+    try {
+      await txApi.commitTransaction(id);
+      connectionsStore.setTransactionActive(id, false);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error');
+    } finally {
+      txBusy = false;
+    }
+  }
+
+  async function handleRollbackTransaction() {
+    if (!activeConnection) return;
+    const id = activeConnection.id;
+    txBusy = true;
+    try {
+      await txApi.rollbackTransaction(id);
+      connectionsStore.setTransactionActive(id, false);
+      document.dispatchEvent(new CustomEvent('tx-rollback', { detail: { connectionId: id } }));
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error');
+    } finally {
+      txBusy = false;
+    }
+  }
+
   function openPalette() {
     paletteOpen = true;
   }
@@ -425,6 +479,7 @@
     {/if}
 
     {#if activeConnection}
+      {@const txActiveInBar = connectionsStore.isTransactionActive(activeConnection.id)}
       <div class="conn-chip-wrapper" bind:this={connChipEl} data-tauri-drag-region="false">
         <button
           class="conn-chip"
@@ -442,6 +497,9 @@
           ></span>
           <span class="conn-chip-name">{activeConnection.name}</span>
           <span class="conn-chip-tag">{activeConnection.dbType}</span>
+          {#if txActiveInBar}
+            <span class="conn-chip-tx-badge" aria-label="Transaction active">TX</span>
+          {/if}
           <svg
             class="conn-chip-chevron"
             width="10"
@@ -740,6 +798,33 @@
         Disconnected
       {/if}
     </div>
+
+    {#if isConnected}
+      {@const txActive = connectionsStore.isTransactionActive(activeConnection.id)}
+      <div class="tx-section" class:tx-section--active={txActive}>
+        <div class="tx-section-header">
+          <span class="tx-indicator" class:tx-indicator--active={txActive}></span>
+          <span class="tx-section-label">
+            {txActive ? 'Transaction active' : 'Transaction'}
+          </span>
+        </div>
+        <div class="tx-section-actions">
+          {#if !txActive}
+            <button class="tx-btn" onclick={handleBeginTransaction} disabled={txBusy}>
+              Begin
+            </button>
+          {:else}
+            <button class="tx-btn tx-btn--commit" onclick={handleCommitTransaction} disabled={txBusy}>
+              Commit
+            </button>
+            <button class="tx-btn tx-btn--rollback" onclick={handleRollbackTransaction} disabled={txBusy}>
+              Rollback
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/if}
+    
     {#if isConnected}
       <button class="conn-popup-disconnect" onclick={handleDisconnect} disabled={disconnecting}>
         {disconnecting ? 'Disconnecting…' : 'Disconnect'}
@@ -896,6 +981,114 @@
 
   .conn-chip--open .conn-chip-chevron {
     transform: rotate(180deg);
+  }
+
+  .conn-chip-tx-badge {
+    font-size: 9px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.05em;
+    color: var(--color-warning, #f59e0b);
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 40%, transparent);
+    border-radius: var(--radius-sm);
+    padding: 0 4px;
+    line-height: 16px;
+    flex-shrink: 0;
+  }
+
+  .tx-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+  }
+
+  .tx-section--active {
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, var(--color-bg-secondary));
+    border-color: color-mix(in srgb, var(--color-warning, #f59e0b) 35%, transparent);
+  }
+
+  .tx-section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .tx-indicator {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--color-text-muted);
+    opacity: 0.4;
+  }
+
+  .tx-indicator--active {
+    background: var(--color-warning, #f59e0b);
+    opacity: 1;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-warning, #f59e0b) 25%, transparent);
+  }
+
+  .tx-section-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .tx-section--active .tx-section-label {
+    color: var(--color-warning, #f59e0b);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .tx-section-actions {
+    display: flex;
+    gap: 5px;
+  }
+
+  .tx-btn {
+    padding: 0 8px;
+    height: 22px;
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-primary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    white-space: nowrap;
+  }
+
+  .tx-btn:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .tx-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .tx-btn--commit {
+    border-color: var(--color-success);
+    color: var(--color-success);
+  }
+
+  .tx-btn--commit:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  }
+
+  .tx-btn--rollback {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
+  .tx-btn--rollback:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   }
 
   .conn-popup {

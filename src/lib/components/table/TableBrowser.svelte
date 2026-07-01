@@ -1076,6 +1076,21 @@
     };
   });
 
+  $effect(() => {
+    function onTxRollback(e: Event) {
+      const { connectionId: evtConnId } = (e as CustomEvent<{ connectionId: string }>).detail;
+      if (evtConnId !== connectionId) return;
+      load().then(() => {
+        // Force DataTable to remount so it picks up the fresh rows AND restores
+        // any unsaved pending changes from the TableBrowser state, exactly as
+        // navigate-away-and-back would.
+        tableKey++;
+      });
+    }
+    document.addEventListener('tx-rollback', onTxRollback);
+    return () => document.removeEventListener('tx-rollback', onTxRollback);
+  });
+
   // Register this panel's state with the status bar when focused.
   $effect(() => {
     if (!isFocused) return;
@@ -1750,9 +1765,9 @@
             saveColPrefs(connectionId, database, table, { columnOrder: order });
           }}
           {columnOrderOverride}
-          initialPendingChanges={tableKey === 0 ? _restoredPending?.changes : undefined}
-          initialOriginalRows={tableKey === 0 ? _restoredPending?.originalRows : undefined}
-          initialDeletedRows={tableKey === 0 ? _restoredPending?.deletedRows : undefined}
+          initialPendingChanges={pendingChanges.size > 0 ? pendingChanges : undefined}
+          initialOriginalRows={originalRows.size > 0 ? originalRows : undefined}
+          initialDeletedRows={pendingDeletedRows.size > 0 ? pendingDeletedRows : undefined}
           {connectionId}
           {database}
           {columnRenames}
@@ -2105,6 +2120,26 @@
   }
 
   /* ── Filter summary bar ─────────────────────────────────────────────────── */
+
+  .tx-banner {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: 5px var(--spacing-3);
+    font-size: 11px;
+    color: var(--color-warning, #b45309);
+    background: color-mix(in srgb, var(--color-warning, #b45309) 10%, var(--color-bg-secondary));
+    border-bottom: 1px solid color-mix(in srgb, var(--color-warning, #b45309) 30%, transparent);
+  }
+
+  .tx-banner-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-warning, #b45309);
+    flex-shrink: 0;
+  }
 
   .filter-summary-bar {
     flex-shrink: 0;

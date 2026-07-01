@@ -9,6 +9,7 @@ use tauri::State;
 
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::AppError;
+use crate::transactions::{HeldConnection, TransactionManager};
 
 /// Column metadata included with every result set.
 #[derive(Debug, Serialize, Clone)]
@@ -150,6 +151,7 @@ pub struct RowDelete {
 pub async fn query_delete_rows(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
     database: String,
     table: String,
@@ -184,111 +186,115 @@ pub async fn query_delete_rows(
         return Ok(UpdateResult { updated_count: 0 });
     }
 
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     let mut total_deleted: u64 = 0;
 
-    match pool_ref.value() {
-        RemotePool::MySql(pool, _) => {
-            for row_del in &rows {
-                if row_del.primary_keys.is_empty() {
-                    continue;
-                }
-                let where_pairs: Vec<(&String, &serde_json::Value)> =
-                    row_del.primary_keys.iter().collect();
-                let mut where_parts: Vec<String> = Vec::new();
-                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
-                for (col, val) in &where_pairs {
-                    if val.is_null() {
-                        where_parts.push(format!("{} IS NULL", quote_mysql(col)));
-                    } else {
-                        where_parts.push(format!("{} = ?", quote_mysql(col)));
-                        where_bind.push(val);
+    if let Some(tx) = transactions.get(&connection_id) {
+        let mut guard = tx.lock().await;
+        match &mut *guard {
+            HeldConnection::MySql(conn) => {
+                for row_del in &rows {
+                    if row_del.primary_keys.is_empty() { continue; }
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_mysql(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_mysql(col))); where_bind.push(val); }
                     }
+                    let sql = format!("DELETE FROM {}.{} WHERE {} LIMIT 1", quote_mysql(&database), quote_mysql(&table), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in &where_bind { q = bind_mysql_value(q, val); }
+                    total_deleted += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-                let sql = format!(
-                    "DELETE FROM {}.{} WHERE {} LIMIT 1",
-                    quote_mysql(&database),
-                    quote_mysql(&table),
-                    where_parts.join(" AND ")
-                );
-                let mut q = sqlx::query(&sql);
-                for val in &where_bind {
-                    q = bind_mysql_value(q, val);
+            }
+            HeldConnection::Postgres(conn) => {
+                for row_del in &rows {
+                    if row_del.primary_keys.is_empty() { continue; }
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+                    let mut param_idx = 1usize;
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_postgres(col))); }
+                        else { where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx)); param_idx += 1; where_bind.push(val); }
+                    }
+                    let sql = format!("DELETE FROM {}.{} WHERE {}", quote_postgres(&database), quote_postgres(&table), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in &where_bind { q = bind_pg_value(q, val); }
+                    total_deleted += q.execute(&mut **conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-                let result = q
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                total_deleted += result.rows_affected();
+            }
+            HeldConnection::Sqlite(conn) => {
+                for row_del in &rows {
+                    if row_del.primary_keys.is_empty() { continue; }
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_sqlite(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_sqlite(col))); where_bind.push(val); }
+                    }
+                    let sql = format!("DELETE FROM {} WHERE {}", quote_sqlite(&table), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in &where_bind { q = bind_sqlite_value(q, val); }
+                    total_deleted += q.execute(&mut **conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
+                }
             }
         }
-        RemotePool::Postgres(pool) => {
-            for row_del in &rows {
-                if row_del.primary_keys.is_empty() {
-                    continue;
-                }
-                let where_pairs: Vec<(&String, &serde_json::Value)> =
-                    row_del.primary_keys.iter().collect();
-                let mut param_idx: usize = 1;
-                let mut where_parts: Vec<String> = Vec::new();
-                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
-                for (col, val) in &where_pairs {
-                    if val.is_null() {
-                        where_parts.push(format!("{} IS NULL", quote_postgres(col)));
-                    } else {
-                        where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx));
-                        param_idx += 1;
-                        where_bind.push(val);
+    } else {
+        let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+        match pool_ref.value() {
+            RemotePool::MySql(pool, _) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for row_del in &rows {
+                    if row_del.primary_keys.is_empty() { continue; }
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_mysql(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_mysql(col))); where_bind.push(val); }
                     }
+                    let sql = format!("DELETE FROM {}.{} WHERE {} LIMIT 1", quote_mysql(&database), quote_mysql(&table), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in &where_bind { q = bind_mysql_value(q, val); }
+                    total_deleted += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-                let sql = format!(
-                    "DELETE FROM {}.{} WHERE {}",
-                    quote_postgres(&database),
-                    quote_postgres(&table),
-                    where_parts.join(" AND ")
-                );
-                let mut q = sqlx::query(&sql);
-                for val in &where_bind {
-                    q = bind_pg_value(q, val);
-                }
-                let result = q
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                total_deleted += result.rows_affected();
             }
-        }
-        RemotePool::Sqlite(pool) => {
-            for row_del in &rows {
-                if row_del.primary_keys.is_empty() {
-                    continue;
-                }
-                let where_pairs: Vec<(&String, &serde_json::Value)> =
-                    row_del.primary_keys.iter().collect();
-                let mut where_parts: Vec<String> = Vec::new();
-                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
-                for (col, val) in &where_pairs {
-                    if val.is_null() {
-                        where_parts.push(format!("{} IS NULL", quote_sqlite(col)));
-                    } else {
-                        where_parts.push(format!("{} = ?", quote_sqlite(col)));
-                        where_bind.push(val);
+            RemotePool::Postgres(pool) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for row_del in &rows {
+                    if row_del.primary_keys.is_empty() { continue; }
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+                    let mut param_idx = 1usize;
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_postgres(col))); }
+                        else { where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx)); param_idx += 1; where_bind.push(val); }
                     }
+                    let sql = format!("DELETE FROM {}.{} WHERE {}", quote_postgres(&database), quote_postgres(&table), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in &where_bind { q = bind_pg_value(q, val); }
+                    total_deleted += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-                let sql = format!(
-                    "DELETE FROM {} WHERE {}",
-                    quote_sqlite(&table),
-                    where_parts.join(" AND ")
-                );
-                let mut q = sqlx::query(&sql);
-                for val in &where_bind {
-                    q = bind_sqlite_value(q, val);
+            }
+            RemotePool::Sqlite(pool) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for row_del in &rows {
+                    if row_del.primary_keys.is_empty() { continue; }
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_sqlite(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_sqlite(col))); where_bind.push(val); }
+                    }
+                    let sql = format!("DELETE FROM {} WHERE {}", quote_sqlite(&table), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in &where_bind { q = bind_sqlite_value(q, val); }
+                    total_deleted += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-                let result = q
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                total_deleted += result.rows_affected();
             }
         }
     }
@@ -303,6 +309,7 @@ pub async fn query_delete_rows(
 pub async fn query_update_rows(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
     table: String,
     database: String,
@@ -338,163 +345,129 @@ pub async fn query_update_rows(
         return Ok(UpdateResult { updated_count: 0 });
     }
 
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
-
     let mut total_updated: u64 = 0;
 
-    match pool_ref.value() {
-        RemotePool::MySql(pool, _) => {
-            for change in &changes {
-                if change.changes.is_empty() || change.primary_keys.is_empty() {
-                    continue;
-                }
-
-                let set_clause: Vec<String> = change
-                    .changes
-                    .keys()
-                    .map(|col| format!("{} = ?", quote_mysql(col)))
-                    .collect();
-
-                // Collect WHERE entries once so iteration order is consistent between
-                // clause generation and binding.
-                let where_pairs: Vec<(&String, &serde_json::Value)> =
-                    change.primary_keys.iter().collect();
-                let mut where_parts: Vec<String> = Vec::new();
-                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
-                for (col, val) in &where_pairs {
-                    if val.is_null() {
-                        where_parts.push(format!("{} IS NULL", quote_mysql(col)));
-                    } else {
-                        where_parts.push(format!("{} = ?", quote_mysql(col)));
-                        where_bind.push(val);
+    if let Some(tx) = transactions.get(&connection_id) {
+        let mut guard = tx.lock().await;
+        match &mut *guard {
+            HeldConnection::MySql(conn) => {
+                for change in &changes {
+                    if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+                    let set_clause: Vec<String> = change.changes.keys().map(|col| format!("{} = ?", quote_mysql(col))).collect();
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_mysql(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_mysql(col))); where_bind.push(val); }
                     }
+                    let sql = format!("UPDATE {}.{} SET {} WHERE {} LIMIT 1", quote_mysql(&database), quote_mysql(&table), set_clause.join(", "), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in change.changes.values() { q = bind_mysql_value(q, val); }
+                    for val in &where_bind { q = bind_mysql_value(q, val); }
+                    total_updated += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-
-                // LIMIT 1 guards against accidentally updating multiple rows on
-                // tables without a primary key (all-column WHERE match).
-                let sql = format!(
-                    "UPDATE {}.{} SET {} WHERE {} LIMIT 1",
-                    quote_mysql(&database),
-                    quote_mysql(&table),
-                    set_clause.join(", "),
-                    where_parts.join(" AND ")
-                );
-
-                let mut q = sqlx::query(&sql);
-                for val in change.changes.values() {
-                    q = bind_mysql_value(q, val);
+            }
+            HeldConnection::Postgres(conn) => {
+                for change in &changes {
+                    if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+                    let mut param_idx: usize = 1;
+                    let set_clause: Vec<String> = change.changes.keys().map(|col| { let s = format!("{} = ${}", quote_postgres(col), param_idx); param_idx += 1; s }).collect();
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_postgres(col))); }
+                        else { where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx)); param_idx += 1; where_bind.push(val); }
+                    }
+                    let sql = format!("UPDATE {}.{} SET {} WHERE {}", quote_postgres(&database), quote_postgres(&table), set_clause.join(", "), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in change.changes.values() { q = bind_pg_value(q, val); }
+                    for val in &where_bind { q = bind_pg_value(q, val); }
+                    total_updated += q.execute(&mut **conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-                for val in where_bind {
-                    q = bind_mysql_value(q, val);
+            }
+            HeldConnection::Sqlite(conn) => {
+                for change in &changes {
+                    if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+                    let set_clause: Vec<String> = change.changes.keys().map(|col| format!("{} = ?", quote_sqlite(col))).collect();
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_sqlite(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_sqlite(col))); where_bind.push(val); }
+                    }
+                    let sql = format!("UPDATE {} SET {} WHERE {}", quote_sqlite(&table), set_clause.join(", "), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in change.changes.values() { q = bind_sqlite_value(q, val); }
+                    for val in &where_bind { q = bind_sqlite_value(q, val); }
+                    total_updated += q.execute(&mut **conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-
-                let result = q
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                total_updated += result.rows_affected();
             }
         }
-        RemotePool::Postgres(pool) => {
-            for change in &changes {
-                if change.changes.is_empty() || change.primary_keys.is_empty() {
-                    continue;
-                }
-
-                let mut param_idx: usize = 1;
-
-                let set_clause: Vec<String> = change
-                    .changes
-                    .keys()
-                    .map(|col| {
-                        let s = format!("{} = ${}", quote_postgres(col), param_idx);
-                        param_idx += 1;
-                        s
-                    })
-                    .collect();
-
-                let where_pairs: Vec<(&String, &serde_json::Value)> =
-                    change.primary_keys.iter().collect();
-                let mut where_parts: Vec<String> = Vec::new();
-                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
-                for (col, val) in &where_pairs {
-                    if val.is_null() {
-                        where_parts.push(format!("{} IS NULL", quote_postgres(col)));
-                    } else {
-                        where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx));
-                        param_idx += 1;
-                        where_bind.push(val);
+    } else {
+        let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+        match pool_ref.value() {
+            RemotePool::MySql(pool, _) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for change in &changes {
+                    if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+                    let set_clause: Vec<String> = change.changes.keys().map(|col| format!("{} = ?", quote_mysql(col))).collect();
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_mysql(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_mysql(col))); where_bind.push(val); }
                     }
+                    // LIMIT 1 guards against accidentally updating multiple rows on
+                    // tables without a primary key (all-column WHERE match).
+                    let sql = format!("UPDATE {}.{} SET {} WHERE {} LIMIT 1", quote_mysql(&database), quote_mysql(&table), set_clause.join(", "), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in change.changes.values() { q = bind_mysql_value(q, val); }
+                    for val in &where_bind { q = bind_mysql_value(q, val); }
+                    total_updated += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-
-                let sql = format!(
-                    "UPDATE {}.{} SET {} WHERE {}",
-                    quote_postgres(&database),
-                    quote_postgres(&table),
-                    set_clause.join(", "),
-                    where_parts.join(" AND ")
-                );
-
-                let mut q = sqlx::query(&sql);
-                for val in change.changes.values() {
-                    q = bind_pg_value(q, val);
-                }
-                for val in where_bind {
-                    q = bind_pg_value(q, val);
-                }
-
-                let result = q
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                total_updated += result.rows_affected();
             }
-        }
-        RemotePool::Sqlite(pool) => {
-            for change in &changes {
-                if change.changes.is_empty() || change.primary_keys.is_empty() {
-                    continue;
-                }
-
-                let set_clause: Vec<String> = change
-                    .changes
-                    .keys()
-                    .map(|col| format!("{} = ?", quote_sqlite(col)))
-                    .collect();
-
-                let where_pairs: Vec<(&String, &serde_json::Value)> =
-                    change.primary_keys.iter().collect();
-                let mut where_parts: Vec<String> = Vec::new();
-                let mut where_bind: Vec<&serde_json::Value> = Vec::new();
-                for (col, val) in &where_pairs {
-                    if val.is_null() {
-                        where_parts.push(format!("{} IS NULL", quote_sqlite(col)));
-                    } else {
-                        where_parts.push(format!("{} = ?", quote_sqlite(col)));
-                        where_bind.push(val);
+            RemotePool::Postgres(pool) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for change in &changes {
+                    if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+                    let mut param_idx: usize = 1;
+                    let set_clause: Vec<String> = change.changes.keys().map(|col| { let s = format!("{} = ${}", quote_postgres(col), param_idx); param_idx += 1; s }).collect();
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_postgres(col))); }
+                        else { where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx)); param_idx += 1; where_bind.push(val); }
                     }
+                    let sql = format!("UPDATE {}.{} SET {} WHERE {}", quote_postgres(&database), quote_postgres(&table), set_clause.join(", "), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in change.changes.values() { q = bind_pg_value(q, val); }
+                    for val in &where_bind { q = bind_pg_value(q, val); }
+                    total_updated += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-
-                let sql = format!(
-                    "UPDATE {} SET {} WHERE {}",
-                    quote_sqlite(&table),
-                    set_clause.join(", "),
-                    where_parts.join(" AND ")
-                );
-
-                let mut q = sqlx::query(&sql);
-                for val in change.changes.values() {
-                    q = bind_sqlite_value(q, val);
+            }
+            RemotePool::Sqlite(pool) => {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for change in &changes {
+                    if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+                    let set_clause: Vec<String> = change.changes.keys().map(|col| format!("{} = ?", quote_sqlite(col))).collect();
+                    let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+                    let mut where_parts: Vec<String> = Vec::new();
+                    let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+                    for (col, val) in &where_pairs {
+                        if val.is_null() { where_parts.push(format!("{} IS NULL", quote_sqlite(col))); }
+                        else { where_parts.push(format!("{} = ?", quote_sqlite(col))); where_bind.push(val); }
+                    }
+                    let sql = format!("UPDATE {} SET {} WHERE {}", quote_sqlite(&table), set_clause.join(", "), where_parts.join(" AND "));
+                    let mut q = sqlx::query(&sql);
+                    for val in change.changes.values() { q = bind_sqlite_value(q, val); }
+                    for val in &where_bind { q = bind_sqlite_value(q, val); }
+                    total_updated += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
                 }
-                for val in where_bind {
-                    q = bind_sqlite_value(q, val);
-                }
-
-                let result = q
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                total_updated += result.rows_affected();
             }
         }
     }
@@ -509,6 +482,7 @@ pub async fn query_update_rows(
 pub async fn query_insert_row(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
     database: String,
     table: String,
@@ -545,64 +519,64 @@ pub async fn query_insert_row(
         ));
     }
 
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
-
     // Collect columns and values in a stable order.
     let cols: Vec<(&String, &serde_json::Value)> = values.iter().collect();
 
-    match pool_ref.value() {
-        RemotePool::MySql(pool, _) => {
-            let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_mysql(c)).collect();
-            let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
-            let sql = format!(
-                "INSERT INTO {}.{} ({}) VALUES ({})",
-                quote_mysql(&database),
-                quote_mysql(&table),
-                col_list.join(", "),
-                placeholders.join(", ")
-            );
-            let mut q = sqlx::query(&sql);
-            for (_, val) in &cols {
-                q = bind_mysql_value(q, val);
+    if let Some(tx) = transactions.get(&connection_id) {
+        let mut guard = tx.lock().await;
+        match &mut *guard {
+            HeldConnection::MySql(conn) => {
+                let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_mysql(c)).collect();
+                let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+                let sql = format!("INSERT INTO {}.{} ({}) VALUES ({})", quote_mysql(&database), quote_mysql(&table), col_list.join(", "), placeholders.join(", "));
+                let mut q = sqlx::query(&sql);
+                for (_, val) in &cols { q = bind_mysql_value(q, val); }
+                q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
-            q.execute(pool)
-                .await
-                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            HeldConnection::Postgres(conn) => {
+                let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_postgres(c)).collect();
+                let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
+                let sql = format!("INSERT INTO {}.{} ({}) VALUES ({})", quote_postgres(&database), quote_postgres(&table), col_list.join(", "), placeholders.join(", "));
+                let mut q = sqlx::query(&sql);
+                for (_, val) in &cols { q = bind_pg_value(q, val); }
+                q.execute(&mut **conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
+            HeldConnection::Sqlite(conn) => {
+                let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_sqlite(c)).collect();
+                let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+                let sql = format!("INSERT INTO {} ({}) VALUES ({})", quote_sqlite(&table), col_list.join(", "), placeholders.join(", "));
+                let mut q = sqlx::query(&sql);
+                for (_, val) in &cols { q = bind_sqlite_value(q, val); }
+                q.execute(&mut **conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
         }
-        RemotePool::Postgres(pool) => {
-            let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_postgres(c)).collect();
-            let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
-            let sql = format!(
-                "INSERT INTO {}.{} ({}) VALUES ({})",
-                quote_postgres(&database),
-                quote_postgres(&table),
-                col_list.join(", "),
-                placeholders.join(", ")
-            );
-            let mut q = sqlx::query(&sql);
-            for (_, val) in &cols {
-                q = bind_pg_value(q, val);
+    } else {
+        let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+        match pool_ref.value() {
+            RemotePool::MySql(pool, _) => {
+                let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_mysql(c)).collect();
+                let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+                let sql = format!("INSERT INTO {}.{} ({}) VALUES ({})", quote_mysql(&database), quote_mysql(&table), col_list.join(", "), placeholders.join(", "));
+                let mut q = sqlx::query(&sql);
+                for (_, val) in &cols { q = bind_mysql_value(q, val); }
+                q.execute(pool).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
-            q.execute(pool)
-                .await
-                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-        }
-        RemotePool::Sqlite(pool) => {
-            let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_sqlite(c)).collect();
-            let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
-            let sql = format!(
-                "INSERT INTO {} ({}) VALUES ({})",
-                quote_sqlite(&table),
-                col_list.join(", "),
-                placeholders.join(", ")
-            );
-            let mut q = sqlx::query(&sql);
-            for (_, val) in &cols {
-                q = bind_sqlite_value(q, val);
+            RemotePool::Postgres(pool) => {
+                let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_postgres(c)).collect();
+                let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
+                let sql = format!("INSERT INTO {}.{} ({}) VALUES ({})", quote_postgres(&database), quote_postgres(&table), col_list.join(", "), placeholders.join(", "));
+                let mut q = sqlx::query(&sql);
+                for (_, val) in &cols { q = bind_pg_value(q, val); }
+                q.execute(pool).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
-            q.execute(pool)
-                .await
-                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            RemotePool::Sqlite(pool) => {
+                let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_sqlite(c)).collect();
+                let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+                let sql = format!("INSERT INTO {} ({}) VALUES ({})", quote_sqlite(&table), col_list.join(", "), placeholders.join(", "));
+                let mut q = sqlx::query(&sql);
+                for (_, val) in &cols { q = bind_sqlite_value(q, val); }
+                q.execute(pool).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
         }
     }
 
@@ -720,6 +694,7 @@ fn split_statements(sql: &str) -> Vec<String> {
 pub async fn query_execute_multi(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
     sql: String,
     database: Option<String>,
@@ -729,108 +704,95 @@ pub async fn query_execute_multi(
         return Ok(vec![]);
     }
 
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     let mut results: Vec<QueryResult> = Vec::new();
 
-    for stmt in &statements {
-        let query_id = uuid::Uuid::new_v4().to_string();
-        let start = std::time::Instant::now();
-
-        let exec_result = match pool_ref.value() {
-            RemotePool::MySql(pool, read_only) => {
-                if let Some(db) = &database {
-                    let mut conn = (*pool.connect_options())
-                        .clone()
-                        .database(db)
-                        .connect()
-                        .await
-                        .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                    // after_connect only runs for pool-allocated connections; apply
-                    // read-only enforcement manually for direct connections.
-                    if *read_only {
-                        sqlx::query("SET SESSION TRANSACTION READ ONLY")
-                            .execute(&mut conn)
-                            .await
-                            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                    }
-                    execute_mysql(&mut conn, stmt, 10_000, 0).await
-                } else {
-                    let mut conn = pool
-                        .acquire()
-                        .await
-                        .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                    execute_mysql(&mut conn, stmt, 10_000, 0).await
+    // If a transaction is active, route all statements through the held connection.
+    if let Some(tx) = transactions.get(&connection_id) {
+        let mut guard = tx.lock().await;
+        for stmt in &statements {
+            let query_id = uuid::Uuid::new_v4().to_string();
+            let start = std::time::Instant::now();
+            let exec_result = match &mut *guard {
+                HeldConnection::MySql(conn) => {
+                    execute_mysql(&mut *conn, stmt, 10_000, 0).await
                 }
-            }
-            RemotePool::Postgres(pool) => {
-                let mut conn = pool
-                    .acquire()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                if let Some(schema) = &database {
-                    sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
-                        .execute(&mut *conn)
+                HeldConnection::Postgres(conn) => {
+                    if let Some(schema) = &database {
+                        sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                        .execute(&mut **conn)
                         .await
                         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    }
+                    execute_postgres(&mut **conn, stmt, 10_000, 0).await
                 }
-                execute_postgres(&mut conn, stmt, 10_000, 0).await
-            }
-            RemotePool::Sqlite(pool) => {
-                let mut conn = pool
-                    .acquire()
+                HeldConnection::Sqlite(conn) => execute_sqlite(&mut **conn, stmt, 10_000, 0).await,
+            };
+            let duration_ms = start.elapsed().as_millis() as u64;
+            push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+        }
+        return Ok(results);
+    }
+
+    // No active transaction — acquire a single connection for the whole batch.
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+
+    match pool_ref.value() {
+        RemotePool::MySql(pool, read_only) => {
+            if let Some(db) = &database {
+                let mut conn = (*pool.connect_options())
+                    .clone()
+                    .database(db)
+                    .connect()
                     .await
                     .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                execute_sqlite(&mut conn, stmt, 10_000, 0).await
+                if *read_only {
+                    sqlx::query("SET SESSION TRANSACTION READ ONLY")
+                    .execute(&mut conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                }
+                for stmt in &statements {
+                    let query_id = uuid::Uuid::new_v4().to_string();
+                    let start = std::time::Instant::now();
+                    let exec_result = execute_mysql(&mut conn, stmt, 10_000, 0).await;
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                }
+            } else {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for stmt in &statements {
+                    let query_id = uuid::Uuid::new_v4().to_string();
+                    let start = std::time::Instant::now();
+                    let exec_result = execute_mysql(&mut conn, stmt, 10_000, 0).await;
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                }
             }
-        };
-
-        let duration_ms = start.elapsed().as_millis() as u64;
-
-        match exec_result {
-            Ok((columns, rows, total_rows, affected_rows)) => {
-                let row_count = rows.len() as i64;
-                record_history(
-                    sqlite.inner(),
-                    &query_id,
-                    &connection_id,
-                    stmt,
-                    duration_ms,
-                    Some(row_count),
-                    None,
-                    "success",
-                )
-                .await;
-                results.push(QueryResult {
-                    query_id,
-                    columns,
-                    rows,
-                    total_rows,
-                    duration_ms,
-                    affected_rows,
-                    error: None,
-                });
+        }
+        RemotePool::Postgres(pool) => {
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            if let Some(schema) = &database {
+                sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
-            Err(err_msg) => {
-                record_history(
-                    sqlite.inner(),
-                    &query_id,
-                    &connection_id,
-                    stmt,
-                    duration_ms,
-                    None,
-                    Some(&err_msg),
-                    "error",
-                )
-                .await;
-                results.push(QueryResult {
-                    query_id,
-                    columns: vec![],
-                    rows: vec![],
-                    total_rows: None,
-                    duration_ms,
-                    affected_rows: None,
-                    error: Some(err_msg),
-                });
+            for stmt in &statements {
+                let query_id = uuid::Uuid::new_v4().to_string();
+                let start = std::time::Instant::now();
+                let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
+                let duration_ms = start.elapsed().as_millis() as u64;
+                push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+            }
+        }
+        RemotePool::Sqlite(pool) => {
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            for stmt in &statements {
+                let query_id = uuid::Uuid::new_v4().to_string();
+                let start = std::time::Instant::now();
+                let exec_result = execute_sqlite(&mut conn, stmt, 10_000, 0).await;
+                let duration_ms = start.elapsed().as_millis() as u64;
+                push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
             }
         }
     }
@@ -838,12 +800,35 @@ pub async fn query_execute_multi(
     Ok(results)
 }
 
+async fn push_result(
+    results: &mut Vec<QueryResult>,
+    exec_result: ExecuteResult,
+    query_id: String,
+    connection_id: &str,
+    stmt: &str,
+    duration_ms: u64,
+    sqlite: &sqlx::SqlitePool,
+) {
+    match exec_result {
+        Ok((columns, rows, total_rows, affected_rows)) => {
+            let row_count = rows.len() as i64;
+            record_history(sqlite, &query_id, connection_id, stmt, duration_ms, Some(row_count), None, "success").await;
+            results.push(QueryResult { query_id, columns, rows, total_rows, duration_ms, affected_rows, error: None });
+        }
+        Err(err_msg) => {
+            record_history(sqlite, &query_id, connection_id, stmt, duration_ms, None, Some(&err_msg), "error").await;
+            results.push(QueryResult { query_id, columns: vec![], rows: vec![], total_rows: None, duration_ms, affected_rows: None, error: Some(err_msg) });
+        }
+    }
+}
+
 /// Execute a SQL query, returning a paginated result set.
 #[tauri::command]
 pub async fn query_execute(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
-    #[allow(unused_variables)] connection_id: String,
+    transactions: State<'_, Arc<TransactionManager>>,
+    connection_id: String,
     sql: String,
     page: u32,
     page_size: u32,
@@ -852,9 +837,31 @@ pub async fn query_execute(
     let query_id = uuid::Uuid::new_v4().to_string();
     let start = std::time::Instant::now();
 
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
-
     let offset = (page.saturating_sub(1)) * page_size;
+
+    // If a transaction is active, route through the held connection.
+    if let Some(tx) = transactions.get(&connection_id) {
+        let mut guard = tx.lock().await;
+        let result = match &mut *guard {
+            HeldConnection::MySql(conn) => {
+                execute_mysql(&mut *conn, &sql, page_size, offset).await
+            }
+            HeldConnection::Postgres(conn) => {
+                if let Some(schema) = &database {
+                    sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                        .execute(&mut **conn)
+                        .await
+                        .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                }
+                execute_postgres(&mut **conn, &sql, page_size, offset).await
+            }
+            HeldConnection::Sqlite(conn) => execute_sqlite(&mut **conn, &sql, page_size, offset).await,
+        };
+        let duration_ms = start.elapsed().as_millis() as u64;
+        return Ok(build_query_result(result, query_id, &connection_id, &sql, duration_ms, sqlite.inner()).await);
+    }
+
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
 
     let result = match pool_ref.value() {
         RemotePool::MySql(pool, read_only) => {
@@ -872,9 +879,9 @@ pub async fn query_execute(
                 // read-only enforcement manually for direct connections.
                 if *read_only {
                     sqlx::query("SET SESSION TRANSACTION READ ONLY")
-                        .execute(&mut conn)
-                        .await
-                        .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    .execute(&mut conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
                 }
                 execute_mysql(&mut conn, &sql, page_size, offset).await
             } else {
@@ -908,54 +915,26 @@ pub async fn query_execute(
     };
 
     let duration_ms = start.elapsed().as_millis() as u64;
+    Ok(build_query_result(result, query_id, &connection_id, &sql, duration_ms, sqlite.inner()).await)
+}
 
+async fn build_query_result(
+    result: ExecuteResult,
+    query_id: String,
+    connection_id: &str,
+    sql: &str,
+    duration_ms: u64,
+    sqlite: &sqlx::SqlitePool,
+) -> QueryResult {
     match result {
         Ok((columns, rows, total_rows, affected_rows)) => {
             let row_count = rows.len() as i64;
-            record_history(
-                sqlite.inner(),
-                &query_id,
-                &connection_id,
-                &sql,
-                duration_ms,
-                Some(row_count),
-                None,
-                "success",
-            )
-            .await;
-
-            Ok(QueryResult {
-                query_id,
-                columns,
-                rows,
-                total_rows,
-                duration_ms,
-                affected_rows,
-                error: None,
-            })
+            record_history(sqlite, &query_id, connection_id, sql, duration_ms, Some(row_count), None, "success").await;
+            QueryResult { query_id, columns, rows, total_rows, duration_ms, affected_rows, error: None }
         }
         Err(err_msg) => {
-            record_history(
-                sqlite.inner(),
-                &query_id,
-                &connection_id,
-                &sql,
-                duration_ms,
-                None,
-                Some(&err_msg),
-                "error",
-            )
-            .await;
-
-            Ok(QueryResult {
-                query_id,
-                columns: vec![],
-                rows: vec![],
-                total_rows: None,
-                duration_ms,
-                affected_rows: None,
-                error: Some(err_msg),
-            })
+            record_history(sqlite, &query_id, connection_id, sql, duration_ms, None, Some(&err_msg), "error").await;
+            QueryResult { query_id, columns: vec![], rows: vec![], total_rows: None, duration_ms, affected_rows: None, error: Some(err_msg) }
         }
     }
 }
@@ -965,12 +944,13 @@ pub async fn query_execute(
 pub async fn query_execute_selection(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
     sql: String,
     database: Option<String>,
 ) -> Result<QueryResult, AppError> {
     // Delegate to the main executor with page=1 and a large page size.
-    query_execute(sqlite, connections, connection_id, sql, 1, 10_000, database).await
+    query_execute(sqlite, connections, transactions, connection_id, sql, 1, 10_000, database).await
 }
 
 // ── Type formatting helpers ───────────────────────────────────────────────────

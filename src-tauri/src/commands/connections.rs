@@ -524,11 +524,15 @@ pub async fn connections_connect(
 }
 
 /// Close the connection pool for the given profile.
+/// Also removes any active transaction for this connection — the underlying
+/// DB connection is dropped, which causes the server to roll back automatically.
 #[tauri::command]
 pub async fn connections_disconnect(
     connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<crate::transactions::TransactionManager>>,
     id: String,
 ) -> Result<(), AppError> {
+    transactions.remove(&id);
     connections.disconnect(&id).await;
     Ok(())
 }
