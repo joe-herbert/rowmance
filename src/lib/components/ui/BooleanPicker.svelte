@@ -1,7 +1,7 @@
 <script lang="ts">
   interface Props {
     value: boolean | null;
-    displayFormat: 'tick-cross' | 'true-false' | '1-0';
+    displayFormat: 'tick-cross' | 'true-false' | '1-0' | 'as-saved';
     nullable?: boolean;
     onselect: (_v: boolean | null) => void;
   }
@@ -11,12 +11,14 @@
   function trueLabel(): string {
     if (displayFormat === 'true-false') return 'True';
     if (displayFormat === '1-0') return '1';
+    if (displayFormat === 'as-saved') return 'true';
     return '✓';
   }
 
   function falseLabel(): string {
     if (displayFormat === 'true-false') return 'False';
     if (displayFormat === '1-0') return '0';
+    if (displayFormat === 'as-saved') return 'false';
     return '✗';
   }
 </script>

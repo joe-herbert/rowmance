@@ -1,6 +1,9 @@
 /// Tauri commands for executing SQL queries against remote databases.
 use serde::{Deserialize, Serialize};
 use sqlx::{Column, ConnectOptions, Executor, Row, Statement, TypeInfo};
+use sqlparser::ast::Statement as SqlStatement;
+use sqlparser::dialect::{MySqlDialect, PostgreSqlDialect, SQLiteDialect};
+use sqlparser::parser::Parser;
 use std::sync::Arc;
 use tauri::State;
 
@@ -994,6 +997,77 @@ fn parse_max_size(debug: &str) -> Option<u32> {
     debug[start..end].parse().ok()
 }
 
+// ── Row-returning detection ───────────────────────────────────────────────────
+
+/// Returns true if the parsed statement produces a result set the caller should
+/// read with `fetch_all`. INSERT/UPDATE/DELETE with RETURNING count as row-returning.
+fn stmt_returns_rows(stmt: &SqlStatement) -> bool {
+    match stmt {
+        SqlStatement::Query(_) => true,
+        SqlStatement::Insert(i) => i.returning.is_some(),
+        SqlStatement::Update(u) => u.returning.is_some(),
+        SqlStatement::Delete(d) => d.returning.is_some(),
+        // SHOW ... and DESCRIBE return result sets in MySQL/MariaDB.
+        SqlStatement::ShowVariable { .. }
+        | SqlStatement::ShowColumns { .. }
+        | SqlStatement::ShowCreate { .. }
+        | SqlStatement::ShowTables { .. }
+        | SqlStatement::ShowStatus { .. }
+        | SqlStatement::ShowDatabases { .. }
+        | SqlStatement::ShowFunctions { .. } => true,
+        // SQLite PRAGMA can return rows.
+        SqlStatement::Pragma { value, .. } => value.is_some(),
+        _ => false,
+    }
+}
+
+/// Keyword-level fallback used when sqlparser cannot parse the SQL (e.g. dialect-
+/// specific syntax the parser doesn't support). Strips leading comments before
+/// checking the first keyword so `-- comment\nSELECT ...` is handled correctly.
+fn returns_rows_heuristic(sql: &str) -> bool {
+    let mut s = sql.trim();
+    loop {
+        s = s.trim_start();
+        if s.starts_with("--") {
+            s = s.splitn(2, '\n').nth(1).unwrap_or("");
+        } else if s.starts_with("/*") {
+            s = s.find("*/").map(|i| &s[i + 2..]).unwrap_or("");
+        } else {
+            break;
+        }
+    }
+    let upper = s.trim().to_uppercase();
+    upper.starts_with("SELECT")
+        || upper.starts_with("WITH")
+        || upper.starts_with("TABLE ")
+        || upper.starts_with("VALUES")
+        || upper.starts_with("SHOW")
+        || upper.starts_with("PRAGMA")
+        || upper.starts_with("DESCRIBE")
+        || upper.starts_with("DESC ")
+}
+
+fn returns_rows_mysql(sql: &str) -> bool {
+    match Parser::parse_sql(&MySqlDialect {}, sql) {
+        Ok(stmts) => stmts.first().map(stmt_returns_rows).unwrap_or(false),
+        Err(_) => returns_rows_heuristic(sql),
+    }
+}
+
+fn returns_rows_postgres(sql: &str) -> bool {
+    match Parser::parse_sql(&PostgreSqlDialect {}, sql) {
+        Ok(stmts) => stmts.first().map(stmt_returns_rows).unwrap_or(false),
+        Err(_) => returns_rows_heuristic(sql),
+    }
+}
+
+fn returns_rows_sqlite(sql: &str) -> bool {
+    match Parser::parse_sql(&SQLiteDialect {}, sql) {
+        Ok(stmts) => stmts.first().map(stmt_returns_rows).unwrap_or(false),
+        Err(_) => returns_rows_heuristic(sql),
+    }
+}
+
 // ── Dialect-specific executors ────────────────────────────────────────────────
 
 type ExecuteResult = Result<
@@ -1012,9 +1086,8 @@ async fn execute_mysql(
     page_size: u32,
     offset: u32,
 ) -> ExecuteResult {
-    // Wrap SELECT statements with LIMIT/OFFSET; pass DDL/DML through unchanged.
     let sql = sql.trim_end_matches(';');
-    let is_select = sql.trim().to_uppercase().starts_with("SELECT");
+    let is_select = returns_rows_mysql(sql);
 
     if is_select {
         let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
@@ -1085,7 +1158,7 @@ async fn execute_postgres(
     offset: u32,
 ) -> ExecuteResult {
     let sql = sql.trim_end_matches(';');
-    let is_select = sql.trim().to_uppercase().starts_with("SELECT");
+    let is_select = returns_rows_postgres(sql);
 
     if is_select {
         let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
@@ -1152,7 +1225,7 @@ async fn execute_sqlite(
     offset: u32,
 ) -> ExecuteResult {
     let sql = sql.trim_end_matches(';');
-    let is_select = sql.trim().to_uppercase().starts_with("SELECT");
+    let is_select = returns_rows_sqlite(sql);
 
     if is_select {
         let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
@@ -1638,5 +1711,101 @@ mod tests {
     fn quote_postgres_handles_simple_identifiers() {
         assert_eq!(quote_postgres("users"), "\"users\"");
         assert_eq!(quote_postgres("created_at"), "\"created_at\"");
+    }
+
+    // ── returns_rows detection ────────────────────────────────────────────────
+
+    #[test]
+    fn returns_rows_plain_select() {
+        assert!(returns_rows_postgres("SELECT 1"));
+        assert!(returns_rows_mysql("SELECT * FROM users"));
+        assert!(returns_rows_sqlite("SELECT name FROM t"));
+    }
+
+    #[test]
+    fn returns_rows_cte_select() {
+        assert!(returns_rows_postgres(
+            "WITH cte AS (SELECT 1 AS n) SELECT n FROM cte"
+        ));
+        assert!(returns_rows_mysql(
+            "WITH cte AS (SELECT 1) SELECT * FROM cte"
+        ));
+    }
+
+    #[test]
+    fn returns_rows_cte_insert_without_returning() {
+        // sqlparser models CTE-wrapped DML as a Query node, so this returns true
+        // and goes through fetch_all. The INSERT still executes; the caller just
+        // receives 0 rows rather than a rows_affected count. Acceptable tradeoff.
+        assert!(returns_rows_postgres(
+            "WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x"
+        ));
+    }
+
+    #[test]
+    fn returns_rows_insert_with_returning() {
+        assert!(returns_rows_postgres(
+            "INSERT INTO orders (total) VALUES (100) RETURNING id"
+        ));
+    }
+
+    #[test]
+    fn returns_rows_insert_without_returning() {
+        assert!(!returns_rows_postgres(
+            "INSERT INTO orders (total) VALUES (100)"
+        ));
+        assert!(!returns_rows_mysql("INSERT INTO t (a) VALUES (1)"));
+    }
+
+    #[test]
+    fn returns_rows_update_with_returning() {
+        assert!(returns_rows_postgres(
+            "UPDATE orders SET status = 'done' WHERE id = 1 RETURNING id"
+        ));
+    }
+
+    #[test]
+    fn returns_rows_update_without_returning() {
+        assert!(!returns_rows_postgres(
+            "UPDATE orders SET status = 'done' WHERE id = 1"
+        ));
+        assert!(!returns_rows_mysql("UPDATE t SET a = 1 WHERE id = 1"));
+    }
+
+    #[test]
+    fn returns_rows_delete_with_returning() {
+        assert!(returns_rows_postgres(
+            "DELETE FROM orders WHERE id = 1 RETURNING id"
+        ));
+    }
+
+    #[test]
+    fn returns_rows_delete_without_returning() {
+        assert!(!returns_rows_postgres("DELETE FROM orders WHERE id = 1"));
+        assert!(!returns_rows_mysql("DELETE FROM t WHERE id = 1"));
+    }
+
+    #[test]
+    fn returns_rows_ddl_is_not_rows() {
+        assert!(!returns_rows_postgres("CREATE TABLE t (id INT)"));
+        assert!(!returns_rows_mysql("DROP TABLE users"));
+        assert!(!returns_rows_sqlite("ALTER TABLE t ADD COLUMN x TEXT"));
+    }
+
+    #[test]
+    fn returns_rows_leading_comment_before_select() {
+        assert!(returns_rows_postgres("-- find users\nSELECT * FROM users"));
+        assert!(returns_rows_mysql("/* all rows */ SELECT * FROM t"));
+    }
+
+    #[test]
+    fn returns_rows_show_mysql() {
+        assert!(returns_rows_mysql("SHOW TABLES"));
+        assert!(returns_rows_mysql("SHOW CREATE TABLE users"));
+    }
+
+    #[test]
+    fn returns_rows_pragma_sqlite() {
+        assert!(returns_rows_sqlite("PRAGMA table_info(users)"));
     }
 }

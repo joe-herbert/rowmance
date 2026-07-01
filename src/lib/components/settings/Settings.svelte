@@ -314,8 +314,9 @@
               { value: 'tick-cross', label: '✓ / ✗' },
               { value: 'true-false', label: 'True / False' },
               { value: '1-0', label: '1 / 0' },
+              { value: 'as-saved', label: 'As saved in DB' },
             ]}
-            onchange={(v) => update('booleanDisplay', v as 'tick-cross' | 'true-false' | '1-0')}
+            onchange={(v) => update('booleanDisplay', v as 'tick-cross' | 'true-false' | '1-0' | 'as-saved')}
           />
         </div>
 

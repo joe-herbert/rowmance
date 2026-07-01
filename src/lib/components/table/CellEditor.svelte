@@ -317,6 +317,7 @@
     const fmt = settings.booleanDisplay ?? 'tick-cross';
     if (fmt === 'true-false') return v ? 'True' : 'False';
     if (fmt === '1-0') return v ? '1' : '0';
+    if (fmt === 'as-saved') return String(v);
     return v ? '✓' : '✗';
   }
 

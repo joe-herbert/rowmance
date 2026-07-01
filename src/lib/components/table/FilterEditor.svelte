@@ -456,6 +456,7 @@
     const fmt = settings.settings.booleanDisplay ?? 'tick-cross';
     if (fmt === 'true-false') return 'True';
     if (fmt === '1-0') return '1';
+    if (fmt === 'as-saved') return 'true';
     return '✓';
   }
 
@@ -463,6 +464,7 @@
     const fmt = settings.settings.booleanDisplay ?? 'tick-cross';
     if (fmt === 'true-false') return 'False';
     if (fmt === '1-0') return '0';
+    if (fmt === 'as-saved') return 'false';
     return '✗';
   }
 

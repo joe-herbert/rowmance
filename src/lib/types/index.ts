@@ -320,7 +320,7 @@ export interface AppSettings {
   rightSidebarPanel: string;
   clickOutsideEdit: 'discard' | 'confirm';
   nowTimeSource: 'user' | 'database';
-  booleanDisplay: 'tick-cross' | 'true-false' | '1-0';
+  booleanDisplay: 'tick-cross' | 'true-false' | '1-0' | 'as-saved';
   systemDatabases: string[];
   systemTablePatterns: string[];
   showSystemItems: boolean;

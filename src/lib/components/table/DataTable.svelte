@@ -2888,6 +2888,8 @@
                           {cellValue ? 'True' : 'False'}
                         {:else if settings.booleanDisplay === '1-0'}
                           {cellValue ? '1' : '0'}
+                        {:else if settings.booleanDisplay === 'as-saved'}
+                          {String(cellValue)}
                         {:else if cellValue}
                           <svg
                             width="12"
