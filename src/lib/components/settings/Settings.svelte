@@ -275,6 +275,19 @@
 
         <div class="setting-row">
           <div class="setting-label">
+            <span class="label-text">Newline Replacement</span>
+            <span class="label-hint">Character shown in place of newlines in table cells (leave empty to hide)</span>
+          </div>
+          <input
+            class="setting-input setting-input--sm"
+            type="text"
+            value={settings.newlineReplacement}
+            onchange={(e) => update('newlineReplacement', (e.currentTarget as HTMLInputElement).value)}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
             <span class="label-text">History Max Entries</span>
             <span class="label-hint">Maximum number of query history entries</span>
           </div>

@@ -1417,11 +1417,6 @@
 
   // ── Cell formatting ───────────────────────────────────────────────────────
 
-  function formatCell(value: CellValue): string {
-    if (value === null) return '';
-    return String(value);
-  }
-
   function escapeHtml(s: string): string {
     return s
       .replace(/&/g, '&amp;')
@@ -1701,7 +1696,14 @@
     if (activeMenuDismiss) activeMenuDismiss = null;
   }
 
-  const { settings } = useSettings();
+  const settingsStore = useSettings();
+  const settings = $derived(settingsStore.settings);
+
+  function formatCell(value: CellValue): string {
+    if (value === null) return '';
+    const nl = settings.newlineReplacement ?? '↵';
+    return String(value).replace(/\r\n|\r|\n/g, nl);
+  }
 
   function isDatetimeishType(dt: string): boolean {
     const lower = dt.toLowerCase();
@@ -3852,11 +3854,17 @@
   .cell-content {
     overflow: hidden;
     min-width: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .cell-multiline .cell-content {
     display: -webkit-box;
-    -webkit-line-clamp: var(--cell-max-lines, 1);
-    line-clamp: var(--cell-max-lines, 1);
+    -webkit-line-clamp: var(--cell-max-lines, 2);
+    line-clamp: var(--cell-max-lines, 2);
     -webkit-box-orient: vertical;
     white-space: pre-wrap;
+    text-overflow: clip;
   }
 
   .cell-multiline .data-cell {

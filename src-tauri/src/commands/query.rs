@@ -1302,6 +1302,11 @@ fn sqlite_value_to_json(row: &sqlx::sqlite::SqliteRow, idx: usize) -> serde_json
             .and_then(|f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
             .unwrap_or(serde_json::Value::Null);
     }
+    if let Ok(v) = row.try_get::<Option<u64>, _>(idx) {
+        return v
+            .map(serde_json::Value::from)
+            .unwrap_or(serde_json::Value::Null);
+    }
     if let Ok(v) = row.try_get::<Option<bool>, _>(idx) {
         return v
             .map(serde_json::Value::Bool)
@@ -1342,6 +1347,11 @@ fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::V
     if let Ok(v) = row.try_get::<Option<f64>, _>(idx) {
         return v
             .and_then(|f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<u64>, _>(idx) {
+        return v
+            .map(serde_json::Value::from)
             .unwrap_or(serde_json::Value::Null);
     }
     if let Ok(v) = row.try_get::<Option<bool>, _>(idx) {
