@@ -748,7 +748,7 @@ pub async fn query_execute_multi(
                         .acquire()
                         .await
                         .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                    execute_mysql(&mut *conn, stmt, 10_000, 0).await
+                    execute_mysql(&mut conn, stmt, 10_000, 0).await
                 }
             }
             RemotePool::Postgres(pool) => {
@@ -762,14 +762,14 @@ pub async fn query_execute_multi(
                         .await
                         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
                 }
-                execute_postgres(&mut *conn, stmt, 10_000, 0).await
+                execute_postgres(&mut conn, stmt, 10_000, 0).await
             }
             RemotePool::Sqlite(pool) => {
                 let mut conn = pool
                     .acquire()
                     .await
                     .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                execute_sqlite(&mut *conn, stmt, 10_000, 0).await
+                execute_sqlite(&mut conn, stmt, 10_000, 0).await
             }
         };
 
@@ -863,7 +863,7 @@ pub async fn query_execute(
                     .acquire()
                     .await
                     .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                execute_mysql(&mut *conn, &sql, page_size, offset).await
+                execute_mysql(&mut conn, &sql, page_size, offset).await
             }
         }
         RemotePool::Postgres(pool) => {
@@ -877,14 +877,14 @@ pub async fn query_execute(
                     .await
                     .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
-            execute_postgres(&mut *conn, &sql, page_size, offset).await
+            execute_postgres(&mut conn, &sql, page_size, offset).await
         }
         RemotePool::Sqlite(pool) => {
             let mut conn = pool
                 .acquire()
                 .await
                 .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            execute_sqlite(&mut *conn, &sql, page_size, offset).await
+            execute_sqlite(&mut conn, &sql, page_size, offset).await
         }
     };
 

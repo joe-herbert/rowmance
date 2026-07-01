@@ -45,6 +45,7 @@ impl SshTunnelManager {
     /// Binds a local TCP listener on 127.0.0.1:0, then spawns a forwarding
     /// task that accepts connections and proxies them through the SSH session
     /// to the remote database host:port.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_tunnel(
         &self,
         connection_id: &str,
@@ -117,6 +118,7 @@ impl SshTunnelManager {
 /// This is a minimal TCP-over-SSH forwarder. It uses raw TCP without the russh
 /// crate to avoid compilation overhead; russh integration can be layered on top
 /// by replacing the `forward_connection` function.
+#[allow(clippy::too_many_arguments)]
 async fn run_tunnel(
     listener: tokio::net::TcpListener,
     mut shutdown: oneshot::Receiver<()>,

@@ -31,7 +31,7 @@ pub async fn window_set_traffic_light_position(
 pub fn install_titlebar_swizzle() {
     use objc2::runtime::{AnyObject, Imp, Sel};
     use objc2_foundation::NSRect;
-    use std::ffi::CStr;
+
     use std::sync::OnceLock;
 
     type SetFrameFn = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, NSRect);
@@ -72,7 +72,7 @@ pub fn install_titlebar_swizzle() {
     }
 
     unsafe {
-        let cls_name = CStr::from_bytes_with_nul(b"_NSTitlebarContainerView\0").unwrap();
+        let cls_name = c"_NSTitlebarContainerView";
         let Some(cls) = objc2::runtime::AnyClass::get(cls_name) else {
             return;
         };

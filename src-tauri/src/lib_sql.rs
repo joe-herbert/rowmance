@@ -1,6 +1,6 @@
 /// SQL text utilities shared across command handlers.
 /// Mirrors the logic in the frontend's `src/lib/utils/sql.ts`.
-
+///
 /// Split a SQL document into individual statements by semicolons,
 /// respecting single-quoted strings, double-quoted identifiers,
 /// backtick-quoted identifiers, and -- / block comments.

@@ -42,11 +42,12 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
   'TOGGLE_SYSTEM_ITEMS',
   'CLOSE_OTHER_TABS',
   'GLOBAL_SEARCH',
+  'TOGGLE_READ_ONLY',
 ];
 
 describe('SHORTCUT_DEFINITIONS', () => {
-  it('contains exactly 27 action definitions', () => {
-    expect(SHORTCUT_DEFINITIONS).toHaveLength(27);
+  it('contains exactly 28 action definitions', () => {
+    expect(SHORTCUT_DEFINITIONS).toHaveLength(28);
   });
 
   it('contains all expected action IDs', () => {

@@ -460,19 +460,43 @@
           class="read-only-toggle"
           class:read-only-toggle--on={activeConnection.readOnly}
           onclick={() => connectionsStore.toggleReadOnly(activeConnection!.id)}
-          title={activeConnection.readOnly ? 'Read-only on — click to disable' : 'Read-only off — click to enable'}
-          aria-label={activeConnection.readOnly ? 'Disable read-only mode' : 'Enable read-only mode'}
+          title={activeConnection.readOnly
+            ? 'Read-only on — click to disable'
+            : 'Read-only off — click to enable'}
+          aria-label={activeConnection.readOnly
+            ? 'Disable read-only mode'
+            : 'Enable read-only mode'}
           aria-pressed={activeConnection.readOnly}
         >
           {#if activeConnection.readOnly}
             <!-- Locked padlock -->
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <rect x="5" y="11" width="14" height="9" rx="2"></rect>
               <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
             </svg>
           {:else}
             <!-- Unlocked padlock -->
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <rect x="5" y="11" width="14" height="9" rx="2"></rect>
               <path d="M8 11V8a4 4 0 0 1 7.5-3.9"></path>
             </svg>

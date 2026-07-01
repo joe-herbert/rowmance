@@ -206,6 +206,7 @@ pub async fn users_get_grants(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn users_create(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,

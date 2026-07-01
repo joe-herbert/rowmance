@@ -14,7 +14,7 @@ fn format_csv(rows: &[Vec<serde_json::Value>], columns: &[String]) -> String {
     out.push('\n');
 
     for row in rows {
-        let cells: Vec<String> = row.iter().map(|v| csv_escape_value(v)).collect();
+        let cells: Vec<String> = row.iter().map(csv_escape_value).collect();
         out.push_str(&cells.join(","));
         out.push('\n');
     }
