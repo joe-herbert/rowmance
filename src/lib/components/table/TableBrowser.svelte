@@ -421,7 +421,9 @@
   let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
 
   function quoteIdentifier(name: string): string {
-    return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;
+    if (dbType === 'postgres' || dbType === 'sqlite')
+      return `"${name.replace(/"/g, '""')}"`;
+    return `\`${name.replace(/`/g, '``')}\``;
   }
 
   function buildSql(): string {
@@ -726,7 +728,7 @@
   function buildSearchWhere(term: string): string {
     const columns = result?.columns ?? [];
     if (columns.length === 0) return '';
-    const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
     const pattern = `'%${escaped}%'`;
     if (dbType === 'postgres') {
       return (

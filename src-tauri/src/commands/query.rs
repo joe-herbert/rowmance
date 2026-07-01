@@ -718,7 +718,10 @@ pub async fn query_execute_multi(
                 }
                 HeldConnection::Postgres(conn) => {
                     if let Some(schema) = &database {
-                        sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                        // SET LOCAL is scoped to the current transaction and reverts
+                        // automatically at COMMIT/ROLLBACK, so the connection returned
+                        // to the pool after the transaction ends has a clean search_path.
+                        sqlx::query(&format!("SET LOCAL search_path = {}", quote_postgres(schema)))
                         .execute(&mut **conn)
                         .await
                         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
@@ -770,19 +773,33 @@ pub async fn query_execute_multi(
             }
         }
         RemotePool::Postgres(pool) => {
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
-                sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
-                    .execute(&mut *conn)
+                // Use a direct connection with search_path baked into the startup
+                // options — it never returns to the pool, so schema state cannot
+                // leak to other callers. read_only enforcement is preserved because
+                // pool.connect_options() already carries default_transaction_read_only.
+                let mut conn = (*pool.connect_options())
+                    .clone()
+                    .options([("search_path", schema.as_str())])
+                    .connect()
                     .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-            }
-            for stmt in &statements {
-                let query_id = uuid::Uuid::new_v4().to_string();
-                let start = std::time::Instant::now();
-                let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
-                let duration_ms = start.elapsed().as_millis() as u64;
-                push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for stmt in &statements {
+                    let query_id = uuid::Uuid::new_v4().to_string();
+                    let start = std::time::Instant::now();
+                    let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                }
+            } else {
+                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                for stmt in &statements {
+                    let query_id = uuid::Uuid::new_v4().to_string();
+                    let start = std::time::Instant::now();
+                    let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                }
             }
         }
         RemotePool::Sqlite(pool) => {
@@ -848,7 +865,7 @@ pub async fn query_execute(
             }
             HeldConnection::Postgres(conn) => {
                 if let Some(schema) = &database {
-                    sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
+                    sqlx::query(&format!("SET LOCAL search_path = {}", quote_postgres(schema)))
                         .execute(&mut **conn)
                         .await
                         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
@@ -893,17 +910,21 @@ pub async fn query_execute(
             }
         }
         RemotePool::Postgres(pool) => {
-            let mut conn = pool
-                .acquire()
-                .await
-                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
-                sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
-                    .execute(&mut *conn)
+                let mut conn = (*pool.connect_options())
+                    .clone()
+                    .options([("search_path", schema.as_str())])
+                    .connect()
                     .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                execute_postgres(&mut conn, &sql, page_size, offset).await
+            } else {
+                let mut conn = pool
+                    .acquire()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                execute_postgres(&mut conn, &sql, page_size, offset).await
             }
-            execute_postgres(&mut conn, &sql, page_size, offset).await
         }
         RemotePool::Sqlite(pool) => {
             let mut conn = pool
@@ -1527,21 +1548,28 @@ pub async fn query_explain(
             })
         }
         RemotePool::Postgres(pool) => {
-            let mut conn = pool
-                .acquire()
-                .await
-                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            if let Some(schema) = &database {
-                sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
-                    .execute(&mut *conn)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-            }
             let explain_sql = format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}");
-            let rows = sqlx::query(&explain_sql)
-                .fetch_all(&mut *conn)
-                .await
-                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            let rows = if let Some(schema) = &database {
+                let mut conn = (*pool.connect_options())
+                    .clone()
+                    .options([("search_path", schema.as_str())])
+                    .connect()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                sqlx::query(&explain_sql)
+                    .fetch_all(&mut conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
+            } else {
+                let mut conn = pool
+                    .acquire()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                sqlx::query(&explain_sql)
+                    .fetch_all(&mut *conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
+            };
             let plans: Vec<serde_json::Value> = rows
                 .iter()
                 .map(|row| {

@@ -63,7 +63,13 @@
     const col = quoteIdentifier(r.column);
     if (r.operator === 'IS NULL') return `${col} IS NULL`;
     if (r.operator === 'IS NOT NULL') return `${col} IS NOT NULL`;
-    if (r.operator === 'IN') return `${col} IN (${r.value})`;
+    if (r.operator === 'IN') {
+      const values = r.value
+        .split(',')
+        .map((v) => `'${v.trim().replaceAll("'", "''")}'`)
+        .join(', ');
+      return `${col} IN (${values})`;
+    }
     const escaped = r.value.replaceAll("'", "''");
     return `${col} ${r.operator} '${escaped}'`;
   }
