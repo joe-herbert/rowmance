@@ -258,6 +258,7 @@
         testResult = await connectionsApi.testConnectionUnsaved(
           buildInput(),
           password || undefined,
+          sshPassword || undefined,
         );
       }
     } catch (err) {
@@ -737,7 +738,6 @@
                     type="text"
                     bind:value={sshKeyPath}
                     placeholder="/Users/you/.ssh/id_rsa"
-                    readonly
                     autocomplete="off"
                     spellcheck="false"
                   />

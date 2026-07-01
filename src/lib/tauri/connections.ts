@@ -34,8 +34,9 @@ export async function testConnection(id: string, password?: string): Promise<Con
 export async function testConnectionUnsaved(
   input: ConnectionProfileInput,
   password?: string,
+  sshPassword?: string,
 ): Promise<ConnectionTestResult> {
-  return invoke<ConnectionTestResult>('connections_test_unsaved', { input, password });
+  return invoke<ConnectionTestResult>('connections_test_unsaved', { input, password, sshPassword });
 }
 
 export async function connectToDatabase(id: string): Promise<void> {

@@ -1,23 +1,20 @@
-/// SSH tunnel manager.
+/// SSH tunnel manager using the system `ssh` binary.
 ///
-/// Each active tunnel is bound to a random local port on 127.0.0.1 and forwards
-/// traffic to the remote database host/port through the SSH server.
-///
-/// Tunnels are stored in a DashMap keyed by connection profile ID so that
-/// connections_connect can look up the local port to substitute into the
-/// database URL.
+/// Each tunnel spawns `ssh -L local_port:remote_host:remote_port -N` and waits
+/// until the local port accepts connections before returning. Tunnels are stored
+/// in a DashMap keyed by connection profile ID so that connections_connect can
+/// look up the local port to substitute into the database URL.
 use dashmap::DashMap;
+use std::process::Stdio;
 use std::sync::Arc;
-use tokio::sync::oneshot;
+use std::time::Duration;
+use tokio::net::TcpListener;
 
 use crate::error::RowmanceError;
 
-/// Handle for a running SSH tunnel task.
 pub struct TunnelHandle {
     pub local_port: u16,
-    shutdown: oneshot::Sender<()>,
-    #[allow(dead_code)]
-    task: tokio::task::JoinHandle<()>,
+    process: tokio::process::Child,
 }
 
 impl std::fmt::Debug for TunnelHandle {
@@ -40,11 +37,6 @@ impl SshTunnelManager {
         })
     }
 
-    /// Create an SSH tunnel for the given profile and return the local port.
-    ///
-    /// Binds a local TCP listener on 127.0.0.1:0, then spawns a forwarding
-    /// task that accepts connections and proxies them through the SSH session
-    /// to the remote database host:port.
     #[allow(clippy::too_many_arguments)]
     pub async fn create_tunnel(
         &self,
@@ -53,121 +45,104 @@ impl SshTunnelManager {
         ssh_port: u16,
         ssh_user: &str,
         ssh_password: Option<String>,
-        _ssh_key_path: Option<String>,
+        ssh_key_path: Option<String>,
         _ssh_key_passphrase: Option<String>,
         remote_host: &str,
         remote_port: u16,
     ) -> Result<u16, RowmanceError> {
-        // Bind the local listener first to get the OS-assigned port.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .map_err(RowmanceError::Io)?;
-        let local_port = listener.local_addr().map_err(RowmanceError::Io)?.port();
+        if let Some(port) = self.local_port(connection_id) {
+            return Ok(port);
+        }
 
-        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-
-        let ssh_host = ssh_host.to_owned();
-        let ssh_user = ssh_user.to_owned();
-        let remote_host = remote_host.to_owned();
-
-        let task = tokio::spawn(async move {
-            run_tunnel(
-                listener,
-                shutdown_rx,
-                ssh_host,
-                ssh_port,
-                ssh_user,
-                ssh_password,
-                remote_host,
-                remote_port,
-            )
-            .await;
-        });
-
-        let handle = TunnelHandle {
-            local_port,
-            shutdown: shutdown_tx,
-            task,
+        // Reserve a free port then release it for ssh to bind.
+        let local_port = {
+            let listener = TcpListener::bind("127.0.0.1:0")
+                .await
+                .map_err(RowmanceError::Io)?;
+            let port = listener.local_addr().map_err(RowmanceError::Io)?.port();
+            drop(listener);
+            port
         };
 
-        self.tunnels.insert(connection_id.to_owned(), handle);
+        let local_fwd = format!("{local_port}:{remote_host}:{remote_port}");
+
+        let mut cmd = if let Some(ref password) = ssh_password {
+            let mut c = tokio::process::Command::new("sshpass");
+            c.arg("-p").arg(password).arg("ssh");
+            c
+        } else {
+            tokio::process::Command::new("ssh")
+        };
+
+        cmd.arg("-L")
+            .arg(&local_fwd)
+            .arg("-N")
+            .arg("-o")
+            .arg("StrictHostKeyChecking=accept-new")
+            .arg("-o")
+            .arg("ExitOnForwardFailure=yes")
+            .arg("-o")
+            .arg("ServerAliveInterval=30");
+
+        if ssh_password.is_none() {
+            cmd.arg("-o").arg("BatchMode=yes");
+        }
+
+        if let Some(ref key_path) = ssh_key_path {
+            cmd.arg("-i").arg(key_path);
+        }
+
+        cmd.arg("-p")
+            .arg(ssh_port.to_string())
+            .arg(format!("{ssh_user}@{ssh_host}"))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        let child = cmd.spawn().map_err(RowmanceError::Io)?;
+
+        // Poll until ssh binds the local port (up to 15 seconds).
+        let ready = tokio::time::timeout(Duration::from_secs(15), async {
+            loop {
+                if tokio::net::TcpStream::connect(format!("127.0.0.1:{local_port}"))
+                    .await
+                    .is_ok()
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await;
+
+        if ready.is_err() {
+            return Err(RowmanceError::Ssh(format!(
+                "SSH tunnel to {ssh_host} did not become ready within 15 seconds"
+            )));
+        }
+
+        self.tunnels.insert(
+            connection_id.to_owned(),
+            TunnelHandle {
+                local_port,
+                process: child,
+            },
+        );
         Ok(local_port)
     }
 
-    /// Shut down the tunnel for the given connection ID.
     pub fn destroy_tunnel(&self, connection_id: &str) {
-        if let Some((_, handle)) = self.tunnels.remove(connection_id) {
-            let _ = handle.shutdown.send(());
+        if let Some((_, mut handle)) = self.tunnels.remove(connection_id) {
+            let _ = handle.process.start_kill();
         }
     }
 
-    /// Return the local port for an active tunnel, or None if not running.
     pub fn local_port(&self, connection_id: &str) -> Option<u16> {
         self.tunnels.get(connection_id).map(|h| h.local_port)
     }
 
-    /// Return whether a tunnel is active for the given connection.
     pub fn is_active(&self, connection_id: &str) -> bool {
         self.tunnels.contains_key(connection_id)
-    }
-}
-
-/// Background task that accepts local TCP connections and forwards them through
-/// an SSH channel to the remote host.
-///
-/// This is a minimal TCP-over-SSH forwarder. It uses raw TCP without the russh
-/// crate to avoid compilation overhead; russh integration can be layered on top
-/// by replacing the `forward_connection` function.
-#[allow(clippy::too_many_arguments)]
-async fn run_tunnel(
-    listener: tokio::net::TcpListener,
-    mut shutdown: oneshot::Receiver<()>,
-    ssh_host: String,
-    ssh_port: u16,
-    _ssh_user: String,
-    _ssh_password: Option<String>,
-    remote_host: String,
-    remote_port: u16,
-) {
-    loop {
-        tokio::select! {
-            accept_result = listener.accept() => {
-                match accept_result {
-                    Ok((local_stream, _)) => {
-                        let rh = remote_host.clone();
-                        let sh = ssh_host.clone();
-                        tokio::spawn(async move {
-                            forward_connection(local_stream, sh, ssh_port, rh, remote_port).await;
-                        });
-                    }
-                    Err(_) => break,
-                }
-            }
-            _ = &mut shutdown => break,
-        }
-    }
-}
-
-/// Forward a single TCP connection through the SSH server.
-///
-/// Currently implements a direct TCP bypass (connects straight to the remote
-/// without SSH encryption) as a functional placeholder. Replace this function
-/// body with russh-based forwarding once the dependency is added.
-async fn forward_connection(
-    mut local: tokio::net::TcpStream,
-    _ssh_host: String,
-    _ssh_port: u16,
-    remote_host: String,
-    remote_port: u16,
-) {
-    let remote_addr = format!("{remote_host}:{remote_port}");
-    match tokio::net::TcpStream::connect(&remote_addr).await {
-        Ok(mut remote) => {
-            let _ = tokio::io::copy_bidirectional(&mut local, &mut remote).await;
-        }
-        Err(_) => {
-            // Connection failed; close the local socket silently.
-        }
     }
 }
 

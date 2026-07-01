@@ -6,6 +6,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::connections::pool_manager::ConnectionManager;
+use crate::connections::ssh_tunnel::SshTunnelManager;
 use crate::db::models::{ConnectionGroupRow, ConnectionProfileRow};
 use crate::error::AppError;
 
@@ -163,6 +164,11 @@ pub struct ConnectionProfileInput {
 fn retrieve_keychain_password(connection_id: &str) -> String {
     let account = format!("{connection_id}:db_password");
     crate::commands::keychain::read_keychain_secret("rowmance", &account).unwrap_or_default()
+}
+
+fn retrieve_keychain_secret(connection_id: &str, secret_type: &str) -> Option<String> {
+    let account = format!("{connection_id}:{secret_type}");
+    crate::commands::keychain::read_keychain_secret("rowmance", &account)
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -328,6 +334,7 @@ pub async fn connections_delete(sqlite: State<'_, SqlitePool>, id: String) -> Re
 #[tauri::command]
 pub async fn connections_test(
     sqlite: State<'_, SqlitePool>,
+    tunnels: State<'_, Arc<SshTunnelManager>>,
     id: String,
     password: Option<String>,
 ) -> Result<ConnectionTestResult, AppError> {
@@ -348,13 +355,52 @@ pub async fn connections_test(
     let password = password
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| retrieve_keychain_password(&id));
+
+    // Create a temporary SSH tunnel if needed, using a distinct key so we don't
+    // interfere with an active connection tunnel for the same profile.
+    let tunnel_key = format!("{id}:test");
+    let (connect_host, connect_port) = if row.ssh_enabled {
+        let ssh_host = row
+            .ssh_host
+            .ok_or_else(|| AppError::new("SSH_ERROR", "SSH host not set"))?;
+        let ssh_port = row.ssh_port.unwrap_or(22) as u16;
+        let ssh_user = row
+            .ssh_user
+            .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
+        let auth_type = row.ssh_auth_type.as_deref().unwrap_or("key");
+        let ssh_password = (auth_type == "password")
+            .then(|| retrieve_keychain_secret(&id, "ssh_password"))
+            .flatten();
+        let ssh_key_passphrase = (auth_type == "key")
+            .then(|| retrieve_keychain_secret(&id, "ssh_key_passphrase"))
+            .flatten();
+
+        let local_port = tunnels
+            .create_tunnel(
+                &tunnel_key,
+                &ssh_host,
+                ssh_port,
+                &ssh_user,
+                ssh_password,
+                row.ssh_key_path.clone(),
+                ssh_key_passphrase,
+                &row.host,
+                row.port as u16,
+            )
+            .await
+            .map_err(AppError::from)?;
+        ("127.0.0.1".to_owned(), local_port)
+    } else {
+        (row.host.clone(), row.port as u16)
+    };
+
     let start = std::time::Instant::now();
 
     let result = match row.db_type.as_str() {
         "mysql" | "mariadb" => {
             let url = format!(
                 "mysql://{}:{}@{}:{}/{}",
-                row.username, password, row.host, row.port, row.database
+                row.username, password, connect_host, connect_port, row.database
             );
             sqlx::mysql::MySqlPoolOptions::new()
                 .max_connections(1)
@@ -365,7 +411,7 @@ pub async fn connections_test(
         "postgres" => {
             let url = format!(
                 "postgres://{}:{}@{}:{}/{}",
-                row.username, password, row.host, row.port, row.database
+                row.username, password, connect_host, connect_port, row.database
             );
             sqlx::postgres::PgPoolOptions::new()
                 .max_connections(1)
@@ -385,6 +431,7 @@ pub async fn connections_test(
                 .map(|_| ())
         }
         _ => {
+            tunnels.destroy_tunnel(&tunnel_key);
             return Ok(ConnectionTestResult {
                 success: false,
                 message: format!("Unknown db_type: {}", row.db_type),
@@ -393,6 +440,7 @@ pub async fn connections_test(
         }
     };
 
+    tunnels.destroy_tunnel(&tunnel_key);
     let latency_ms = start.elapsed().as_millis() as u64;
 
     match result {
@@ -412,17 +460,53 @@ pub async fn connections_test(
 /// Test a connection from raw input without saving it to the database.
 #[tauri::command]
 pub async fn connections_test_unsaved(
+    tunnels: State<'_, Arc<SshTunnelManager>>,
     input: ConnectionProfileInput,
     password: Option<String>,
+    ssh_password: Option<String>,
 ) -> Result<ConnectionTestResult, AppError> {
     let password = password.unwrap_or_default();
+
+    let tunnel_key = uuid::Uuid::new_v4().to_string();
+    let (connect_host, connect_port) = if input.ssh_enabled {
+        let ssh_host = input
+            .ssh_host
+            .as_deref()
+            .ok_or_else(|| AppError::new("SSH_ERROR", "SSH host not set"))?;
+        let ssh_port = input.ssh_port.unwrap_or(22) as u16;
+        let ssh_user = input
+            .ssh_user
+            .as_deref()
+            .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
+        let auth_type = input.ssh_auth_type.as_deref().unwrap_or("key");
+        let ssh_pass = (auth_type == "password").then_some(ssh_password).flatten();
+
+        let local_port = tunnels
+            .create_tunnel(
+                &tunnel_key,
+                ssh_host,
+                ssh_port,
+                ssh_user,
+                ssh_pass,
+                input.ssh_key_path.clone(),
+                None,
+                &input.host,
+                input.port as u16,
+            )
+            .await
+            .map_err(AppError::from)?;
+        ("127.0.0.1".to_owned(), local_port)
+    } else {
+        (input.host.clone(), input.port as u16)
+    };
+
     let start = std::time::Instant::now();
 
     let result = match input.db_type.as_str() {
         "mysql" | "mariadb" => {
             let url = format!(
                 "mysql://{}:{}@{}:{}/{}",
-                input.username, password, input.host, input.port, input.database
+                input.username, password, connect_host, connect_port, input.database
             );
             sqlx::mysql::MySqlPoolOptions::new()
                 .max_connections(1)
@@ -433,7 +517,7 @@ pub async fn connections_test_unsaved(
         "postgres" => {
             let url = format!(
                 "postgres://{}:{}@{}:{}/{}",
-                input.username, password, input.host, input.port, input.database
+                input.username, password, connect_host, connect_port, input.database
             );
             sqlx::postgres::PgPoolOptions::new()
                 .max_connections(1)
@@ -453,6 +537,7 @@ pub async fn connections_test_unsaved(
                 .map(|_| ())
         }
         _ => {
+            tunnels.destroy_tunnel(&tunnel_key);
             return Ok(ConnectionTestResult {
                 success: false,
                 message: format!("Unknown db_type: {}", input.db_type),
@@ -461,6 +546,7 @@ pub async fn connections_test_unsaved(
         }
     };
 
+    tunnels.destroy_tunnel(&tunnel_key);
     let latency_ms = start.elapsed().as_millis() as u64;
 
     match result {
@@ -482,6 +568,7 @@ pub async fn connections_test_unsaved(
 pub async fn connections_connect(
     sqlite: State<'_, SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
+    tunnels: State<'_, Arc<SshTunnelManager>>,
     id: String,
 ) -> Result<(), AppError> {
     let row =
@@ -499,13 +586,52 @@ pub async fn connections_connect(
 
     let password = retrieve_keychain_password(&id);
 
+    let (connect_host, connect_port) = if row.ssh_enabled {
+        let local_port = if let Some(port) = tunnels.local_port(&id) {
+            port
+        } else {
+            let ssh_host = row
+                .ssh_host
+                .ok_or_else(|| AppError::new("SSH_ERROR", "SSH host not set"))?;
+            let ssh_port = row.ssh_port.unwrap_or(22) as u16;
+            let ssh_user = row
+                .ssh_user
+                .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
+            let auth_type = row.ssh_auth_type.as_deref().unwrap_or("key");
+            let ssh_password = (auth_type == "password")
+                .then(|| retrieve_keychain_secret(&id, "ssh_password"))
+                .flatten();
+            let ssh_key_passphrase = (auth_type == "key")
+                .then(|| retrieve_keychain_secret(&id, "ssh_key_passphrase"))
+                .flatten();
+
+            tunnels
+                .create_tunnel(
+                    &id,
+                    &ssh_host,
+                    ssh_port,
+                    &ssh_user,
+                    ssh_password,
+                    row.ssh_key_path.clone(),
+                    ssh_key_passphrase,
+                    &row.host,
+                    row.port as u16,
+                )
+                .await
+                .map_err(AppError::from)?
+        };
+        ("127.0.0.1".to_owned(), local_port)
+    } else {
+        (row.host.clone(), row.port as u16)
+    };
+
     connections
         .connect(
             &id,
             &row.name,
             &row.db_type,
-            &row.host,
-            row.port as u16,
+            &connect_host,
+            connect_port,
             &row.database,
             &row.username,
             &password,
@@ -530,10 +656,12 @@ pub async fn connections_connect(
 pub async fn connections_disconnect(
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<crate::transactions::TransactionManager>>,
+    tunnels: State<'_, Arc<SshTunnelManager>>,
     id: String,
 ) -> Result<(), AppError> {
     transactions.remove(&id);
     connections.disconnect(&id).await;
+    tunnels.destroy_tunnel(&id);
     Ok(())
 }
 
