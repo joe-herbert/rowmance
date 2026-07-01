@@ -290,7 +290,9 @@ pub async fn query_delete_rows(
         }
     }
 
-    Ok(UpdateResult { updated_count: total_deleted })
+    Ok(UpdateResult {
+        updated_count: total_deleted,
+    })
 }
 
 /// Execute a batch of row-level UPDATE statements for inline cell editing.
@@ -534,7 +536,10 @@ pub async fn query_insert_row(
     }
 
     if values.is_empty() {
-        return Err(AppError::new("INVALID_INPUT", "No values provided for insert"));
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "No values provided for insert",
+        ));
     }
 
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
@@ -721,53 +726,36 @@ pub async fn query_execute_multi(
         return Ok(vec![]);
     }
 
-    let profile_row = sqlx::query!(
-        "SELECT read_only FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
-
-    let is_read_only = profile_row.as_ref().map(|r| r.read_only != 0).unwrap_or(false);
-
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     let mut results: Vec<QueryResult> = Vec::new();
 
     for stmt in &statements {
-        if is_read_only && is_mutating_statement(stmt) {
-            results.push(QueryResult {
-                query_id: uuid::Uuid::new_v4().to_string(),
-                columns: vec![],
-                rows: vec![],
-                total_rows: None,
-                duration_ms: 0,
-                affected_rows: None,
-                error: Some(
-                    "This connection is in read-only mode — mutating statements are not allowed"
-                        .to_string(),
-                ),
-            });
-            continue;
-        }
-
         let query_id = uuid::Uuid::new_v4().to_string();
         let start = std::time::Instant::now();
 
         let exec_result = match pool_ref.value() {
             RemotePool::MySql(pool) => {
                 if let Some(db) = &database {
-                    let mut conn = (*pool.connect_options()).clone().database(db)
-                        .connect().await
+                    let mut conn = (*pool.connect_options())
+                        .clone()
+                        .database(db)
+                        .connect()
+                        .await
                         .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
                     execute_mysql(&mut conn, stmt, 10_000, 0).await
                 } else {
-                    let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                    let mut conn = pool
+                        .acquire()
+                        .await
+                        .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
                     execute_mysql(&mut *conn, stmt, 10_000, 0).await
                 }
             }
             RemotePool::Postgres(pool) => {
-                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                let mut conn = pool
+                    .acquire()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
                 if let Some(schema) = &database {
                     sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
                         .execute(&mut *conn)
@@ -777,7 +765,10 @@ pub async fn query_execute_multi(
                 execute_postgres(&mut *conn, stmt, 10_000, 0).await
             }
             RemotePool::Sqlite(pool) => {
-                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                let mut conn = pool
+                    .acquire()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
                 execute_sqlite(&mut *conn, stmt, 10_000, 0).await
             }
         };
@@ -836,24 +827,6 @@ pub async fn query_execute_multi(
     Ok(results)
 }
 
-/// Enforce read-only mode by checking the leading SQL keyword.
-fn is_mutating_statement(sql: &str) -> bool {
-    let keyword = sql.split_whitespace().next().unwrap_or("").to_uppercase();
-    matches!(
-        keyword.as_str(),
-        "INSERT"
-            | "UPDATE"
-            | "DELETE"
-            | "DROP"
-            | "CREATE"
-            | "ALTER"
-            | "TRUNCATE"
-            | "REPLACE"
-            | "MERGE"
-            | "RENAME"
-    )
-}
-
 /// Execute a SQL query, returning a paginated result set.
 #[tauri::command]
 pub async fn query_execute(
@@ -868,24 +841,6 @@ pub async fn query_execute(
     let query_id = uuid::Uuid::new_v4().to_string();
     let start = std::time::Instant::now();
 
-    // Check read-only mode before touching the remote pool.
-    let profile_row = sqlx::query!(
-        "SELECT read_only FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
-
-    if let Some(row) = &profile_row {
-        if row.read_only != 0 && is_mutating_statement(&sql) {
-            return Err(AppError::new(
-                "READ_ONLY_VIOLATION",
-                "This connection is in read-only mode — mutating statements are not allowed",
-            ));
-        }
-    }
-
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
 
     let offset = (page.saturating_sub(1)) * page_size;
@@ -896,17 +851,26 @@ pub async fn query_execute(
                 // `USE db` cannot be sent as a prepared statement (MySQL error 1295).
                 // Open a short-lived direct connection with the target database set in
                 // the options so we never need to issue USE at all.
-                let mut conn = (*pool.connect_options()).clone().database(db)
-                    .connect().await
+                let mut conn = (*pool.connect_options())
+                    .clone()
+                    .database(db)
+                    .connect()
+                    .await
                     .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
                 execute_mysql(&mut conn, &sql, page_size, offset).await
             } else {
-                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                let mut conn = pool
+                    .acquire()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
                 execute_mysql(&mut *conn, &sql, page_size, offset).await
             }
         }
         RemotePool::Postgres(pool) => {
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let mut conn = pool
+                .acquire()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
                 sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
                     .execute(&mut *conn)
@@ -916,7 +880,10 @@ pub async fn query_execute(
             execute_postgres(&mut *conn, &sql, page_size, offset).await
         }
         RemotePool::Sqlite(pool) => {
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let mut conn = pool
+                .acquire()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             execute_sqlite(&mut *conn, &sql, page_size, offset).await
         }
     };
@@ -1216,7 +1183,11 @@ async fn execute_sqlite(
 
         let data: Vec<Vec<serde_json::Value>> = rows
             .iter()
-            .map(|row| (0..row.len()).map(|i| sqlite_value_to_json(row, i)).collect())
+            .map(|row| {
+                (0..row.len())
+                    .map(|i| sqlite_value_to_json(row, i))
+                    .collect()
+            })
             .collect();
 
         Ok((columns, data, total_rows, None))
@@ -1263,8 +1234,8 @@ fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::V
     let col = &row.columns()[idx];
     let type_name = col.type_info().name().to_lowercase();
     let debug = format!("{:?}", col.type_info());
-    let is_bool_col = type_name == "boolean"
-        || (type_name == "tinyint" && parse_max_size(&debug) == Some(1));
+    let is_bool_col =
+        type_name == "boolean" || (type_name == "tinyint" && parse_max_size(&debug) == Some(1));
     if is_bool_col {
         if let Ok(v) = row.try_get::<Option<bool>, _>(idx) {
             return v
@@ -1390,11 +1361,18 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
             .map(|t| serde_json::Value::String(t.to_string()))
             .unwrap_or(serde_json::Value::Null);
     }
-    if let Ok(v) = row.try_get::<Option<sqlx::postgres::types::PgTimeTz<chrono::NaiveTime, chrono::FixedOffset>>, _>(idx) {
+    if let Ok(v) = row.try_get::<Option<
+        sqlx::postgres::types::PgTimeTz<chrono::NaiveTime, chrono::FixedOffset>,
+    >, _>(idx)
+    {
         return v
             .map(|tz| {
                 let offset = tz.offset.local_minus_utc();
-                let (sign, abs_secs) = if offset >= 0 { ('+', offset as u32) } else { ('-', (-offset) as u32) };
+                let (sign, abs_secs) = if offset >= 0 {
+                    ('+', offset as u32)
+                } else {
+                    ('-', (-offset) as u32)
+                };
                 serde_json::Value::String(format!(
                     "{}{}{:02}:{:02}",
                     tz.time.format("%H:%M:%S%.f"),
@@ -1409,10 +1387,20 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
         return v
             .map(|interval| {
                 let mut parts = Vec::new();
-                if interval.months != 0 { parts.push(format!("{} months", interval.months)); }
-                if interval.days != 0 { parts.push(format!("{} days", interval.days)); }
-                if interval.microseconds != 0 { parts.push(format!("{} μs", interval.microseconds)); }
-                serde_json::Value::String(if parts.is_empty() { "0".to_string() } else { parts.join(" ") })
+                if interval.months != 0 {
+                    parts.push(format!("{} months", interval.months));
+                }
+                if interval.days != 0 {
+                    parts.push(format!("{} days", interval.days));
+                }
+                if interval.microseconds != 0 {
+                    parts.push(format!("{} μs", interval.microseconds));
+                }
+                serde_json::Value::String(if parts.is_empty() {
+                    "0".to_string()
+                } else {
+                    parts.join(" ")
+                })
             })
             .unwrap_or(serde_json::Value::Null);
     }
@@ -1444,8 +1432,14 @@ pub async fn query_explain(
     match pool_ref.value() {
         RemotePool::MySql(pool) => {
             let base_opts = (*pool.connect_options()).clone();
-            let opts = if let Some(db) = &database { base_opts.database(db) } else { base_opts };
-            let mut conn = opts.connect().await
+            let opts = if let Some(db) = &database {
+                base_opts.database(db)
+            } else {
+                base_opts
+            };
+            let mut conn = opts
+                .connect()
+                .await
                 .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             let explain_sql = format!("EXPLAIN FORMAT=JSON {sql}");
             let rows = sqlx::query(&explain_sql)
@@ -1464,7 +1458,10 @@ pub async fn query_explain(
             })
         }
         RemotePool::Postgres(pool) => {
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let mut conn = pool
+                .acquire()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
                 sqlx::query(&format!("SET search_path = {}", quote_postgres(schema)))
                     .execute(&mut *conn)
@@ -1491,7 +1488,10 @@ pub async fn query_explain(
             })
         }
         RemotePool::Sqlite(pool) => {
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let mut conn = pool
+                .acquire()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             let explain_sql = format!("EXPLAIN QUERY PLAN {sql}");
             let rows = sqlx::query(&explain_sql)
                 .fetch_all(&mut *conn)
@@ -1588,51 +1588,6 @@ mod tests {
     fn split_statements_empty_and_whitespace() {
         let stmts = split_statements("  ;  ;  SELECT 1  ;  ");
         assert_eq!(stmts, vec!["SELECT 1"]);
-    }
-
-    #[test]
-    fn mutating_keywords_are_detected() {
-        assert!(is_mutating_statement("INSERT INTO t VALUES (1)"));
-        assert!(is_mutating_statement("UPDATE t SET a = 1"));
-        assert!(is_mutating_statement("DELETE FROM t"));
-        assert!(is_mutating_statement("DROP TABLE t"));
-        assert!(is_mutating_statement("  truncate table t"));
-        assert!(!is_mutating_statement("SELECT * FROM t"));
-        assert!(!is_mutating_statement("EXPLAIN SELECT 1"));
-    }
-
-    #[test]
-    fn all_mutating_keywords_covered() {
-        for keyword in &["INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE", "REPLACE", "MERGE", "RENAME"] {
-            let sql = format!("{keyword} something");
-            assert!(is_mutating_statement(&sql), "{keyword} should be mutating");
-        }
-    }
-
-    #[test]
-    fn case_insensitive_detection() {
-        assert!(is_mutating_statement("insert into t values (1)"));
-        assert!(is_mutating_statement("Insert Into t Values (1)"));
-        assert!(!is_mutating_statement("select * from t"));
-    }
-
-    #[test]
-    fn leading_whitespace_is_handled() {
-        assert!(is_mutating_statement("   DELETE FROM t"));
-        assert!(is_mutating_statement("\tUPDATE t SET a = 1"));
-        assert!(!is_mutating_statement("   SELECT 1"));
-    }
-
-    #[test]
-    fn empty_sql_is_not_mutating() {
-        assert!(!is_mutating_statement(""));
-        assert!(!is_mutating_statement("   "));
-    }
-
-    #[test]
-    fn select_with_mutating_word_in_subquery_is_not_mutating() {
-        // Only the leading keyword matters, not words in the middle.
-        assert!(!is_mutating_statement("SELECT * FROM t WHERE id IN (SELECT id FROM deleted_items)"));
     }
 
     // ── Identifier quoting ────────────────────────────────────────────────────

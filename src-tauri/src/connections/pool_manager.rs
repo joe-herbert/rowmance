@@ -62,6 +62,7 @@ impl ConnectionManager {
         ssl_ca_path: Option<&str>,
         ssl_cert_path: Option<&str>,
         ssl_key_path: Option<&str>,
+        read_only: bool,
     ) -> Result<(), RowmanceError> {
         let pool = match db_type {
             "mysql" | "mariadb" => {
@@ -85,17 +86,31 @@ impl ConnectionManager {
                     }
                     if let Some(cert) = ssl_cert_path {
                         if let Some(key) = ssl_key_path {
-                            opts = opts.ssl_client_cert(Path::new(cert))
-                                       .ssl_client_key(Path::new(key));
+                            opts = opts
+                                .ssl_client_cert(Path::new(cert))
+                                .ssl_client_key(Path::new(key));
                         }
                     }
                 }
 
-                let p = MySqlPoolOptions::new()
+                let pool_opts = MySqlPoolOptions::new()
                     .min_connections(pool_min)
-                    .max_connections(pool_max)
-                    .connect_with(opts)
-                    .await?;
+                    .max_connections(pool_max);
+                // SET SESSION TRANSACTION READ ONLY on every connection so the
+                // server enforces read-only regardless of what SQL is sent.
+                let pool_opts = if read_only {
+                    pool_opts.after_connect(|conn, _meta| {
+                        Box::pin(async move {
+                            sqlx::query("SET SESSION TRANSACTION READ ONLY")
+                                .execute(conn)
+                                .await?;
+                            Ok(())
+                        })
+                    })
+                } else {
+                    pool_opts
+                };
+                let p = pool_opts.connect_with(opts).await?;
                 RemotePool::MySql(p)
             }
             "postgres" => {
@@ -125,6 +140,12 @@ impl ConnectionManager {
                     }
                 }
 
+                // default_transaction_read_only makes the server reject all
+                // writes at the session level, including CTEs and procedures.
+                if read_only {
+                    opts = opts.options([("default_transaction_read_only", "on")]);
+                }
+
                 let p = PgPoolOptions::new()
                     .min_connections(pool_min)
                     .max_connections(pool_max)
@@ -135,9 +156,12 @@ impl ConnectionManager {
             "sqlite" => {
                 // For SQLite, `host` holds the file path (or `:memory:`).
                 // No user/password/SSL needed.
+                // read_only(true) opens the file with O_RDONLY so the OS
+                // prevents any writes even if bypassing our application logic.
                 let opts = SqliteConnectOptions::new()
                     .filename(host)
-                    .create_if_missing(true);
+                    .read_only(read_only)
+                    .create_if_missing(!read_only);
                 let p = SqlitePoolOptions::new()
                     .min_connections(pool_min)
                     .max_connections(pool_max)
@@ -243,13 +267,29 @@ mod tests {
         let result = tokio::runtime::Runtime::new().unwrap().block_on(async {
             manager
                 .connect(
-                    "id", "name", "oracle", "localhost", 1521, "db", "user", "pw", 1, 1,
-                    false, None, None, None,
+                    "id",
+                    "name",
+                    "oracle",
+                    "localhost",
+                    1521,
+                    "db",
+                    "user",
+                    "pw",
+                    1,
+                    1,
+                    false,
+                    None,
+                    None,
+                    None,
+                    false,
                 )
                 .await
         });
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), RowmanceError::ConnectionNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            RowmanceError::ConnectionNotFound(_)
+        ));
     }
 
     // ── SSL option building tests ─────────────────────────────────────────────
@@ -340,12 +380,28 @@ mod tests {
         let result = tokio::runtime::Runtime::new().unwrap().block_on(async {
             manager
                 .connect(
-                    "id", "name", "oracle", "localhost", 1521, "db", "user", "pw", 1, 1,
-                    true, Some("/tmp/ca.pem"), None, None,
+                    "id",
+                    "name",
+                    "oracle",
+                    "localhost",
+                    1521,
+                    "db",
+                    "user",
+                    "pw",
+                    1,
+                    1,
+                    true,
+                    Some("/tmp/ca.pem"),
+                    None,
+                    None,
+                    false,
                 )
                 .await
         });
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), RowmanceError::ConnectionNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            RowmanceError::ConnectionNotFound(_)
+        ));
     }
 }

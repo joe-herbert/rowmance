@@ -40,7 +40,9 @@
   type RightPanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations';
 
   let rightVisible = $state(untrack(() => settings.rightSidebarVisible));
-  let activeRightPanel = $state<RightPanel>(untrack(() => (settings.rightSidebarPanel as RightPanel) || 'history'));
+  let activeRightPanel = $state<RightPanel>(
+    untrack(() => (settings.rightSidebarPanel as RightPanel) || 'history'),
+  );
 
   const SIDEBAR_INSET = 0;
 
@@ -60,7 +62,9 @@
     return null;
   });
 
-  const isConnected = $derived(activeConnection ? connectionsStore.isActive(activeConnection.id) : false);
+  const isConnected = $derived(
+    activeConnection ? connectionsStore.isActive(activeConnection.id) : false,
+  );
 
   $effect(() => {
     void settings.theme; // re-run after theme switches, which clear documentElement inline styles
@@ -81,10 +85,14 @@
 
   const activeView = $derived.by((): ViewMode | null => {
     switch (focusedContent.kind) {
-      case 'table_browser': return 'data';
-      case 'table_structure': return 'structure';
-      case 'ddl_viewer': return 'sql';
-      default: return null;
+      case 'table_browser':
+        return 'data';
+      case 'table_structure':
+        return 'structure';
+      case 'ddl_viewer':
+        return 'sql';
+      default:
+        return null;
     }
   });
 
@@ -95,9 +103,16 @@
 
     let database: string | null = null;
     let table: string | null = null;
-    if (c.kind === 'table_browser') { database = c.database; table = c.table; }
-    else if (c.kind === 'table_structure') { database = c.database; table = c.table; }
-    else if (c.kind === 'ddl_viewer') { database = c.database; table = c.objectName; }
+    if (c.kind === 'table_browser') {
+      database = c.database;
+      table = c.table;
+    } else if (c.kind === 'table_structure') {
+      database = c.database;
+      table = c.table;
+    } else if (c.kind === 'ddl_viewer') {
+      database = c.database;
+      table = c.objectName;
+    }
     if (!database || !table) return;
 
     if (mode === 'data') {
@@ -105,19 +120,30 @@
     } else if (mode === 'structure') {
       panelStore.replaceInFocused({ kind: 'table_structure', connectionId, database, table });
     } else {
-      panelStore.replaceInFocused({ kind: 'ddl_viewer', connectionId, database, objectName: table, objectType: 'table' });
+      panelStore.replaceInFocused({
+        kind: 'ddl_viewer',
+        connectionId,
+        database,
+        objectName: table,
+        objectType: 'table',
+      });
     }
   }
 
   const _hasTableContext = $derived(
-    focusedContent.kind === 'table_browser' || focusedContent.kind === 'table_structure' || focusedContent.kind === 'ddl_viewer'
+    focusedContent.kind === 'table_browser' ||
+      focusedContent.kind === 'table_structure' ||
+      focusedContent.kind === 'ddl_viewer',
   );
 
   function openSettings() {
     panelStore.openInFocused({ kind: 'settings' });
   }
 
-  interface UpdateInfo { version: string; notes: string | null }
+  interface UpdateInfo {
+    version: string;
+    notes: string | null;
+  }
   let pendingUpdate = $state<UpdateInfo | null>(null);
   let updateDismissed = $state(false);
   let installing = $state(false);
@@ -126,13 +152,16 @@
     shortcutsStore.load(settings.shortcutPreset);
 
     if (settings.autoUpdateCheck) {
-      updaterApi.updaterCheck().then((result) => {
-        if (result.available && result.version) {
-          pendingUpdate = { version: result.version, notes: result.notes };
-        }
-      }).catch(() => {
-        // Update check failures are silently swallowed to avoid disrupting startup.
-      });
+      updaterApi
+        .updaterCheck()
+        .then((result) => {
+          if (result.available && result.version) {
+            pendingUpdate = { version: result.version, notes: result.notes };
+          }
+        })
+        .catch(() => {
+          // Update check failures are silently swallowed to avoid disrupting startup.
+        });
     }
 
     let unlistenFn: (() => void) | undefined;
@@ -146,7 +175,9 @@
       listen('menu:new-window', () => openNewWindow()),
       listen('menu:toggle-left-sidebar', () => toggleLeftSidebar()),
       listen('menu:toggle-right-sidebar', () => toggleRightSidebar()),
-      listen('menu:toggle-system-items', () => settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems)),
+      listen('menu:toggle-system-items', () =>
+        settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems),
+      ),
       listen('menu:command-palette', () => openPalette()),
       listen('menu:check-updates', async () => {
         try {
@@ -155,12 +186,14 @@
             pendingUpdate = { version: result.version, notes: result.notes };
             updateDismissed = false;
           }
-        } catch { /* silently ignore */ }
+        } catch {
+          /* silently ignore */
+        }
       }),
       listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),
       listen('menu:import-sql', () => document.dispatchEvent(new CustomEvent('menu-import-sql'))),
     ]).then((unlisteners) => {
-      unlistenFn = () => unlisteners.forEach(u => u());
+      unlistenFn = () => unlisteners.forEach((u) => u());
     });
 
     window.addEventListener('resize', syncTrafficLightPosition);
@@ -227,7 +260,8 @@
     if (action === 'NEW_WINDOW') openNewWindow();
     if (action === 'OPEN_SETTINGS') openSettings();
     if (action === 'COMMAND_PALETTE') openPalette();
-    if (action === 'TOGGLE_SYSTEM_ITEMS') settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
+    if (action === 'TOGGLE_SYSTEM_ITEMS')
+      settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
     if (action === 'PANEL_CLOSE') {
       const focused = panelStore.focusedPanel.content;
       const dKey = dirtyKeyForContent(focused);
@@ -242,7 +276,7 @@
     if (action === 'PANEL_PREV') panelStore.focusPrev();
     if (action === 'CLOSE_OTHER_TABS') {
       const focusedContent = panelStore.focusedPanel.content;
-      const focusedItem = panelStore.openItems.find(i => sameContent(i.content, focusedContent));
+      const focusedItem = panelStore.openItems.find((i) => sameContent(i.content, focusedContent));
       if (focusedItem) panelStore.closeOtherItems(focusedItem.id);
     }
     if (action === 'NEW_QUERY_EDITOR') {
@@ -251,7 +285,10 @@
       if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
     }
     if (action === 'GLOBAL_SEARCH') openGlobalSearch();
-    if (action === 'FOCUS_SCHEMA_TREE') document.dispatchEvent(new CustomEvent('focus-schema-tree'));
+    if (action === 'FOCUS_SCHEMA_TREE')
+      document.dispatchEvent(new CustomEvent('focus-schema-tree'));
+    if (action === 'TOGGLE_READ_ONLY' && activeConnection)
+      connectionsStore.toggleReadOnly(activeConnection.id).catch(() => {});
   }
 
   let paletteOpen = $state(false);
@@ -312,8 +349,10 @@
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node;
       if (
-        connChipEl && !connChipEl.contains(target) &&
-        connPopupEl && !connPopupEl.contains(target)
+        connChipEl &&
+        !connChipEl.contains(target) &&
+        connPopupEl &&
+        !connPopupEl.contains(target)
       ) {
         connChipOpen = false;
       }
@@ -349,10 +388,18 @@
     }
   }
 
-  function openPalette() { paletteOpen = true; }
-  function closePalette() { paletteOpen = false; }
-  function openGlobalSearch() { globalSearchOpen = true; }
-  function closeGlobalSearch() { globalSearchOpen = false; }
+  function openPalette() {
+    paletteOpen = true;
+  }
+  function closePalette() {
+    paletteOpen = false;
+  }
+  function openGlobalSearch() {
+    globalSearchOpen = true;
+  }
+  function closeGlobalSearch() {
+    globalSearchOpen = false;
+  }
 
   // On macOS with titleBarStyle:"overlay" the webview fills behind the native traffic
   // lights, so we reserve space to push content clear of them.
@@ -362,15 +409,15 @@
     document.addEventListener('shortcut-action', handleShortcutAction);
     return () => document.removeEventListener('shortcut-action', handleShortcutAction);
   });
-
 </script>
-
 
 <a class="skip-link" href="#main-content">Skip to main content</a>
 
 <div
   class="app-shell-wrapper"
-  style="--sidebar-width: {leftVisible ? leftWidth + SIDEBAR_INSET : 0}px; --right-sidebar-width: {rightWidth}px;"
+  style="--sidebar-width: {leftVisible
+    ? leftWidth + SIDEBAR_INSET
+    : 0}px; --right-sidebar-width: {rightWidth}px;"
 >
   <div class="titlebar-card" data-tauri-drag-region>
     {#if isMacOS}
@@ -389,21 +436,48 @@
         >
           <span
             class="conn-chip-dot"
-            style="background: {activeConnection.color ?? 'var(--color-accent)'}; box-shadow: 0 0 0 3px color-mix(in srgb, {activeConnection.color ?? 'var(--color-accent)'} 26%, transparent)"
+            style="background: {activeConnection.color ??
+              'var(--color-accent)'}; box-shadow: 0 0 0 3px color-mix(in srgb, {activeConnection.color ??
+              'var(--color-accent)'} 26%, transparent)"
           ></span>
           <span class="conn-chip-name">{activeConnection.name}</span>
           <span class="conn-chip-tag">{activeConnection.dbType}</span>
-          {#if activeConnection.readOnly}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
-              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
-              <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
-            </svg>
-          {/if}
-          <svg class="conn-chip-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <svg
+            class="conn-chip-chevron"
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </button>
-
+        <button
+          class="read-only-toggle"
+          class:read-only-toggle--on={activeConnection.readOnly}
+          onclick={() => connectionsStore.toggleReadOnly(activeConnection!.id)}
+          title={activeConnection.readOnly ? 'Read-only on — click to disable' : 'Read-only off — click to enable'}
+          aria-label={activeConnection.readOnly ? 'Disable read-only mode' : 'Enable read-only mode'}
+          aria-pressed={activeConnection.readOnly}
+        >
+          {#if activeConnection.readOnly}
+            <!-- Locked padlock -->
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+              <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+            </svg>
+          {:else}
+            <!-- Unlocked padlock -->
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+              <path d="M8 11V8a4 4 0 0 1 7.5-3.9"></path>
+            </svg>
+          {/if}
+        </button>
       </div>
     {:else}
       <span class="app-title">Rowmance</span>
@@ -415,36 +489,65 @@
           class="view-btn"
           class:view-btn--active={activeView === 'data'}
           onclick={() => switchView('data')}
-          title="Data view"
-        >Data</button>
+          title="Data view">Data</button
+        >
         <button
           class="view-btn"
           class:view-btn--active={activeView === 'structure'}
           onclick={() => switchView('structure')}
-          title="Structure view"
-        >Structure</button>
+          title="Structure view">Structure</button
+        >
         <button
           class="view-btn"
           class:view-btn--active={activeView === 'sql'}
           onclick={() => switchView('sql')}
-          title="DDL"
-        >SQL</button>
+          title="DDL">SQL</button
+        >
       </div>
     {/if}
 
     <div class="titlebar-spacer" data-tauri-drag-region></div>
-    <button class="titlebar-btn" onclick={openGlobalSearch} title="Search (⌘F)" aria-label="Open global search">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <button
+      class="titlebar-btn"
+      onclick={openGlobalSearch}
+      title="Search (⌘F)"
+      aria-label="Open global search"
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+      >
         <circle cx="11" cy="11" r="7"></circle>
         <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
       </svg>
       <span class="titlebar-btn-label">Search</span>
       <kbd>⌘F</kbd>
     </button>
-    <button class="titlebar-btn titlebar-btn--icon" onclick={openSettings} title="Settings" aria-label="Open settings">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <button
+      class="titlebar-btn titlebar-btn--icon"
+      onclick={openSettings}
+      title="Settings"
+      aria-label="Open settings"
+    >
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <circle cx="12" cy="12" r="3"></circle>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        <path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        ></path>
       </svg>
     </button>
   </div>
@@ -453,7 +556,8 @@
     <div class="update-banner" role="alert" aria-live="polite">
       <span class="update-message">
         Update {pendingUpdate.version} available
-        {#if pendingUpdate.notes} — {pendingUpdate.notes.slice(0, 80)}{/if}
+        {#if pendingUpdate.notes}
+          — {pendingUpdate.notes.slice(0, 80)}{/if}
       </span>
       <div class="update-actions">
         <button
@@ -466,70 +570,84 @@
         <button
           class="update-btn"
           onclick={() => (updateDismissed = true)}
-          aria-label="Dismiss update notification"
-        >Later</button>
+          aria-label="Dismiss update notification">Later</button
+        >
       </div>
     </div>
   {/if}
 
-<div
-  class="app-body"
-  role="application"
-  onpointermove={onResizePointerMove}
-  onpointerup={onResizePointerUp}
->
-  <!-- Left sidebar (toggleable) -->
-  {#if leftVisible}
-    <aside class="left-sidebar" class:floating={settings.sidebarFloating} style="width: {leftWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
-      <Sidebar />
-    </aside>
-  {/if}
-
-
-  <!-- Resize handle: left sidebar ↔ main area -->
-  {#if leftVisible && !settings.sidebarFloating}
-    <div
-      class="resize-handle resize-handle--horizontal left-resize"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize left sidebar"
-      style="left: {leftWidth}px;"
-      onpointerdown={(e) => onResizePointerDown('left', e)}
-      class:dragging={dragging === 'left'}
-    ></div>
-  {/if}
-
-  <!-- Main split-panel area -->
-  <main id="main-content" class="main-area">
-    {#if settings.openItemsLocation === 'top'}
-      <TabBar />
+  <div
+    class="app-body"
+    role="application"
+    onpointermove={onResizePointerMove}
+    onpointerup={onResizePointerUp}
+  >
+    <!-- Left sidebar (toggleable) -->
+    {#if leftVisible}
+      <aside
+        class="left-sidebar"
+        class:floating={settings.sidebarFloating}
+        style="width: {leftWidth}px;"
+        transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}
+      >
+        <Sidebar />
+      </aside>
     {/if}
-    <div class="split-panel-wrapper">
-      <SplitPanel />
-    </div>
-  </main>
 
-  <!-- Resize handle: main area ↔ right sidebar -->
-  {#if rightVisible && !settings.sidebarFloating}
-    <div
-      class="resize-handle resize-handle--horizontal right-resize"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize right sidebar"
-      style="right: {rightWidth}px;"
-      onpointerdown={(e) => onResizePointerDown('right', e)}
-      class:dragging={dragging === 'right'}
-    ></div>
-  {/if}
+    <!-- Resize handle: left sidebar ↔ main area -->
+    {#if leftVisible && !settings.sidebarFloating}
+      <div
+        class="resize-handle resize-handle--horizontal left-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize left sidebar"
+        style="left: {leftWidth}px;"
+        onpointerdown={(e) => onResizePointerDown('left', e)}
+        class:dragging={dragging === 'left'}
+      ></div>
+    {/if}
 
-  <!-- Right sidebar (toggleable) -->
-  {#if rightVisible}
-    <aside class="right-sidebar" class:floating={settings.sidebarFloating} style="width: {rightWidth}px;" transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}>
-      <RightSidebar initialPanel={activeRightPanel} onPanelChange={(p) => { activeRightPanel = (p ?? 'history') as RightPanel; settingsStore.set('rightSidebarPanel', activeRightPanel); }} />
-    </aside>
-  {/if}
+    <!-- Main split-panel area -->
+    <main id="main-content" class="main-area">
+      {#if settings.openItemsLocation === 'top'}
+        <TabBar />
+      {/if}
+      <div class="split-panel-wrapper">
+        <SplitPanel />
+      </div>
+    </main>
 
-</div>
+    <!-- Resize handle: main area ↔ right sidebar -->
+    {#if rightVisible && !settings.sidebarFloating}
+      <div
+        class="resize-handle resize-handle--horizontal right-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize right sidebar"
+        style="right: {rightWidth}px;"
+        onpointerdown={(e) => onResizePointerDown('right', e)}
+        class:dragging={dragging === 'right'}
+      ></div>
+    {/if}
+
+    <!-- Right sidebar (toggleable) -->
+    {#if rightVisible}
+      <aside
+        class="right-sidebar"
+        class:floating={settings.sidebarFloating}
+        style="width: {rightWidth}px;"
+        transition:slide={{ axis: 'x', duration: 200, easing: cubicOut }}
+      >
+        <RightSidebar
+          initialPanel={activeRightPanel}
+          onPanelChange={(p) => {
+            activeRightPanel = (p ?? 'history') as RightPanel;
+            settingsStore.set('rightSidebarPanel', activeRightPanel);
+          }}
+        />
+      </aside>
+    {/if}
+  </div>
 
   <div class="statusbar-row">
     <button
@@ -540,9 +658,9 @@
       title="{leftVisible ? 'Hide' : 'Show'} left sidebar"
     >
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2"/>
-        <line x1="5" y1="1" x2="5" y2="14" stroke="currentColor" stroke-width="1.2"/>
-        <rect x="1.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5"/>
+        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2" />
+        <line x1="5" y1="1" x2="5" y2="14" stroke="currentColor" stroke-width="1.2" />
+        <rect x="1.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5" />
       </svg>
     </button>
     <StatusBar />
@@ -554,9 +672,9 @@
       title="{rightVisible ? 'Hide' : 'Show'} right sidebar"
     >
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2"/>
-        <line x1="10" y1="1" x2="10" y2="14" stroke="currentColor" stroke-width="1.2"/>
-        <rect x="10.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5"/>
+        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2" />
+        <line x1="10" y1="1" x2="10" y2="14" stroke="currentColor" stroke-width="1.2" />
+        <rect x="10.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5" />
       </svg>
     </button>
   </div>
@@ -580,7 +698,15 @@
       <span class="conn-chip-tag">{activeConnection.dbType}</span>
     </div>
     <div class="conn-popup-time">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        aria-hidden="true"
+      >
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
@@ -591,19 +717,11 @@
       {/if}
     </div>
     {#if isConnected}
-      <button
-        class="conn-popup-disconnect"
-        onclick={handleDisconnect}
-        disabled={disconnecting}
-      >
+      <button class="conn-popup-disconnect" onclick={handleDisconnect} disabled={disconnecting}>
         {disconnecting ? 'Disconnecting…' : 'Disconnect'}
       </button>
     {:else}
-      <button
-        class="conn-popup-connect"
-        onclick={handleConnect}
-        disabled={connecting}
-      >
+      <button class="conn-popup-connect" onclick={handleConnect} disabled={connecting}>
         {connecting ? 'Connecting…' : 'Connect'}
       </button>
     {/if}
@@ -626,7 +744,10 @@
       confirmCloseFocused = false;
       confirmCloseFocusedKey = null;
     }}
-    oncancel={() => { confirmCloseFocused = false; confirmCloseFocusedKey = null; }}
+    oncancel={() => {
+      confirmCloseFocused = false;
+      confirmCloseFocusedKey = null;
+    }}
   />
 {/if}
 
@@ -715,6 +836,9 @@
   .conn-chip-wrapper {
     position: relative;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 3px;
   }
 
   .conn-chip {
@@ -807,7 +931,10 @@
     font-family: var(--font-family-ui);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     align-self: stretch;
     text-align: center;
   }
@@ -833,7 +960,10 @@
     font-family: var(--font-family-ui);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     align-self: stretch;
     text-align: center;
   }
@@ -877,6 +1007,38 @@
     font-weight: var(--font-weight-medium);
   }
 
+  .read-only-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  .read-only-toggle:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border);
+    color: var(--color-text-secondary);
+  }
+
+  .read-only-toggle--on {
+    color: var(--color-accent);
+  }
+
+  .read-only-toggle--on:hover {
+    color: var(--color-accent);
+  }
+
   /* ── View switcher ─────────────────────────────────────────────────────── */
 
   .view-switcher {
@@ -898,7 +1060,9 @@
     font-family: var(--font-family-ui);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     white-space: nowrap;
   }
 
@@ -934,7 +1098,9 @@
     font-size: var(--font-size-xs);
     font-family: var(--font-family-ui);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     flex-shrink: 0;
   }
 
@@ -1006,10 +1172,20 @@
     transition: background var(--transition-fast);
   }
 
-  .update-btn:hover { background: rgba(0, 0, 0, 0.05); }
-  .update-btn--primary { background: var(--color-warning); color: #fff; }
-  .update-btn--primary:hover { opacity: 0.9; }
-  .update-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .update-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+  .update-btn--primary {
+    background: var(--color-warning);
+    color: #fff;
+  }
+  .update-btn--primary:hover {
+    opacity: 0.9;
+  }
+  .update-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 
   /* ── App body (flex row with sidebar + main + sidebar) ─────────────────── */
 
@@ -1159,7 +1335,9 @@
     color: var(--color-text-muted);
     cursor: pointer;
     opacity: var(--panel-opacity);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .sidebar-toggle-btn:hover {

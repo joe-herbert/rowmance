@@ -40,7 +40,8 @@ export type ShortcutAction =
   | 'OPEN_SETTINGS'
   | 'TOGGLE_SYSTEM_ITEMS'
   | 'CLOSE_OTHER_TABS'
-  | 'GLOBAL_SEARCH';
+  | 'GLOBAL_SEARCH'
+  | 'TOGGLE_READ_ONLY';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 
@@ -272,9 +273,18 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     jetbrains: 'Mod+Shift+F',
     vim: 'Mod+Shift+F',
   },
+  {
+    action: 'TOGGLE_READ_ONLY',
+    label: 'Toggle Read Only',
+    group: 'General',
+    vscode: 'Mod+Shift+L',
+    jetbrains: 'Mod+Shift+L',
+    vim: 'Mod+Shift+L',
+  },
 ];
 
-export const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC');
+export const isMac =
+  typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 

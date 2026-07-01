@@ -168,8 +168,9 @@ export function statementAtCursor(sql: string, cursorPos: number): string {
 
 /**
  * Return whether the first keyword of a SQL statement is a write operation.
- * Used to enforce read-only mode in the UI before sending to the backend
- * (the backend enforces it too — this provides an earlier, friendlier error).
+ * Used to show an early error in the UI before sending to the backend.
+ * The backend enforces read-only at the database connection level, which
+ * covers cases this heuristic misses (CTEs, CALL, EXEC, etc.).
  */
 export function isMutatingStatement(sql: string): boolean {
   const keyword = sql.trim().split(/\s+/)[0]?.toUpperCase();

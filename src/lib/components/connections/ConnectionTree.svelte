@@ -55,64 +55,115 @@
 
   let expandedGroups = $state<Set<string>>(new Set());
   let ungroupedExpanded = $state(true);
-  let renamingGroupId   = $state<string | null>(null);
-  let renameValue       = $state('');
-  let renameError       = $state('');
-  let renameLoading     = $state(false);
+  let renamingGroupId = $state<string | null>(null);
+  let renameValue = $state('');
+  let renameError = $state('');
+  let renameLoading = $state(false);
 
   // ── Context menus ─────────────────────────────────────────────────────────
 
-  interface TableCtxMenu  { x: number; y: number; connectionId: string; database: string; table: TableInfo }
-  interface DbCtxMenu     { x: number; y: number; connectionId: string; database: string }
-  interface GrpCtxMenu    { x: number; y: number; group: ConnectionGroup }
-  interface ConnCtxMenu   { x: number; y: number; profile: ConnectionProfile }
-  interface PanelCtxMenu  { x: number; y: number }
+  interface TableCtxMenu {
+    x: number;
+    y: number;
+    connectionId: string;
+    database: string;
+    table: TableInfo;
+  }
+  interface DbCtxMenu {
+    x: number;
+    y: number;
+    connectionId: string;
+    database: string;
+  }
+  interface GrpCtxMenu {
+    x: number;
+    y: number;
+    group: ConnectionGroup;
+  }
+  interface ConnCtxMenu {
+    x: number;
+    y: number;
+    profile: ConnectionProfile;
+  }
+  interface PanelCtxMenu {
+    x: number;
+    y: number;
+  }
 
-  let tableCtx  = $state<TableCtxMenu | null>(null);
-  let dbCtx     = $state<DbCtxMenu | null>(null);
-  let grpCtx    = $state<GrpCtxMenu | null>(null);
-  let connCtx   = $state<ConnCtxMenu | null>(null);
-  let panelCtx  = $state<PanelCtxMenu | null>(null);
+  let tableCtx = $state<TableCtxMenu | null>(null);
+  let dbCtx = $state<DbCtxMenu | null>(null);
+  let grpCtx = $state<GrpCtxMenu | null>(null);
+  let connCtx = $state<ConnCtxMenu | null>(null);
+  let panelCtx = $state<PanelCtxMenu | null>(null);
 
   let moveToGroupSubmenuOpen = $state(false);
   let moveToGroupSubmenuTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
-  interface ConfirmState { title: string; message: string; confirmText?: string; onconfirm: () => void }
+  interface ConfirmState {
+    title: string;
+    message: string;
+    confirmText?: string;
+    onconfirm: () => void;
+  }
   let confirmState = $state<ConfirmState | null>(null);
   let errorModal = $state<{ title: string; message: string } | null>(null);
 
   // ── Create modals ─────────────────────────────────────────────────────────
 
-  interface CreateDbModal { connectionId: string; dbType: string }
-  interface CreateTableColumn { name: string; type: string; nullable: boolean; primaryKey: boolean }
-  interface CreateTableFk { localColumn: string; refTable: string; refColumn: string; onDelete: string; onUpdate: string }
-  interface CreateTableModal { connectionId: string; database: string; dbType: string }
+  interface CreateDbModal {
+    connectionId: string;
+    dbType: string;
+  }
+  interface CreateTableColumn {
+    name: string;
+    type: string;
+    nullable: boolean;
+    primaryKey: boolean;
+  }
+  interface CreateTableFk {
+    localColumn: string;
+    refTable: string;
+    refColumn: string;
+    onDelete: string;
+    onUpdate: string;
+  }
+  interface CreateTableModal {
+    connectionId: string;
+    database: string;
+    dbType: string;
+  }
 
-  let createDbModal   = $state<CreateDbModal | null>(null);
-  let createDbName    = $state('');
-  let createDbError   = $state('');
+  let createDbModal = $state<CreateDbModal | null>(null);
+  let createDbName = $state('');
+  let createDbError = $state('');
   let createDbLoading = $state(false);
 
-  let createTableModal   = $state<CreateTableModal | null>(null);
-  let createTableName    = $state('');
+  let createTableModal = $state<CreateTableModal | null>(null);
+  let createTableName = $state('');
   let createTableColumns = $state<CreateTableColumn[]>([]);
-  let createTableFks     = $state<CreateTableFk[]>([]);
-  let createTableError   = $state('');
+  let createTableFks = $state<CreateTableFk[]>([]);
+  let createTableError = $state('');
   let createTableLoading = $state(false);
 
   const refActions = [
     { value: 'NO ACTION', label: 'NO ACTION' },
-    { value: 'RESTRICT',  label: 'RESTRICT'  },
-    { value: 'CASCADE',   label: 'CASCADE'   },
-    { value: 'SET NULL',  label: 'SET NULL'  },
+    { value: 'RESTRICT', label: 'RESTRICT' },
+    { value: 'CASCADE', label: 'CASCADE' },
+    { value: 'SET NULL', label: 'SET NULL' },
   ];
 
   // ── Connection helpers ────────────────────────────────────────────────────
 
-  function isConnected(id: string)   { return connectionStore.activeIds.has(id); }
-  function isConnecting(id: string)  { return connectionStore.connectingIds.has(id); }
-  function hasError(id: string)      { return connectionStore.errorIds.has(id); }
-  function connError(id: string)     { return connectionStore.errorIds.get(id) ?? 'Connection error'; }
+  function isConnected(id: string) {
+    return connectionStore.activeIds.has(id);
+  }
+  function isConnecting(id: string) {
+    return connectionStore.connectingIds.has(id);
+  }
+  function hasError(id: string) {
+    return connectionStore.errorIds.has(id);
+  }
+
   function dotColor(profile: ConnectionProfile): string {
     return profile.color ?? 'var(--color-accent)';
   }
@@ -139,7 +190,9 @@
           panelStore.closeItemsForConnection(profile.id);
           await connectionStore.load();
           onDone?.();
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       },
     };
   }
@@ -148,7 +201,7 @@
 
   async function toggleExpand(connectionId: string) {
     if (expandedConnections.has(connectionId)) {
-      expandedConnections = new Set([...expandedConnections].filter(id => id !== connectionId));
+      expandedConnections = new Set([...expandedConnections].filter((id) => id !== connectionId));
     } else {
       expandedConnections = new Set([...expandedConnections, connectionId]);
       await loadDatabases(connectionId);
@@ -161,19 +214,19 @@
     try {
       const databases = await schemaApi.listDatabases(connectionId);
       const dbMap = new Map<string, TableInfo[]>();
-      databases.forEach(db => dbMap.set(db, []));
+      databases.forEach((db) => dbMap.set(db, []));
       schemaCache = new Map([...schemaCache, [connectionId, dbMap]]);
     } catch (err) {
       toast.addToast(errorMessage(err), 'error', 0);
     } finally {
-      loadingKeys = new Set([...loadingKeys].filter(k => k !== connectionId));
+      loadingKeys = new Set([...loadingKeys].filter((k) => k !== connectionId));
     }
   }
 
   async function toggleDatabase(connectionId: string, database: string) {
     const key = `${connectionId}/${database}`;
     if (expandedDatabases.has(key)) {
-      expandedDatabases = new Set([...expandedDatabases].filter(k => k !== key));
+      expandedDatabases = new Set([...expandedDatabases].filter((k) => k !== key));
     } else {
       expandedDatabases = new Set([...expandedDatabases, key]);
       await loadTables(connectionId, database);
@@ -193,17 +246,19 @@
     } catch (err) {
       toast.addToast(errorMessage(err), 'error', 0);
     } finally {
-      loadingKeys = new Set([...loadingKeys].filter(k => k !== key));
+      loadingKeys = new Set([...loadingKeys].filter((k) => k !== key));
     }
   }
 
   const focusedContent = $derived(panelStore.focusedPanel?.content);
 
   function isTableActive(connectionId: string, database: string, tableName: string): boolean {
-    return focusedContent?.kind === 'table_browser' &&
+    return (
+      focusedContent?.kind === 'table_browser' &&
       focusedContent.connectionId === connectionId &&
       focusedContent.database === database &&
-      focusedContent.table === tableName;
+      focusedContent.table === tableName
+    );
   }
 
   function openTable(connectionId: string, database: string, table: string) {
@@ -214,16 +269,19 @@
 
   function toggleGroup(groupId: string) {
     if (expandedGroups.has(groupId)) {
-      expandedGroups = new Set([...expandedGroups].filter(id => id !== groupId));
+      expandedGroups = new Set([...expandedGroups].filter((id) => id !== groupId));
     } else {
       expandedGroups = new Set([...expandedGroups, groupId]);
     }
   }
 
   async function commitRename() {
-    if (!renamingGroupId || !renameValue.trim()) { renamingGroupId = null; return; }
+    if (!renamingGroupId || !renameValue.trim()) {
+      renamingGroupId = null;
+      return;
+    }
     renameLoading = true;
-    renameError   = '';
+    renameError = '';
     try {
       await connectionsApi.updateConnectionGroup(renamingGroupId, { name: renameValue.trim() });
       await connectionStore.load();
@@ -245,21 +303,23 @@
         try {
           await connectionsApi.deleteConnectionGroup(group.id);
           await connectionStore.load();
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       },
     };
   }
 
   // ── Group creation ────────────────────────────────────────────────────────
 
-  let createGroupModal  = $state(false);
-  let newGroupName      = $state('');
-  let newGroupError     = $state('');
-  let newGroupLoading   = $state(false);
+  let createGroupModal = $state(false);
+  let newGroupName = $state('');
+  let newGroupError = $state('');
+  let newGroupLoading = $state(false);
 
   function startCreateGroup() {
     closeAllCtx();
-    newGroupName  = '';
+    newGroupName = '';
     newGroupError = '';
     createGroupModal = true;
   }
@@ -268,7 +328,7 @@
     const name = newGroupName.trim();
     if (!name) return;
     newGroupLoading = true;
-    newGroupError   = '';
+    newGroupError = '';
     try {
       await connectionsApi.createConnectionGroup(name);
       await connectionStore.load();
@@ -283,9 +343,16 @@
   // ── Context menu helpers ──────────────────────────────────────────────────
 
   function closeAllCtx() {
-    tableCtx = null; dbCtx = null; grpCtx = null; connCtx = null; panelCtx = null;
+    tableCtx = null;
+    dbCtx = null;
+    grpCtx = null;
+    connCtx = null;
+    panelCtx = null;
     moveToGroupSubmenuOpen = false;
-    if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
+    if (moveToGroupSubmenuTimer) {
+      clearTimeout(moveToGroupSubmenuTimer);
+      moveToGroupSubmenuTimer = null;
+    }
   }
 
   function showTableCtx(e: MouseEvent, connectionId: string, database: string, table: TableInfo) {
@@ -326,7 +393,9 @@
     const { profile } = connCtx;
     connCtx = null;
     schemaCache = new Map([...schemaCache].filter(([k]) => k !== profile.id));
-    expandedDatabases = new Set([...expandedDatabases].filter(k => !k.startsWith(`${profile.id}/`)));
+    expandedDatabases = new Set(
+      [...expandedDatabases].filter((k) => !k.startsWith(`${profile.id}/`)),
+    );
     await loadDatabases(profile.id);
   }
 
@@ -373,41 +442,19 @@
 
   async function ctxConnToggleReadOnly() {
     if (!connCtx) return;
-    const { profile } = connCtx;
+    const id = connCtx.profile.id;
     connCtx = null;
-    await connectionStore.update(profile.id, {
-      name: profile.name,
-      dbType: profile.dbType,
-      host: profile.host,
-      port: profile.port,
-      database: profile.database,
-      username: profile.username,
-      color: profile.color,
-      readOnly: !profile.readOnly,
-      groupId: profile.groupId,
-      sshEnabled: profile.sshEnabled,
-      sshHost: profile.sshHost,
-      sshPort: profile.sshPort,
-      sshUser: profile.sshUser,
-      sshAuthType: profile.sshAuthType,
-      sshKeyPath: profile.sshKeyPath,
-      sslEnabled: profile.sslEnabled,
-      sslCaPath: profile.sslCaPath,
-      sslCertPath: profile.sslCertPath,
-      sslKeyPath: profile.sslKeyPath,
-      poolMin: profile.poolMin,
-      poolMax: profile.poolMax,
-    });
+    await connectionStore.toggleReadOnly(id);
   }
 
   async function ctxDisconnectAll() {
     panelCtx = null;
     const activeIds = [...connectionStore.activeIds];
-    await Promise.all(activeIds.map(id => connectionStore.disconnect(id)));
+    await Promise.all(activeIds.map((id) => connectionStore.disconnect(id)));
     for (const id of activeIds) {
       panelStore.closeItemsForConnection(id, { skipDirty: true });
     }
-    expandedConnections = new Set([...expandedConnections].filter(i => !activeIds.includes(i)));
+    expandedConnections = new Set([...expandedConnections].filter((i) => !activeIds.includes(i)));
   }
 
   async function ctxConnDisconnect() {
@@ -416,7 +463,7 @@
     connCtx = null;
     await connectionStore.disconnect(id);
     panelStore.closeItemsForConnection(id, { skipDirty: true });
-    expandedConnections = new Set([...expandedConnections].filter(i => i !== id));
+    expandedConnections = new Set([...expandedConnections].filter((i) => i !== id));
   }
 
   async function ctxNewQueryEditor() {
@@ -443,7 +490,13 @@
 
   function ctxViewDdl() {
     if (!tableCtx) return;
-    panelStore.openInFocused({ kind: 'ddl_viewer', connectionId: tableCtx.connectionId, database: tableCtx.database, objectName: tableCtx.table.name, objectType: tableCtx.table.tableType });
+    panelStore.openInFocused({
+      kind: 'ddl_viewer',
+      connectionId: tableCtx.connectionId,
+      database: tableCtx.database,
+      objectName: tableCtx.table.name,
+      objectType: tableCtx.table.tableType,
+    });
     tableCtx = null;
   }
 
@@ -455,7 +508,11 @@
 
   function ctxOpenErd() {
     if (!dbCtx) return;
-    panelStore.openInFocused({ kind: 'erd', connectionId: dbCtx.connectionId, database: dbCtx.database });
+    panelStore.openInFocused({
+      kind: 'erd',
+      connectionId: dbCtx.connectionId,
+      database: dbCtx.database,
+    });
     dbCtx = null;
   }
 
@@ -471,9 +528,10 @@
     tableCtx = null;
     if (!profile || profile.readOnly) return;
     const dbType = profile.dbType;
-    const sql = dbType === 'sqlite'
-      ? `DROP TABLE ${qi(table.name, dbType)}`
-      : `DROP TABLE ${qi(database, dbType)}.${qi(table.name, dbType)}`;
+    const sql =
+      dbType === 'sqlite'
+        ? `DROP TABLE ${qi(table.name, dbType)}`
+        : `DROP TABLE ${qi(database, dbType)}.${qi(table.name, dbType)}`;
     confirmState = {
       title: 'Drop Table',
       message: `Drop table "${table.name}"? This will permanently delete the table and all its data. This cannot be undone.`,
@@ -521,7 +579,9 @@
           const connMap = new Map(schemaCache.get(connectionId) ?? []);
           connMap.delete(database);
           schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
-          expandedDatabases = new Set([...expandedDatabases].filter(k => k !== `${connectionId}/${database}`));
+          expandedDatabases = new Set(
+            [...expandedDatabases].filter((k) => k !== `${connectionId}/${database}`),
+          );
         } catch (err) {
           errorModal = { title: 'Drop Failed', message: errorMessage(err) };
         }
@@ -543,11 +603,15 @@
   async function executeCreateDatabase() {
     if (!createDbModal) return;
     const name = createDbName.trim();
-    if (!name) { createDbError = 'Name is required'; return; }
+    if (!name) {
+      createDbError = 'Name is required';
+      return;
+    }
     const { connectionId, dbType } = createDbModal;
-    const sql = dbType === 'postgres'
-      ? `CREATE SCHEMA ${qi(name, dbType)}`
-      : `CREATE DATABASE ${qi(name, dbType)}`;
+    const sql =
+      dbType === 'postgres'
+        ? `CREATE SCHEMA ${qi(name, dbType)}`
+        : `CREATE DATABASE ${qi(name, dbType)}`;
     createDbLoading = true;
     createDbError = '';
     try {
@@ -572,9 +636,40 @@
 
   function columnTypes(dbType: string): string[] {
     if (dbType === 'mysql' || dbType === 'mariadb') {
-      return ['INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'VARCHAR(255)', 'TEXT', 'LONGTEXT', 'DATETIME', 'DATE', 'FLOAT', 'DOUBLE', 'DECIMAL(10,2)', 'BOOLEAN', 'JSON'];
+      return [
+        'INT',
+        'BIGINT',
+        'SMALLINT',
+        'TINYINT',
+        'VARCHAR(255)',
+        'TEXT',
+        'LONGTEXT',
+        'DATETIME',
+        'DATE',
+        'FLOAT',
+        'DOUBLE',
+        'DECIMAL(10,2)',
+        'BOOLEAN',
+        'JSON',
+      ];
     } else if (dbType === 'postgres') {
-      return ['INTEGER', 'BIGINT', 'SMALLINT', 'VARCHAR(255)', 'TEXT', 'TIMESTAMP', 'DATE', 'REAL', 'NUMERIC(10,2)', 'BOOLEAN', 'JSON', 'JSONB', 'UUID', 'SERIAL', 'BIGSERIAL'];
+      return [
+        'INTEGER',
+        'BIGINT',
+        'SMALLINT',
+        'VARCHAR(255)',
+        'TEXT',
+        'TIMESTAMP',
+        'DATE',
+        'REAL',
+        'NUMERIC(10,2)',
+        'BOOLEAN',
+        'JSON',
+        'JSONB',
+        'UUID',
+        'SERIAL',
+        'BIGSERIAL',
+      ];
     }
     return ['INTEGER', 'TEXT', 'REAL', 'BLOB', 'NUMERIC'];
   }
@@ -587,7 +682,9 @@
     if (!profile) return;
     createTableName = '';
     createTableError = '';
-    createTableColumns = [{ name: 'id', type: defaultColumnType(profile.dbType), nullable: false, primaryKey: true }];
+    createTableColumns = [
+      { name: 'id', type: defaultColumnType(profile.dbType), nullable: false, primaryKey: true },
+    ];
     createTableFks = [];
     createTableModal = { connectionId, database, dbType: profile.dbType };
   }
@@ -595,25 +692,39 @@
   async function executeCreateTable() {
     if (!createTableModal) return;
     const name = createTableName.trim();
-    if (!name) { createTableError = 'Table name is required'; return; }
-    const emptyCol = createTableColumns.find(c => !c.name.trim());
-    if (emptyCol) { createTableError = 'All columns must have a name'; return; }
-    const incompleteFk = createTableFks.find(fk => !fk.localColumn || !fk.refTable.trim() || !fk.refColumn.trim());
-    if (incompleteFk) { createTableError = 'All foreign keys must have a local column, referenced table, and referenced column'; return; }
+    if (!name) {
+      createTableError = 'Table name is required';
+      return;
+    }
+    const emptyCol = createTableColumns.find((c) => !c.name.trim());
+    if (emptyCol) {
+      createTableError = 'All columns must have a name';
+      return;
+    }
+    const incompleteFk = createTableFks.find(
+      (fk) => !fk.localColumn || !fk.refTable.trim() || !fk.refColumn.trim(),
+    );
+    if (incompleteFk) {
+      createTableError =
+        'All foreign keys must have a local column, referenced table, and referenced column';
+      return;
+    }
     const { connectionId, database, dbType } = createTableModal;
     const q = (n: string) => qi(n, dbType);
-    const pkCols = createTableColumns.filter(c => c.primaryKey);
-    const colDefs = createTableColumns.map(c => {
+    const pkCols = createTableColumns.filter((c) => c.primaryKey);
+    const colDefs = createTableColumns.map((c) => {
       let def = `  ${q(c.name.trim())} ${c.type}`;
       if (!c.nullable) def += ' NOT NULL';
       return def;
     });
     if (pkCols.length > 0) {
-      colDefs.push(`  PRIMARY KEY (${pkCols.map(c => q(c.name.trim())).join(', ')})`);
+      colDefs.push(`  PRIMARY KEY (${pkCols.map((c) => q(c.name.trim())).join(', ')})`);
     }
     for (const fk of createTableFks) {
       const fkName = `fk_${name}_${fk.localColumn}`;
-      colDefs.push(`  CONSTRAINT ${q(fkName)} FOREIGN KEY (${q(fk.localColumn)}) REFERENCES ${q(fk.refTable.trim())} (${q(fk.refColumn.trim())}) ON DELETE ${fk.onDelete} ON UPDATE ${fk.onUpdate}`);
+      colDefs.push(
+        `  CONSTRAINT ${q(fkName)} FOREIGN KEY (${q(fk.localColumn)}) REFERENCES ${q(fk.refTable.trim())} (${q(fk.refColumn.trim())}) ON DELETE ${fk.onDelete} ON UPDATE ${fk.onUpdate}`,
+      );
     }
     const tablePath = dbType === 'sqlite' ? q(name) : `${q(database)}.${q(name)}`;
     const sql = `CREATE TABLE ${tablePath} (\n${colDefs.join(',\n')}\n)`;
@@ -636,7 +747,10 @@
   }
 
   function handleWindowKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') { closeAllCtx(); renamingGroupId = null; }
+    if (e.key === 'Escape') {
+      closeAllCtx();
+      renamingGroupId = null;
+    }
   }
 
   function handleWindowClick(e: MouseEvent) {
@@ -657,7 +771,7 @@
   const grouped = $derived(() => {
     const groups = connectionStore.groups;
     const profiles = connectionStore.profiles;
-    const ungrouped = profiles.filter(p => p.groupId === null);
+    const ungrouped = profiles.filter((p) => p.groupId === null);
     const byGroup = new Map<string, ConnectionProfile[]>();
     for (const g of groups) byGroup.set(g.id, []);
     for (const p of profiles) {
@@ -680,19 +794,35 @@
 
   <!-- Scrollable list -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="tree-scroll gscroll" bind:this={treeScrollEl} tabindex="-1" oncontextmenu={(e) => { if ((e.target as Element).closest('.conn-item,.group-section,.ctx-menu')) return; showPanelCtx(e); }}>
+  <div
+    class="tree-scroll gscroll"
+    bind:this={treeScrollEl}
+    tabindex="-1"
+    oncontextmenu={(e) => {
+      if ((e.target as Element).closest('.conn-item,.group-section,.ctx-menu')) return;
+      showPanelCtx(e);
+    }}
+  >
     {#if connectionStore.profiles.length === 0 && connectionStore.groups.length === 0}
       <div class="empty-state">
         <p>No connections yet.</p>
       </div>
     {:else}
-
       <!-- Ungrouped profiles -->
       {#if connectionStore.groups.length > 0 && grouped().ungrouped.length > 0}
         <div class="group-section">
           <button class="group-row" onclick={() => (ungroupedExpanded = !ungroupedExpanded)}>
             <span class="chevron" class:open={ungroupedExpanded} aria-hidden="true">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
+              >
             </span>
             <span class="group-name">Ungrouped</span>
             <span class="group-count">{grouped().ungrouped.length}</span>
@@ -717,7 +847,16 @@
         <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
           <button class="group-row" onclick={() => toggleGroup(group.id)}>
             <span class="chevron" class:open={isExpanded} aria-hidden="true">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
+              >
             </span>
             <span class="group-name">{group.name}</span>
             <span class="group-count">{groupProfiles.length}</span>
@@ -729,12 +868,25 @@
           {/if}
         </div>
       {/each}
-
     {/if}
 
     <!-- Add connection inline row -->
-    <button class="add-row" onclick={() => { newConnectionGroupId = undefined; showAddForm = true; }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <button
+      class="add-row"
+      onclick={() => {
+        newConnectionGroupId = undefined;
+        showAddForm = true;
+      }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      >
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
@@ -754,20 +906,43 @@
   <div class="conn-item">
     <!-- Main row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="conn-row" class:connected class:errored oncontextmenu={(e) => showConnCtx(e, profile)} onclick={() => connected ? toggleExpand(profile.id) : handleConnect(profile)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { connected ? toggleExpand(profile.id) : handleConnect(profile); } }}>
+    <div
+      class="conn-row"
+      class:connected
+      class:errored
+      oncontextmenu={(e) => showConnCtx(e, profile)}
+      onclick={() => (connected ? toggleExpand(profile.id) : handleConnect(profile))}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          connected ? toggleExpand(profile.id) : handleConnect(profile);
+        }
+      }}
+    >
       <div class="conn-row-left">
         <!-- Chevron: rotates when expanded -->
         <button
           class="conn-chevron"
           class:open={expanded}
-          onclick={(e) => { e.stopPropagation(); connected ? toggleExpand(profile.id) : handleConnect(profile); }}
+          onclick={(e) => {
+            e.stopPropagation();
+            connected ? toggleExpand(profile.id) : handleConnect(profile);
+          }}
           aria-label="{expanded ? 'Collapse' : 'Expand'} {profile.name}"
           disabled={connecting}
         >
           {#if connecting}
             <span class="spin-ring" aria-hidden="true"></span>
           {:else}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           {/if}
@@ -777,23 +952,49 @@
         <span
           class="color-dot"
           class:dim={!connected && !connecting}
-          style="background:{color};{connected ? `box-shadow:0 0 0 3px color-mix(in srgb,${color} 18%,transparent)` : ''}"
+          style="background:{color};{connected
+            ? `box-shadow:0 0 0 3px color-mix(in srgb,${color} 18%,transparent)`
+            : ''}"
           aria-hidden="true"
         ></span>
 
         <!-- Name -->
         <button
           class="conn-name"
-          onclick={(e) => { e.stopPropagation(); connected ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id }) : handleConnect(profile); }}
-          title={profile.host}
-        >{profile.name}</button>
+          onclick={(e) => {
+            e.stopPropagation();
+            connected
+              ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id })
+              : handleConnect(profile);
+          }}
+          title={profile.host}>{profile.name}</button
+        >
 
-        <!-- Lock icon if read-only -->
+        <!-- Lock icon if read-only — click to toggle -->
         {#if profile.readOnly}
-          <svg class="lock-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-label="Read-only">
-            <rect x="5" y="11" width="14" height="9" rx="2"></rect>
-            <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
-          </svg>
+          <button
+            class="lock-icon-btn"
+            onclick={(e) => {
+              e.stopPropagation();
+              connectionStore.toggleReadOnly(profile.id);
+            }}
+            title="Read-only — click to disable"
+            aria-label="Disable read-only for {profile.name}"
+            aria-pressed={true}
+          >
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
+              <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+            </svg>
+          </button>
         {/if}
       </div>
 
@@ -801,11 +1002,23 @@
       <div class="conn-actions">
         <button
           class="action-btn"
-          onclick={(e) => { e.stopPropagation(); editingProfile = profile; }}
+          onclick={(e) => {
+            e.stopPropagation();
+            editingProfile = profile;
+          }}
           title="Edit connection"
           aria-label="Edit {profile.name}"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
@@ -824,7 +1037,7 @@
             <span class="loading-dots" aria-label="Loading">Loading…</span>
           </div>
         {:else if databases}
-          {#each [...databases.keys()].filter(db => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
+          {#each [...databases.keys()].filter((db) => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
             {@const dbKey = `${profile.id}/${database}`}
             {@const isDbExpanded = expandedDatabases.has(dbKey)}
             {@const isDbLoading = loadingKeys.has(dbKey)}
@@ -840,7 +1053,16 @@
                 aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
               >
                 <span class="chevron" class:open={isDbExpanded} aria-hidden="true">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
+                  >
                 </span>
                 <DbIcon system={isDbSystem} aria-hidden="true" />
                 <span class="db-name">{database}</span>
@@ -851,7 +1073,7 @@
 
               {#if isDbExpanded && tables.length > 0}
                 <div class="table-list">
-                  {#each tables.filter(t => settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) as table}
+                  {#each tables.filter((t) => settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) as table}
                     {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                     <button
                       class="table-row"
@@ -882,7 +1104,15 @@
 <!-- Context menus -->
 {#if panelCtx}
   <div class="ctx-menu" role="menu" style="top:{panelCtx.y}px;left:{panelCtx.x}px" use:portal>
-    <button class="ctx-item" role="menuitem" onclick={() => { panelCtx = null; newConnectionGroupId = undefined; showAddForm = true; }}>New Connection</button>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        panelCtx = null;
+        newConnectionGroupId = undefined;
+        showAddForm = true;
+      }}>New Connection</button
+    >
     <button class="ctx-item" role="menuitem" onclick={startCreateGroup}>New Group</button>
     {#if connectionStore.activeIds.size > 0}
       <div class="ctx-sep" role="separator"></div>
@@ -899,7 +1129,9 @@
     <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
     {#if !tableCtxProfile?.readOnly}
       <div class="ctx-sep" role="separator"></div>
-      <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDropTable}>Drop Table</button>
+      <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDropTable}
+        >Drop Table</button
+      >
     {/if}
   </div>
 {/if}
@@ -911,12 +1143,34 @@
       <button class="ctx-item" role="menuitem" onclick={ctxNewTable}>New Table</button>
       <div class="ctx-sep" role="separator"></div>
     {/if}
-    <button class="ctx-item" role="menuitem" onclick={() => { if (dbCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: dbCtx.connectionId, database: dbCtx.database }); dbCtx = null; } }}>New Query Editor</button>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (dbCtx) {
+          panelStore.openInFocused({
+            kind: 'query_editor',
+            connectionId: dbCtx.connectionId,
+            database: dbCtx.database,
+          });
+          dbCtx = null;
+        }
+      }}>New Query Editor</button
+    >
     <div class="ctx-sep" role="separator"></div>
     <button class="ctx-item" role="menuitem" onclick={ctxRefreshDatabase}>Refresh</button>
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
     <div class="ctx-sep" role="separator"></div>
-    <button class="ctx-item" role="menuitem" onclick={() => { if (dbCtx) { navigator.clipboard.writeText(dbCtx.database); dbCtx = null; } }}>Copy Name</button>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (dbCtx) {
+          navigator.clipboard.writeText(dbCtx.database);
+          dbCtx = null;
+        }
+      }}>Copy Name</button
+    >
     {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dbType !== 'sqlite'}
       <div class="ctx-sep" role="separator"></div>
       <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDropDatabase}>
@@ -928,9 +1182,34 @@
 
 {#if grpCtx}
   <div class="ctx-menu" role="menu" style="top:{grpCtx.y}px;left:{grpCtx.x}px" use:portal>
-    <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { newConnectionGroupId = grpCtx.group.id; showAddForm = true; grpCtx = null; } }}>New Connection in Group</button>
-    <button class="ctx-item" role="menuitem" onclick={() => { if (grpCtx) { renamingGroupId = grpCtx.group.id; renameValue = grpCtx.group.name; renameError = ''; grpCtx = null; } }}>Rename Group</button>
-    <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</button>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (grpCtx) {
+          newConnectionGroupId = grpCtx.group.id;
+          showAddForm = true;
+          grpCtx = null;
+        }
+      }}>New Connection in Group</button
+    >
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (grpCtx) {
+          renamingGroupId = grpCtx.group.id;
+          renameValue = grpCtx.group.name;
+          renameError = '';
+          grpCtx = null;
+        }
+      }}>Rename Group</button
+    >
+    <button
+      class="ctx-item ctx-item--danger"
+      role="menuitem"
+      onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</button
+    >
   </div>
 {/if}
 
@@ -939,15 +1218,44 @@
   <div class="ctx-menu" role="menu" style="top:{connCtx.y}px;left:{connCtx.x}px" use:portal>
     <button class="ctx-item" role="menuitem" onclick={ctxNewQueryEditor}>New Query Editor</button>
     {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dbType !== 'sqlite'}
-      <button class="ctx-item" role="menuitem" onclick={ctxNewDatabase}>New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</button>
+      <button class="ctx-item" role="menuitem" onclick={ctxNewDatabase}
+        >New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</button
+      >
     {/if}
     <button class="ctx-item" role="menuitem" onclick={ctxManageUsers}>Manage Users</button>
     <div class="ctx-sep" role="separator"></div>
-    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { editingProfile = connCtx.profile; connCtx = null; } }}>Edit</button>
-    <button class="ctx-item" role="menuitem" onclick={ctxConnToggleReadOnly}>{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</button>
-    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { navigator.clipboard.writeText(connCtx.profile.name); connCtx = null; } }}>Copy Name</button>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (connCtx) {
+          editingProfile = connCtx.profile;
+          connCtx = null;
+        }
+      }}>Edit</button
+    >
+    <button class="ctx-item" role="menuitem" onclick={ctxConnToggleReadOnly}
+      >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</button
+    >
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (connCtx) {
+          navigator.clipboard.writeText(connCtx.profile.name);
+          connCtx = null;
+        }
+      }}>Copy Name</button
+    >
     <div class="ctx-sep" role="separator"></div>
-    <button class="ctx-item" role="menuitem" onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); connCtx = null; }}>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
+        connCtx = null;
+      }}
+    >
       {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
     </button>
     <div class="ctx-sep" role="separator"></div>
@@ -955,9 +1263,27 @@
       <button class="ctx-item" role="menuitem" onclick={ctxRefreshConnection}>Refresh</button>
       <button class="ctx-item" role="menuitem" onclick={ctxConnDisconnect}>Disconnect</button>
     {:else}
-      <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</button>
+      <button
+        class="ctx-item"
+        role="menuitem"
+        onclick={() => {
+          if (connCtx) {
+            handleConnect(connCtx.profile);
+            connCtx = null;
+          }
+        }}>Connect</button
+      >
     {/if}
-    <button class="ctx-item" role="menuitem" onclick={() => { if (connCtx) { panelStore.closeItemsForConnection(connCtx.profile.id); connCtx = null; } }}>Close All Tabs</button>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (connCtx) {
+          panelStore.closeItemsForConnection(connCtx.profile.id);
+          connCtx = null;
+        }
+      }}>Close All Tabs</button
+    >
     <div class="ctx-sep" role="separator"></div>
     {#if connectionStore.groups.length > 0}
       <div
@@ -966,47 +1292,92 @@
         tabindex="0"
         aria-haspopup="true"
         onmouseenter={() => {
-          if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
+          if (moveToGroupSubmenuTimer) {
+            clearTimeout(moveToGroupSubmenuTimer);
+            moveToGroupSubmenuTimer = null;
+          }
           moveToGroupSubmenuOpen = true;
         }}
         onmouseleave={() => {
-          moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150);
+          moveToGroupSubmenuTimer = setTimeout(() => {
+            moveToGroupSubmenuOpen = false;
+          }, 150);
         }}
       >
         Move to Group
-        <svg class="ctx-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        <svg
+          class="ctx-caret"
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
+        >
         {#if moveToGroupSubmenuOpen}
           <div
             class="ctx-submenu"
             role="menu"
             tabindex="0"
             onmouseenter={() => {
-              if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; }
+              if (moveToGroupSubmenuTimer) {
+                clearTimeout(moveToGroupSubmenuTimer);
+                moveToGroupSubmenuTimer = null;
+              }
             }}
             onmouseleave={() => {
-              moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150);
+              moveToGroupSubmenuTimer = setTimeout(() => {
+                moveToGroupSubmenuOpen = false;
+              }, 150);
             }}
           >
-            {#each connectionStore.groups.filter(g => g.id !== connCtx?.profile.groupId) as g (g.id)}
-              <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(g.id)}>{g.name}</button>
+            {#each connectionStore.groups.filter((g) => g.id !== connCtx?.profile.groupId) as g (g.id)}
+              <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(g.id)}
+                >{g.name}</button
+              >
             {/each}
           </div>
         {/if}
       </div>
       {#if connCtx.profile.groupId !== null}
-        <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(null)}>Remove from Group</button>
+        <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(null)}
+          >Remove from Group</button
+        >
       {/if}
       <div class="ctx-sep" role="separator"></div>
     {/if}
-    <button class="ctx-item" role="menuitem" onclick={() => { connCtx = null; startCreateGroup(); }}>New Group</button>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        connCtx = null;
+        startCreateGroup();
+      }}>New Group</button
+    >
     <div class="ctx-sep" role="separator"></div>
-    <button class="ctx-item ctx-item--danger" role="menuitem" onclick={() => { if (connCtx) { deleteConnection(connCtx.profile); connCtx = null; } }}>Delete</button>
+    <button
+      class="ctx-item ctx-item--danger"
+      role="menuitem"
+      onclick={() => {
+        if (connCtx) {
+          deleteConnection(connCtx.profile);
+          connCtx = null;
+        }
+      }}>Delete</button
+    >
   </div>
 {/if}
 
 {#if createDbModal}
   {@const dbLabel = createDbModal.dbType === 'postgres' ? 'Schema' : 'Database'}
-  <Modal label="New {dbLabel}" onbackdropclick={() => { createDbModal = null; }}>
+  <Modal
+    label="New {dbLabel}"
+    onbackdropclick={() => {
+      createDbModal = null;
+    }}
+  >
     <div class="create-modal-card">
       <div class="create-modal-title">New {dbLabel}</div>
       <div class="create-modal-body">
@@ -1022,7 +1393,10 @@
           autocapitalize="off"
           autocorrect="off"
           spellcheck={false}
-          onkeydown={(e) => { if (e.key === 'Enter') executeCreateDatabase(); if (e.key === 'Escape') createDbModal = null; }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') executeCreateDatabase();
+            if (e.key === 'Escape') createDbModal = null;
+          }}
           autofocus
         />
         {#if createDbError}
@@ -1030,7 +1404,7 @@
         {/if}
       </div>
       <div class="create-modal-footer">
-        <button class="btn" onclick={() => createDbModal = null}>Cancel</button>
+        <button class="btn" onclick={() => (createDbModal = null)}>Cancel</button>
         <button class="btn btn--primary" onclick={executeCreateDatabase} disabled={createDbLoading}>
           {createDbLoading ? 'Creating…' : 'Create'}
         </button>
@@ -1040,7 +1414,12 @@
 {/if}
 
 {#if createGroupModal}
-  <Modal label="New Group" onbackdropclick={() => { createGroupModal = false; }}>
+  <Modal
+    label="New Group"
+    onbackdropclick={() => {
+      createGroupModal = false;
+    }}
+  >
     <div class="create-modal-card">
       <div class="create-modal-title">New Group</div>
       <div class="create-modal-body">
@@ -1056,7 +1435,10 @@
           autocapitalize="off"
           autocorrect="off"
           spellcheck={false}
-          onkeydown={(e) => { if (e.key === 'Enter') commitCreateGroup(); if (e.key === 'Escape') createGroupModal = false; }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') commitCreateGroup();
+            if (e.key === 'Escape') createGroupModal = false;
+          }}
           autofocus
         />
         {#if newGroupError}
@@ -1064,7 +1446,7 @@
         {/if}
       </div>
       <div class="create-modal-footer">
-        <button class="btn" onclick={() => createGroupModal = false}>Cancel</button>
+        <button class="btn" onclick={() => (createGroupModal = false)}>Cancel</button>
         <button class="btn btn--primary" onclick={commitCreateGroup} disabled={newGroupLoading}>
           {newGroupLoading ? 'Creating…' : 'Create'}
         </button>
@@ -1074,7 +1456,12 @@
 {/if}
 
 {#if renamingGroupId}
-  <Modal label="Rename Group" onbackdropclick={() => { renamingGroupId = null; }}>
+  <Modal
+    label="Rename Group"
+    onbackdropclick={() => {
+      renamingGroupId = null;
+    }}
+  >
     <div class="create-modal-card">
       <div class="create-modal-title">Rename Group</div>
       <div class="create-modal-body">
@@ -1089,7 +1476,10 @@
           autocapitalize="off"
           autocorrect="off"
           spellcheck={false}
-          onkeydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') renamingGroupId = null; }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') commitRename();
+            if (e.key === 'Escape') renamingGroupId = null;
+          }}
           autofocus
         />
         {#if renameError}
@@ -1097,7 +1487,7 @@
         {/if}
       </div>
       <div class="create-modal-footer">
-        <button class="btn" onclick={() => renamingGroupId = null}>Cancel</button>
+        <button class="btn" onclick={() => (renamingGroupId = null)}>Cancel</button>
         <button class="btn btn--primary" onclick={commitRename} disabled={renameLoading}>
           {renameLoading ? 'Saving…' : 'Save'}
         </button>
@@ -1108,9 +1498,16 @@
 
 {#if createTableModal}
   {@const types = columnTypes(createTableModal.dbType)}
-  <Modal label="New Table" onbackdropclick={() => { createTableModal = null; }}>
+  <Modal
+    label="New Table"
+    onbackdropclick={() => {
+      createTableModal = null;
+    }}
+  >
     <div class="create-modal-card create-modal-card--wide">
-      <div class="create-modal-title">New Table in <span class="create-modal-db">{createTableModal.database}</span></div>
+      <div class="create-modal-title">
+        New Table in <span class="create-modal-db">{createTableModal.database}</span>
+      </div>
       <div class="create-modal-body">
         <div class="field-group">
           <label class="field-label" for="create-table-name">Table Name</label>
@@ -1132,8 +1529,13 @@
             <span class="field-label">Columns</span>
             <button
               class="btn-add-col"
-              onclick={() => { createTableColumns = [...createTableColumns, { name: '', type: types[0], nullable: true, primaryKey: false }]; }}
-            >+ Add Column</button>
+              onclick={() => {
+                createTableColumns = [
+                  ...createTableColumns,
+                  { name: '', type: types[0], nullable: true, primaryKey: false },
+                ];
+              }}>+ Add Column</button
+            >
           </div>
           <div class="cols-head-row">
             <span class="col-cell-name">Name</span>
@@ -1144,17 +1546,44 @@
           </div>
           {#each createTableColumns as col, i}
             <div class="col-row">
-              <input class="field-input col-name-input" type="text" bind:value={col.name} placeholder="column_name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck={false} />
-              <Select bind:value={col.type} options={types.map(t => ({ value: t, label: t }))} size="sm" mono={true} style="width:100%" />
+              <input
+                class="field-input col-name-input"
+                type="text"
+                bind:value={col.name}
+                placeholder="column_name"
+                autocomplete="off"
+                autocapitalize="off"
+                autocorrect="off"
+                spellcheck={false}
+              />
+              <Select
+                bind:value={col.type}
+                options={types.map((t) => ({ value: t, label: t }))}
+                size="sm"
+                mono={true}
+                style="width:100%"
+              />
               <Checkbox bind:checked={col.nullable} size="sm" aria-label="Nullable" />
               <Checkbox bind:checked={col.primaryKey} size="sm" aria-label="Primary key" />
               <button
                 class="col-del-btn"
-                onclick={() => { createTableColumns = createTableColumns.filter((_, idx) => idx !== i); }}
+                onclick={() => {
+                  createTableColumns = createTableColumns.filter((_, idx) => idx !== i);
+                }}
                 disabled={createTableColumns.length <= 1}
                 aria-label="Remove column"
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  ><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"
+                  ></line></svg
+                >
               </button>
             </div>
           {/each}
@@ -1166,15 +1595,28 @@
               <span class="field-label">Foreign Keys</span>
               <button
                 class="btn-add-col"
-                onclick={() => { createTableFks = [...createTableFks, { localColumn: createTableColumns[0]?.name ?? '', refTable: '', refColumn: '', onDelete: 'NO ACTION', onUpdate: 'NO ACTION' }]; }}
-              >+ Add FK</button>
+                onclick={() => {
+                  createTableFks = [
+                    ...createTableFks,
+                    {
+                      localColumn: createTableColumns[0]?.name ?? '',
+                      refTable: '',
+                      refColumn: '',
+                      onDelete: 'NO ACTION',
+                      onUpdate: 'NO ACTION',
+                    },
+                  ];
+                }}>+ Add FK</button
+              >
             </div>
             {#each createTableFks as fk, i}
               <div class="fk-card">
                 <div class="fk-row">
                   <Select
                     bind:value={fk.localColumn}
-                    options={createTableColumns.filter(c => c.name.trim()).map(c => ({ value: c.name, label: c.name }))}
+                    options={createTableColumns
+                      .filter((c) => c.name.trim())
+                      .map((c) => ({ value: c.name, label: c.name }))}
                     size="sm"
                     aria-label="Local column"
                     style="flex:1;min-width:0"
@@ -1185,28 +1627,60 @@
                     type="text"
                     bind:value={fk.refTable}
                     placeholder="ref_table"
-                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck={false}
+                    autocomplete="off"
+                    autocapitalize="off"
+                    autocorrect="off"
+                    spellcheck={false}
                   />
                   <input
                     class="field-input fk-input"
                     type="text"
                     bind:value={fk.refColumn}
                     placeholder="ref_col"
-                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck={false}
+                    autocomplete="off"
+                    autocapitalize="off"
+                    autocorrect="off"
+                    spellcheck={false}
                   />
                   <button
                     class="col-del-btn"
-                    onclick={() => { createTableFks = createTableFks.filter((_, idx) => idx !== i); }}
+                    onclick={() => {
+                      createTableFks = createTableFks.filter((_, idx) => idx !== i);
+                    }}
                     aria-label="Remove foreign key"
                   >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.2"
+                      stroke-linecap="round"
+                      ><line x1="18" y1="6" x2="6" y2="18"></line><line
+                        x1="6"
+                        y1="6"
+                        x2="18"
+                        y2="18"
+                      ></line></svg
+                    >
                   </button>
                 </div>
                 <div class="fk-actions-row">
                   <span class="fk-action-label">ON DELETE</span>
-                  <Select bind:value={fk.onDelete} options={refActions} size="sm" style="flex:1;min-width:0" />
+                  <Select
+                    bind:value={fk.onDelete}
+                    options={refActions}
+                    size="sm"
+                    style="flex:1;min-width:0"
+                  />
                   <span class="fk-action-label">ON UPDATE</span>
-                  <Select bind:value={fk.onUpdate} options={refActions} size="sm" style="flex:1;min-width:0" />
+                  <Select
+                    bind:value={fk.onUpdate}
+                    options={refActions}
+                    size="sm"
+                    style="flex:1;min-width:0"
+                  />
                 </div>
               </div>
             {/each}
@@ -1218,7 +1692,7 @@
         {/if}
       </div>
       <div class="create-modal-footer">
-        <button class="btn" onclick={() => createTableModal = null}>Cancel</button>
+        <button class="btn" onclick={() => (createTableModal = null)}>Cancel</button>
         <button class="btn btn--primary" onclick={executeCreateTable} disabled={createTableLoading}>
           {createTableLoading ? 'Creating…' : 'Create Table'}
         </button>
@@ -1230,7 +1704,10 @@
 {#if showAddForm}
   <ConnectionForm
     groupId={newConnectionGroupId ?? null}
-    onclose={() => { showAddForm = false; newConnectionGroupId = undefined; }}
+    onclose={() => {
+      showAddForm = false;
+      newConnectionGroupId = undefined;
+    }}
   />
 {/if}
 
@@ -1238,7 +1715,12 @@
   <ConnectionForm
     profile={editingProfile}
     onclose={() => (editingProfile = undefined)}
-    ondelete={() => { if (editingProfile) deleteConnection(editingProfile, () => { editingProfile = undefined; }); }}
+    ondelete={() => {
+      if (editingProfile)
+        deleteConnection(editingProfile, () => {
+          editingProfile = undefined;
+        });
+    }}
   />
 {/if}
 
@@ -1333,9 +1815,13 @@
     user-select: none;
   }
 
-  .group-row:hover { background: var(--color-bg-hover); }
+  .group-row:hover {
+    background: var(--color-bg-hover);
+  }
 
-  .group-name { flex: 1; }
+  .group-name {
+    flex: 1;
+  }
 
   .group-count {
     font-size: 10px;
@@ -1386,7 +1872,9 @@
     color: var(--color-text-muted);
     border-radius: 4px;
     cursor: pointer;
-    transition: transform var(--transition-fast), color var(--transition-fast);
+    transition:
+      transform var(--transition-fast),
+      color var(--transition-fast);
     background: transparent;
   }
 
@@ -1398,7 +1886,10 @@
     transition: transform var(--transition-fast);
   }
 
-  .conn-chevron:disabled { opacity: 0.5; cursor: default; }
+  .conn-chevron:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 
   .color-dot {
     width: 9px;
@@ -1408,7 +1899,9 @@
     transition: opacity var(--transition-fast);
   }
 
-  .color-dot.dim { opacity: 0.4; }
+  .color-dot.dim {
+    opacity: 0.4;
+  }
 
   .conn-name {
     flex: 0 1 auto;
@@ -1423,12 +1916,32 @@
     cursor: pointer;
   }
 
-  .conn-name:hover { color: var(--color-accent); }
+  .conn-name:hover {
+    color: var(--color-accent);
+  }
 
-  .lock-icon {
+  .lock-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    padding: 2px;
+    border: none;
+    background: transparent;
     color: var(--color-text-muted);
     opacity: 0.6;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition:
+      opacity var(--transition-fast),
+      color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .lock-icon-btn:hover {
+    opacity: 1;
+    color: var(--color-accent);
+    background: var(--color-bg-hover);
   }
 
   /* Hover-only action buttons */
@@ -1442,7 +1955,9 @@
     flex: 0;
   }
 
-  .conn-row:hover .conn-actions { opacity: 1; }
+  .conn-row:hover .conn-actions {
+    opacity: 1;
+  }
 
   .action-btn {
     display: flex;
@@ -1453,46 +1968,18 @@
     border-radius: 5px;
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     background: transparent;
   }
 
-  .action-btn:hover { background: var(--color-bg-active); color: var(--color-text-primary); }
+  .action-btn:hover {
+    background: var(--color-bg-active);
+    color: var(--color-text-primary);
+  }
 
   /* ── Error / loading ── */
-
-  .error-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 2px 8px 4px 34px;
-    font-size: 11px;
-    color: var(--color-danger);
-  }
-
-  .error-msg {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .retry-btn {
-    flex-shrink: 0;
-    height: 16px;
-    padding: 0 6px;
-    background: transparent;
-    border: 1px solid var(--color-danger);
-    border-radius: var(--radius-sm);
-    font-size: 10px;
-    font-family: var(--font-family-ui);
-    color: var(--color-danger);
-    cursor: pointer;
-    line-height: 1;
-    transition: background var(--transition-fast);
-  }
-
-  .retry-btn:hover { background: var(--color-danger-subtle); }
 
   .loading-row {
     padding: 4px 8px 4px 34px;
@@ -1502,17 +1989,6 @@
     font-size: 11px;
     color: var(--color-text-muted);
     animation: pulse 1s infinite;
-  }
-
-  .load-error {
-    padding: 3px 8px 3px 34px;
-    font-size: 11px;
-    color: var(--color-danger);
-    word-break: break-word;
-  }
-
-  .db-load-error {
-    padding-left: 50px;
   }
 
   /* ── Schema children ── */
@@ -1544,9 +2020,17 @@
     background: transparent;
   }
 
-  .db-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+  .db-row:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
 
-  .db-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   /* ── Table rows ── */
 
@@ -1567,15 +2051,31 @@
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     background: transparent;
   }
 
-  .table-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
-  .table-row.active { background: var(--color-accent-subtle); color: var(--color-accent); box-shadow: inset 2px 0 0 var(--color-accent); }
-  .table-row.active:hover { background: var(--color-accent-subtle); }
+  .table-row:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+  .table-row.active {
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+  .table-row.active:hover {
+    background: var(--color-accent-subtle);
+  }
 
-  .table-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .table-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   .row-count {
     font-size: 10px;
@@ -1586,8 +2086,12 @@
 
   /* ── System items ── */
 
-  .system-item { opacity: 0.6; }
-  .system-item:hover { opacity: 0.9; }
+  .system-item {
+    opacity: 0.6;
+  }
+  .system-item:hover {
+    opacity: 0.9;
+  }
 
   /* ── Chevron shared ── */
 
@@ -1598,8 +2102,12 @@
     align-items: center;
   }
 
-  .chevron svg { transition: transform var(--transition-fast); }
-  .chevron.open svg { transform: rotate(90deg); }
+  .chevron svg {
+    transition: transform var(--transition-fast);
+  }
+  .chevron.open svg {
+    transform: rotate(90deg);
+  }
 
   /* ── Add connection row ── */
 
@@ -1616,11 +2124,16 @@
     color: var(--color-text-muted);
     cursor: pointer;
     text-align: left;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     background: transparent;
   }
 
-  .add-row:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+  .add-row:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
 
   /* ── Empty state ── */
 
@@ -1643,12 +2156,19 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
   }
 
   /* ── Context menu ── */
@@ -1678,8 +2198,12 @@
     background: transparent;
   }
 
-  .ctx-item:hover { background: var(--color-bg-active); }
-  .ctx-item--danger { color: var(--color-danger); }
+  .ctx-item:hover {
+    background: var(--color-bg-active);
+  }
+  .ctx-item--danger {
+    color: var(--color-danger);
+  }
 
   .ctx-item--submenu {
     position: relative;
@@ -1690,7 +2214,9 @@
     -webkit-user-select: none;
     user-select: none;
   }
-  .ctx-item--submenu:hover { background: var(--color-bg-active); }
+  .ctx-item--submenu:hover {
+    background: var(--color-bg-active);
+  }
 
   .ctx-caret {
     flex-shrink: 0;
@@ -1736,8 +2262,14 @@
   }
 
   @keyframes modal-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
-    to   { opacity: 1; transform: scale(1)    translateY(0); }
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   .create-modal-title {
@@ -1807,7 +2339,9 @@
     box-sizing: border-box;
   }
 
-  .field-input:focus { border-color: var(--color-accent); }
+  .field-input:focus {
+    border-color: var(--color-accent);
+  }
 
   .field-error {
     padding: var(--spacing-2) var(--spacing-3);
@@ -1844,7 +2378,9 @@
     transition: background var(--transition-fast);
   }
 
-  .btn-add-col:hover { background: var(--color-accent-subtle); }
+  .btn-add-col:hover {
+    background: var(--color-accent-subtle);
+  }
 
   .cols-head-row {
     display: grid;
@@ -1857,7 +2393,9 @@
     letter-spacing: 0.03em;
   }
 
-  .col-cell-flag { text-align: center; }
+  .col-cell-flag {
+    text-align: center;
+  }
 
   .col-row {
     display: grid;
@@ -1880,11 +2418,19 @@
     background: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
-  .col-del-btn:hover:not(:disabled) { background: var(--color-danger-subtle); color: var(--color-danger); }
-  .col-del-btn:disabled { opacity: 0.3; cursor: default; }
+  .col-del-btn:hover:not(:disabled) {
+    background: var(--color-danger-subtle);
+    color: var(--color-danger);
+  }
+  .col-del-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
 
   /* Shared modal buttons */
 
@@ -1915,8 +2461,16 @@
     color: white;
   }
 
-  .btn--primary:hover { opacity: 0.88; border-color: var(--color-accent); background: var(--color-accent); color: white; }
-  .btn--primary:disabled { opacity: 0.5; cursor: default; }
+  .btn--primary:hover {
+    opacity: 0.88;
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: white;
+  }
+  .btn--primary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 
   /* ── FK cards ── */
 

@@ -59,6 +59,41 @@ export function useConnections() {
       return updated;
     },
 
+    /** Toggle read-only mode for a connection. Reconnects the pool if active. */
+    async toggleReadOnly(id: string): Promise<void> {
+      const profile = profiles.find((p) => p.id === id);
+      if (!profile) return;
+      const wasActive = activeIds.has(id);
+      const updated = await api.updateConnection(id, {
+        name: profile.name,
+        dbType: profile.dbType,
+        host: profile.host,
+        port: profile.port,
+        database: profile.database,
+        username: profile.username,
+        color: profile.color,
+        readOnly: !profile.readOnly,
+        groupId: profile.groupId,
+        sshEnabled: profile.sshEnabled,
+        sshHost: profile.sshHost,
+        sshPort: profile.sshPort,
+        sshUser: profile.sshUser,
+        sshAuthType: profile.sshAuthType,
+        sshKeyPath: profile.sshKeyPath,
+        sslEnabled: profile.sslEnabled,
+        sslCaPath: profile.sslCaPath,
+        sslCertPath: profile.sslCertPath,
+        sslKeyPath: profile.sslKeyPath,
+        poolMin: profile.poolMin,
+        poolMax: profile.poolMax,
+      });
+      profiles = profiles.map((p) => (p.id === id ? updated : p));
+      if (wasActive) {
+        await this.disconnect(id);
+        await this.connect(id);
+      }
+    },
+
     /** Delete a connection profile and disconnect if active. */
     async delete(id: string): Promise<void> {
       if (activeIds.has(id)) {
