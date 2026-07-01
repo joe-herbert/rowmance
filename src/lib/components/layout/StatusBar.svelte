@@ -24,12 +24,12 @@
       ? focusedConnection.dbType === 'postgres'
         ? 'PostgreSQL'
         : focusedConnection.dbType === 'mysql'
-        ? 'MySQL'
-        : 'MariaDB'
-      : null
+          ? 'MySQL'
+          : 'MariaDB'
+      : null,
   );
   const host = $derived(
-    focusedConnection ? `${focusedConnection.host}:${focusedConnection.port}` : null
+    focusedConnection ? `${focusedConnection.host}:${focusedConnection.port}` : null,
   );
 
   const timingText = $derived(
@@ -37,7 +37,7 @@
       ? statusBar.lastQueryMs < 1000
         ? `${statusBar.lastQueryMs}ms`
         : `${(statusBar.lastQueryMs / 1000).toFixed(1)}s`
-      : null
+      : null,
   );
 
   const rowCountText = $derived.by(() => {

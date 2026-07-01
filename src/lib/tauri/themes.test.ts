@@ -70,7 +70,10 @@ describe('themesDuplicate', () => {
   it('invokes themes_duplicate with source and newName', async () => {
     mockInvoke.mockResolvedValue(stubMeta);
     await themesDuplicate('dark', 'dracula');
-    expect(mockInvoke).toHaveBeenCalledWith('themes_duplicate', { source: 'dark', newName: 'dracula' });
+    expect(mockInvoke).toHaveBeenCalledWith('themes_duplicate', {
+      source: 'dark',
+      newName: 'dracula',
+    });
   });
 
   it('returns the new ThemeMeta', async () => {

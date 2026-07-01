@@ -6,7 +6,6 @@
 <script lang="ts">
   import SidebarTopHalf from './SidebarTopHalf.svelte';
   import SidebarBottomHalf from './SidebarBottomHalf.svelte';
-
 </script>
 
 <div class="sidebar">

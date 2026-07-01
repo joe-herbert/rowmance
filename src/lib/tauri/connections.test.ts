@@ -37,7 +37,14 @@ describe('listConnections', () => {
 
 describe('createConnection', () => {
   it('invokes connections_create with the input wrapped in { input }', async () => {
-    const input = { name: 'Test', dbType: 'postgres' as const, host: 'localhost', port: 5432, database: 'db', username: 'user' };
+    const input = {
+      name: 'Test',
+      dbType: 'postgres' as const,
+      host: 'localhost',
+      port: 5432,
+      database: 'db',
+      username: 'user',
+    };
     mockInvoke.mockResolvedValue({ id: '1', ...input });
     await createConnection(input);
     expect(mockInvoke).toHaveBeenCalledWith('connections_create', { input });
@@ -46,7 +53,14 @@ describe('createConnection', () => {
 
 describe('updateConnection', () => {
   it('invokes connections_update with id and input', async () => {
-    const input = { name: 'Updated', dbType: 'mysql' as const, host: 'localhost', port: 3306, database: 'db', username: 'root' };
+    const input = {
+      name: 'Updated',
+      dbType: 'mysql' as const,
+      host: 'localhost',
+      port: 3306,
+      database: 'db',
+      username: 'root',
+    };
     mockInvoke.mockResolvedValue({ id: 'x', ...input });
     await updateConnection('x', input);
     expect(mockInvoke).toHaveBeenCalledWith('connections_update', { id: 'x', input });

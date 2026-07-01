@@ -14,7 +14,8 @@
   function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
     const lower = dt.toLowerCase();
     if (lower.includes('bool') || lower === 'tinyint(1)') return 'boolean';
-    if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp')) return 'datetime-local';
+    if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp'))
+      return 'datetime-local';
     if (lower.includes('date')) return 'date';
     if (lower.includes('time') && !lower.includes('timestamp')) return 'time';
     return 'text';
@@ -34,7 +35,17 @@
     database?: string | null;
   }
 
-  let { value, originalValue, colName, dataType, nullable, onConfirm, onCancel, connectionId, database }: Props = $props();
+  let {
+    value,
+    originalValue,
+    colName,
+    dataType,
+    nullable,
+    onConfirm,
+    onCancel,
+    connectionId,
+    database,
+  }: Props = $props();
 
   const { settings } = useSettings();
 
@@ -104,9 +115,13 @@
     }
   }
 
-  const showNow = $derived(inputType === 'date' || inputType === 'datetime-local' || inputType === 'time');
+  const showNow = $derived(
+    inputType === 'date' || inputType === 'datetime-local' || inputType === 'time',
+  );
 
-  const isJsonType = $derived(dataType.toLowerCase() === 'json' || dataType.toLowerCase() === 'jsonb');
+  const isJsonType = $derived(
+    dataType.toLowerCase() === 'json' || dataType.toLowerCase() === 'jsonb',
+  );
 
   function formatJson(): void {
     try {
@@ -126,7 +141,11 @@
   }
 
   function parseDbNow(raw: string, type: typeof inputType): string {
-    const normalized = String(raw).replace('T', ' ').replace(/\.\d+/, '').replace(/[+-]\d{2}:\d{2}$/, '').trim();
+    const normalized = String(raw)
+      .replace('T', ' ')
+      .replace(/\.\d+/, '')
+      .replace(/[+-]\d{2}:\d{2}$/, '')
+      .trim();
     const [datePart = '', timePart = '00:00:00'] = normalized.split(' ');
     if (type === 'date') return datePart;
     if (type === 'time') return timePart;
@@ -150,12 +169,7 @@
 </script>
 
 <Modal zindex={500} label="Edit {colName}" onbackdropclick={handleBackdropClick}>
-  <div
-    bind:this={modalEl}
-    class="modal-dialog"
-    role="presentation"
-    onkeydown={handleKeydown}
-  >
+  <div bind:this={modalEl} class="modal-dialog" role="presentation" onkeydown={handleKeydown}>
     <header class="modal-header">
       <span class="modal-title">{colName}</span>
       <span class="modal-type">{dataType}</span>
@@ -167,14 +181,31 @@
           value={boolState}
           displayFormat={settings.booleanDisplay ?? 'tick-cross'}
           {nullable}
-          onselect={(v) => { boolState = v; }}
+          onselect={(v) => {
+            boolState = v;
+          }}
         />
       {:else if inputType === 'datetime-local'}
-        <DateTimePicker value={textValue} onchange={(v) => { textValue = v; }} />
+        <DateTimePicker
+          value={textValue}
+          onchange={(v) => {
+            textValue = v;
+          }}
+        />
       {:else if inputType === 'date'}
-        <DatePicker value={textValue} onchange={(v) => { textValue = v; }} />
+        <DatePicker
+          value={textValue}
+          onchange={(v) => {
+            textValue = v;
+          }}
+        />
       {:else if inputType === 'time'}
-        <TimePicker value={textValue} onchange={(v) => { textValue = v; }} />
+        <TimePicker
+          value={textValue}
+          onchange={(v) => {
+            textValue = v;
+          }}
+        />
       {:else}
         <textarea
           bind:this={inputEl}
@@ -190,14 +221,22 @@
 
     <footer class="modal-footer">
       <span class="modal-hint">
-        {inputType === 'boolean' ? 'Click to cycle value' : 'Ctrl+Enter to confirm · Escape to cancel'}
+        {inputType === 'boolean'
+          ? 'Click to cycle value'
+          : 'Ctrl+Enter to confirm · Escape to cancel'}
       </span>
       <div class="modal-actions">
         {#if isJsonType}
           <button class="modal-btn btn-format-json" onclick={formatJson}>Format JSON</button>
         {/if}
         {#if showNow}
-          <button class="modal-btn btn-now" onclick={handleNow} title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time">NOW</button>
+          <button
+            class="modal-btn btn-now"
+            onclick={handleNow}
+            title="Set to current {settings.nowTimeSource === 'database'
+              ? 'database'
+              : 'local'} time">NOW</button
+          >
         {/if}
         {#if nullable}
           <button class="modal-btn btn-null" onclick={() => onConfirm(null)}>Set NULL</button>
@@ -300,7 +339,9 @@
     font-family: var(--font-family-ui);
     cursor: pointer;
     border: 1px solid var(--color-border);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     background: transparent;
     color: var(--color-text-primary);
   }

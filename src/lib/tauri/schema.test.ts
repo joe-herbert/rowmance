@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { listDatabases, listTables, listColumns, listIndexes, listForeignKeys, getDdl } from './schema';
+import {
+  listDatabases,
+  listTables,
+  listColumns,
+  listIndexes,
+  listForeignKeys,
+  getDdl,
+} from './schema';
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -80,6 +87,9 @@ describe('getDdl', () => {
   it('accepts "view" as objectType', async () => {
     mockInvoke.mockResolvedValue('CREATE VIEW ...');
     await getDdl('conn-1', 'my_db', 'active_users', 'view');
-    expect(mockInvoke).toHaveBeenCalledWith('schema_get_ddl', expect.objectContaining({ objectType: 'view' }));
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'schema_get_ddl',
+      expect.objectContaining({ objectType: 'view' }),
+    );
   });
 });

@@ -28,7 +28,10 @@ fn format_json(rows: &[Vec<serde_json::Value>], columns: &[String]) -> String {
         .map(|row| {
             let mut obj = serde_json::Map::new();
             for (i, col) in columns.iter().enumerate() {
-                obj.insert(col.clone(), row.get(i).cloned().unwrap_or(serde_json::Value::Null));
+                obj.insert(
+                    col.clone(),
+                    row.get(i).cloned().unwrap_or(serde_json::Value::Null),
+                );
             }
             serde_json::Value::Object(obj)
         })
@@ -37,7 +40,11 @@ fn format_json(rows: &[Vec<serde_json::Value>], columns: &[String]) -> String {
     serde_json::to_string_pretty(&objects).unwrap_or_default()
 }
 
-fn format_sql_insert(rows: &[Vec<serde_json::Value>], columns: &[String], table_name: &str) -> String {
+fn format_sql_insert(
+    rows: &[Vec<serde_json::Value>],
+    columns: &[String],
+    table_name: &str,
+) -> String {
     if rows.is_empty() || columns.is_empty() {
         return String::new();
     }
@@ -111,7 +118,13 @@ fn csv_escape_value(v: &serde_json::Value) -> String {
 fn sql_value(v: &serde_json::Value) -> String {
     match v {
         serde_json::Value::Null => "NULL".to_owned(),
-        serde_json::Value::Bool(b) => if *b { "1".to_owned() } else { "0".to_owned() },
+        serde_json::Value::Bool(b) => {
+            if *b {
+                "1".to_owned()
+            } else {
+                "0".to_owned()
+            }
+        }
         serde_json::Value::Number(n) => n.to_string(),
         serde_json::Value::String(s) => format!("'{}'", s.replace('\'', "''")),
         other => format!("'{}'", other.to_string().replace('\'', "''")),
@@ -133,7 +146,10 @@ fn apply_format(
         }
         "sql_in_clause" => Ok(format_sql_in_clause(rows, columns)),
         "tab_separated" => Ok(format_tab_separated(rows, columns)),
-        other => Err(AppError::new("EXPORT_ERROR", format!("Unknown format: {other}"))),
+        other => Err(AppError::new(
+            "EXPORT_ERROR",
+            format!("Unknown format: {other}"),
+        )),
     }
 }
 

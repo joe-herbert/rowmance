@@ -27,10 +27,7 @@ export async function deleteConnection(id: string): Promise<void> {
   return invoke<void>('connections_delete', { id });
 }
 
-export async function testConnection(
-  id: string,
-  password?: string,
-): Promise<ConnectionTestResult> {
+export async function testConnection(id: string, password?: string): Promise<ConnectionTestResult> {
   return invoke<ConnectionTestResult>('connections_test', { id, password });
 }
 

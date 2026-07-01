@@ -12,11 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
-import {
-  SHORTCUT_DEFINITIONS,
-  useShortcuts,
-  type ShortcutAction,
-} from './shortcuts.svelte';
+import { SHORTCUT_DEFINITIONS, useShortcuts, type ShortcutAction } from './shortcuts.svelte';
 
 const EXPECTED_ACTIONS: ShortcutAction[] = [
   'QUERY_RUN_ALL',

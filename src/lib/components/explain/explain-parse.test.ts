@@ -114,15 +114,17 @@ describe('parsePostgres', () => {
   });
 
   it('parses a simple Seq Scan plan', () => {
-    const raw = JSON.stringify([{
-      Plan: {
-        'Node Type': 'Seq Scan',
-        'Relation Name': 'users',
-        'Plan Rows': 100,
-        'Total Cost': 5.5,
-        'Actual Rows': 98,
+    const raw = JSON.stringify([
+      {
+        Plan: {
+          'Node Type': 'Seq Scan',
+          'Relation Name': 'users',
+          'Plan Rows': 100,
+          'Total Cost': 5.5,
+          'Actual Rows': 98,
+        },
       },
-    }]);
+    ]);
     const root = parsePostgres(raw);
     expect(root).not.toBeNull();
     expect(root!.nodeType).toBe('Seq Scan');
@@ -134,17 +136,19 @@ describe('parsePostgres', () => {
   });
 
   it('parses nested Plans into children', () => {
-    const raw = JSON.stringify([{
-      Plan: {
-        'Node Type': 'Hash Join',
-        'Plan Rows': 200,
-        'Total Cost': 30.0,
-        Plans: [
-          { 'Node Type': 'Seq Scan', 'Relation Name': 'a', 'Plan Rows': 10, 'Total Cost': 5.0 },
-          { 'Node Type': 'Hash', 'Plan Rows': 10, 'Total Cost': 5.0 },
-        ],
+    const raw = JSON.stringify([
+      {
+        Plan: {
+          'Node Type': 'Hash Join',
+          'Plan Rows': 200,
+          'Total Cost': 30.0,
+          Plans: [
+            { 'Node Type': 'Seq Scan', 'Relation Name': 'a', 'Plan Rows': 10, 'Total Cost': 5.0 },
+            { 'Node Type': 'Hash', 'Plan Rows': 10, 'Total Cost': 5.0 },
+          ],
+        },
       },
-    }]);
+    ]);
     const root = parsePostgres(raw);
     expect(root!.nodeType).toBe('Hash Join');
     expect(root!.children).toHaveLength(2);
@@ -162,9 +166,11 @@ describe('parsePostgres', () => {
   });
 
   it('defaults actualRows to null when Actual Rows is absent', () => {
-    const raw = JSON.stringify([{
-      Plan: { 'Node Type': 'Seq Scan', 'Plan Rows': 10, 'Total Cost': 2.0 },
-    }]);
+    const raw = JSON.stringify([
+      {
+        Plan: { 'Node Type': 'Seq Scan', 'Plan Rows': 10, 'Total Cost': 2.0 },
+      },
+    ]);
     const root = parsePostgres(raw);
     expect(root!.actualRows).toBeNull();
   });

@@ -11,7 +11,15 @@
     oncancel: () => void;
   }
 
-  const { title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, onconfirm, oncancel }: Props = $props();
+  const {
+    title,
+    message,
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    danger = false,
+    onconfirm,
+    oncancel,
+  }: Props = $props();
 </script>
 
 <Modal label={title} onbackdropclick={oncancel}>
@@ -22,7 +30,12 @@
     </div>
     <div class="modal-footer">
       <button class="btn" onclick={oncancel}>{cancelText}</button>
-      <button class="btn" class:btn--danger={danger} class:btn--primary={!danger} onclick={onconfirm}>
+      <button
+        class="btn"
+        class:btn--danger={danger}
+        class:btn--primary={!danger}
+        onclick={onconfirm}
+      >
         {confirmText}
       </button>
     </div>
@@ -42,8 +55,14 @@
   }
 
   @keyframes modal-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
-    to   { opacity: 1; transform: scale(1)    translateY(0); }
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   .modal-title {

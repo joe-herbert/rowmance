@@ -22,7 +22,9 @@
   let m = $state(initM);
   let s = $state(initS);
 
-  function pad(n: number): string { return String(n).padStart(2, '0'); }
+  function pad(n: number): string {
+    return String(n).padStart(2, '0');
+  }
 
   // Raw display strings — only padded on blur/arrow-key, not during typing
   let hRaw = $state(pad(initH));
@@ -38,7 +40,9 @@
   $effect(() => {
     const [ph, pm, ps] = parseTime(value);
     untrack(() => {
-      h = ph; m = pm; s = ps;
+      h = ph;
+      m = pm;
+      s = ps;
       if (activeField !== 'h') hRaw = pad(ph);
       if (activeField !== 'm') mRaw = pad(pm);
       if (activeField !== 's') sRaw = pad(ps);
@@ -93,31 +97,86 @@
     }
   }
 
-  function adjustH(delta: number): void { h = ((h + delta) % 24 + 24) % 24; hRaw = pad(h); emit(); }
-  function adjustM(delta: number): void { m = ((m + delta) % 60 + 60) % 60; mRaw = pad(m); emit(); }
-  function adjustS(delta: number): void { s = ((s + delta) % 60 + 60) % 60; sRaw = pad(s); emit(); }
+  function adjustH(delta: number): void {
+    h = (((h + delta) % 24) + 24) % 24;
+    hRaw = pad(h);
+    emit();
+  }
+  function adjustM(delta: number): void {
+    m = (((m + delta) % 60) + 60) % 60;
+    mRaw = pad(m);
+    emit();
+  }
+  function adjustS(delta: number): void {
+    s = (((s + delta) % 60) + 60) % 60;
+    sRaw = pad(s);
+    emit();
+  }
 
   function handleKeydown(field: 'h' | 'm' | 's', e: KeyboardEvent): void {
-    if (e.key === 'ArrowUp') { e.preventDefault(); if (field === 'h') adjustH(1); else if (field === 'm') adjustM(1); else adjustS(1); }
-    if (e.key === 'ArrowDown') { e.preventDefault(); if (field === 'h') adjustH(-1); else if (field === 'm') adjustM(-1); else adjustS(-1); }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (field === 'h') adjustH(1);
+      else if (field === 'm') adjustM(1);
+      else adjustS(1);
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (field === 'h') adjustH(-1);
+      else if (field === 'm') adjustM(-1);
+      else adjustS(-1);
+    }
     if (e.key === 'Tab' && !e.shiftKey) {
-      if (field === 'h') { e.preventDefault(); e.stopPropagation(); commitField('h'); mEl?.focus(); }
-      else if (field === 'm') { e.preventDefault(); e.stopPropagation(); commitField('m'); sEl?.focus(); }
+      if (field === 'h') {
+        e.preventDefault();
+        e.stopPropagation();
+        commitField('h');
+        mEl?.focus();
+      } else if (field === 'm') {
+        e.preventDefault();
+        e.stopPropagation();
+        commitField('m');
+        sEl?.focus();
+      }
       // s: let default tab behaviour move focus out
     }
     if (e.key === 'Tab' && e.shiftKey) {
-      if (field === 's') { e.preventDefault(); e.stopPropagation(); commitField('s'); mEl?.focus(); }
-      else if (field === 'm') { e.preventDefault(); e.stopPropagation(); commitField('m'); hEl?.focus(); }
+      if (field === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+        commitField('s');
+        mEl?.focus();
+      } else if (field === 'm') {
+        e.preventDefault();
+        e.stopPropagation();
+        commitField('m');
+        hEl?.focus();
+      }
       // h: let default shift-tab behaviour move focus out
     }
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); commitField(field); (e.target as HTMLInputElement).blur(); }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      commitField(field);
+      (e.target as HTMLInputElement).blur();
+    }
   }
 </script>
 
 <div class="time-picker">
   <div class="tp-col">
     <button class="tp-arrow" onclick={() => adjustH(1)} aria-label="Increment hours" tabindex="-1">
-      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 5 5 1 9 5"/></svg>
+      <svg
+        width="10"
+        height="6"
+        viewBox="0 0 10 6"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="1 5 5 1 9 5" /></svg
+      >
     </button>
     <input
       class="tp-input"
@@ -133,7 +192,17 @@
       aria-label="Hours"
     />
     <button class="tp-arrow" onclick={() => adjustH(-1)} aria-label="Decrement hours" tabindex="-1">
-      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 1 5 5 9 1"/></svg>
+      <svg
+        width="10"
+        height="6"
+        viewBox="0 0 10 6"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="1 1 5 5 9 1" /></svg
+      >
     </button>
     <span class="tp-label">HH</span>
   </div>
@@ -141,8 +210,23 @@
   <span class="tp-colon">:</span>
 
   <div class="tp-col">
-    <button class="tp-arrow" onclick={() => adjustM(1)} aria-label="Increment minutes" tabindex="-1">
-      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 5 5 1 9 5"/></svg>
+    <button
+      class="tp-arrow"
+      onclick={() => adjustM(1)}
+      aria-label="Increment minutes"
+      tabindex="-1"
+    >
+      <svg
+        width="10"
+        height="6"
+        viewBox="0 0 10 6"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="1 5 5 1 9 5" /></svg
+      >
     </button>
     <input
       class="tp-input"
@@ -157,8 +241,23 @@
       onblur={() => handleBlur('m')}
       aria-label="Minutes"
     />
-    <button class="tp-arrow" onclick={() => adjustM(-1)} aria-label="Decrement minutes" tabindex="-1">
-      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 1 5 5 9 1"/></svg>
+    <button
+      class="tp-arrow"
+      onclick={() => adjustM(-1)}
+      aria-label="Decrement minutes"
+      tabindex="-1"
+    >
+      <svg
+        width="10"
+        height="6"
+        viewBox="0 0 10 6"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="1 1 5 5 9 1" /></svg
+      >
     </button>
     <span class="tp-label">MM</span>
   </div>
@@ -166,8 +265,23 @@
   <span class="tp-colon">:</span>
 
   <div class="tp-col">
-    <button class="tp-arrow" onclick={() => adjustS(1)} aria-label="Increment seconds" tabindex="-1">
-      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 5 5 1 9 5"/></svg>
+    <button
+      class="tp-arrow"
+      onclick={() => adjustS(1)}
+      aria-label="Increment seconds"
+      tabindex="-1"
+    >
+      <svg
+        width="10"
+        height="6"
+        viewBox="0 0 10 6"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="1 5 5 1 9 5" /></svg
+      >
     </button>
     <input
       class="tp-input"
@@ -182,8 +296,23 @@
       onblur={() => handleBlur('s')}
       aria-label="Seconds"
     />
-    <button class="tp-arrow" onclick={() => adjustS(-1)} aria-label="Decrement seconds" tabindex="-1">
-      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 1 5 5 9 1"/></svg>
+    <button
+      class="tp-arrow"
+      onclick={() => adjustS(-1)}
+      aria-label="Decrement seconds"
+      tabindex="-1"
+    >
+      <svg
+        width="10"
+        height="6"
+        viewBox="0 0 10 6"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="1 1 5 5 9 1" /></svg
+      >
     </button>
     <span class="tp-label">SS</span>
   </div>
@@ -216,7 +345,9 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     color: var(--color-text-muted);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     padding: 0;
   }
 
@@ -237,7 +368,9 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     outline: none;
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
   }
 
   .tp-input:focus {

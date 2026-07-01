@@ -77,7 +77,9 @@
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      border-color var(--transition-fast);
     color: var(--color-text-secondary);
   }
 

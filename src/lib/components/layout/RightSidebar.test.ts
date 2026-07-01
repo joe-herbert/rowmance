@@ -101,7 +101,8 @@ describe('truncateSql', () => {
   });
 
   it('truncates long SQL and appends ellipsis character', () => {
-    const sql = 'SELECT id, name, email, address, phone, status FROM users WHERE active = 1 ORDER BY name';
+    const sql =
+      'SELECT id, name, email, address, phone, status FROM users WHERE active = 1 ORDER BY name';
     const result = truncateSql(sql);
     expect(result.length).toBe(81); // 80 chars + '…'
     expect(result.endsWith('…')).toBe(true);

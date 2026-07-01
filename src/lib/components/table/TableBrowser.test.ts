@@ -52,7 +52,10 @@ function emptyFilterState(): FilterEditorState {
 
 function isActiveRule(r: FilterRule): boolean {
   if (r.rawSql !== undefined) return r.rawSql.trim() !== '';
-  return r.column !== '' && (r.operator === 'IS NULL' || r.operator === 'IS NOT NULL' || r.value.trim() !== '');
+  return (
+    r.column !== '' &&
+    (r.operator === 'IS NULL' || r.operator === 'IS NOT NULL' || r.value.trim() !== '')
+  );
 }
 
 function buildRuleSql(r: FilterRule, quoteId: (n: string) => string): string {
@@ -65,14 +68,14 @@ function buildRuleSql(r: FilterRule, quoteId: (n: string) => string): string {
   return `${col} ${r.operator} '${escaped}'`;
 }
 
-function buildWhereClause(
-  state: FilterEditorState,
-  quoteId: (n: string) => string,
-): string {
+function buildWhereClause(state: FilterEditorState, quoteId: (n: string) => string): string {
   if (state.mode === 'sql') return state.sql.trim();
 
   const activeGroups = state.groups
-    .map((g) => ({ conjunction: g.conjunction, parts: g.rules.filter(isActiveRule).map((r) => buildRuleSql(r, quoteId)) }))
+    .map((g) => ({
+      conjunction: g.conjunction,
+      parts: g.rules.filter(isActiveRule).map((r) => buildRuleSql(r, quoteId)),
+    }))
     .filter((g) => g.parts.length > 0);
 
   if (activeGroups.length === 0) return '';
@@ -110,11 +113,13 @@ function singleGroup(
   return {
     mode: 'builder',
     groupJunction: 'AND',
-    groups: [{
-      id: '1',
-      conjunction,
-      rules: rules.map((r, i) => ({ id: String(i + 1), ...r })),
-    }],
+    groups: [
+      {
+        id: '1',
+        conjunction,
+        rules: rules.map((r, i) => ({ id: String(i + 1), ...r })),
+      },
+    ],
     sql: '',
   };
 }
@@ -154,89 +159,146 @@ describe('buildWhereClause', () => {
   });
 
   it('returns empty string for SQL mode with empty sql', () => {
-    expect(buildWhereClause({ mode: 'sql', groupJunction: 'AND', groups: [], sql: '' }, qi)).toBe('');
+    expect(buildWhereClause({ mode: 'sql', groupJunction: 'AND', groups: [], sql: '' }, qi)).toBe(
+      '',
+    );
   });
 
   it('returns trimmed sql for SQL mode', () => {
-    const state: FilterEditorState = { mode: 'sql', groupJunction: 'AND', groups: [], sql: '  age > 18  ' };
+    const state: FilterEditorState = {
+      mode: 'sql',
+      groupJunction: 'AND',
+      groups: [],
+      sql: '  age > 18  ',
+    };
     expect(buildWhereClause(state, qi)).toBe('age > 18');
   });
 
   it('returns verbatim sql for SQL mode (no escaping)', () => {
-    const state: FilterEditorState = { mode: 'sql', groupJunction: 'AND', groups: [], sql: "name = 'alice'" };
+    const state: FilterEditorState = {
+      mode: 'sql',
+      groupJunction: 'AND',
+      groups: [],
+      sql: "name = 'alice'",
+    };
     expect(buildWhereClause(state, qi)).toBe("name = 'alice'");
   });
 
   it('builds a single equality rule for mysql', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'status', operator: '=', value: 'active' }]), qi))
-      .toBe("`status` = 'active'");
+    expect(
+      buildWhereClause(singleGroup([{ column: 'status', operator: '=', value: 'active' }]), qi),
+    ).toBe("`status` = 'active'");
   });
 
   it('builds a single equality rule for postgres', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'status', operator: '=', value: 'active' }]), qiPg))
-      .toBe(`"status" = 'active'`);
+    expect(
+      buildWhereClause(singleGroup([{ column: 'status', operator: '=', value: 'active' }]), qiPg),
+    ).toBe(`"status" = 'active'`);
   });
 
   it('handles IS NULL operator without value', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'deleted_at', operator: 'IS NULL', value: '' }]), qi))
-      .toBe('`deleted_at` IS NULL');
+    expect(
+      buildWhereClause(singleGroup([{ column: 'deleted_at', operator: 'IS NULL', value: '' }]), qi),
+    ).toBe('`deleted_at` IS NULL');
   });
 
   it('handles IS NOT NULL operator without value', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'email', operator: 'IS NOT NULL', value: '' }]), qi))
-      .toBe('`email` IS NOT NULL');
+    expect(
+      buildWhereClause(singleGroup([{ column: 'email', operator: 'IS NOT NULL', value: '' }]), qi),
+    ).toBe('`email` IS NOT NULL');
   });
 
   it('handles IN operator by wrapping value in parens', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'role', operator: 'IN', value: "'admin','user'" }]), qi))
-      .toBe("`role` IN ('admin','user')");
+    expect(
+      buildWhereClause(
+        singleGroup([{ column: 'role', operator: 'IN', value: "'admin','user'" }]),
+        qi,
+      ),
+    ).toBe("`role` IN ('admin','user')");
   });
 
   it('escapes single quotes in values', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'name', operator: '=', value: "O'Brien" }]), qi))
-      .toBe("`name` = 'O''Brien'");
+    expect(
+      buildWhereClause(singleGroup([{ column: 'name', operator: '=', value: "O'Brien" }]), qi),
+    ).toBe("`name` = 'O''Brien'");
   });
 
   it('combines two rules with AND in a single group', () => {
-    expect(buildWhereClause(singleGroup([
-      { column: 'age', operator: '>', value: '18' },
-      { column: 'status', operator: '=', value: 'active' },
-    ], 'AND'), qi)).toBe("`age` > '18' AND `status` = 'active'");
+    expect(
+      buildWhereClause(
+        singleGroup(
+          [
+            { column: 'age', operator: '>', value: '18' },
+            { column: 'status', operator: '=', value: 'active' },
+          ],
+          'AND',
+        ),
+        qi,
+      ),
+    ).toBe("`age` > '18' AND `status` = 'active'");
   });
 
   it('combines two rules with OR in a single group', () => {
-    expect(buildWhereClause(singleGroup([
-      { column: 'age', operator: '<', value: '18' },
-      { column: 'age', operator: '>', value: '65' },
-    ], 'OR'), qi)).toBe("`age` < '18' OR `age` > '65'");
+    expect(
+      buildWhereClause(
+        singleGroup(
+          [
+            { column: 'age', operator: '<', value: '18' },
+            { column: 'age', operator: '>', value: '65' },
+          ],
+          'OR',
+        ),
+        qi,
+      ),
+    ).toBe("`age` < '18' OR `age` > '65'");
   });
 
   it('skips rules with empty column', () => {
-    expect(buildWhereClause(singleGroup([
-      { column: '', operator: '=', value: 'something' },
-      { column: 'status', operator: '=', value: 'active' },
-    ]), qi)).toBe("`status` = 'active'");
+    expect(
+      buildWhereClause(
+        singleGroup([
+          { column: '', operator: '=', value: 'something' },
+          { column: 'status', operator: '=', value: 'active' },
+        ]),
+        qi,
+      ),
+    ).toBe("`status` = 'active'");
   });
 
   it('skips rules with empty value (except IS NULL / IS NOT NULL)', () => {
-    expect(buildWhereClause(singleGroup([
-      { column: 'name', operator: '=', value: '' },
-      { column: 'status', operator: '=', value: 'active' },
-    ]), qi)).toBe("`status` = 'active'");
+    expect(
+      buildWhereClause(
+        singleGroup([
+          { column: 'name', operator: '=', value: '' },
+          { column: 'status', operator: '=', value: 'active' },
+        ]),
+        qi,
+      ),
+    ).toBe("`status` = 'active'");
   });
 
   it('returns empty string when all rules have empty columns', () => {
-    expect(buildWhereClause(singleGroup([{ column: '', operator: '=', value: 'foo' }]), qi)).toBe('');
+    expect(buildWhereClause(singleGroup([{ column: '', operator: '=', value: 'foo' }]), qi)).toBe(
+      '',
+    );
   });
 
   it('handles LIKE operator', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'email', operator: 'LIKE', value: '%@example.com' }]), qi))
-      .toBe("`email` LIKE '%@example.com'");
+    expect(
+      buildWhereClause(
+        singleGroup([{ column: 'email', operator: 'LIKE', value: '%@example.com' }]),
+        qi,
+      ),
+    ).toBe("`email` LIKE '%@example.com'");
   });
 
   it('handles NOT LIKE operator', () => {
-    expect(buildWhereClause(singleGroup([{ column: 'email', operator: 'NOT LIKE', value: '%@spam.com' }]), qi))
-      .toBe("`email` NOT LIKE '%@spam.com'");
+    expect(
+      buildWhereClause(
+        singleGroup([{ column: 'email', operator: 'NOT LIKE', value: '%@spam.com' }]),
+        qi,
+      ),
+    ).toBe("`email` NOT LIKE '%@spam.com'");
   });
 
   it('joins two single-rule groups with AND', () => {
@@ -244,8 +306,16 @@ describe('buildWhereClause', () => {
       mode: 'builder',
       groupJunction: 'AND',
       groups: [
-        { id: '1', conjunction: 'AND', rules: [{ id: 'r1', column: 'status', operator: '=', value: 'active' }] },
-        { id: '2', conjunction: 'AND', rules: [{ id: 'r2', column: 'age', operator: '>', value: '18' }] },
+        {
+          id: '1',
+          conjunction: 'AND',
+          rules: [{ id: 'r1', column: 'status', operator: '=', value: 'active' }],
+        },
+        {
+          id: '2',
+          conjunction: 'AND',
+          rules: [{ id: 'r2', column: 'age', operator: '>', value: '18' }],
+        },
       ],
       sql: '',
     };
@@ -258,21 +328,24 @@ describe('buildWhereClause', () => {
       groupJunction: 'AND',
       groups: [
         {
-          id: '1', conjunction: 'OR',
+          id: '1',
+          conjunction: 'OR',
           rules: [
             { id: 'r1', column: 'client_id', operator: '=', value: 'crm' },
             { id: 'r2', column: 'client_id', operator: '=', value: 'dms' },
           ],
         },
         {
-          id: '2', conjunction: 'AND',
+          id: '2',
+          conjunction: 'AND',
           rules: [{ id: 'r3', column: 'name', operator: '=', value: 'CRM' }],
         },
       ],
       sql: '',
     };
-    expect(buildWhereClause(state, qi))
-      .toBe("(`client_id` = 'crm' OR `client_id` = 'dms') AND `name` = 'CRM'");
+    expect(buildWhereClause(state, qi)).toBe(
+      "(`client_id` = 'crm' OR `client_id` = 'dms') AND `name` = 'CRM'",
+    );
   });
 
   it('joins two multi-rule groups with OR', () => {
@@ -281,14 +354,16 @@ describe('buildWhereClause', () => {
       groupJunction: 'OR',
       groups: [
         {
-          id: '1', conjunction: 'AND',
+          id: '1',
+          conjunction: 'AND',
           rules: [
             { id: 'r1', column: 'type', operator: '=', value: 'admin' },
             { id: 'r2', column: 'active', operator: '=', value: '1' },
           ],
         },
         {
-          id: '2', conjunction: 'AND',
+          id: '2',
+          conjunction: 'AND',
           rules: [
             { id: 'r3', column: 'type', operator: '=', value: 'owner' },
             { id: 'r4', column: 'active', operator: '=', value: '1' },
@@ -297,8 +372,9 @@ describe('buildWhereClause', () => {
       ],
       sql: '',
     };
-    expect(buildWhereClause(state, qi))
-      .toBe("(`type` = 'admin' AND `active` = '1') OR (`type` = 'owner' AND `active` = '1')");
+    expect(buildWhereClause(state, qi)).toBe(
+      "(`type` = 'admin' AND `active` = '1') OR (`type` = 'owner' AND `active` = '1')",
+    );
   });
 
   it('does not wrap a single-rule group in parens even when there are multiple groups', () => {
@@ -306,8 +382,16 @@ describe('buildWhereClause', () => {
       mode: 'builder',
       groupJunction: 'AND',
       groups: [
-        { id: '1', conjunction: 'AND', rules: [{ id: 'r1', column: 'a', operator: '=', value: '1' }] },
-        { id: '2', conjunction: 'AND', rules: [{ id: 'r2', column: 'b', operator: '=', value: '2' }] },
+        {
+          id: '1',
+          conjunction: 'AND',
+          rules: [{ id: 'r1', column: 'a', operator: '=', value: '1' }],
+        },
+        {
+          id: '2',
+          conjunction: 'AND',
+          rules: [{ id: 'r2', column: 'b', operator: '=', value: '2' }],
+        },
       ],
       sql: '',
     };
@@ -329,13 +413,23 @@ describe('buildSql', () => {
   });
 
   it('includes a WHERE clause when SQL filter is non-empty', () => {
-    const state: FilterEditorState = { mode: 'sql', groupJunction: 'AND', groups: [], sql: 'age > 18' };
+    const state: FilterEditorState = {
+      mode: 'sql',
+      groupJunction: 'AND',
+      groups: [],
+      sql: 'age > 18',
+    };
     const sql = buildSql('mydb', 'users', state, 'mysql');
     expect(sql).toBe('SELECT * FROM `mydb`.`users` WHERE age > 18');
   });
 
   it('trims whitespace from SQL filter', () => {
-    const state: FilterEditorState = { mode: 'sql', groupJunction: 'AND', groups: [], sql: '  age > 18  ' };
+    const state: FilterEditorState = {
+      mode: 'sql',
+      groupJunction: 'AND',
+      groups: [],
+      sql: '  age > 18  ',
+    };
     const sql = buildSql('mydb', 'users', state, 'mysql');
     expect(sql).toBe('SELECT * FROM `mydb`.`users` WHERE age > 18');
   });
@@ -347,7 +441,12 @@ describe('buildSql', () => {
   });
 
   it('includes WHERE clause from builder rules', () => {
-    const sql = buildSql('mydb', 'users', singleGroup([{ column: 'status', operator: '=', value: 'active' }]), 'mysql');
+    const sql = buildSql(
+      'mydb',
+      'users',
+      singleGroup([{ column: 'status', operator: '=', value: 'active' }]),
+      'mysql',
+    );
     expect(sql).toBe("SELECT * FROM `mydb`.`users` WHERE `status` = 'active'");
   });
 

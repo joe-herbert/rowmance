@@ -41,7 +41,10 @@ describe('exportResultToClipboard', () => {
 
   it('calls with tab_separated format using correct invoke name and args', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    const rows = [['a', 'b'], ['c', 'd']];
+    const rows = [
+      ['a', 'b'],
+      ['c', 'd'],
+    ];
     const columns = ['col1', 'col2'];
     await exportResultToClipboard(rows, columns, 'tab_separated');
     expect(mockInvoke).toHaveBeenCalledWith('export_result_to_clipboard', {
@@ -68,7 +71,10 @@ describe('exportResultToFile', () => {
 
   it('calls with csv format using correct invoke name and args', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    const rows = [[1, 'Alice'], [2, 'Bob']];
+    const rows = [
+      [1, 'Alice'],
+      [2, 'Bob'],
+    ];
     const columns = ['id', 'name'];
     await exportResultToFile(rows, columns, 'csv', '/tmp/data.csv');
     expect(mockInvoke).toHaveBeenCalledWith('export_result_to_file', {

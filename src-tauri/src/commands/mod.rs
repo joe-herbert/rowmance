@@ -1,10 +1,10 @@
 pub mod connections;
-pub mod menu;
 pub mod erd;
 pub mod export;
 pub mod history;
 pub mod import;
 pub mod keychain;
+pub mod menu;
 pub mod query;
 pub mod saved_queries;
 pub mod schema;

@@ -20,14 +20,30 @@ let onDiscard = $state<(() => void) | null>(null);
 
 export function useStatusBar() {
   return {
-    get pendingCellCount() { return pendingCellCount; },
-    get pendingRowCount() { return pendingRowCount; },
-    get rowCount() { return rowCount; },
-    get totalRowCount() { return totalRowCount; },
-    get lastQueryMs() { return lastQueryMs; },
-    get isSaving() { return isSaving; },
-    get onSave() { return onSave; },
-    get onDiscard() { return onDiscard; },
+    get pendingCellCount() {
+      return pendingCellCount;
+    },
+    get pendingRowCount() {
+      return pendingRowCount;
+    },
+    get rowCount() {
+      return rowCount;
+    },
+    get totalRowCount() {
+      return totalRowCount;
+    },
+    get lastQueryMs() {
+      return lastQueryMs;
+    },
+    get isSaving() {
+      return isSaving;
+    },
+    get onSave() {
+      return onSave;
+    },
+    get onDiscard() {
+      return onDiscard;
+    },
 
     update(patch: {
       pendingCellCount?: number;

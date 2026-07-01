@@ -81,7 +81,10 @@ mod tests {
 
     async fn setup_db() -> SqlitePool {
         let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        sqlx::migrate!("src/db/migrations").run(&pool).await.unwrap();
+        sqlx::migrate!("src/db/migrations")
+            .run(&pool)
+            .await
+            .unwrap();
         pool
     }
 
@@ -109,12 +112,11 @@ mod tests {
         .await
         .unwrap();
 
-        let value: String =
-            sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
-                .bind("theme")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let value: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+            .bind("theme")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&value).unwrap();
         assert_eq!(parsed, serde_json::json!("dark"));
     }
@@ -135,12 +137,11 @@ mod tests {
             .unwrap();
         }
 
-        let value: String =
-            sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
-                .bind("page_size")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let value: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+            .bind("page_size")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&value).unwrap();
         assert_eq!(parsed, serde_json::json!(100));
     }
@@ -163,12 +164,11 @@ mod tests {
             .await
             .unwrap();
 
-        let value: Option<String> =
-            sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
-                .bind("theme")
-                .fetch_optional(&pool)
-                .await
-                .unwrap();
+        let value: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+            .bind("theme")
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
         assert!(value.is_none());
     }
 

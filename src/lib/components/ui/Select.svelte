@@ -14,7 +14,7 @@
   }
 
   function flatOptions(opts: SelectOption[]): Option[] {
-    return opts.flatMap(o => isGroup(o) ? o.options : [o]);
+    return opts.flatMap((o) => (isGroup(o) ? o.options : [o]));
   }
 
   interface Props {
@@ -55,7 +55,7 @@
   let openUp = $state(false);
 
   const flat = $derived(flatOptions(options));
-  const selectedLabel = $derived(flat.find(o => o.value === value)?.label ?? '');
+  const selectedLabel = $derived(flat.find((o) => o.value === value)?.label ?? '');
 
   function positionDropdown() {
     if (!triggerEl || !dropdownEl) return;
@@ -72,9 +72,15 @@
 
   function toggle() {
     if (disabled) return;
-    if (open) { close(); return; }
+    if (open) {
+      close();
+      return;
+    }
     open = true;
-    focusedIndex = Math.max(0, flat.findIndex(o => o.value === value));
+    focusedIndex = Math.max(
+      0,
+      flat.findIndex((o) => o.value === value),
+    );
   }
 
   function close() {
@@ -136,8 +142,12 @@
       if (!triggerEl?.contains(t) && !dropdownEl?.contains(t)) close();
     }
 
-    function onScroll() { positionDropdown(); }
-    function onResize() { positionDropdown(); }
+    function onScroll() {
+      positionDropdown();
+    }
+    function onResize() {
+      positionDropdown();
+    }
 
     document.addEventListener('mousedown', onMousedown, true);
     window.addEventListener('scroll', onScroll, true);
@@ -170,8 +180,22 @@
   onkeydown={handleTriggerKeydown}
 >
   <span class="trigger-label">{selectedLabel}</span>
-  <svg class="trigger-chevron" class:trigger-chevron--open={open} width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true">
-    <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <svg
+    class="trigger-chevron"
+    class:trigger-chevron--open={open}
+    width="10"
+    height="6"
+    viewBox="0 0 10 6"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M1 1l4 4 4-4"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
   </svg>
 </button>
 
@@ -202,10 +226,16 @@
             class="option"
             class:option--selected={opt.value === value}
             class:option--focused={idx === focusedIndex}
-            onmouseenter={() => { focusedIndex = idx; }}
-            onmousedown={(e) => { e.preventDefault(); selectOption(opt.value); }}
+            onmouseenter={() => {
+              focusedIndex = idx;
+            }}
+            onmousedown={(e) => {
+              e.preventDefault();
+              selectOption(opt.value);
+            }}
           >
-            <span class="option-indicator" class:option-indicator--visible={opt.value === value}></span>
+            <span class="option-indicator" class:option-indicator--visible={opt.value === value}
+            ></span>
             <span class="option-label">{opt.label}</span>
           </button>
         {/each}
@@ -219,10 +249,16 @@
           class="option"
           class:option--selected={item.value === value}
           class:option--focused={idx === focusedIndex}
-          onmouseenter={() => { focusedIndex = idx; }}
-          onmousedown={(e) => { e.preventDefault(); selectOption(item.value); }}
+          onmouseenter={() => {
+            focusedIndex = idx;
+          }}
+          onmousedown={(e) => {
+            e.preventDefault();
+            selectOption(item.value);
+          }}
         >
-          <span class="option-indicator" class:option-indicator--visible={item.value === value}></span>
+          <span class="option-indicator" class:option-indicator--visible={item.value === value}
+          ></span>
           <span class="option-label">{item.label}</span>
         </button>
       {/if}
@@ -315,7 +351,9 @@
     top: 50%;
     transform: translateY(-50%) rotate(0deg);
     color: var(--color-text-muted);
-    transition: transform var(--transition-md), color var(--transition-fast);
+    transition:
+      transform var(--transition-md),
+      color var(--transition-fast);
     pointer-events: none;
     flex-shrink: 0;
   }
@@ -424,7 +462,9 @@
     font-size: inherit;
     text-align: left;
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     white-space: nowrap;
     min-height: 26px;
   }

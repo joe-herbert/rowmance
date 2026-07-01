@@ -42,7 +42,7 @@
   let error = $state<string | null>(null);
 
   const activeConnections = $derived(
-    connectionStore.profiles.filter((p) => connectionStore.isActive(p.id))
+    connectionStore.profiles.filter((p) => connectionStore.isActive(p.id)),
   );
 
   const connectionOptions = $derived([
@@ -68,17 +68,22 @@
   // Pre-load cascading data when editing an existing relation
   $effect(() => {
     if (!initialTo) return;
-    schemaApi.listDatabases(initialTo.connectionId).then((dbs) => {
-      databases = dbs;
-      return schemaApi.listTables(initialTo.connectionId, initialTo.database);
-    }).then((tbls) => {
-      tables = tbls;
-      return schemaApi.listColumns(initialTo.connectionId, initialTo.database, initialTo.table);
-    }).then((cols) => {
-      columns = cols.map((c) => c.name);
-    }).catch((err) => {
-      error = errorMessage(err);
-    });
+    schemaApi
+      .listDatabases(initialTo.connectionId)
+      .then((dbs) => {
+        databases = dbs;
+        return schemaApi.listTables(initialTo.connectionId, initialTo.database);
+      })
+      .then((tbls) => {
+        tables = tbls;
+        return schemaApi.listColumns(initialTo.connectionId, initialTo.database, initialTo.table);
+      })
+      .then((cols) => {
+        columns = cols.map((c) => c.name);
+      })
+      .catch((err) => {
+        error = errorMessage(err);
+      });
   });
 
   async function onConnectionChange(val: string) {
@@ -139,7 +144,12 @@
 
   async function handleSave() {
     if (!toConnectionId || !toDatabase || !toTable || !toColumn) return;
-    const toRef: ColumnRef = { connectionId: toConnectionId, database: toDatabase, table: toTable, column: toColumn };
+    const toRef: ColumnRef = {
+      connectionId: toConnectionId,
+      database: toDatabase,
+      table: toTable,
+      column: toColumn,
+    };
     if (editId) await vrStore.remove(editId);
     await vrStore.add({ from, to: toRef, label: label.trim() || undefined });
     onCreated?.();
@@ -149,7 +159,9 @@
   const canSave = $derived(!!toConnectionId && !!toDatabase && !!toTable && !!toColumn);
   const modalTitle = $derived(editId ? 'Edit Connection' : 'Connect Column');
 
-  const fromConnName = $derived(connectionStore.profiles.find((p) => p.id === from.connectionId)?.name ?? from.connectionId);
+  const fromConnName = $derived(
+    connectionStore.profiles.find((p) => p.id === from.connectionId)?.name ?? from.connectionId,
+  );
 </script>
 
 <Modal label={modalTitle} onbackdropclick={onClose}>
@@ -223,7 +235,9 @@
             id="vr-col"
             bind:value={toColumn}
             options={columnOptions}
-            onchange={(v) => { toColumn = v; }}
+            onchange={(v) => {
+              toColumn = v;
+            }}
             disabled={!toTable || colLoading}
             size="md"
           />
@@ -286,7 +300,9 @@
     cursor: pointer;
     background: none;
     border: none;
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .close-btn:hover {
@@ -337,11 +353,23 @@
     font-size: var(--font-size-sm);
   }
 
-  .chip-conn { color: var(--color-text-muted); }
-  .chip-sep { color: var(--color-text-muted); }
-  .chip-db { color: var(--color-text-secondary); }
-  .chip-table { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
-  .chip-col { color: var(--color-accent); font-weight: var(--font-weight-medium); }
+  .chip-conn {
+    color: var(--color-text-muted);
+  }
+  .chip-sep {
+    color: var(--color-text-muted);
+  }
+  .chip-db {
+    color: var(--color-text-secondary);
+  }
+  .chip-table {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
+  }
+  .chip-col {
+    color: var(--color-accent);
+    font-weight: var(--font-weight-medium);
+  }
 
   .arrow-row {
     font-size: var(--font-size-sm);
@@ -370,7 +398,9 @@
     color: var(--color-text-primary);
     font-size: var(--font-size-md);
     font-family: var(--font-family-ui);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
     outline: none;
     width: 100%;
     box-sizing: border-box;
@@ -399,11 +429,17 @@
     font-weight: var(--font-weight-medium);
     font-family: var(--font-family-ui);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     white-space: nowrap;
   }
 
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   .btn--primary {
     background: var(--color-accent);
@@ -411,7 +447,9 @@
     border: 1px solid transparent;
   }
 
-  .btn--primary:not(:disabled):hover { background: var(--color-accent-hover); }
+  .btn--primary:not(:disabled):hover {
+    background: var(--color-accent-hover);
+  }
 
   .btn--ghost {
     background: transparent;

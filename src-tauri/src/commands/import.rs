@@ -109,7 +109,10 @@ fn csv_preview_from_text(content: &str) -> Result<CsvPreview, AppError> {
         })
         .collect();
 
-    Ok(CsvPreview { columns, preview_rows })
+    Ok(CsvPreview {
+        columns,
+        preview_rows,
+    })
 }
 
 /// Read the first 20 rows of a CSV file and return column names with inferred types.
@@ -173,9 +176,7 @@ async fn csv_execute_from_text(
             if create_table {
                 let col_defs: Vec<String> = effective_columns
                     .iter()
-                    .map(|(name, db_type)| {
-                        format!("`{}` {}", name.replace('`', "``"), db_type)
-                    })
+                    .map(|(name, db_type)| format!("`{}` {}", name.replace('`', "``"), db_type))
                     .collect();
                 let ddl = format!(
                     "CREATE TABLE IF NOT EXISTS `{}` ({})",
@@ -216,9 +217,7 @@ async fn csv_execute_from_text(
             if create_table {
                 let col_defs: Vec<String> = effective_columns
                     .iter()
-                    .map(|(name, db_type)| {
-                        format!("\"{}\" {}", name.replace('"', "\"\""), db_type)
-                    })
+                    .map(|(name, db_type)| format!("\"{}\" {}", name.replace('"', "\"\""), db_type))
                     .collect();
                 let ddl = format!(
                     "CREATE TABLE IF NOT EXISTS \"{}\" ({})",
@@ -268,9 +267,7 @@ async fn csv_execute_from_text(
             if create_table {
                 let col_defs: Vec<String> = effective_columns
                     .iter()
-                    .map(|(name, db_type)| {
-                        format!("\"{}\" {}", name.replace('"', "\"\""), db_type)
-                    })
+                    .map(|(name, db_type)| format!("\"{}\" {}", name.replace('"', "\"\""), db_type))
                     .collect();
                 let ddl = format!(
                     "CREATE TABLE IF NOT EXISTS \"{}\" ({})",
@@ -324,7 +321,15 @@ pub async fn import_csv_execute(
 ) -> Result<u32, AppError> {
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
-    csv_execute_from_text(connections.inner(), connection_id, content, table_name, create_table, column_overrides).await
+    csv_execute_from_text(
+        connections.inner(),
+        connection_id,
+        content,
+        table_name,
+        create_table,
+        column_overrides,
+    )
+    .await
 }
 
 /// Import CSV data from a raw text string (e.g. clipboard content).
@@ -337,7 +342,15 @@ pub async fn import_csv_execute_text(
     create_table: bool,
     column_overrides: Vec<ColumnOverride>,
 ) -> Result<u32, AppError> {
-    csv_execute_from_text(connections.inner(), connection_id, csv_text, table_name, create_table, column_overrides).await
+    csv_execute_from_text(
+        connections.inner(),
+        connection_id,
+        csv_text,
+        table_name,
+        create_table,
+        column_overrides,
+    )
+    .await
 }
 
 async fn sql_execute_from_text(
@@ -404,7 +417,14 @@ pub async fn import_sql_file(
 ) -> Result<u32, AppError> {
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
-    sql_execute_from_text(app, connections.inner(), connection_id, content, stop_on_error).await
+    sql_execute_from_text(
+        app,
+        connections.inner(),
+        connection_id,
+        content,
+        stop_on_error,
+    )
+    .await
 }
 
 /// Execute SQL statements from a raw text string (e.g. clipboard content).
@@ -416,7 +436,14 @@ pub async fn import_sql_text(
     sql_text: String,
     stop_on_error: bool,
 ) -> Result<u32, AppError> {
-    sql_execute_from_text(app, connections.inner(), connection_id, sql_text, stop_on_error).await
+    sql_execute_from_text(
+        app,
+        connections.inner(),
+        connection_id,
+        sql_text,
+        stop_on_error,
+    )
+    .await
 }
 
 #[cfg(test)]

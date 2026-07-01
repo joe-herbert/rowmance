@@ -94,10 +94,9 @@ pub async fn list_tables(
 
     for table in &mut tables {
         let tbl_esc = table.name.replace('"', "\"\"");
-        let count: i64 =
-            sqlx::query_scalar(&format!("SELECT COUNT(*) FROM \"{}\"", tbl_esc))
-                .fetch_one(pool)
-                .await?;
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM \"{}\"", tbl_esc))
+            .fetch_one(pool)
+            .await?;
         table.row_count = Some(count);
     }
 
@@ -187,10 +186,7 @@ pub async fn list_indexes(
 
     let mut result = Vec::new();
     for idx in indexes {
-        let info_sql = format!(
-            "PRAGMA index_info(\"{}\")",
-            idx.name.replace('"', "\"\"")
-        );
+        let info_sql = format!("PRAGMA index_info(\"{}\")", idx.name.replace('"', "\"\""));
         let cols = sqlx::query_as::<_, IndexInfoRow>(&info_sql)
             .fetch_all(pool)
             .await

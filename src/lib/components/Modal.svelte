@@ -18,8 +18,12 @@
   aria-modal="true"
   aria-label={label}
   tabindex="-1"
-  onclick={(e) => { if (e.target === e.currentTarget) onbackdropclick?.(); }}
-  onkeydown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onbackdropclick?.(); }}
+  onclick={(e) => {
+    if (e.target === e.currentTarget) onbackdropclick?.();
+  }}
+  onkeydown={(e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onbackdropclick?.();
+  }}
   use:portal
 >
   {@render children()}

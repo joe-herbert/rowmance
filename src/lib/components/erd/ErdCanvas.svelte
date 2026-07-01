@@ -51,11 +51,13 @@
         height: NODE_HEADER_HEIGHT + table.columns.length * NODE_ROW_HEIGHT,
       }));
 
-      const elkEdges = edges.map((rel: { constraintName: string; fromTable: string; toTable: string }, i: number) => ({
-        id: `edge-${i}-${rel.constraintName}`,
-        sources: [rel.fromTable],
-        targets: [rel.toTable],
-      }));
+      const elkEdges = edges.map(
+        (rel: { constraintName: string; fromTable: string; toTable: string }, i: number) => ({
+          id: `edge-${i}-${rel.constraintName}`,
+          sources: [rel.fromTable],
+          targets: [rel.toTable],
+        }),
+      );
 
       const elkGraph = {
         id: 'root',
@@ -219,11 +221,7 @@
       <g transform="translate({transform.x},{transform.y}) scale({transform.k})">
         <!-- Edges rendered behind nodes -->
         {#each layout.edges as edge (edge.id)}
-          <path
-            class="erd-edge"
-            d={buildEdgePath(edge)}
-            marker-end="url(#arrowhead)"
-          />
+          <path class="erd-edge" d={buildEdgePath(edge)} marker-end="url(#arrowhead)" />
         {/each}
 
         <!-- Table nodes -->
@@ -245,25 +243,15 @@
               rx="4"
             />
             <!-- Header -->
-            <rect
-              class="node-header"
-              width={NODE_WIDTH}
-              height={NODE_HEADER_HEIGHT}
-              rx="4"
-            />
-            <rect
-              class="node-header"
-              y="20"
-              width={NODE_WIDTH}
-              height="10"
-            />
+            <rect class="node-header" width={NODE_WIDTH} height={NODE_HEADER_HEIGHT} rx="4" />
+            <rect class="node-header" y="20" width={NODE_WIDTH} height="10" />
             <text
               class="node-title"
               x={NODE_WIDTH / 2}
               y={NODE_HEADER_HEIGHT / 2}
               dominant-baseline="middle"
-              text-anchor="middle"
-            >{node.id}</text>
+              text-anchor="middle">{node.id}</text
+            >
 
             <!-- Columns -->
             {#each node.table.columns as col, idx}
@@ -275,21 +263,25 @@
                   height={NODE_ROW_HEIGHT}
                 />
                 {#if col.isPrimaryKey}
-                  <polygon class="col-pk-icon" points="8,3 9.5,7 14,7 10.5,9.5 11.8,14 8,11.5 4.2,14 5.5,9.5 2,7 6.5,7" transform="translate(0, {NODE_ROW_HEIGHT / 2 - 8.5})" />
+                  <polygon
+                    class="col-pk-icon"
+                    points="8,3 9.5,7 14,7 10.5,9.5 11.8,14 8,11.5 4.2,14 5.5,9.5 2,7 6.5,7"
+                    transform="translate(0, {NODE_ROW_HEIGHT / 2 - 8.5})"
+                  />
                 {/if}
                 <text
                   class="col-name"
                   x={col.isPrimaryKey ? 22 : 8}
                   y={NODE_ROW_HEIGHT / 2}
-                  dominant-baseline="middle"
-                >{col.name}</text>
+                  dominant-baseline="middle">{col.name}</text
+                >
                 <text
                   class="col-type"
                   x={NODE_WIDTH - 8}
                   y={NODE_ROW_HEIGHT / 2}
                   dominant-baseline="middle"
-                  text-anchor="end"
-                >{col.dataType}</text>
+                  text-anchor="end">{col.dataType}</text
+                >
               </g>
             {/each}
           </g>
@@ -382,7 +374,7 @@
     fill: var(--color-bg-primary);
     stroke: var(--color-border-strong);
     stroke-width: 1px;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08));
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
   }
 
   :global(.node-header) {

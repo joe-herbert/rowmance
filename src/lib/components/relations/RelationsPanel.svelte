@@ -27,6 +27,7 @@
     rows: CellValue[][];
     columnNames: string[];
     loading: boolean;
+    error: string | null;
     expanded: boolean;
     virtual?: boolean;
     vrId?: string;
@@ -46,7 +47,9 @@
   let reverseExpanded = $state(true);
 
   function quoteId(name: string, dbType: DbType): string {
-    return dbType === 'postgres' ? `"${name.replace(/"/g, '""')}"` : `\`${name.replace(/`/g, '``')}\``;
+    return dbType === 'postgres'
+      ? `"${name.replace(/"/g, '""')}"`
+      : `\`${name.replace(/`/g, '``')}\``;
   }
 
   function escapeStr(val: string): string {
@@ -83,6 +86,7 @@
             rows: [],
             columnNames: [],
             loading: true,
+            error: null,
             expanded: true,
           });
         }
@@ -102,6 +106,7 @@
             rows: [],
             columnNames: [],
             loading: true,
+            error: null,
             expanded: true,
           });
         }
@@ -171,7 +176,12 @@
           const connDbType = connectionStore.getById(connId)?.dbType ?? dbType;
           try {
             const sql = `SELECT * FROM ${quoteId(db, connDbType)}.${quoteId(rel.targetTable, connDbType)} WHERE ${quoteId(rel.filterColumn, connDbType)} = ${valueLiteral(rel.filterValue)}`;
-            const result = await executeQuery(connId, sql, 1, rel.direction === 'forward' ? 20 : 10);
+            const result = await executeQuery(
+              connId,
+              sql,
+              1,
+              rel.direction === 'forward' ? 20 : 10,
+            );
             if (result.error) {
               relations[i].loading = false;
               toast.addToast(result.error, 'error', 0);
@@ -249,24 +259,44 @@
 <div class="relations-panel">
   {#if !sel}
     <div class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" stroke-linecap="round"/>
-        <path d="M10.172 13.828a4 4 0 015.656 0l4 4a4 4 0 01-5.656 5.656l-1.1-1.1" stroke-linecap="round"/>
+      <svg
+        class="empty-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <path
+          d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
+          stroke-linecap="round"
+        />
+        <path
+          d="M10.172 13.828a4 4 0 015.656 0l4 4a4 4 0 01-5.656 5.656l-1.1-1.1"
+          stroke-linecap="round"
+        />
       </svg>
       <p>Select a table cell to explore its relations</p>
     </div>
   {:else if sel.cellValue === null}
     <div class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="9"/>
-        <path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round"/>
+      <svg
+        class="empty-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round" />
       </svg>
       <p>Cell is NULL — no relations to show</p>
     </div>
   {:else}
     <div class="context-bar">
       <div class="context-cell">
-        <span class="context-table">{sel.table}</span><span class="context-dot">.</span><span class="context-col">{sel.columnName}</span>
+        <span class="context-table">{sel.table}</span><span class="context-dot">.</span><span
+          class="context-col">{sel.columnName}</span
+        >
       </div>
       <div class="context-value-row">
         <span class="context-eq-label">value</span>
@@ -278,9 +308,17 @@
       <div class="global-state"><Loader /><span>Loading relations…</span></div>
     {:else if relations.length === 0}
       <div class="empty-state">
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        <svg
+          class="empty-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </svg>
         <p>No relations found for <span class="inline-col">{sel.columnName}</span></p>
       </div>
@@ -291,7 +329,7 @@
             <button class="section-header" onclick={() => (forwardExpanded = !forwardExpanded)}>
               <div class="section-icon forward-icon">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M3 8h10M9 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M3 8h10M9 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </div>
               <div class="section-info">
@@ -299,74 +337,130 @@
                 <span class="section-desc">{sel.table} → foreign key targets</span>
               </div>
               <span class="section-count">{forwardRelations.length}</span>
-              <svg class="section-chevron" class:collapsed={!forwardExpanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                class="section-chevron"
+                class:collapsed={!forwardExpanded}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
 
             <div class="section-body" class:collapsed={!forwardExpanded}>
               <div class="section-body-inner">
-            {#each forwardRelations as rel, i (getRelKey(rel, i))}
-              <div class="relation-card">
-                <div class="card-header" role="button" tabindex="0" onclick={() => (rel.expanded = !rel.expanded)} onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}>
-                  <svg class="table-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <rect x="2" y="3" width="12" height="10" rx="1"/>
-                    <path d="M2 7h12M6 7v6"/>
-                  </svg>
-                  <span class="card-header-text">
-                    <span class="card-table">{rel.targetTable}</span>
-                    <span class="card-filter">{rel.filterColumn}</span>
-                    {#if rel.virtual}
-                      <span class="virtual-badge" title="Virtual connection">{#if rel.targetConnectionId}<span class="card-via">{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span>{:else}Virtual{/if}</span>
-                    {/if}
-                  </span>
-                  {#if !rel.loading}
-                    <span class="card-row-count">{rel.rows.length}</span>
-                  {/if}
-                  <button class="card-open-btn" title="Open in panel" onclick={(e) => { e.stopPropagation(); openRelation(sel, rel); }}>
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <path d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </button>
-                  <svg class="card-chevron" class:collapsed={!rel.expanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </div>
+                {#each forwardRelations as rel, i (getRelKey(rel, i))}
+                  <div class="relation-card">
+                    <div
+                      class="card-header"
+                      role="button"
+                      tabindex="0"
+                      onclick={() => (rel.expanded = !rel.expanded)}
+                      onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}
+                    >
+                      <svg
+                        class="table-icon"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      >
+                        <rect x="2" y="3" width="12" height="10" rx="1" />
+                        <path d="M2 7h12M6 7v6" />
+                      </svg>
+                      <span class="card-header-text">
+                        <span class="card-table">{rel.targetTable}</span>
+                        <span class="card-filter">{rel.filterColumn}</span>
+                        {#if rel.virtual}
+                          <span class="virtual-badge" title="Virtual connection"
+                            >{#if rel.targetConnectionId}<span class="card-via"
+                                >{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span
+                              >{:else}Virtual{/if}</span
+                          >
+                        {/if}
+                      </span>
+                      {#if !rel.loading}
+                        <span class="card-row-count">{rel.rows.length}</span>
+                      {/if}
+                      <button
+                        class="card-open-btn"
+                        title="Open in panel"
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          openRelation(sel, rel);
+                        }}
+                      >
+                        <svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                        >
+                          <path
+                            d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <svg
+                        class="card-chevron"
+                        class:collapsed={!rel.expanded}
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      >
+                        <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </div>
 
-                <div class="card-collapse" class:collapsed={!rel.expanded}>
-                  <div class="card-body">
-                    {#if rel.loading}
-                      <div class="card-state"><Loader /></div>
-                    {:else if rel.rows.length > 0}
-                      <div class="table-scroll">
-                        <table class="data-table">
-                          <thead>
-                            <tr>
-                              {#each rel.columnNames as col}
-                                <th class="data-th" class:filter-col={col === rel.filterColumn} title={col}>{col}</th>
-                              {/each}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {#each rel.rows as row, ri (ri)}
-                              <tr class="data-row">
-                                {#each rel.columnNames as _col, ci (ci)}
-                                  <td class="data-td" class:filter-col={ci === rel.columnNames.indexOf(rel.filterColumn)} title={formatValue(row[ci])}>
-                                    {#if row[ci] === null}<span class="null-val">NULL</span>{:else}{formatValue(row[ci])}{/if}
-                                  </td>
+                    <div class="card-collapse" class:collapsed={!rel.expanded}>
+                      <div class="card-body">
+                        {#if rel.loading}
+                          <div class="card-state"><Loader /></div>
+                        {:else if rel.rows.length > 0}
+                          <div class="table-scroll">
+                            <table class="data-table">
+                              <thead>
+                                <tr>
+                                  {#each rel.columnNames as col}
+                                    <th
+                                      class="data-th"
+                                      class:filter-col={col === rel.filterColumn}
+                                      title={col}>{col}</th
+                                    >
+                                  {/each}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {#each rel.rows as row, ri (ri)}
+                                  <tr class="data-row">
+                                    {#each rel.columnNames as _col, ci (ci)}
+                                      <td
+                                        class="data-td"
+                                        class:filter-col={ci ===
+                                          rel.columnNames.indexOf(rel.filterColumn)}
+                                        title={formatValue(row[ci])}
+                                      >
+                                        {#if row[ci] === null}<span class="null-val">NULL</span
+                                          >{:else}{formatValue(row[ci])}{/if}
+                                      </td>
+                                    {/each}
+                                  </tr>
                                 {/each}
-                              </tr>
-                            {/each}
-                          </tbody>
-                        </table>
+                              </tbody>
+                            </table>
+                          </div>
+                        {:else}
+                          <div class="card-empty">No rows found</div>
+                        {/if}
                       </div>
-                    {:else}
-                      <div class="card-empty">No rows found</div>
-                    {/if}
+                    </div>
                   </div>
-                </div>
-              </div>
-            {/each}
+                {/each}
               </div>
             </div>
           </div>
@@ -377,7 +471,7 @@
             <button class="section-header" onclick={() => (reverseExpanded = !reverseExpanded)}>
               <div class="section-icon reverse-icon">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M13 8H3M7 4L3 8l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M13 8H3M7 4L3 8l4 4" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </div>
               <div class="section-info">
@@ -385,74 +479,130 @@
                 <span class="section-desc">tables pointing to {sel.table}</span>
               </div>
               <span class="section-count">{reverseRelations.length}</span>
-              <svg class="section-chevron" class:collapsed={!reverseExpanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg
+                class="section-chevron"
+                class:collapsed={!reverseExpanded}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
 
             <div class="section-body" class:collapsed={!reverseExpanded}>
               <div class="section-body-inner">
-            {#each reverseRelations as rel, i (getRelKey(rel, i + 1000))}
-              <div class="relation-card">
-                <div class="card-header" role="button" tabindex="0" onclick={() => (rel.expanded = !rel.expanded)} onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}>
-                  <svg class="table-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <rect x="2" y="3" width="12" height="10" rx="1"/>
-                    <path d="M2 7h12M6 7v6"/>
-                  </svg>
-                  <span class="card-header-text">
-                    <span class="card-table">{rel.targetTable}</span>
-                    <span class="card-filter">{rel.filterColumn}</span>
-                    {#if rel.virtual}
-                      <span class="virtual-badge" title="Virtual connection">{#if rel.targetConnectionId}<span class="card-via">{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span>{:else}Virtual{/if}</span>
-                    {/if}
-                  </span>
-                  {#if !rel.loading}
-                    <span class="card-row-count">{rel.rows.length}</span>
-                  {/if}
-                  <button class="card-open-btn" title="Open in panel" onclick={(e) => { e.stopPropagation(); openRelation(sel, rel); }}>
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <path d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </button>
-                  <svg class="card-chevron" class:collapsed={!rel.expanded} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </div>
+                {#each reverseRelations as rel, i (getRelKey(rel, i + 1000))}
+                  <div class="relation-card">
+                    <div
+                      class="card-header"
+                      role="button"
+                      tabindex="0"
+                      onclick={() => (rel.expanded = !rel.expanded)}
+                      onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}
+                    >
+                      <svg
+                        class="table-icon"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      >
+                        <rect x="2" y="3" width="12" height="10" rx="1" />
+                        <path d="M2 7h12M6 7v6" />
+                      </svg>
+                      <span class="card-header-text">
+                        <span class="card-table">{rel.targetTable}</span>
+                        <span class="card-filter">{rel.filterColumn}</span>
+                        {#if rel.virtual}
+                          <span class="virtual-badge" title="Virtual connection"
+                            >{#if rel.targetConnectionId}<span class="card-via"
+                                >{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span
+                              >{:else}Virtual{/if}</span
+                          >
+                        {/if}
+                      </span>
+                      {#if !rel.loading}
+                        <span class="card-row-count">{rel.rows.length}</span>
+                      {/if}
+                      <button
+                        class="card-open-btn"
+                        title="Open in panel"
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          openRelation(sel, rel);
+                        }}
+                      >
+                        <svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                        >
+                          <path
+                            d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <svg
+                        class="card-chevron"
+                        class:collapsed={!rel.expanded}
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      >
+                        <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </div>
 
-                <div class="card-collapse" class:collapsed={!rel.expanded}>
-                  <div class="card-body">
-                    {#if rel.loading}
-                      <div class="card-state"><Loader /></div>
-                    {:else if rel.rows.length > 0}
-                      <div class="table-scroll">
-                        <table class="data-table">
-                          <thead>
-                            <tr>
-                              {#each rel.columnNames as col}
-                                <th class="data-th" class:filter-col={col === rel.filterColumn} title={col}>{col}</th>
-                              {/each}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {#each rel.rows as row, ri (ri)}
-                              <tr class="data-row">
-                                {#each rel.columnNames as _col, ci (ci)}
-                                  <td class="data-td" class:filter-col={ci === rel.columnNames.indexOf(rel.filterColumn)} title={formatValue(row[ci])}>
-                                    {#if row[ci] === null}<span class="null-val">NULL</span>{:else}{formatValue(row[ci])}{/if}
-                                  </td>
+                    <div class="card-collapse" class:collapsed={!rel.expanded}>
+                      <div class="card-body">
+                        {#if rel.loading}
+                          <div class="card-state"><Loader /></div>
+                        {:else if rel.rows.length > 0}
+                          <div class="table-scroll">
+                            <table class="data-table">
+                              <thead>
+                                <tr>
+                                  {#each rel.columnNames as col}
+                                    <th
+                                      class="data-th"
+                                      class:filter-col={col === rel.filterColumn}
+                                      title={col}>{col}</th
+                                    >
+                                  {/each}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {#each rel.rows as row, ri (ri)}
+                                  <tr class="data-row">
+                                    {#each rel.columnNames as _col, ci (ci)}
+                                      <td
+                                        class="data-td"
+                                        class:filter-col={ci ===
+                                          rel.columnNames.indexOf(rel.filterColumn)}
+                                        title={formatValue(row[ci])}
+                                      >
+                                        {#if row[ci] === null}<span class="null-val">NULL</span
+                                          >{:else}{formatValue(row[ci])}{/if}
+                                      </td>
+                                    {/each}
+                                  </tr>
                                 {/each}
-                              </tr>
-                            {/each}
-                          </tbody>
-                        </table>
+                              </tbody>
+                            </table>
+                          </div>
+                        {:else}
+                          <div class="card-empty">No rows found</div>
+                        {/if}
                       </div>
-                    {:else}
-                      <div class="card-empty">No rows found</div>
-                    {/if}
+                    </div>
                   </div>
-                </div>
-              </div>
-            {/each}
+                {/each}
               </div>
             </div>
           </div>
@@ -789,7 +939,9 @@
     border-radius: var(--radius-sm);
     color: var(--color-text-muted);
     flex-shrink: 0;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .card-open-btn:hover {
@@ -929,5 +1081,4 @@
     font-style: italic;
     font-size: 10px;
   }
-
 </style>

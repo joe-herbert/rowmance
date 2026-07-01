@@ -58,6 +58,7 @@ export default [
     rules: {
       ...svelte.configs.recommended.rules,
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'svelte/no-at-html-tags': 'off',
     },
   },
   {

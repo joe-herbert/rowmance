@@ -90,7 +90,10 @@ mod tests {
 
     async fn setup_db() -> SqlitePool {
         let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        sqlx::migrate!("src/db/migrations").run(&pool).await.unwrap();
+        sqlx::migrate!("src/db/migrations")
+            .run(&pool)
+            .await
+            .unwrap();
         pool
     }
 
@@ -183,10 +186,11 @@ mod tests {
             .await
             .unwrap();
 
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM query_history WHERE connection_id = 'c-2'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM query_history WHERE connection_id = 'c-2'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(count, 0);
     }
 
@@ -219,7 +223,14 @@ mod tests {
         let pool = setup_db().await;
         insert_profile(&pool, "c-4").await;
         for i in 0..5 {
-            insert_history(&pool, &format!("h-pg-{i}"), "c-4", &format!("SELECT {i}"), "success").await;
+            insert_history(
+                &pool,
+                &format!("h-pg-{i}"),
+                "c-4",
+                &format!("SELECT {i}"),
+                "success",
+            )
+            .await;
         }
 
         let page1 = sqlx::query_as::<_, QueryHistoryRow>(

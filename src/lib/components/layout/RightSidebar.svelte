@@ -11,7 +11,14 @@
   import * as historyApi from '$lib/tauri/history';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import * as schemaApi from '$lib/tauri/schema';
-  import type { QueryHistoryEntry, SavedQuery, SavedQueryFolder, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
+  import type {
+    QueryHistoryEntry,
+    SavedQuery,
+    SavedQueryFolder,
+    ColumnInfo,
+    IndexInfo,
+    ForeignKeyInfo,
+  } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
@@ -20,7 +27,7 @@
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
   import { portal } from '$lib/actions/portal';
 
-  type ActivePanel = 'history' | 'saved' | 'column' | 'relations' | null;
+  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
 
   interface Props {
     initialPanel?: ActivePanel;
@@ -73,15 +80,17 @@
       schemaApi.listColumns(sel.connectionId, sel.database, sel.table),
       schemaApi.listIndexes(sel.connectionId, sel.database, sel.table),
       schemaApi.listForeignKeys(sel.connectionId, sel.database, sel.table),
-    ]).then(([cols, idxs, fks]) => {
-      columnInfoData = cols.find((c) => c.name === sel.columnName) ?? null;
-      columnIndexes = idxs.filter((idx) => idx.columns.includes(sel.columnName));
-      columnForeignKeys = fks.filter((fk) => fk.columns.includes(sel.columnName));
-      columnInfoLoading = false;
-    }).catch((err) => {
-      toast.addToast(errorMessage(err), 'error', 0);
-      columnInfoLoading = false;
-    });
+    ])
+      .then(([cols, idxs, fks]) => {
+        columnInfoData = cols.find((c) => c.name === sel.columnName) ?? null;
+        columnIndexes = idxs.filter((idx) => idx.columns.includes(sel.columnName));
+        columnForeignKeys = fks.filter((fk) => fk.columns.includes(sel.columnName));
+        columnInfoLoading = false;
+      })
+      .catch((err) => {
+        toast.addToast(errorMessage(err), 'error', 0);
+        columnInfoLoading = false;
+      });
   });
 
   // ── Query History ─────────────────────────────────────────────────────────────
@@ -224,7 +233,7 @@
 
   function openSavedQuery(query: SavedQuery) {
     const existing = panelStore.openItems.find(
-      item => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id
+      (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id,
     );
     if (existing) {
       panelStore.showItem(existing);
@@ -250,7 +259,8 @@
 
   async function createQuery() {
     if (!newQueryName.trim()) return;
-    const connectionId = connectionStore.profiles.find((p) => connectionStore.isActive(p.id))?.id ?? null;
+    const connectionId =
+      connectionStore.profiles.find((p) => connectionStore.isActive(p.id))?.id ?? null;
     await savedQueriesApi.createSavedQuery({
       name: newQueryName.trim(),
       sql: '',
@@ -292,11 +302,22 @@
   }
 
   async function commitRenameQuery(query: SavedQuery) {
-    if (!renameQueryValue.trim()) { renamingQueryId = null; return; }
+    if (!renameQueryValue.trim()) {
+      renamingQueryId = null;
+      return;
+    }
     const name = renameQueryValue.trim();
     renamingQueryId = null;
-    await savedQueriesApi.updateSavedQuery(query.id, { name, sql: query.sql, connectionId: query.connectionId, folderId: query.folderId, database: query.database });
-    const open = panelStore.openItems.find(item => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id);
+    await savedQueriesApi.updateSavedQuery(query.id, {
+      name,
+      sql: query.sql,
+      connectionId: query.connectionId,
+      folderId: query.folderId,
+      database: query.database,
+    });
+    const open = panelStore.openItems.find(
+      (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id,
+    );
     if (open?.content.kind === 'query_editor' && open.content.editorId) {
       panelStore.updateQueryEditorMeta(open.content.editorId, { savedQueryName: name });
     }
@@ -305,7 +326,7 @@
 
   async function handleSavedCtxDuplicate() {
     if (!savedCtxMenu || savedCtxMenu.kind !== 'query') return;
-    const original = savedQueries.find(q => q.id === savedCtxMenu?.id);
+    const original = savedQueries.find((q) => q.id === savedCtxMenu?.id);
     if (!original) return;
     savedCtxMenu = null;
     await savedQueriesApi.createSavedQuery({
@@ -335,7 +356,12 @@
 
   // Load saved queries when the panel first opens.
   $effect(() => {
-    if (activePanel === 'saved' && savedFolders.length === 0 && savedQueries.length === 0 && !savedLoading) {
+    if (
+      activePanel === 'saved' &&
+      savedFolders.length === 0 &&
+      savedQueries.length === 0 &&
+      !savedLoading
+    ) {
       loadSavedQueries();
     }
   });
@@ -362,7 +388,10 @@
 
   // ── Drag & Drop ───────────────────────────────────────────────────────────────
 
-  interface DragState { kind: 'query' | 'folder'; id: string; }
+  interface DragState {
+    kind: 'query' | 'folder';
+    id: string;
+  }
 
   type DropZone =
     | { type: 'into-folder'; folderId: string }
@@ -391,11 +420,17 @@
       dragging = null;
       isDragging = false;
       dropZone = null;
-      if (drag && zone) { suppressNextClick = true; void commitDrop(drag, zone); }
+      if (drag && zone) {
+        suppressNextClick = true;
+        void commitDrop(drag, zone);
+      }
     }
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
   });
 
   function startDrag(e: PointerEvent, kind: 'query' | 'folder', id: string) {
@@ -421,7 +456,9 @@
         const queryId = node.dataset.queryId!;
         if (queryId === dragging.id) return null;
         const folderId = node.dataset.queryFolderId || null;
-        return relY < 0.5 ? { type: 'before-query', queryId, folderId } : { type: 'after-query', queryId, folderId };
+        return relY < 0.5
+          ? { type: 'before-query', queryId, folderId }
+          : { type: 'after-query', queryId, folderId };
       }
     }
 
@@ -429,7 +466,9 @@
       if (dropType === 'folder') {
         const folderId = node.dataset.folderId!;
         if (folderId === dragging.id) return null;
-        return relY < 0.5 ? { type: 'before-folder', folderId } : { type: 'after-folder', folderId };
+        return relY < 0.5
+          ? { type: 'before-folder', folderId }
+          : { type: 'after-folder', folderId };
       }
     }
     return null;
@@ -442,53 +481,86 @@
   }
 
   async function commitQueryDrop(queryId: string, zone: DropZone) {
-    const query = savedQueries.find(q => q.id === queryId);
+    const query = savedQueries.find((q) => q.id === queryId);
     if (!query) return;
     if (zone.type === 'into-folder') {
-      const maxPos = savedQueries.filter(q => q.folderId === zone.folderId).reduce((m, q) => Math.max(m, q.position), -1);
-      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: zone.folderId, database: query.database, position: maxPos + 1 });
+      const maxPos = savedQueries
+        .filter((q) => q.folderId === zone.folderId)
+        .reduce((m, q) => Math.max(m, q.position), -1);
+      await savedQueriesApi.updateSavedQuery(queryId, {
+        name: query.name,
+        sql: query.sql,
+        connectionId: query.connectionId,
+        folderId: zone.folderId,
+        database: query.database,
+        position: maxPos + 1,
+      });
     } else if (zone.type === 'into-unfiled') {
-      const maxPos = savedQueries.filter(q => q.folderId === null).reduce((m, q) => Math.max(m, q.position), -1);
-      await savedQueriesApi.updateSavedQuery(queryId, { name: query.name, sql: query.sql, connectionId: query.connectionId, folderId: null, database: query.database, position: maxPos + 1 });
+      const maxPos = savedQueries
+        .filter((q) => q.folderId === null)
+        .reduce((m, q) => Math.max(m, q.position), -1);
+      await savedQueriesApi.updateSavedQuery(queryId, {
+        name: query.name,
+        sql: query.sql,
+        connectionId: query.connectionId,
+        folderId: null,
+        database: query.database,
+        position: maxPos + 1,
+      });
     } else if (zone.type === 'before-query' || zone.type === 'after-query') {
       const targetFolderId = zone.folderId;
-      const folderQueries = savedQueries.filter(q => q.folderId === targetFolderId);
-      const ordered = folderQueries.filter(q => q.id !== queryId);
-      const refIdx = ordered.findIndex(q => q.id === zone.queryId);
+      const folderQueries = savedQueries.filter((q) => q.folderId === targetFolderId);
+      const ordered = folderQueries.filter((q) => q.id !== queryId);
+      const refIdx = ordered.findIndex((q) => q.id === zone.queryId);
       if (refIdx === -1) return;
       ordered.splice(zone.type === 'before-query' ? refIdx : refIdx + 1, 0, query);
-      await Promise.all(ordered.map((q, i) =>
-        savedQueriesApi.updateSavedQuery(q.id, { name: q.name, sql: q.sql, connectionId: q.connectionId, folderId: targetFolderId, database: q.database, position: i })
-      ));
+      await Promise.all(
+        ordered.map((q, i) =>
+          savedQueriesApi.updateSavedQuery(q.id, {
+            name: q.name,
+            sql: q.sql,
+            connectionId: q.connectionId,
+            folderId: targetFolderId,
+            database: q.database,
+            position: i,
+          }),
+        ),
+      );
     }
   }
 
   async function commitFolderDrop(folderId: string, zone: DropZone) {
     if (zone.type !== 'before-folder' && zone.type !== 'after-folder') return;
-    const folder = savedFolders.find(f => f.id === folderId);
+    const folder = savedFolders.find((f) => f.id === folderId);
     if (!folder) return;
-    const ordered = savedFolders.filter(f => f.id !== folderId);
-    const refIdx = ordered.findIndex(f => f.id === zone.folderId);
+    const ordered = savedFolders.filter((f) => f.id !== folderId);
+    const refIdx = ordered.findIndex((f) => f.id === zone.folderId);
     if (refIdx === -1) return;
     ordered.splice(zone.type === 'before-folder' ? refIdx : refIdx + 1, 0, folder);
-    await Promise.all(ordered.map((f, i) =>
-      savedQueriesApi.updateFolder(f.id, { name: f.name, parentId: f.parentId, position: i })
-    ));
+    await Promise.all(
+      ordered.map((f, i) =>
+        savedQueriesApi.updateFolder(f.id, { name: f.name, parentId: f.parentId, position: i }),
+      ),
+    );
   }
 
   function handleQueryClick(query: SavedQuery) {
-    if (suppressNextClick) { suppressNextClick = false; return; }
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
     openSavedQuery(query);
   }
 
   function handleFolderToggle(folderId: string) {
-    if (suppressNextClick) { suppressNextClick = false; return; }
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
     toggleFolder(folderId);
   }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="right-sidebar">
   <!-- Icon tab strip -->
   <div class="tab-strip" role="tablist" aria-label="Right sidebar panels">
@@ -500,9 +572,23 @@
       aria-selected={activePanel === 'history'}
       aria-controls="panel-history"
       title="Query History"
-      onclick={(e) => { e.stopPropagation(); selectPanel('history'); }}
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('history');
+      }}
     >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        ><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg
+      >
     </button>
 
     <button
@@ -512,9 +598,22 @@
       aria-selected={activePanel === 'saved'}
       aria-controls="panel-saved"
       title="Saved Queries"
-      onclick={(e) => { e.stopPropagation(); selectPanel('saved'); }}
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('saved');
+      }}
     >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg
+      >
     </button>
 
     <button
@@ -524,9 +623,28 @@
       aria-selected={activePanel === 'column'}
       aria-controls="panel-column"
       title="Column Inspector"
-      onclick={(e) => { e.stopPropagation(); selectPanel('column'); }}
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('column');
+      }}
     >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        ><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line
+          x1="8"
+          y1="11"
+          x2="14"
+          y2="11"
+        /><line x1="11" y1="8" x2="11" y2="14" /></svg
+      >
     </button>
 
     <button
@@ -536,9 +654,25 @@
       aria-selected={activePanel === 'relations'}
       aria-controls="panel-relations"
       title="Relations"
-      onclick={(e) => { e.stopPropagation(); selectPanel('relations'); }}
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('relations');
+      }}
     >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        ><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path
+          d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+        /></svg
+      >
     </button>
   </div>
 
@@ -550,7 +684,7 @@
           {#if activeProfiles.length > 1}
             <Select
               bind:value={selectedHistoryConnectionId}
-              options={activeProfiles.map(p => ({ value: p.id, label: p.name }))}
+              options={activeProfiles.map((p) => ({ value: p.id, label: p.name }))}
               aria-label="Select connection"
               size="xs"
             />
@@ -563,7 +697,11 @@
           <div class="toolbar-gap"></div>
 
           {#if historyEntries.length > 0}
-            <button class="action-btn danger-btn" onclick={handleClearHistory} title="Clear history">
+            <button
+              class="action-btn danger-btn"
+              onclick={handleClearHistory}
+              title="Clear history"
+            >
               Clear
             </button>
           {/if}
@@ -602,16 +740,27 @@
           </ul>
         {/if}
       </div>
-
     {:else if activePanel === 'saved'}
       <div id="panel-saved" role="tabpanel" aria-label="Saved Queries">
         <div class="panel-toolbar">
           <span class="panel-title">Saved Queries</span>
           <div class="toolbar-gap"></div>
-          <button class="action-btn" onclick={() => { showNewFolder = !showNewFolder; }} title="New folder">
+          <button
+            class="action-btn"
+            onclick={() => {
+              showNewFolder = !showNewFolder;
+            }}
+            title="New folder"
+          >
             + Folder
           </button>
-          <button class="action-btn" onclick={() => { showNewQuery = !showNewQuery; }} title="New query">
+          <button
+            class="action-btn"
+            onclick={() => {
+              showNewQuery = !showNewQuery;
+            }}
+            title="New query"
+          >
             + Query
           </button>
         </div>
@@ -623,7 +772,12 @@
               type="text"
               placeholder="Folder name…"
               bind:value={newFolderName}
-              onkeydown={(e) => { if (e.key === 'Enter') createFolder(); if (e.key === 'Escape') { showNewFolder = false; } }}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') createFolder();
+                if (e.key === 'Escape') {
+                  showNewFolder = false;
+                }
+              }}
               aria-label="New folder name"
             />
             <button class="action-btn" onclick={createFolder}>Add</button>
@@ -637,7 +791,12 @@
               type="text"
               placeholder="Query name…"
               bind:value={newQueryName}
-              onkeydown={(e) => { if (e.key === 'Enter') createQuery(); if (e.key === 'Escape') { showNewQuery = false; } }}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') createQuery();
+                if (e.key === 'Escape') {
+                  showNewQuery = false;
+                }
+              }}
               aria-label="New query name"
             />
             <button class="action-btn" onclick={createQuery}>Add</button>
@@ -653,9 +812,12 @@
               {@const unfiledQueries = queriesByFolder.get(null) ?? []}
               <li
                 class="folder-node"
-                class:drop-into={isDragging && dragging?.kind === 'query' && dropZone?.type === 'into-unfiled'}
+                class:drop-into={isDragging &&
+                  dragging?.kind === 'query' &&
+                  dropZone?.type === 'into-unfiled'}
                 data-drop-type="unfiled"
-                role="treeitem" aria-selected={false}
+                role="treeitem"
+                aria-selected={false}
               >
                 <span class="folder-label muted">Unfiled</span>
                 {#if unfiledQueries.length > 0}
@@ -663,13 +825,16 @@
                     {#each unfiledQueries as query (query.id)}
                       <li
                         class="query-node"
-                        class:drop-before={dropZone?.type === 'before-query' && dropZone.queryId === query.id}
-                        class:drop-after={dropZone?.type === 'after-query' && dropZone.queryId === query.id}
+                        class:drop-before={dropZone?.type === 'before-query' &&
+                          dropZone.queryId === query.id}
+                        class:drop-after={dropZone?.type === 'after-query' &&
+                          dropZone.queryId === query.id}
                         class:is-dragging={isDragging && dragging?.id === query.id}
                         data-drop-type="query"
                         data-query-id={query.id}
                         data-query-folder-id=""
-                        role="treeitem" aria-selected={false}
+                        role="treeitem"
+                        aria-selected={false}
                       >
                         {#if renamingQueryId === query.id}
                           <input
@@ -681,7 +846,15 @@
                             autocomplete="off"
                             spellcheck={false}
                             onclick={(e) => e.stopPropagation()}
-                            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRenameQuery(query); } if (e.key === 'Escape') { renamingQueryId = null; } }}
+                            onkeydown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                commitRenameQuery(query);
+                              }
+                              if (e.key === 'Escape') {
+                                renamingQueryId = null;
+                              }
+                            }}
                             onblur={() => commitRenameQuery(query)}
                           />
                         {:else}
@@ -689,12 +862,43 @@
                             class="query-btn"
                             onclick={() => handleQueryClick(query)}
                             onpointerdown={(e) => startDrag(e, 'query', query.id)}
-                            oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
+                            oncontextmenu={(e) =>
+                              showSavedCtxMenu(e, 'query', query.id, query.name)}
                             title="Open {query.name}"
                           >
-                            <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
+                            <span class="query-icon" aria-hidden="true"
+                              ><svg
+                                width="13"
+                                height="13"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.7"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                ><polyline points="8 7 4 12 8 17"></polyline><polyline
+                                  points="16 7 20 12 16 17"
+                                ></polyline></svg
+                              ></span
+                            >
                             <span class="query-name">{query.name}</span>
-                            <span class="drag-handle" aria-hidden="true"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg></span>
+                            <span class="drag-handle" aria-hidden="true"
+                              ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
+                                ><circle cx="2" cy="2" r="1.2" /><circle
+                                  cx="6"
+                                  cy="2"
+                                  r="1.2"
+                                /><circle cx="2" cy="6" r="1.2" /><circle
+                                  cx="6"
+                                  cy="6"
+                                  r="1.2"
+                                /><circle cx="2" cy="10" r="1.2" /><circle
+                                  cx="6"
+                                  cy="10"
+                                  r="1.2"
+                                /></svg
+                              ></span
+                            >
                           </button>
                         {/if}
                       </li>
@@ -710,13 +914,22 @@
               {@const isOpen = expandedFolders.has(folder.id)}
               <li
                 class="folder-node"
-                class:drop-into={isDragging && dragging?.kind === 'query' && dropZone?.type === 'into-folder' && dropZone.folderId === folder.id}
-                class:drop-before={dropZone?.type === 'before-folder' && dropZone.folderId === folder.id}
-                class:drop-after={dropZone?.type === 'after-folder' && dropZone.folderId === folder.id}
-                class:is-dragging={isDragging && dragging?.kind === 'folder' && dragging.id === folder.id}
+                class:drop-into={isDragging &&
+                  dragging?.kind === 'query' &&
+                  dropZone?.type === 'into-folder' &&
+                  dropZone.folderId === folder.id}
+                class:drop-before={dropZone?.type === 'before-folder' &&
+                  dropZone.folderId === folder.id}
+                class:drop-after={dropZone?.type === 'after-folder' &&
+                  dropZone.folderId === folder.id}
+                class:is-dragging={isDragging &&
+                  dragging?.kind === 'folder' &&
+                  dragging.id === folder.id}
                 data-drop-type="folder"
                 data-folder-id={folder.id}
-                role="treeitem" aria-expanded={isOpen} aria-selected={false}
+                role="treeitem"
+                aria-expanded={isOpen}
+                aria-selected={false}
               >
                 <button
                   class="folder-btn"
@@ -725,13 +938,50 @@
                   oncontextmenu={(e) => showSavedCtxMenu(e, 'folder', folder.id, folder.name)}
                   aria-label="{isOpen ? 'Collapse' : 'Expand'} folder {folder.name}"
                 >
-                  <span class="chevron" class:open={isOpen} aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 2 7 5 3 8"/></svg></span>
-                  <span class="folder-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                  <span class="chevron" class:open={isOpen} aria-hidden="true"
+                    ><svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 10 10"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"><polyline points="3 2 7 5 3 8" /></svg
+                    ></span
+                  >
+                  <span class="folder-icon" aria-hidden="true"
+                    ><svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      ><path
+                        d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                      /></svg
+                    ></span
+                  >
                   <span class="folder-name">{folder.name}</span>
                   {#if folderQueries.length > 0}
                     <span class="count-badge">{folderQueries.length}</span>
                   {/if}
-                  <span class="drag-handle" aria-hidden="true"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg></span>
+                  <span class="drag-handle" aria-hidden="true"
+                    ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
+                      ><circle cx="2" cy="2" r="1.2" /><circle cx="6" cy="2" r="1.2" /><circle
+                        cx="2"
+                        cy="6"
+                        r="1.2"
+                      /><circle cx="6" cy="6" r="1.2" /><circle cx="2" cy="10" r="1.2" /><circle
+                        cx="6"
+                        cy="10"
+                        r="1.2"
+                      /></svg
+                    ></span
+                  >
                 </button>
 
                 {#if isOpen && folderQueries.length > 0}
@@ -739,13 +989,16 @@
                     {#each folderQueries as query (query.id)}
                       <li
                         class="query-node"
-                        class:drop-before={dropZone?.type === 'before-query' && dropZone.queryId === query.id}
-                        class:drop-after={dropZone?.type === 'after-query' && dropZone.queryId === query.id}
+                        class:drop-before={dropZone?.type === 'before-query' &&
+                          dropZone.queryId === query.id}
+                        class:drop-after={dropZone?.type === 'after-query' &&
+                          dropZone.queryId === query.id}
                         class:is-dragging={isDragging && dragging?.id === query.id}
                         data-drop-type="query"
                         data-query-id={query.id}
                         data-query-folder-id={folder.id}
-                        role="treeitem" aria-selected={false}
+                        role="treeitem"
+                        aria-selected={false}
                       >
                         {#if renamingQueryId === query.id}
                           <input
@@ -757,7 +1010,15 @@
                             autocomplete="off"
                             spellcheck={false}
                             onclick={(e) => e.stopPropagation()}
-                            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRenameQuery(query); } if (e.key === 'Escape') { renamingQueryId = null; } }}
+                            onkeydown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                commitRenameQuery(query);
+                              }
+                              if (e.key === 'Escape') {
+                                renamingQueryId = null;
+                              }
+                            }}
                             onblur={() => commitRenameQuery(query)}
                           />
                         {:else}
@@ -765,12 +1026,43 @@
                             class="query-btn"
                             onclick={() => handleQueryClick(query)}
                             onpointerdown={(e) => startDrag(e, 'query', query.id)}
-                            oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
+                            oncontextmenu={(e) =>
+                              showSavedCtxMenu(e, 'query', query.id, query.name)}
                             title="Open {query.name}"
                           >
-                            <span class="query-icon" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 7 4 12 8 17"></polyline><polyline points="16 7 20 12 16 17"></polyline></svg></span>
+                            <span class="query-icon" aria-hidden="true"
+                              ><svg
+                                width="13"
+                                height="13"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.7"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                ><polyline points="8 7 4 12 8 17"></polyline><polyline
+                                  points="16 7 20 12 16 17"
+                                ></polyline></svg
+                              ></span
+                            >
                             <span class="query-name">{query.name}</span>
-                            <span class="drag-handle" aria-hidden="true"><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="6" r="1.2"/><circle cx="6" cy="6" r="1.2"/><circle cx="2" cy="10" r="1.2"/><circle cx="6" cy="10" r="1.2"/></svg></span>
+                            <span class="drag-handle" aria-hidden="true"
+                              ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
+                                ><circle cx="2" cy="2" r="1.2" /><circle
+                                  cx="6"
+                                  cy="2"
+                                  r="1.2"
+                                /><circle cx="2" cy="6" r="1.2" /><circle
+                                  cx="6"
+                                  cy="6"
+                                  r="1.2"
+                                /><circle cx="2" cy="10" r="1.2" /><circle
+                                  cx="6"
+                                  cy="10"
+                                  r="1.2"
+                                /></svg
+                              ></span
+                            >
                           </button>
                         {/if}
                       </li>
@@ -792,7 +1084,9 @@
           <span class="panel-title">Column Inspector</span>
         </div>
         {#if !cellSelectionStore.current}
-          <div class="placeholder-panel"><p>Select a cell in a table to inspect its column.</p></div>
+          <div class="placeholder-panel">
+            <p>Select a cell in a table to inspect its column.</p>
+          </div>
         {:else if columnInfoLoading}
           <div class="loading-row">Loading…</div>
         {:else if !columnInfoData}
@@ -800,27 +1094,50 @@
         {:else}
           {@const sel = cellSelectionStore.current}
           <div class="context-bar">
-            <span class="ctx-table">{sel!.table}</span><span class="ctx-dot">.</span><span class="ctx-col">{columnInfoData.name}</span>
+            <span class="ctx-table">{sel!.table}</span><span class="ctx-dot">.</span><span
+              class="ctx-col">{columnInfoData.name}</span
+            >
           </div>
           <div class="info-section">
             <div class="info-section-title">Properties</div>
             <dl class="info-dl">
-              <div class="info-row"><dt>Type</dt><dd class="mono">{columnInfoData.dataType}</dd></div>
-              <div class="info-row"><dt>Nullable</dt><dd>{columnInfoData.nullable ? 'Yes' : 'No'}</dd></div>
+              <div class="info-row">
+                <dt>Type</dt>
+                <dd class="mono">{columnInfoData.dataType}</dd>
+              </div>
+              <div class="info-row">
+                <dt>Nullable</dt>
+                <dd>{columnInfoData.nullable ? 'Yes' : 'No'}</dd>
+              </div>
               {#if columnInfoData.defaultValue !== null}
-                <div class="info-row"><dt>Default</dt><dd class="mono">{columnInfoData.defaultValue}</dd></div>
+                <div class="info-row">
+                  <dt>Default</dt>
+                  <dd class="mono">{columnInfoData.defaultValue}</dd>
+                </div>
               {/if}
               {#if columnInfoData.isPrimaryKey}
-                <div class="info-row"><dt>Primary Key</dt><dd class="badge-pk">PK</dd></div>
+                <div class="info-row">
+                  <dt>Primary Key</dt>
+                  <dd class="badge-pk">PK</dd>
+                </div>
               {/if}
               {#if columnInfoData.isAutoIncrement}
-                <div class="info-row"><dt>Auto Increment</dt><dd>Yes</dd></div>
+                <div class="info-row">
+                  <dt>Auto Increment</dt>
+                  <dd>Yes</dd>
+                </div>
               {/if}
               {#if columnInfoData.isForeignKey}
-                <div class="info-row"><dt>Foreign Key</dt><dd>Yes</dd></div>
+                <div class="info-row">
+                  <dt>Foreign Key</dt>
+                  <dd>Yes</dd>
+                </div>
               {/if}
               {#if columnInfoData.comment}
-                <div class="info-row"><dt>Comment</dt><dd>{columnInfoData.comment}</dd></div>
+                <div class="info-row">
+                  <dt>Comment</dt>
+                  <dd>{columnInfoData.comment}</dd>
+                </div>
               {/if}
             </dl>
           </div>
@@ -842,7 +1159,11 @@
               {#each columnForeignKeys as fk (fk.constraintName)}
                 <div class="fk-card">
                   <div class="fk-name mono">{fk.constraintName}</div>
-                  <div class="fk-ref">→ <span class="mono">{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span></div>
+                  <div class="fk-ref">
+                    → <span class="mono"
+                      >{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span
+                    >
+                  </div>
                   <div class="fk-actions">ON DELETE {fk.onDelete} · ON UPDATE {fk.onUpdate}</div>
                 </div>
               {/each}
@@ -850,7 +1171,6 @@
           {/if}
         {/if}
       </div>
-
     {:else if activePanel === 'relations'}
       <div id="panel-relations" role="tabpanel" aria-label="Relations" class="relations-tabpanel">
         <div class="panel-toolbar">
@@ -873,20 +1193,29 @@
     use:portal
   >
     {#if savedCtxMenu.kind === 'query'}
-      <button class="ctx-item" role="menuitem" onclick={() => { openSavedQuery(savedQueries.find(q => q.id === savedCtxMenu?.id)!); closeSavedCtxMenu(); }}>
+      <button
+        class="ctx-item"
+        role="menuitem"
+        onclick={() => {
+          openSavedQuery(savedQueries.find((q) => q.id === savedCtxMenu?.id)!);
+          closeSavedCtxMenu();
+        }}
+      >
         Open
       </button>
       <button class="ctx-item" role="menuitem" onclick={handleSavedCtxDuplicate}>
         Duplicate
       </button>
-      <button class="ctx-item" role="menuitem" onclick={() => startRenameQuery(savedCtxMenu!.id, savedCtxMenu!.name)}>
+      <button
+        class="ctx-item"
+        role="menuitem"
+        onclick={() => startRenameQuery(savedCtxMenu!.id, savedCtxMenu!.name)}
+      >
         Rename
       </button>
       <div class="ctx-sep" role="separator"></div>
     {/if}
-    <button class="ctx-item danger" role="menuitem" onclick={handleSavedCtxDelete}>
-      Delete
-    </button>
+    <button class="ctx-item danger" role="menuitem" onclick={handleSavedCtxDelete}> Delete </button>
   </div>
 {/if}
 
@@ -898,7 +1227,9 @@
     cancelText="Cancel"
     danger={true}
     onconfirm={confirmDeleteQuery}
-    oncancel={() => { confirmDeleteQueryId = null; }}
+    oncancel={() => {
+      confirmDeleteQueryId = null;
+    }}
   />
 {/if}
 
@@ -1293,7 +1624,6 @@
   .is-dragging {
     opacity: 0.35;
   }
-
 
   /* ── Context menu ──────────────────────────────────────────────────────── */
 

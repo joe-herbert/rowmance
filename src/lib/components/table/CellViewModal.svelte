@@ -16,7 +16,9 @@
 
   let { value, colName, dataType, onClose }: Props = $props();
 
-  const isJsonType = $derived(dataType.toLowerCase() === 'json' || dataType.toLowerCase() === 'jsonb');
+  const isJsonType = $derived(
+    dataType.toLowerCase() === 'json' || dataType.toLowerCase() === 'jsonb',
+  );
 
   let textValue = $state<string>(untrack(() => (value === null ? '' : String(value))));
   let copied = $state(false);
@@ -40,7 +42,9 @@
     try {
       await navigator.clipboard.writeText(textValue);
       copied = true;
-      setTimeout(() => { copied = false; }, 1500);
+      setTimeout(() => {
+        copied = false;
+      }, 1500);
     } catch {
       // clipboard unavailable
     }
@@ -48,11 +52,7 @@
 </script>
 
 <Modal zindex={500} label="View {colName}" onbackdropclick={onClose}>
-  <div
-    class="modal-dialog"
-    role="presentation"
-    onkeydown={handleKeydown}
-  >
+  <div class="modal-dialog" role="presentation" onkeydown={handleKeydown}>
     <header class="modal-header">
       <span class="modal-title">{colName}</span>
       <span class="modal-type">{dataType}</span>
@@ -177,7 +177,9 @@
     font-family: var(--font-family-ui);
     cursor: pointer;
     border: 1px solid var(--color-border);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     background: transparent;
     color: var(--color-text-primary);
   }

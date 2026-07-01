@@ -34,7 +34,16 @@
   let error = $state<string | null>(null);
   let loading = $state(false);
 
-  const DB_TYPES = ['TEXT', 'INTEGER', 'REAL', 'BLOB', 'BOOLEAN', 'DATE', 'TIMESTAMP', 'VARCHAR(255)'];
+  const DB_TYPES = [
+    'TEXT',
+    'INTEGER',
+    'REAL',
+    'BLOB',
+    'BOOLEAN',
+    'DATE',
+    'TIMESTAMP',
+    'VARCHAR(255)',
+  ];
 
   onMount(async () => {
     if (source === 'clipboard') {
@@ -96,10 +105,14 @@
 
   function typeForInferred(t: InferredColumn['inferredType']): string {
     switch (t) {
-      case 'integer': return 'INTEGER';
-      case 'float': return 'REAL';
-      case 'date': return 'DATE';
-      default: return 'TEXT';
+      case 'integer':
+        return 'INTEGER';
+      case 'float':
+        return 'REAL';
+      case 'date':
+        return 'DATE';
+      default:
+        return 'TEXT';
     }
   }
 
@@ -152,7 +165,19 @@
   <div class="modal">
     <header class="modal-header">
       <h2 class="modal-title">Import CSV</h2>
-      <button class="close-btn" onclick={onclose} aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="close-btn" onclick={onclose} aria-label="Close"
+        ><svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        ></button
+      >
     </header>
 
     <div class="modal-body">
@@ -166,7 +191,11 @@
               bind:value={clipboardText}
               aria-label="CSV data to import"
             ></textarea>
-            <button class="btn btn--primary" onclick={() => loadPreviewFromText(clipboardText)} disabled={loading || !clipboardText.trim()}>
+            <button
+              class="btn btn--primary"
+              onclick={() => loadPreviewFromText(clipboardText)}
+              disabled={loading || !clipboardText.trim()}
+            >
               {loading ? 'Loading…' : 'Preview'}
             </button>
           {:else}
@@ -179,14 +208,13 @@
             <div class="error-msg">{error}</div>
           {/if}
         </div>
-
       {:else if step === 'preview' && preview}
         <div class="preview-step">
           {#if source === 'file'}
-          <div class="file-row">
-            <span class="file-path">{filePath}</span>
-            <button class="btn btn--ghost btn--sm" onclick={pickFile}>Change</button>
-          </div>
+            <div class="file-row">
+              <span class="file-path">{filePath}</span>
+              <button class="btn btn--ghost btn--sm" onclick={pickFile}>Change</button>
+            </div>
           {/if}
 
           <div class="table-settings">
@@ -224,7 +252,7 @@
                     <td>
                       <Select
                         bind:value={col.inferredType}
-                        options={DB_TYPES.map(t => ({ value: t.toLowerCase(), label: t }))}
+                        options={DB_TYPES.map((t) => ({ value: t.toLowerCase(), label: t }))}
                         aria-label="Column {i + 1} type"
                         size="xs"
                       />
@@ -244,17 +272,29 @@
             <div class="error-msg">{error}</div>
           {/if}
         </div>
-
       {:else if step === 'importing'}
         <div class="importing-step">
           <div class="spinner" aria-label="Importing…"></div>
           <p>Importing rows…</p>
         </div>
-
       {:else if step === 'done'}
         <div class="done-step">
-          <span class="success-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-          <p>Successfully imported <strong>{importedCount}</strong> rows into <code>{tableName}</code>.</p>
+          <span class="success-icon" aria-hidden="true"
+            ><svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
+            ></span
+          >
+          <p>
+            Successfully imported <strong>{importedCount}</strong> rows into
+            <code>{tableName}</code>.
+          </p>
         </div>
       {/if}
     </div>
@@ -262,11 +302,7 @@
     <footer class="modal-footer">
       {#if step === 'preview'}
         <button class="btn btn--ghost" onclick={onclose}>Cancel</button>
-        <button
-          class="btn btn--primary"
-          onclick={runImport}
-          disabled={!tableName.trim()}
-        >
+        <button class="btn btn--primary" onclick={runImport} disabled={!tableName.trim()}>
           Import
         </button>
       {:else if step === 'done'}
@@ -313,7 +349,9 @@
     font-size: var(--font-size-md);
     padding: var(--spacing-1);
     border-radius: var(--radius-sm);
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .close-btn:hover {
@@ -364,7 +402,9 @@
     box-sizing: border-box;
   }
 
-  .paste-area:focus { border-color: var(--color-accent); }
+  .paste-area:focus {
+    border-color: var(--color-accent);
+  }
 
   .preview-step {
     display: flex;
@@ -428,7 +468,9 @@
     outline: none;
   }
 
-  .input:focus { border-color: var(--color-accent); }
+  .input:focus {
+    border-color: var(--color-accent);
+  }
 
   .section-label {
     font-size: var(--font-size-sm);
@@ -518,7 +560,11 @@
     animation: spin 0.7s linear infinite;
   }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   .done-step {
     display: flex;
@@ -552,7 +598,10 @@
     font-weight: var(--font-weight-medium);
     font-family: var(--font-family-ui);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     white-space: nowrap;
   }
 
@@ -562,7 +611,10 @@
     font-size: var(--font-size-xs);
   }
 
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   .btn--primary {
     background: var(--color-accent);
@@ -570,7 +622,9 @@
     border: 1px solid transparent;
   }
 
-  .btn--primary:not(:disabled):hover { background: var(--color-accent-hover); }
+  .btn--primary:not(:disabled):hover {
+    background: var(--color-accent-hover);
+  }
 
   .btn--ghost {
     background: transparent;

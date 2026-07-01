@@ -184,10 +184,26 @@ export interface SavedQuery {
 
 // ── ERD ──────────────────────────────────────────────────────────────────────
 
-export interface ErdColumn { name: string; dataType: string; isPrimaryKey: boolean; }
-export interface ErdTable { name: string; columns: ErdColumn[]; }
-export interface ErdRelation { fromTable: string; fromColumns: string[]; toTable: string; toColumns: string[]; constraintName: string; }
-export interface ErdGraph { nodes: ErdTable[]; edges: ErdRelation[]; }
+export interface ErdColumn {
+  name: string;
+  dataType: string;
+  isPrimaryKey: boolean;
+}
+export interface ErdTable {
+  name: string;
+  columns: ErdColumn[];
+}
+export interface ErdRelation {
+  fromTable: string;
+  fromColumns: string[];
+  toTable: string;
+  toColumns: string[];
+  constraintName: string;
+}
+export interface ErdGraph {
+  nodes: ErdTable[];
+  edges: ErdRelation[];
+}
 
 // ── Virtual Relations ─────────────────────────────────────────────────────────
 
@@ -207,16 +223,30 @@ export interface VirtualRelation {
 
 // ── EXPLAIN ──────────────────────────────────────────────────────────────────
 
-export interface ExplainResult { rawJson: string; dialect: string; }
+export interface ExplainResult {
+  rawJson: string;
+  dialect: string;
+}
 
 // ── Themes ───────────────────────────────────────────────────────────────────
 
-export interface ThemeMeta { name: string; extends: string; }
-export interface ThemeData { name: string; extends: string; variables: Record<string, string>; }
+export interface ThemeMeta {
+  name: string;
+  extends: string;
+}
+export interface ThemeData {
+  name: string;
+  extends: string;
+  variables: Record<string, string>;
+}
 
 // ── Updater ──────────────────────────────────────────────────────────────────
 
-export interface UpdateCheckResult { available: boolean; version: string | null; notes: string | null; }
+export interface UpdateCheckResult {
+  available: boolean;
+  version: string | null;
+  notes: string | null;
+}
 
 // ── Users ────────────────────────────────────────────────────────────────────
 
@@ -232,10 +262,30 @@ export interface DbUser {
 // ── Panels ───────────────────────────────────────────────────────────────────
 
 export type PanelKind =
-  | { kind: 'query_editor'; connectionId: string; database?: string; initialSql?: string; editorId?: string; savedQueryId?: string; savedQueryName?: string }
-  | { kind: 'table_browser'; connectionId: string; database: string; table: string; initialFilter?: string }
+  | {
+      kind: 'query_editor';
+      connectionId: string;
+      database?: string;
+      initialSql?: string;
+      editorId?: string;
+      savedQueryId?: string;
+      savedQueryName?: string;
+    }
+  | {
+      kind: 'table_browser';
+      connectionId: string;
+      database: string;
+      table: string;
+      initialFilter?: string;
+    }
   | { kind: 'table_structure'; connectionId: string; database: string; table: string }
-  | { kind: 'ddl_viewer'; connectionId: string; database: string; objectName: string; objectType: 'table' | 'view' }
+  | {
+      kind: 'ddl_viewer';
+      connectionId: string;
+      database: string;
+      objectName: string;
+      objectType: 'table' | 'view';
+    }
   | { kind: 'erd'; connectionId: string; database: string }
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'settings' }

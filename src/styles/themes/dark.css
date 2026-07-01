@@ -15,9 +15,9 @@
     --color-bg-tertiary: rgba(255, 255, 255, 0.04);
     --color-bg-overlay: rgba(18, 16, 32, 0.82);
     --color-bg-hover: rgba(255, 255, 255, 0.07);
-    --color-bg-active: rgba(255, 255, 255, 0.10);
+    --color-bg-active: rgba(255, 255, 255, 0.1);
 
-    --color-border: rgba(255, 255, 255, 0.10);
+    --color-border: rgba(255, 255, 255, 0.1);
     --color-border-strong: rgba(255, 255, 255, 0.16);
 
     --color-text-primary: #eef0f8;
@@ -52,9 +52,13 @@
     --color-scrollbar-thumb-hover: rgba(238, 240, 248, 0.32);
 
     --color-table-row-alt: transparent;
-    --color-table-row-hover: rgba(124, 92, 255, 0.10);
+    --color-table-row-hover: rgba(124, 92, 255, 0.1);
     --color-table-row-selected: rgba(124, 92, 255, 0.22);
-    --color-table-header-bg: linear-gradient(90deg, rgba(48, 2, 81, 0.95) 0%, rgba(3, 35, 80, 0.95) 100%);
+    --color-table-header-bg: linear-gradient(
+      90deg,
+      rgba(48, 2, 81, 0.95) 0%,
+      rgba(3, 35, 80, 0.95) 100%
+    );
 
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
@@ -76,9 +80,9 @@
   --color-bg-tertiary: rgba(255, 255, 255, 0.04);
   --color-bg-overlay: rgba(18, 16, 32, 0.82);
   --color-bg-hover: rgba(255, 255, 255, 0.07);
-  --color-bg-active: rgba(255, 255, 255, 0.10);
+  --color-bg-active: rgba(255, 255, 255, 0.1);
 
-  --color-border: rgba(255, 255, 255, 0.10);
+  --color-border: rgba(255, 255, 255, 0.1);
   --color-border-strong: rgba(255, 255, 255, 0.16);
 
   --color-text-primary: #eef0f8;
@@ -113,9 +117,13 @@
   --color-scrollbar-thumb-hover: rgba(238, 240, 248, 0.32);
 
   --color-table-row-alt: transparent;
-  --color-table-row-hover: rgba(124, 92, 255, 0.10);
+  --color-table-row-hover: rgba(124, 92, 255, 0.1);
   --color-table-row-selected: rgba(124, 92, 255, 0.22);
-  --color-table-header-bg: linear-gradient(90deg, rgba(48, 2, 81, 0.95) 0%, rgba(3, 35, 80, 0.95) 100%);
+  --color-table-header-bg: linear-gradient(
+    90deg,
+    rgba(48, 2, 81, 0.95) 0%,
+    rgba(3, 35, 80, 0.95) 100%
+  );
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);

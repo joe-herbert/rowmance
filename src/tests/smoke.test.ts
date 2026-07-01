@@ -45,7 +45,13 @@ function makeQueryResult(overrides: Partial<QueryResult> = {}): QueryResult {
     queryId: 'qr-1',
     columns: [
       { name: 'id', dataType: 'INT', nullable: false, isPrimaryKey: true, isForeignKey: false },
-      { name: 'email', dataType: 'VARCHAR(255)', nullable: false, isPrimaryKey: false, isForeignKey: false },
+      {
+        name: 'email',
+        dataType: 'VARCHAR(255)',
+        nullable: false,
+        isPrimaryKey: false,
+        isForeignKey: false,
+      },
     ],
     rows: [
       [1, 'alice@example.com'],
@@ -166,19 +172,14 @@ describe('Smoke test: core path — connect → query → edit → save', () => 
 
     const result = await updateRows('smoke-conn-1', 'smokedb', 'users', [change]);
 
-    expect(mockQueryApi.updateRows).toHaveBeenCalledWith(
-      'smoke-conn-1',
-      'smokedb',
-      'users',
-      [change],
-    );
+    expect(mockQueryApi.updateRows).toHaveBeenCalledWith('smoke-conn-1', 'smokedb', 'users', [
+      change,
+    ]);
     expect(result.updatedCount).toBe(1);
   });
 
   it('surfaces a connection error and records it in errorIds', async () => {
-    mockConnectionsApi.connectToDatabase.mockRejectedValue(
-      new Error('Connection refused'),
-    );
+    mockConnectionsApi.connectToDatabase.mockRejectedValue(new Error('Connection refused'));
 
     const store = useConnections();
     await store.create(connectionInput);

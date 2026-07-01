@@ -17,7 +17,9 @@
   async function copyAll(): Promise<void> {
     await navigator.clipboard.writeText(allSql);
     copied = true;
-    setTimeout(() => { copied = false; }, 1500);
+    setTimeout(() => {
+      copied = false;
+    }, 1500);
   }
 </script>
 
@@ -27,10 +29,33 @@
       <span class="modal-title">SQL Preview</span>
       <button class="copy-btn" onclick={copyAll} title="Copy all SQL">
         {#if copied}
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
+          >
           Copied
         {:else}
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path
+              d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+            /></svg
+          >
           Copy
         {/if}
       </button>
@@ -66,8 +91,14 @@
   }
 
   @keyframes modal-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
-    to   { opacity: 1; transform: scale(1)    translateY(0); }
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   .modal-header {

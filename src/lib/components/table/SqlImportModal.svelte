@@ -106,12 +106,30 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<Modal zindex={300} label="Import SQL File" onbackdropclick={() => { if (phase !== 'running') onclose(); }}>
+<Modal
+  zindex={300}
+  label="Import SQL File"
+  onbackdropclick={() => {
+    if (phase !== 'running') onclose();
+  }}
+>
   <div class="modal">
     <header class="modal-header">
       <h2 class="modal-title">Import SQL File</h2>
       {#if phase !== 'running'}
-        <button class="close-btn" onclick={onclose} aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="close-btn" onclick={onclose} aria-label="Close"
+          ><svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            aria-hidden="true"
+            ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+          ></button
+        >
       {/if}
     </header>
 
@@ -140,9 +158,7 @@
           {/if}
 
           <div class="option-row">
-            <label class="option-label" for="stop-on-error">
-              Stop on first error
-            </label>
+            <label class="option-label" for="stop-on-error"> Stop on first error </label>
             <Checkbox id="stop-on-error" bind:checked={stopOnError} />
           </div>
 
@@ -150,7 +166,6 @@
             <div class="error-msg">{error}</div>
           {/if}
         </div>
-
       {:else if phase === 'running'}
         <div class="running-step">
           {#if progress}
@@ -164,7 +179,13 @@
             </div>
 
             {#if progressPct !== null}
-              <div class="progress-bar-track" role="progressbar" aria-valuenow={progressPct} aria-valuemin={0} aria-valuemax={100}>
+              <div
+                class="progress-bar-track"
+                role="progressbar"
+                aria-valuenow={progressPct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
                 <div class="progress-bar-fill" style="width: {progressPct}%"></div>
               </div>
             {/if}
@@ -186,13 +207,27 @@
             </div>
           {/if}
         </div>
-
       {:else if phase === 'done'}
         <div class="done-step">
-          <span class="success-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-          <p>Executed <strong>{executedCount}</strong> statement{executedCount !== 1 ? 's' : ''}.</p>
+          <span class="success-icon" aria-hidden="true"
+            ><svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
+            ></span
+          >
+          <p>
+            Executed <strong>{executedCount}</strong> statement{executedCount !== 1 ? 's' : ''}.
+          </p>
           {#if errors.length > 0}
-            <p class="error-summary">{errors.length} error{errors.length !== 1 ? 's' : ''} encountered.</p>
+            <p class="error-summary">
+              {errors.length} error{errors.length !== 1 ? 's' : ''} encountered.
+            </p>
             <div class="errors-list">
               {#each errors as err}
                 <div class="error-item">{err}</div>
@@ -254,7 +289,9 @@
     color: var(--color-text-muted);
     padding: var(--spacing-1);
     border-radius: var(--radius-sm);
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .close-btn:hover {
@@ -298,7 +335,9 @@
     box-sizing: border-box;
   }
 
-  .paste-area:focus { border-color: var(--color-accent); }
+  .paste-area:focus {
+    border-color: var(--color-accent);
+  }
 
   .file-picker-row {
     display: flex;
@@ -343,8 +382,12 @@
     color: var(--color-text-secondary);
   }
 
-  .progress-count { font-weight: var(--font-weight-medium); }
-  .progress-pct { color: var(--color-text-muted); }
+  .progress-count {
+    font-weight: var(--font-weight-medium);
+  }
+  .progress-pct {
+    color: var(--color-text-muted);
+  }
 
   .progress-bar-track {
     height: 4px;
@@ -393,7 +436,11 @@
     flex-shrink: 0;
   }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   .errors-list {
     display: flex;
@@ -459,7 +506,10 @@
     font-weight: var(--font-weight-medium);
     font-family: var(--font-family-ui);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     white-space: nowrap;
   }
 
@@ -470,7 +520,10 @@
     flex-shrink: 0;
   }
 
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   .btn--primary {
     background: var(--color-accent);
@@ -478,7 +531,9 @@
     border: 1px solid transparent;
   }
 
-  .btn--primary:not(:disabled):hover { background: var(--color-accent-hover); }
+  .btn--primary:not(:disabled):hover {
+    background: var(--color-accent-hover);
+  }
 
   .btn--ghost {
     background: transparent;

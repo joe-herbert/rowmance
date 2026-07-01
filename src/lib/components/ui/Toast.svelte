@@ -10,20 +10,65 @@
 
 <div class="toast-stack" aria-live="polite" aria-atomic="false">
   {#each toastStore.toasts as toast (toast.id)}
-    <div
-      class="toast toast--{toast.type}"
-      role="status"
-      aria-label="{toast.type}: {toast.message}"
-    >
+    <div class="toast toast--{toast.type}" role="status" aria-label="{toast.type}: {toast.message}">
       <span class="toast-icon" aria-hidden="true">
         {#if toast.type === 'success'}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
+          >
         {:else if toast.type === 'error'}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+          >
         {:else if toast.type === 'warning'}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><path
+              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            /><line x1="12" y1="9" x2="12" y2="13" /><line
+              x1="12"
+              y1="17"
+              x2="12.01"
+              y2="17"
+            /></svg
+          >
         {:else}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            ><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line
+              x1="12"
+              y1="16"
+              x2="12.01"
+              y2="16"
+            /></svg
+          >
         {/if}
       </span>
       <span class="toast-message">{toast.message}</span>
@@ -34,7 +79,20 @@
           aria-label="Copy error message"
           title="Copy"
         >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            ><rect x="9" y="9" width="13" height="13" rx="2" /><path
+              d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+            /></svg
+          >
         </button>
       {/if}
       <button
@@ -42,7 +100,18 @@
         onclick={() => toastStore.dismiss(toast.id)}
         aria-label="Dismiss notification"
         title="Dismiss"
-      ><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        ><svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        ></button
+      >
     </div>
   {/each}
 </div>
@@ -107,10 +176,18 @@
     line-height: 1.4;
   }
 
-  .toast--info .toast-icon { color: var(--color-accent); }
-  .toast--success .toast-icon { color: var(--color-success); }
-  .toast--error .toast-icon { color: var(--color-danger); }
-  .toast--warning .toast-icon { color: var(--color-warning); }
+  .toast--info .toast-icon {
+    color: var(--color-accent);
+  }
+  .toast--success .toast-icon {
+    color: var(--color-success);
+  }
+  .toast--error .toast-icon {
+    color: var(--color-danger);
+  }
+  .toast--warning .toast-icon {
+    color: var(--color-warning);
+  }
 
   .toast-message {
     flex: 1;
@@ -135,7 +212,10 @@
     cursor: pointer;
     padding: 0;
     opacity: 0.7;
-    transition: color var(--transition-fast), background var(--transition-fast), opacity var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast),
+      opacity var(--transition-fast);
   }
 
   .toast-copy:hover {
@@ -159,7 +239,9 @@
     cursor: pointer;
     line-height: 1;
     padding: 0;
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .toast-dismiss:hover {

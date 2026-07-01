@@ -35,11 +35,26 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case 'table_browser':
-      return b.kind === 'table_browser' && a.connectionId === b.connectionId && a.database === b.database && a.table === b.table;
+      return (
+        b.kind === 'table_browser' &&
+        a.connectionId === b.connectionId &&
+        a.database === b.database &&
+        a.table === b.table
+      );
     case 'table_structure':
-      return b.kind === 'table_structure' && a.connectionId === b.connectionId && a.database === b.database && a.table === b.table;
+      return (
+        b.kind === 'table_structure' &&
+        a.connectionId === b.connectionId &&
+        a.database === b.database &&
+        a.table === b.table
+      );
     case 'ddl_viewer':
-      return b.kind === 'ddl_viewer' && a.connectionId === b.connectionId && a.database === b.database && a.objectName === b.objectName;
+      return (
+        b.kind === 'ddl_viewer' &&
+        a.connectionId === b.connectionId &&
+        a.database === b.database &&
+        a.objectName === b.objectName
+      );
     case 'erd':
       return b.kind === 'erd' && a.connectionId === b.connectionId && a.database === b.database;
     case 'explain':
@@ -91,9 +106,12 @@ function previousSplitMode(current: SplitMode): SplitMode {
 }
 
 export function dirtyKeyForContent(content: PanelKind): string | null {
-  if (content.kind === 'table_browser') return `${content.connectionId}:${content.database}:${content.table}`;
-  if (content.kind === 'table_structure') return `${content.connectionId}:${content.database}:${content.table}`;
-  if (content.kind === 'ddl_viewer') return `${content.connectionId}:${content.database}:${content.objectName}`;
+  if (content.kind === 'table_browser')
+    return `${content.connectionId}:${content.database}:${content.table}`;
+  if (content.kind === 'table_structure')
+    return `${content.connectionId}:${content.database}:${content.table}`;
+  if (content.kind === 'ddl_viewer')
+    return `${content.connectionId}:${content.database}:${content.objectName}`;
   if (content.kind === 'query_editor' && content.editorId) return `query:${content.editorId}`;
   return null;
 }
@@ -134,13 +152,13 @@ export function usePanels() {
       }
       if (content.kind !== 'empty') {
         // If already visible in some panel, just focus it
-        const existingPanelIdx = panels.findIndex(p => sameContent(p.content, content));
+        const existingPanelIdx = panels.findIndex((p) => sameContent(p.content, content));
         if (existingPanelIdx !== -1) {
           focusedIndex = existingPanelIdx;
           return;
         }
         // Add to open items if not already tracked
-        if (!openItems.find(item => sameContent(item.content, content))) {
+        if (!openItems.find((item) => sameContent(item.content, content))) {
           openItems = [...openItems, { id: createId(), content }];
         }
       }
@@ -154,9 +172,9 @@ export function usePanels() {
      */
     replaceInFocused(content: PanelKind) {
       const currentContent = panels[focusedIndex].content;
-      const itemIndex = openItems.findIndex(item => sameContent(item.content, currentContent));
+      const itemIndex = openItems.findIndex((item) => sameContent(item.content, currentContent));
       if (itemIndex !== -1) {
-        openItems = openItems.map((item, i) => i === itemIndex ? { ...item, content } : item);
+        openItems = openItems.map((item, i) => (i === itemIndex ? { ...item, content } : item));
       } else {
         openItems = [...openItems, { id: createId(), content }];
       }
@@ -166,7 +184,7 @@ export function usePanels() {
     /** Show an already-tracked open item in the focused panel. */
     showItem(item: OpenItem) {
       // If item is already visible in some panel, focus that panel
-      const existingPanelIdx = panels.findIndex(p => sameContent(p.content, item.content));
+      const existingPanelIdx = panels.findIndex((p) => sameContent(p.content, item.content));
       if (existingPanelIdx !== -1) {
         focusedIndex = existingPanelIdx;
         return;
@@ -176,7 +194,7 @@ export function usePanels() {
 
     /** Close all open items associated with a specific connection, optionally skipping dirty items. */
     closeItemsForConnection(connectionId: string, { skipDirty = false } = {}) {
-      const toClose = openItems.filter(item => {
+      const toClose = openItems.filter((item) => {
         const c = item.content;
         if (!('connectionId' in c) || c.connectionId !== connectionId) return false;
         if (skipDirty) {
@@ -189,9 +207,9 @@ export function usePanels() {
         if (item.content.kind === 'query_editor' && item.content.editorId) {
           queryEditorCache.delete(item.content.editorId);
         }
-        openItems = openItems.filter(i => i.id !== item.id);
-        panels = panels.map(p =>
-          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        openItems = openItems.filter((i) => i.id !== item.id);
+        panels = panels.map((p) =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p,
         );
       }
       focusedIndex = Math.min(focusedIndex, panels.length - 1);
@@ -199,17 +217,22 @@ export function usePanels() {
 
     /** Close all open items associated with a specific table. */
     closeItemsForTable(connectionId: string, database: string, table: string) {
-      const toClose = openItems.filter(item => {
+      const toClose = openItems.filter((item) => {
         const c = item.content;
-        if (c.kind === 'table_browser') return c.connectionId === connectionId && c.database === database && c.table === table;
-        if (c.kind === 'table_structure') return c.connectionId === connectionId && c.database === database && c.table === table;
-        if (c.kind === 'ddl_viewer') return c.connectionId === connectionId && c.database === database && c.objectName === table;
+        if (c.kind === 'table_browser')
+          return c.connectionId === connectionId && c.database === database && c.table === table;
+        if (c.kind === 'table_structure')
+          return c.connectionId === connectionId && c.database === database && c.table === table;
+        if (c.kind === 'ddl_viewer')
+          return (
+            c.connectionId === connectionId && c.database === database && c.objectName === table
+          );
         return false;
       });
       for (const item of toClose) {
-        openItems = openItems.filter(i => i.id !== item.id);
-        panels = panels.map(p =>
-          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        openItems = openItems.filter((i) => i.id !== item.id);
+        panels = panels.map((p) =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p,
         );
       }
       focusedIndex = Math.min(focusedIndex, panels.length - 1);
@@ -217,18 +240,21 @@ export function usePanels() {
 
     /** Close all open items associated with a specific database. */
     closeItemsForDatabase(connectionId: string, database: string) {
-      const toClose = openItems.filter(item => {
+      const toClose = openItems.filter((item) => {
         const c = item.content;
-        if (c.kind === 'table_browser') return c.connectionId === connectionId && c.database === database;
-        if (c.kind === 'table_structure') return c.connectionId === connectionId && c.database === database;
-        if (c.kind === 'ddl_viewer') return c.connectionId === connectionId && c.database === database;
+        if (c.kind === 'table_browser')
+          return c.connectionId === connectionId && c.database === database;
+        if (c.kind === 'table_structure')
+          return c.connectionId === connectionId && c.database === database;
+        if (c.kind === 'ddl_viewer')
+          return c.connectionId === connectionId && c.database === database;
         if (c.kind === 'erd') return c.connectionId === connectionId && c.database === database;
         return false;
       });
       for (const item of toClose) {
-        openItems = openItems.filter(i => i.id !== item.id);
-        panels = panels.map(p =>
-          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        openItems = openItems.filter((i) => i.id !== item.id);
+        panels = panels.map((p) =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p,
         );
       }
       focusedIndex = Math.min(focusedIndex, panels.length - 1);
@@ -236,14 +262,14 @@ export function usePanels() {
 
     /** Remove an item from the open list and reset any panel showing it to empty. */
     closeOpenItem(itemId: string) {
-      const item = openItems.find(i => i.id === itemId);
+      const item = openItems.find((i) => i.id === itemId);
       if (!item) return;
       if (item.content.kind === 'query_editor' && item.content.editorId) {
         queryEditorCache.delete(item.content.editorId);
       }
-      openItems = openItems.filter(i => i.id !== itemId);
-      panels = panels.map(p =>
-        sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+      openItems = openItems.filter((i) => i.id !== itemId);
+      panels = panels.map((p) =>
+        sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p,
       );
       // Clamp focused index in case the layout visually changes
       focusedIndex = Math.min(focusedIndex, panels.length - 1);
@@ -251,14 +277,14 @@ export function usePanels() {
 
     /** Close all open items except the one with the given id. */
     closeOtherItems(keepItemId: string) {
-      const toClose = openItems.filter(i => i.id !== keepItemId);
+      const toClose = openItems.filter((i) => i.id !== keepItemId);
       for (const item of toClose) {
         if (item.content.kind === 'query_editor' && item.content.editorId) {
           queryEditorCache.delete(item.content.editorId);
         }
-        openItems = openItems.filter(i => i.id !== item.id);
-        panels = panels.map(p =>
-          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p
+        openItems = openItems.filter((i) => i.id !== item.id);
+        panels = panels.map((p) =>
+          sameContent(p.content, item.content) ? { ...p, content: { kind: 'empty' } } : p,
         );
       }
       focusedIndex = Math.min(focusedIndex, panels.length - 1);
@@ -276,7 +302,7 @@ export function usePanels() {
       if (focused.content.kind === 'query_editor' && focused.content.editorId) {
         queryEditorCache.delete(focused.content.editorId);
       }
-      const itemIndex = openItems.findIndex(i => sameContent(i.content, focused.content));
+      const itemIndex = openItems.findIndex((i) => sameContent(i.content, focused.content));
       openItems = openItems.filter((_, i) => i !== itemIndex);
 
       const next = openItems[itemIndex] ?? openItems[itemIndex - 1] ?? null;
@@ -338,25 +364,28 @@ export function usePanels() {
     },
 
     /** Update saved query metadata on a query_editor open item and its panel. */
-    updateQueryEditorMeta(editorId: string, updates: { savedQueryId?: string; savedQueryName?: string }) {
+    updateQueryEditorMeta(
+      editorId: string,
+      updates: { savedQueryId?: string; savedQueryName?: string },
+    ) {
       const applyUpdate = (content: PanelKind): PanelKind => {
         if (content.kind === 'query_editor' && content.editorId === editorId) {
           return { ...content, ...updates };
         }
         return content;
       };
-      openItems = openItems.map(item => ({ ...item, content: applyUpdate(item.content) }));
-      panels = panels.map(p => ({ ...p, content: applyUpdate(p.content) }));
+      openItems = openItems.map((item) => ({ ...item, content: applyUpdate(item.content) }));
+      panels = panels.map((p) => ({ ...p, content: applyUpdate(p.content) }));
     },
 
     /** Reorder open items by moving fromId to before/after toId. */
     reorderOpenItems(fromId: string, toId: string, position: 'before' | 'after') {
       if (fromId === toId) return;
-      const fromIndex = openItems.findIndex(i => i.id === fromId);
+      const fromIndex = openItems.findIndex((i) => i.id === fromId);
       if (fromIndex === -1) return;
       const items = [...openItems];
       const [item] = items.splice(fromIndex, 1);
-      const insertAt = items.findIndex(i => i.id === toId);
+      const insertAt = items.findIndex((i) => i.id === toId);
       if (insertAt === -1) return;
       items.splice(position === 'before' ? insertAt : insertAt + 1, 0, item);
       openItems = items;

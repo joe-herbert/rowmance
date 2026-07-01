@@ -141,13 +141,12 @@ pub async fn saved_queries_create_folder(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    let row = sqlx::query_as::<_, SavedQueryFolderRow>(
-        "SELECT * FROM saved_query_folders WHERE id = ?",
-    )
-    .bind(&id)
-    .fetch_one(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row =
+        sqlx::query_as::<_, SavedQueryFolderRow>("SELECT * FROM saved_query_folders WHERE id = ?")
+            .bind(&id)
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     Ok(SavedQueryFolder::from(row))
 }
@@ -172,13 +171,12 @@ pub async fn saved_queries_update_folder(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    let row = sqlx::query_as::<_, SavedQueryFolderRow>(
-        "SELECT * FROM saved_query_folders WHERE id = ?",
-    )
-    .bind(&id)
-    .fetch_one(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row =
+        sqlx::query_as::<_, SavedQueryFolderRow>("SELECT * FROM saved_query_folders WHERE id = ?")
+            .bind(&id)
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     Ok(SavedQueryFolder::from(row))
 }
@@ -205,23 +203,19 @@ pub async fn saved_queries_list(
     folder_id: Option<String>,
 ) -> Result<Vec<SavedQuery>, AppError> {
     let rows = match folder_id {
-        Some(fid) => {
-            sqlx::query_as::<_, SavedQueryRow>(
-                "SELECT * FROM saved_queries WHERE folder_id = ? ORDER BY position, name",
-            )
-            .bind(fid)
-            .fetch_all(sqlite.inner())
-            .await
-            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
-        }
-        None => {
-            sqlx::query_as::<_, SavedQueryRow>(
-                "SELECT * FROM saved_queries ORDER BY position, name",
-            )
-            .fetch_all(sqlite.inner())
-            .await
-            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
-        }
+        Some(fid) => sqlx::query_as::<_, SavedQueryRow>(
+            "SELECT * FROM saved_queries WHERE folder_id = ? ORDER BY position, name",
+        )
+        .bind(fid)
+        .fetch_all(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?,
+        None => sqlx::query_as::<_, SavedQueryRow>(
+            "SELECT * FROM saved_queries ORDER BY position, name",
+        )
+        .fetch_all(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?,
     };
 
     Ok(rows.into_iter().map(SavedQuery::from).collect())
@@ -276,12 +270,11 @@ pub async fn saved_queries_create(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    let row =
-        sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
-            .bind(&id)
-            .fetch_one(sqlite.inner())
-            .await
-            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row = sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
+        .bind(&id)
+        .fetch_one(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     Ok(SavedQuery::from(row))
 }
@@ -334,12 +327,11 @@ pub async fn saved_queries_update(
         .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
     }
 
-    let row =
-        sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
-            .bind(&id)
-            .fetch_one(sqlite.inner())
-            .await
-            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row = sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
+        .bind(&id)
+        .fetch_one(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     Ok(SavedQuery::from(row))
 }
@@ -365,7 +357,10 @@ mod tests {
 
     async fn setup_db() -> SqlitePool {
         let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        sqlx::migrate!("src/db/migrations").run(&pool).await.unwrap();
+        sqlx::migrate!("src/db/migrations")
+            .run(&pool)
+            .await
+            .unwrap();
         pool
     }
 
@@ -400,7 +395,8 @@ mod tests {
 
     #[test]
     fn saved_query_input_deserializes_camel_case_fields() {
-        let json = r#"{"connectionId":"conn-1","folderId":"fold-2","name":"My Query","sql":"SELECT 1"}"#;
+        let json =
+            r#"{"connectionId":"conn-1","folderId":"fold-2","name":"My Query","sql":"SELECT 1"}"#;
         let input: SavedQueryInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.connection_id.as_deref(), Some("conn-1"));
         assert_eq!(input.folder_id.as_deref(), Some("fold-2"));
@@ -516,12 +512,11 @@ mod tests {
         .await
         .unwrap();
 
-        let row =
-            sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
-                .bind(id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let row = sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         assert_eq!(row.id, id);
         assert_eq!(row.name, "My Query");
@@ -602,7 +597,11 @@ mod tests {
     async fn list_folders_returns_all() {
         let pool = setup_db().await;
 
-        for (id, name) in &[("fla-1", "Folder 1"), ("fla-2", "Folder 2"), ("fla-3", "Folder 3")] {
+        for (id, name) in &[
+            ("fla-1", "Folder 1"),
+            ("fla-2", "Folder 2"),
+            ("fla-3", "Folder 3"),
+        ] {
             sqlx::query(
                 "INSERT INTO saved_query_folders (id, name, parent_id, position) VALUES (?, ?, NULL, 0)",
             )
@@ -613,12 +612,10 @@ mod tests {
             .unwrap();
         }
 
-        let rows = sqlx::query_as::<_, SavedQueryFolderRow>(
-            "SELECT * FROM saved_query_folders",
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
+        let rows = sqlx::query_as::<_, SavedQueryFolderRow>("SELECT * FROM saved_query_folders")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
 
         assert_eq!(rows.len(), 3);
     }
@@ -628,11 +625,8 @@ mod tests {
         let pool = setup_db().await;
 
         // Insert with positions 2, 0, 1 and names C, A, B respectively.
-        let entries: &[(&str, &str, i64)] = &[
-            ("flo-1", "C", 2),
-            ("flo-2", "A", 0),
-            ("flo-3", "B", 1),
-        ];
+        let entries: &[(&str, &str, i64)] =
+            &[("flo-1", "C", 2), ("flo-2", "A", 0), ("flo-3", "B", 1)];
         for (id, name, position) in entries {
             sqlx::query(
                 "INSERT INTO saved_query_folders (id, name, parent_id, position) VALUES (?, ?, NULL, ?)",
@@ -698,12 +692,11 @@ mod tests {
         .await
         .unwrap();
 
-        let row =
-            sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
-                .bind(id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let row = sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         assert_eq!(row.name, "New Name");
         assert_eq!(row.sql, "SELECT 2");
@@ -732,12 +725,11 @@ mod tests {
             .await
             .unwrap();
 
-        let row =
-            sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
-                .bind(id)
-                .fetch_optional(&pool)
-                .await
-                .unwrap();
+        let row = sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
 
         assert!(row.is_none());
     }
@@ -819,11 +811,10 @@ mod tests {
             .unwrap();
         }
 
-        let rows =
-            sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries ORDER BY name")
-                .fetch_all(&pool)
-                .await
-                .unwrap();
+        let rows = sqlx::query_as::<_, SavedQueryRow>("SELECT * FROM saved_queries ORDER BY name")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
 
         assert_eq!(rows.len(), 3);
     }

@@ -49,7 +49,14 @@
 >
   {#if panel.content.kind === 'query_editor'}
     {#key panel.content.editorId}
-      <QueryEditor connectionId={panel.content.connectionId} database={panel.content.database} initialSql={panel.content.initialSql} editorId={panel.content.editorId} savedQueryId={panel.content.savedQueryId} savedQueryName={panel.content.savedQueryName} />
+      <QueryEditor
+        connectionId={panel.content.connectionId}
+        database={panel.content.database}
+        initialSql={panel.content.initialSql}
+        editorId={panel.content.editorId}
+        savedQueryId={panel.content.savedQueryId}
+        savedQueryName={panel.content.savedQueryName}
+      />
     {/key}
   {:else if panel.content.kind === 'table_browser'}
     {#key panel.content}
@@ -75,15 +82,9 @@
       objectType={panel.content.objectType}
     />
   {:else if panel.content.kind === 'erd'}
-    <ErdCanvas
-      connectionId={panel.content.connectionId}
-      database={panel.content.database}
-    />
+    <ErdCanvas connectionId={panel.content.connectionId} database={panel.content.database} />
   {:else if panel.content.kind === 'explain'}
-    <ExplainCanvas
-      rawJson={panel.content.sql}
-      dialect={panel.content.dialect}
-    />
+    <ExplainCanvas rawJson={panel.content.sql} dialect={panel.content.dialect} />
   {:else if panel.content.kind === 'settings'}
     <Settings />
   {:else if panel.content.kind === 'user_manager'}
@@ -94,7 +95,19 @@
       {#if !hasConnections}
         <div class="empty-panel-hint">
           <div class="empty-panel-icon" aria-hidden="true">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              ><ellipse cx="12" cy="5" rx="9" ry="3" /><path
+                d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"
+              /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg
+            >
           </div>
           <p class="empty-panel-title">No database connections</p>
           <p class="empty-panel-subtitle">Add a connection in the left sidebar to get started</p>

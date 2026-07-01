@@ -44,9 +44,7 @@ function filterRows(rows: CellValue[][], filters: string[]): CellValue[][] {
 }
 
 function buildRowKey(row: CellValue[], columns: ColumnMeta[], rowIndex: number): string {
-  const pkCols = columns
-    .map((col, idx) => ({ col, idx }))
-    .filter(({ col }) => col.isPrimaryKey);
+  const pkCols = columns.map((col, idx) => ({ col, idx })).filter(({ col }) => col.isPrimaryKey);
   if (pkCols.length > 0) {
     return pkCols.map(({ idx }) => String(row[idx] ?? '')).join('|');
   }
@@ -172,11 +170,7 @@ describe('filterRows', () => {
 
 // ── buildRowKey tests ─────────────────────────────────────────────────────────
 
-function makeColumn(
-  name: string,
-  isPrimaryKey: boolean,
-  dataType = 'VARCHAR(255)',
-): ColumnMeta {
+function makeColumn(name: string, isPrimaryKey: boolean, dataType = 'VARCHAR(255)'): ColumnMeta {
   return { name, dataType, nullable: true, isPrimaryKey, isForeignKey: false };
 }
 

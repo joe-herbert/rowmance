@@ -33,7 +33,24 @@
     database?: string | null;
   }
 
-  let { value, originalValue, dataType, nullable, initialViewportTop, initialViewportLeft, width, height, scrollEl = null, panelEl = null, onConfirm, onCancel, onTab, onTabConfirm, connectionId, database }: Props = $props();
+  let {
+    value,
+    originalValue,
+    dataType,
+    nullable,
+    initialViewportTop,
+    initialViewportLeft,
+    width,
+    height,
+    scrollEl = null,
+    panelEl = null,
+    onConfirm,
+    onCancel,
+    onTab,
+    onTabConfirm,
+    connectionId,
+    database,
+  }: Props = $props();
 
   const { settings } = useSettings();
 
@@ -62,7 +79,9 @@
     return lower.includes('time') && !lower.includes('date') && !lower.includes('timestamp');
   }
 
-  export function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
+  export function getInputType(
+    dt: string,
+  ): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
     if (isBooleanType(dt)) return 'boolean';
     if (isDateTimeType(dt)) return 'datetime-local';
     if (isDateType(dt)) return 'date';
@@ -84,9 +103,7 @@
   let boolState = $state<boolean | null>(untrack(() => toBoolState(value)));
 
   // For text/date: string representation
-  let textValue = $state<string>(
-    untrack(() => value === null ? '' : String(value)),
-  );
+  let textValue = $state<string>(untrack(() => (value === null ? '' : String(value))));
 
   let inputEl = $state<HTMLInputElement | null>(null);
   let cellEditorEl = $state<HTMLDivElement | null>(null);
@@ -94,12 +111,15 @@
   let pickerEl = $state<HTMLDivElement | null>(null);
 
   const showPicker = $derived(
-    inputType === 'date' || inputType === 'datetime-local' || inputType === 'time' || inputType === 'boolean',
+    inputType === 'date' ||
+      inputType === 'datetime-local' ||
+      inputType === 'time' ||
+      inputType === 'boolean',
   );
 
   // Cell editor fixed viewport position, updated on scroll to follow the cell
-  let currentTop = $state(initialViewportTop);
-  let currentLeft = $state(initialViewportLeft);
+  let currentTop = $state(untrack(() => initialViewportTop));
+  let currentLeft = $state(untrack(() => initialViewportLeft));
 
   // Off-screen until first position calculation runs
   let pickerTop = $state(-9999);
@@ -110,10 +130,10 @@
 
   // Fallback estimates used only to decide open-up vs open-down before first render
   const PICKER_HEIGHT_ESTIMATE: Record<string, number> = {
-    'date': 300,
-    'time': 150,
+    date: 300,
+    time: 150,
     'datetime-local': 450,
-    'boolean': 130,
+    boolean: 130,
   };
 
   // Height of the actions bar — used to decide above/below placement
@@ -137,8 +157,12 @@
 
       // Clamp the cell editor to the panel bounds so the group stays visible.
       const panel = panelEl?.getBoundingClientRect();
-      const clampedTop = panel ? Math.max(panel.top, Math.min(panel.bottom - height, rawTop)) : rawTop;
-      const clampedLeft = panel ? Math.max(panel.left, Math.min(panel.right - width, rawLeft)) : rawLeft;
+      const clampedTop = panel
+        ? Math.max(panel.top, Math.min(panel.bottom - height, rawTop))
+        : rawTop;
+      const clampedLeft = panel
+        ? Math.max(panel.left, Math.min(panel.right - width, rawLeft))
+        : rawLeft;
 
       // Apply directly to the DOM so getBoundingClientRect() below is accurate.
       cellEditorEl.style.top = `${clampedTop}px`;
@@ -159,23 +183,29 @@
         ? rect.top - ACTIONS_GAP - ACTIONS_HEIGHT
         : rect.bottom + ACTIONS_GAP;
       const actionsW = actionsEl?.offsetWidth ?? 100;
-      actionsLeftFixed = Math.max(panelLeft + 4, Math.min(panelRight - actionsW - 4, cellCenterX - actionsW / 2));
+      actionsLeftFixed = Math.max(
+        panelLeft + 4,
+        Math.min(panelRight - actionsW - 4, cellCenterX - actionsW / 2),
+      );
 
       // Picker
       if (showPicker) {
-        const actualH = pickerEl ? pickerEl.offsetHeight : (PICKER_HEIGHT_ESTIMATE[inputType] ?? 300);
+        const actualH = pickerEl
+          ? pickerEl.offsetHeight
+          : (PICKER_HEIGHT_ESTIMATE[inputType] ?? 300);
         const estimateH = PICKER_HEIGHT_ESTIMATE[inputType] ?? 300;
         const belowActionsY = actionsAbove
           ? rect.bottom + ACTIONS_GAP + 4
           : actionsTopFixed + ACTIONS_HEIGHT + 4;
-        const aboveActionsY = actionsAbove
-          ? actionsTopFixed - 4
-          : rect.top - 4;
+        const aboveActionsY = actionsAbove ? actionsTopFixed - 4 : rect.top - 4;
         const spaceBelow = panelBottom - belowActionsY - 4;
         pickerOpenUp = spaceBelow < estimateH && aboveActionsY > estimateH;
         pickerTop = pickerOpenUp ? aboveActionsY - actualH : belowActionsY;
         const pickerW = pickerEl ? pickerEl.offsetWidth : 240;
-        pickerLeft = Math.max(panelLeft + 4, Math.min(panelRight - pickerW - 4, cellCenterX - pickerW / 2));
+        pickerLeft = Math.max(
+          panelLeft + 4,
+          Math.min(panelRight - pickerW - 4, cellCenterX - pickerW / 2),
+        );
       }
     }
 
@@ -210,7 +240,8 @@
         (cellEditorEl && cellEditorEl.contains(target)) ||
         (actionsEl && actionsEl.contains(target)) ||
         (pickerEl && pickerEl.contains(target))
-      ) return;
+      )
+        return;
       if (settings.clickOutsideEdit === 'confirm') {
         confirmEdit();
       } else {
@@ -232,7 +263,8 @@
     if (textValue === '') return '';
     if (inputType === 'text') {
       const asNum = Number(textValue);
-      if (typeof originalValue === 'number' && !isNaN(asNum) && textValue.trim() !== '') return asNum;
+      if (typeof originalValue === 'number' && !isNaN(asNum) && textValue.trim() !== '')
+        return asNum;
       return textValue;
     }
     return textValue;
@@ -298,7 +330,11 @@
   }
 
   function parseDbNow(raw: string, type: typeof inputType): string {
-    const normalized = String(raw).replace('T', ' ').replace(/\.\d+/, '').replace(/[+-]\d{2}:\d{2}$/, '').trim();
+    const normalized = String(raw)
+      .replace('T', ' ')
+      .replace(/\.\d+/, '')
+      .replace(/[+-]\d{2}:\d{2}$/, '')
+      .trim();
     const [datePart = '', timePart = '00:00:00'] = normalized.split(' ');
     if (type === 'date') return datePart;
     if (type === 'time') return timePart;
@@ -321,13 +357,24 @@
   }
 </script>
 
-<svelte:document onkeydown={(e) => {
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); }
-  if (inputType === 'boolean') {
-    if (e.key === 'ArrowDown') { e.preventDefault(); cycleBool(1); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); cycleBool(-1); }
-  }
-}} />
+<svelte:document
+  onkeydown={(e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
+    }
+    if (inputType === 'boolean') {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        cycleBool(1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        cycleBool(-1);
+      }
+    }
+  }}
+/>
 
 <div
   bind:this={cellEditorEl}
@@ -410,9 +457,26 @@
   onkeydown={handleKeydown}
   use:portal
 >
-  <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></button>
+  <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)"
+    ><svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
+    ></button
+  >
   {#if inputType !== 'boolean' && showPicker}
-    <button class="action-btn now-btn" onclick={handleNow} title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time" aria-label="Set to now">NOW</button>
+    <button
+      class="action-btn now-btn"
+      onclick={handleNow}
+      title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time"
+      aria-label="Set to now">NOW</button
+    >
   {/if}
   {#if nullable}
     <button
@@ -424,7 +488,19 @@
       NULL
     </button>
   {/if}
-  <button class="action-btn cancel-btn" onclick={onCancel} title="Cancel (Escape)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  <button class="action-btn cancel-btn" onclick={onCancel} title="Cancel (Escape)"
+    ><svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      aria-hidden="true"
+      ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+    ></button
+  >
 </div>
 
 {#if showPicker}
@@ -435,7 +511,11 @@
     style="top:{pickerTop}px; left:{pickerLeft}px;"
     role="dialog"
     tabindex="-1"
-    aria-label="Pick {inputType === 'date' ? 'date' : inputType === 'time' ? 'time' : 'date and time'}"
+    aria-label="Pick {inputType === 'date'
+      ? 'date'
+      : inputType === 'time'
+        ? 'time'
+        : 'date and time'}"
     use:portal
     onkeydown={handleKeydown}
   >
@@ -444,14 +524,32 @@
         value={boolState}
         displayFormat={settings.booleanDisplay ?? 'tick-cross'}
         {nullable}
-        onselect={(v) => { boolState = v; onConfirm(boolToDbValue(v)); }}
+        onselect={(v) => {
+          boolState = v;
+          onConfirm(boolToDbValue(v));
+        }}
       />
     {:else if inputType === 'date'}
-      <DatePicker value={textValue} onchange={(v) => { textValue = v; }} />
+      <DatePicker
+        value={textValue}
+        onchange={(v) => {
+          textValue = v;
+        }}
+      />
     {:else if inputType === 'time'}
-      <TimePicker value={textValue} onchange={(v) => { textValue = v; }} />
+      <TimePicker
+        value={textValue}
+        onchange={(v) => {
+          textValue = v;
+        }}
+      />
     {:else if inputType === 'datetime-local'}
-      <DateTimePicker value={textValue} onchange={(v) => { textValue = v; }} />
+      <DateTimePicker
+        value={textValue}
+        onchange={(v) => {
+          textValue = v;
+        }}
+      />
     {/if}
   </div>
 {/if}
@@ -596,12 +694,24 @@
   }
 
   @keyframes picker-in {
-    from { opacity: 0; transform: scaleY(0.94) translateY(-4px); }
-    to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
+    from {
+      opacity: 0;
+      transform: scaleY(0.94) translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1) translateY(0);
+    }
   }
 
   @keyframes picker-in-up {
-    from { opacity: 0; transform: scaleY(0.94) translateY(4px); }
-    to   { opacity: 1; transform: scaleY(1)    translateY(0);   }
+    from {
+      opacity: 0;
+      transform: scaleY(0.94) translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1) translateY(0);
+    }
   }
 </style>

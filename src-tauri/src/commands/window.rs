@@ -29,10 +29,10 @@ pub async fn window_set_traffic_light_position(
 /// On non-macOS platforms this is a no-op.
 #[cfg(target_os = "macos")]
 pub fn install_titlebar_swizzle() {
-    use std::ffi::CStr;
-    use std::sync::OnceLock;
     use objc2::runtime::{AnyObject, Imp, Sel};
     use objc2_foundation::NSRect;
+    use std::ffi::CStr;
+    use std::sync::OnceLock;
 
     type SetFrameFn = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, NSRect);
     static ORIGINAL: OnceLock<SetFrameFn> = OnceLock::new();
@@ -73,10 +73,14 @@ pub fn install_titlebar_swizzle() {
 
     unsafe {
         let cls_name = CStr::from_bytes_with_nul(b"_NSTitlebarContainerView\0").unwrap();
-        let Some(cls) = objc2::runtime::AnyClass::get(cls_name) else { return };
+        let Some(cls) = objc2::runtime::AnyClass::get(cls_name) else {
+            return;
+        };
 
         let sel = objc2::sel!(setFrame:);
-        let Some(method) = cls.instance_method(sel) else { return };
+        let Some(method) = cls.instance_method(sel) else {
+            return;
+        };
 
         let new_imp: Imp = std::mem::transmute(swizzled_set_frame as SetFrameFn);
         let old_imp: Imp = method.set_implementation(new_imp);
@@ -99,11 +103,7 @@ struct TlParams {
 static TL_PARAMS: std::sync::Mutex<Option<TlParams>> = std::sync::Mutex::new(None);
 
 #[cfg(target_os = "macos")]
-unsafe fn reposition_buttons(
-    window: &objc2_app_kit::NSWindow,
-    button_x: f64,
-    button_spacing: f64,
-) {
+unsafe fn reposition_buttons(window: &objc2_app_kit::NSWindow, button_x: f64, button_spacing: f64) {
     use objc2_app_kit::NSWindowButton;
     use objc2_foundation::NSPoint;
 

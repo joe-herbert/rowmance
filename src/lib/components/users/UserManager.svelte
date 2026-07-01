@@ -43,26 +43,32 @@
   function loadUsers() {
     isLoading = true;
     loadError = null;
-    usersApi.listUsers(connectionId).then((result) => {
-      users = result;
-      isLoading = false;
-    }).catch((err) => {
-      loadError = errorMessage(err);
-      isLoading = false;
-    });
+    usersApi
+      .listUsers(connectionId)
+      .then((result) => {
+        users = result;
+        isLoading = false;
+      })
+      .catch((err) => {
+        loadError = errorMessage(err);
+        isLoading = false;
+      });
   }
 
   function loadGrants(user: DbUser) {
     grantsLoading = true;
     grantsError = null;
     grants = [];
-    usersApi.getGrants(connectionId, user.username, user.host).then((result) => {
-      grants = result;
-      grantsLoading = false;
-    }).catch((err) => {
-      grantsError = errorMessage(err);
-      grantsLoading = false;
-    });
+    usersApi
+      .getGrants(connectionId, user.username, user.host)
+      .then((result) => {
+        grants = result;
+        grantsLoading = false;
+      })
+      .catch((err) => {
+        grantsError = errorMessage(err);
+        grantsLoading = false;
+      });
   }
 
   $effect(() => {
@@ -105,7 +111,10 @@
 
   async function submitAddUser() {
     if (!addUserForm) return;
-    if (!addUserForm.username.trim()) { addUserError = 'Username is required'; return; }
+    if (!addUserForm.username.trim()) {
+      addUserError = 'Username is required';
+      return;
+    }
     addUserSaving = true;
     addUserError = null;
     const newUsername = addUserForm.username.trim();
@@ -126,7 +135,7 @@
       const result = await usersApi.listUsers(connectionId);
       users = result;
       isLoading = false;
-      const created = result.find(u => u.username === newUsername && u.host === newHost);
+      const created = result.find((u) => u.username === newUsername && u.host === newHost);
       if (created) selectUser(created);
     } catch (err) {
       addUserError = errorMessage(err);
@@ -189,7 +198,10 @@
 
   async function submitEditUser() {
     if (!editUserForm || !selectedUser) return;
-    if (!editUserForm.username.trim()) { editUserError = 'Username is required'; return; }
+    if (!editUserForm.username.trim()) {
+      editUserError = 'Username is required';
+      return;
+    }
     editUserSaving = true;
     editUserError = null;
     const orig = selectedUser;
@@ -284,18 +296,86 @@
   let builderDbLoading = $state(false);
   let builderTableLoading = $state(false);
 
-  const MYSQL_GLOBAL_PRIVS = ['ALL PRIVILEGES', 'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER', 'INDEX', 'REFERENCES', 'CREATE VIEW', 'SHOW VIEW', 'CREATE TEMPORARY TABLES', 'CREATE ROUTINE', 'ALTER ROUTINE', 'EXECUTE', 'TRIGGER', 'LOCK TABLES', 'EVENT', 'SUPER', 'PROCESS', 'RELOAD', 'SHOW DATABASES', 'REPLICATION CLIENT', 'REPLICATION SLAVE'];
-  const MYSQL_DB_PRIVS = ['ALL PRIVILEGES', 'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER', 'INDEX', 'REFERENCES', 'CREATE VIEW', 'SHOW VIEW', 'CREATE TEMPORARY TABLES', 'CREATE ROUTINE', 'ALTER ROUTINE', 'EXECUTE', 'TRIGGER', 'LOCK TABLES', 'EVENT'];
-  const MYSQL_TABLE_PRIVS = ['ALL PRIVILEGES', 'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER', 'INDEX', 'REFERENCES', 'TRIGGER'];
+  const MYSQL_GLOBAL_PRIVS = [
+    'ALL PRIVILEGES',
+    'SELECT',
+    'INSERT',
+    'UPDATE',
+    'DELETE',
+    'CREATE',
+    'DROP',
+    'ALTER',
+    'INDEX',
+    'REFERENCES',
+    'CREATE VIEW',
+    'SHOW VIEW',
+    'CREATE TEMPORARY TABLES',
+    'CREATE ROUTINE',
+    'ALTER ROUTINE',
+    'EXECUTE',
+    'TRIGGER',
+    'LOCK TABLES',
+    'EVENT',
+    'SUPER',
+    'PROCESS',
+    'RELOAD',
+    'SHOW DATABASES',
+    'REPLICATION CLIENT',
+    'REPLICATION SLAVE',
+  ];
+  const MYSQL_DB_PRIVS = [
+    'ALL PRIVILEGES',
+    'SELECT',
+    'INSERT',
+    'UPDATE',
+    'DELETE',
+    'CREATE',
+    'DROP',
+    'ALTER',
+    'INDEX',
+    'REFERENCES',
+    'CREATE VIEW',
+    'SHOW VIEW',
+    'CREATE TEMPORARY TABLES',
+    'CREATE ROUTINE',
+    'ALTER ROUTINE',
+    'EXECUTE',
+    'TRIGGER',
+    'LOCK TABLES',
+    'EVENT',
+  ];
+  const MYSQL_TABLE_PRIVS = [
+    'ALL PRIVILEGES',
+    'SELECT',
+    'INSERT',
+    'UPDATE',
+    'DELETE',
+    'CREATE',
+    'DROP',
+    'ALTER',
+    'INDEX',
+    'REFERENCES',
+    'TRIGGER',
+  ];
   const PG_SCHEMA_PRIVS = ['ALL', 'USAGE', 'CREATE'];
-  const PG_TABLE_PRIVS = ['ALL', 'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
+  const PG_TABLE_PRIVS = [
+    'ALL',
+    'SELECT',
+    'INSERT',
+    'UPDATE',
+    'DELETE',
+    'TRUNCATE',
+    'REFERENCES',
+    'TRIGGER',
+  ];
 
   const scopeOptions = $derived.by(() => {
-    if (isMysql) return [
-      { value: 'global', label: 'Global (*.*)' },
-      { value: 'database', label: 'Database (db.*)' },
-      { value: 'table', label: 'Table (db.table)' },
-    ];
+    if (isMysql)
+      return [
+        { value: 'global', label: 'Global (*.*)' },
+        { value: 'database', label: 'Database (db.*)' },
+        { value: 'table', label: 'Table (db.table)' },
+      ];
     return [
       { value: 'schema', label: 'Schema' },
       { value: 'table', label: 'Table' },
@@ -320,7 +400,8 @@
     if (isMysql) {
       if (grantScope === 'global') onClause = '*.*';
       else if (grantScope === 'database' && grantDb) onClause = `\`${grantDb}\`.*`;
-      else if (grantScope === 'table' && grantDb && grantTable) onClause = `\`${grantDb}\`.\`${grantTable}\``;
+      else if (grantScope === 'table' && grantDb && grantTable)
+        onClause = `\`${grantDb}\`.\`${grantTable}\``;
       else return '';
     } else {
       if (grantScope === 'schema' && grantDb) onClause = `SCHEMA "${grantDb}"`;
@@ -340,12 +421,20 @@
 
   // Load DB list when scope requires it
   $effect(() => {
-    const needsDb = isMysql ? (grantScope === 'database' || grantScope === 'table') : (grantScope === 'schema' || grantScope === 'table');
+    const needsDb = isMysql
+      ? grantScope === 'database' || grantScope === 'table'
+      : grantScope === 'schema' || grantScope === 'table';
     if (needsDb && builderDbList.length === 0 && !builderDbLoading) {
       builderDbLoading = true;
-      schemaApi.listDatabases(connectionId).then(dbs => {
-        builderDbList = dbs;
-      }).catch(() => {}).finally(() => { builderDbLoading = false; });
+      schemaApi
+        .listDatabases(connectionId)
+        .then((dbs) => {
+          builderDbList = dbs;
+        })
+        .catch(() => {})
+        .finally(() => {
+          builderDbLoading = false;
+        });
     }
   });
 
@@ -354,9 +443,15 @@
     if (grantScope === 'table' && grantDb) {
       builderTableLoading = true;
       builderTableList = [];
-      schemaApi.listTables(connectionId, grantDb).then(tables => {
-        builderTableList = tables.map(t => t.name);
-      }).catch(() => {}).finally(() => { builderTableLoading = false; });
+      schemaApi
+        .listTables(connectionId, grantDb)
+        .then((tables) => {
+          builderTableList = tables.map((t) => t.name);
+        })
+        .catch(() => {})
+        .finally(() => {
+          builderTableLoading = false;
+        });
     }
   });
 
@@ -376,7 +471,10 @@
     const next = new Set(grantPrivs);
     if (priv === 'ALL PRIVILEGES' || priv === 'ALL') {
       if (next.has(priv)) next.clear();
-      else { next.clear(); next.add(priv); }
+      else {
+        next.clear();
+        next.add(priv);
+      }
     } else {
       next.delete('ALL PRIVILEGES');
       next.delete('ALL');
@@ -399,16 +497,23 @@
 
     let action: 'grant' | 'revoke';
     let rest: string;
-    if (upper.startsWith('GRANT ')) { action = 'grant'; rest = trimmed.slice(6); }
-    else if (upper.startsWith('REVOKE ')) { action = 'revoke'; rest = trimmed.slice(7); }
-    else return;
+    if (upper.startsWith('GRANT ')) {
+      action = 'grant';
+      rest = trimmed.slice(6);
+    } else if (upper.startsWith('REVOKE ')) {
+      action = 'revoke';
+      rest = trimmed.slice(7);
+    } else return;
 
     const onMatch = rest.match(/^(.+?)\s+ON\s+(.+?)\s+(TO|FROM)\s+.+$/i);
     if (!onMatch) return;
 
     const privsStr = onMatch[1].trim();
     const onClause = onMatch[2].trim();
-    const privs = privsStr.split(',').map(p => p.trim().toUpperCase()).filter(Boolean);
+    const privs = privsStr
+      .split(',')
+      .map((p) => p.trim().toUpperCase())
+      .filter(Boolean);
 
     let newScope = grantScope;
     let newDb = '';
@@ -453,15 +558,27 @@
 
     if (newDb && builderDbList.length === 0) {
       builderDbLoading = true;
-      schemaApi.listDatabases(connectionId).then(dbs => {
-        builderDbList = dbs;
-      }).catch(() => {}).finally(() => { builderDbLoading = false; });
+      schemaApi
+        .listDatabases(connectionId)
+        .then((dbs) => {
+          builderDbList = dbs;
+        })
+        .catch(() => {})
+        .finally(() => {
+          builderDbLoading = false;
+        });
     }
     if (newTable && newDb && builderTableList.length === 0) {
       builderTableLoading = true;
-      schemaApi.listTables(connectionId, newDb).then(tables => {
-        builderTableList = tables.map(t => t.name);
-      }).catch(() => {}).finally(() => { builderTableLoading = false; });
+      schemaApi
+        .listTables(connectionId, newDb)
+        .then((tables) => {
+          builderTableList = tables.map((t) => t.name);
+        })
+        .catch(() => {})
+        .finally(() => {
+          builderTableLoading = false;
+        });
     }
   }
 
@@ -495,7 +612,19 @@
   {#if isSqlite}
     <div class="unsupported-notice">
       <div class="unsupported-icon" aria-hidden="true">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <svg
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          ><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path
+            d="M7 11V7a5 5 0 0 1 10 0v4"
+          /></svg
+        >
       </div>
       <p class="unsupported-title">Not supported for SQLite</p>
       <p class="unsupported-desc">User management is not supported for SQLite connections.</p>
@@ -511,11 +640,7 @@
       {#if isReadOnly}
         <span class="readonly-badge">Read Only</span>
       {:else}
-        <button
-          class="add-user-btn"
-          disabled={isLoading}
-          onclick={openAddUser}
-        >+ Add User</button>
+        <button class="add-user-btn" disabled={isLoading} onclick={openAddUser}>+ Add User</button>
       {/if}
     </div>
 
@@ -541,7 +666,8 @@
             {#each users as user (user.username + (user.host ?? ''))}
               <button
                 class="user-row"
-                class:user-row--active={selectedUser?.username === user.username && selectedUser?.host === user.host}
+                class:user-row--active={selectedUser?.username === user.username &&
+                  selectedUser?.host === user.host}
                 onclick={() => selectUser(user)}
               >
                 <div class="user-row-main">
@@ -554,9 +680,19 @@
                   {/if}
                   {#if user.isLocked}
                     <span class="lock-icon" title="Account locked" aria-label="Locked">
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="3" y="8" width="10" height="7" rx="1"/>
-                        <path d="M5 8V5a3 3 0 0 1 6 0v3"/>
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <rect x="3" y="8" width="10" height="7" rx="1" />
+                        <path d="M5 8V5a3 3 0 0 1 6 0v3" />
                       </svg>
                     </span>
                   {/if}
@@ -565,7 +701,6 @@
             {/each}
           </div>
         {/if}
-
       </div>
 
       <!-- ── Right: detail ──────────────────────────────────────────────── -->
@@ -583,11 +718,7 @@
               {/if}
             </div>
             <div class="detail-actions">
-              <button
-                class="action-btn"
-                disabled={isReadOnly}
-                onclick={openEditUser}
-              >
+              <button class="action-btn" disabled={isReadOnly} onclick={openEditUser}>
                 Edit
               </button>
               <button
@@ -608,7 +739,11 @@
           <div class="grants-section">
             <div class="section-header">
               <span>Grants</span>
-              <button class="refresh-btn" onclick={() => selectedUser && loadGrants(selectedUser)} title="Refresh grants">
+              <button
+                class="refresh-btn"
+                onclick={() => selectedUser && loadGrants(selectedUser)}
+                title="Refresh grants"
+              >
                 <RefreshIcon width={12} height={12} />
               </button>
             </div>
@@ -635,7 +770,10 @@
             <div class="section-header">
               <span>Grant / Revoke</span>
               <SegmentedControl
-                options={[{ value: 'builder', label: 'Builder' }, { value: 'sql', label: 'SQL' }]}
+                options={[
+                  { value: 'builder', label: 'Builder' },
+                  { value: 'sql', label: 'SQL' },
+                ]}
                 value={grantMode}
                 onchange={(v) => switchGrantMode(v as 'builder' | 'sql')}
               />
@@ -647,8 +785,18 @@
                 <div class="builder-controls">
                   <!-- GRANT / REVOKE toggle -->
                   <div class="action-toggle">
-                    <button class="action-toggle-btn" class:action-toggle-btn--active={grantAction === 'grant'} onclick={() => grantAction = 'grant'} disabled={isReadOnly}>GRANT</button>
-                    <button class="action-toggle-btn" class:action-toggle-btn--active={grantAction === 'revoke'} onclick={() => grantAction = 'revoke'} disabled={isReadOnly}>REVOKE</button>
+                    <button
+                      class="action-toggle-btn"
+                      class:action-toggle-btn--active={grantAction === 'grant'}
+                      onclick={() => (grantAction = 'grant')}
+                      disabled={isReadOnly}>GRANT</button
+                    >
+                    <button
+                      class="action-toggle-btn"
+                      class:action-toggle-btn--active={grantAction === 'revoke'}
+                      onclick={() => (grantAction = 'revoke')}
+                      disabled={isReadOnly}>REVOKE</button
+                    >
                   </div>
 
                   <!-- Scope -->
@@ -657,30 +805,51 @@
                     value={grantScope}
                     size="sm"
                     disabled={isReadOnly}
-                    onchange={(v) => { grantScope = v; grantDb = ''; grantTable = ''; grantPrivs = new Set(); }}
+                    onchange={(v) => {
+                      grantScope = v;
+                      grantDb = '';
+                      grantTable = '';
+                      grantPrivs = new Set();
+                    }}
                   />
 
                   <!-- Database / schema selector -->
                   {#if (isMysql && (grantScope === 'database' || grantScope === 'table')) || (!isMysql && (grantScope === 'schema' || grantScope === 'table'))}
                     <Select
-                      options={builderDbLoading ? [{ value: '', label: 'Loading…' }] : [{ value: '', label: isMysql ? 'Database…' : 'Schema…' }, ...builderDbList.map(d => ({ value: d, label: d }))]}
+                      options={builderDbLoading
+                        ? [{ value: '', label: 'Loading…' }]
+                        : [
+                            { value: '', label: isMysql ? 'Database…' : 'Schema…' },
+                            ...builderDbList.map((d) => ({ value: d, label: d })),
+                          ]}
                       value={grantDb}
                       size="sm"
                       mono={true}
                       disabled={isReadOnly || builderDbLoading}
-                      onchange={(v) => { grantDb = v; grantTable = ''; builderTableList = []; }}
+                      onchange={(v) => {
+                        grantDb = v;
+                        grantTable = '';
+                        builderTableList = [];
+                      }}
                     />
                   {/if}
 
                   <!-- Table selector -->
                   {#if grantScope === 'table' && grantDb}
                     <Select
-                      options={builderTableLoading ? [{ value: '', label: 'Loading…' }] : [{ value: '', label: 'Table…' }, ...builderTableList.map(t => ({ value: t, label: t }))]}
+                      options={builderTableLoading
+                        ? [{ value: '', label: 'Loading…' }]
+                        : [
+                            { value: '', label: 'Table…' },
+                            ...builderTableList.map((t) => ({ value: t, label: t })),
+                          ]}
                       value={grantTable}
                       size="sm"
                       mono={true}
                       disabled={isReadOnly || builderTableLoading}
-                      onchange={(v) => { grantTable = v; }}
+                      onchange={(v) => {
+                        grantTable = v;
+                      }}
                     />
                   {/if}
                 </div>
@@ -697,15 +866,22 @@
                       class:priv-chip--all={isAll}
                       class:priv-chip--dimmed={!isSelected && !isAll && allSelected}
                       disabled={isReadOnly}
-                      onclick={() => togglePriv(priv)}
-                    >{priv}</button>
+                      onclick={() => togglePriv(priv)}>{priv}</button
+                    >
                   {/each}
                 </div>
 
                 <!-- WITH GRANT OPTION (only for GRANT action) -->
                 {#if grantAction === 'grant'}
                   <label class="with-grant-option">
-                    <Checkbox size="sm" checked={grantWithGrantOption} disabled={isReadOnly} onchange={(c) => { grantWithGrantOption = c; }} />
+                    <Checkbox
+                      size="sm"
+                      checked={grantWithGrantOption}
+                      disabled={isReadOnly}
+                      onchange={(c) => {
+                        grantWithGrantOption = c;
+                      }}
+                    />
                     <span>WITH GRANT OPTION</span>
                   </label>
                 {/if}
@@ -723,10 +899,14 @@
                     class="action-btn action-btn--primary"
                     disabled={isReadOnly || grantRunning || !builderPreviewSql}
                     onclick={runBuilderGrant}
-                  >{grantRunning ? 'Running…' : (grantAction === 'grant' ? 'Grant' : 'Revoke')}</button>
+                    >{grantRunning
+                      ? 'Running…'
+                      : grantAction === 'grant'
+                        ? 'Grant'
+                        : 'Revoke'}</button
+                  >
                 </div>
               </div>
-
             {:else}
               <!-- SQL mode -->
               <div class="grant-exec-body">
@@ -739,7 +919,9 @@
                   autocomplete="off"
                   autocapitalize="off"
                   spellcheck={false}
-                  oninput={(e) => { grantSql = (e.target as HTMLTextAreaElement).value; }}
+                  oninput={(e) => {
+                    grantSql = (e.target as HTMLTextAreaElement).value;
+                  }}
                 ></textarea>
                 {#if grantError}
                   <div class="inline-error">{grantError}</div>
@@ -748,8 +930,8 @@
                   <button
                     class="action-btn action-btn--primary"
                     disabled={isReadOnly || grantRunning || !grantSql.trim()}
-                    onclick={runGrant}
-                  >{grantRunning ? 'Running…' : 'Run'}</button>
+                    onclick={runGrant}>{grantRunning ? 'Running…' : 'Run'}</button
+                  >
                 </div>
               </div>
             {/if}
@@ -779,7 +961,9 @@
             autocorrect="off"
             autocapitalize="off"
             spellcheck={false}
-            oninput={(e) => { addUserForm!.username = (e.target as HTMLInputElement).value; }}
+            oninput={(e) => {
+              addUserForm!.username = (e.target as HTMLInputElement).value;
+            }}
             placeholder="username"
           />
         </div>
@@ -794,7 +978,9 @@
               autocorrect="off"
               autocapitalize="off"
               spellcheck={false}
-              oninput={(e) => { addUserForm!.host = (e.target as HTMLInputElement).value; }}
+              oninput={(e) => {
+                addUserForm!.host = (e.target as HTMLInputElement).value;
+              }}
               placeholder="%"
             />
           </div>
@@ -807,7 +993,9 @@
             class="form-input"
             value={form.password}
             autocomplete="new-password"
-            oninput={(e) => { addUserForm!.password = (e.target as HTMLInputElement).value; }}
+            oninput={(e) => {
+              addUserForm!.password = (e.target as HTMLInputElement).value;
+            }}
             placeholder="password"
           />
         </div>
@@ -817,7 +1005,9 @@
               type="checkbox"
               id="add-superuser"
               checked={form.isSuperuser}
-              onchange={(e) => { addUserForm!.isSuperuser = (e.target as HTMLInputElement).checked; }}
+              onchange={(e) => {
+                addUserForm!.isSuperuser = (e.target as HTMLInputElement).checked;
+              }}
             />
             <label for="add-superuser" class="form-check-label">Superuser</label>
           </div>
@@ -826,7 +1016,9 @@
               type="checkbox"
               id="add-createdb"
               checked={form.canCreateDb}
-              onchange={(e) => { addUserForm!.canCreateDb = (e.target as HTMLInputElement).checked; }}
+              onchange={(e) => {
+                addUserForm!.canCreateDb = (e.target as HTMLInputElement).checked;
+              }}
             />
             <label for="add-createdb" class="form-check-label">Can Create DB</label>
           </div>
@@ -835,7 +1027,9 @@
               type="checkbox"
               id="add-createrole"
               checked={form.canCreateRole}
-              onchange={(e) => { addUserForm!.canCreateRole = (e.target as HTMLInputElement).checked; }}
+              onchange={(e) => {
+                addUserForm!.canCreateRole = (e.target as HTMLInputElement).checked;
+              }}
             />
             <label for="add-createrole" class="form-check-label">Can Create Role</label>
           </div>
@@ -845,7 +1039,9 @@
         {/if}
       </div>
       <div class="modal-footer">
-        <button class="btn" onclick={() => (addUserForm = null)} disabled={addUserSaving}>Cancel</button>
+        <button class="btn" onclick={() => (addUserForm = null)} disabled={addUserSaving}
+          >Cancel</button
+        >
         <button class="btn btn--primary" onclick={submitAddUser} disabled={addUserSaving}>
           {addUserSaving ? 'Creating…' : 'Create User'}
         </button>
@@ -857,7 +1053,10 @@
 <!-- ── Set Password Modal ──────────────────────────────────────────────────── -->
 {#if setPasswordForm && selectedUser}
   {@const user = selectedUser}
-  <Modal label="Set Password" onbackdropclick={() => !setPasswordSaving && (setPasswordForm = null)}>
+  <Modal
+    label="Set Password"
+    onbackdropclick={() => !setPasswordSaving && (setPasswordForm = null)}
+  >
     <div class="modal-card">
       <div class="modal-title">Set Password</div>
       <div class="modal-body">
@@ -874,7 +1073,9 @@
             value={setPasswordForm.password}
             autofocus
             autocomplete="new-password"
-            oninput={(e) => { setPasswordForm!.password = (e.target as HTMLInputElement).value; }}
+            oninput={(e) => {
+              setPasswordForm!.password = (e.target as HTMLInputElement).value;
+            }}
             placeholder="new password"
           />
         </div>
@@ -883,7 +1084,9 @@
         {/if}
       </div>
       <div class="modal-footer">
-        <button class="btn" onclick={() => (setPasswordForm = null)} disabled={setPasswordSaving}>Cancel</button>
+        <button class="btn" onclick={() => (setPasswordForm = null)} disabled={setPasswordSaving}
+          >Cancel</button
+        >
         <button class="btn btn--primary" onclick={submitSetPassword} disabled={setPasswordSaving}>
           {setPasswordSaving ? 'Saving…' : 'Set Password'}
         </button>
@@ -911,7 +1114,9 @@
             autocorrect="off"
             autocapitalize="off"
             spellcheck={false}
-            oninput={(e) => { editUserForm!.username = (e.target as HTMLInputElement).value; }}
+            oninput={(e) => {
+              editUserForm!.username = (e.target as HTMLInputElement).value;
+            }}
           />
         </div>
         {#if isMysql}
@@ -925,12 +1130,16 @@
               autocorrect="off"
               autocapitalize="off"
               spellcheck={false}
-              oninput={(e) => { editUserForm!.host = (e.target as HTMLInputElement).value; }}
+              oninput={(e) => {
+                editUserForm!.host = (e.target as HTMLInputElement).value;
+              }}
             />
           </div>
         {/if}
         <div class="form-row">
-          <label class="form-label" for="edit-password">New Password <span class="form-label-hint">(leave blank to keep current)</span></label>
+          <label class="form-label" for="edit-password"
+            >New Password <span class="form-label-hint">(leave blank to keep current)</span></label
+          >
           <input
             id="edit-password"
             type="password"
@@ -938,7 +1147,9 @@
             value={form.password}
             autocomplete="new-password"
             placeholder="unchanged"
-            oninput={(e) => { editUserForm!.password = (e.target as HTMLInputElement).value; }}
+            oninput={(e) => {
+              editUserForm!.password = (e.target as HTMLInputElement).value;
+            }}
           />
         </div>
         {#if editUserError}
@@ -946,7 +1157,9 @@
         {/if}
       </div>
       <div class="modal-footer">
-        <button class="btn" onclick={() => (editUserForm = null)} disabled={editUserSaving}>Cancel</button>
+        <button class="btn" onclick={() => (editUserForm = null)} disabled={editUserSaving}
+          >Cancel</button
+        >
         <button class="btn btn--primary" onclick={submitEditUser} disabled={editUserSaving}>
           {editUserSaving ? 'Saving…' : 'Save'}
         </button>
@@ -1434,7 +1647,9 @@
     outline: none;
     width: 100%;
     box-sizing: border-box;
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
     line-height: 1.5;
   }
 
@@ -1471,13 +1686,14 @@
     font-style: normal;
   }
 
-  .loading-text {
-    animation: pulse 1.4s ease-in-out infinite;
-  }
-
   @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
   }
 
   /* ── Badges ─────────────────────────────────────────────────────────────── */
@@ -1512,8 +1728,14 @@
   }
 
   @keyframes modal-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
-    to   { opacity: 1; transform: scale(1)    translateY(0); }
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   .modal-title {
@@ -1580,7 +1802,9 @@
     outline: none;
     width: 100%;
     box-sizing: border-box;
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
   }
 
   .form-input:focus {
@@ -1594,7 +1818,7 @@
     gap: var(--spacing-2);
   }
 
-  .form-check-row input[type="checkbox"] {
+  .form-check-row input[type='checkbox'] {
     width: 14px;
     height: 14px;
     accent-color: var(--color-accent);

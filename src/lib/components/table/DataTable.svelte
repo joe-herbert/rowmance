@@ -45,7 +45,10 @@
     hiddenColumns?: Set<string>;
     totalRows?: number | null;
     rowOffset?: number;
-    onChangePending?: (_changes: Map<string, Map<string, CellValue>>, _originalRows: Map<string, CellValue[]>) => void;
+    onChangePending?: (
+      _changes: Map<string, Map<string, CellValue>>,
+      _originalRows: Map<string, CellValue[]>,
+    ) => void;
     onCellSelect?: (_originalColIndex: number, _row: CellValue[]) => void;
     onDeselect?: () => void;
     onAddRow?: () => void;
@@ -75,11 +78,7 @@
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
 
-  export function sortRows(
-    rows: CellValue[][],
-    colIndex: number,
-    dir: SortDir,
-  ): CellValue[][] {
+  export function sortRows(rows: CellValue[][], colIndex: number, dir: SortDir): CellValue[][] {
     if (dir === 'none' || colIndex < 0) return rows;
     const sorted = [...rows].sort((a, b) => {
       const av = a[colIndex];
@@ -100,10 +99,7 @@
     return sorted;
   }
 
-  export function filterRows(
-    rows: CellValue[][],
-    filters: string[],
-  ): CellValue[][] {
+  export function filterRows(rows: CellValue[][], filters: string[]): CellValue[][] {
     const activeFilters = filters
       .map((f, i) => ({ i, term: f.trim().toLowerCase() }))
       .filter((f) => f.term !== '');
@@ -119,14 +115,8 @@
     );
   }
 
-  export function buildRowKey(
-    row: CellValue[],
-    columns: ColumnMeta[],
-    rowIndex: number,
-  ): string {
-    const pkCols = columns
-      .map((col, idx) => ({ col, idx }))
-      .filter(({ col }) => col.isPrimaryKey);
+  export function buildRowKey(row: CellValue[], columns: ColumnMeta[], rowIndex: number): string {
+    const pkCols = columns.map((col, idx) => ({ col, idx })).filter(({ col }) => col.isPrimaryKey);
 
     if (pkCols.length > 0) {
       return pkCols.map(({ idx }) => String(row[idx] ?? '')).join('|');
@@ -271,7 +261,7 @@
         if (fromDisplay < toDisplay) toIdx -= 1;
         columnOrder = reorderColumns(columnOrder, fromDisplay, toIdx);
         if (onColumnOrderChange) {
-          onColumnOrderChange(columnOrder.map(i => columns[i].name));
+          onColumnOrderChange(columnOrder.map((i) => columns[i].name));
         }
       }
       colDragName = null;
@@ -335,14 +325,30 @@
 
   // ── Column widths ─────────────────────────────────────────────────────────
 
-  function computeDefaultColWidths(cols: ColumnMeta[], dataRows: CellValue[][], container: HTMLElement): number[] {
-    type FontStyle = { fontFamily: string; fontSize: string; fontWeight: string; fontStyle: string; letterSpacing: string };
+  function computeDefaultColWidths(
+    cols: ColumnMeta[],
+    dataRows: CellValue[][],
+    container: HTMLElement,
+  ): number[] {
+    type FontStyle = {
+      fontFamily: string;
+      fontSize: string;
+      fontWeight: string;
+      fontStyle: string;
+      letterSpacing: string;
+    };
 
     function getElFontStyle(selector: string): FontStyle | null {
       const el = container.querySelector<HTMLElement>(selector);
       if (!el) return null;
       const s = getComputedStyle(el);
-      return { fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight, fontStyle: s.fontStyle, letterSpacing: s.letterSpacing };
+      return {
+        fontFamily: s.fontFamily,
+        fontSize: s.fontSize,
+        fontWeight: s.fontWeight,
+        fontStyle: s.fontStyle,
+        letterSpacing: s.letterSpacing,
+      };
     }
 
     function applyFont(span: HTMLSpanElement, fs: FontStyle): void {
@@ -355,24 +361,32 @@
 
     const nameStyle = getElFontStyle('.header-name');
     const typeStyle = getElFontStyle('.header-type');
-    const textCellStyle = getElFontStyle('.data-cell:not(.cell-number):not(.cell-timestamp) .cell-content');
+    const textCellStyle = getElFontStyle(
+      '.data-cell:not(.cell-number):not(.cell-timestamp) .cell-content',
+    );
     const numCellStyle = getElFontStyle('.cell-number .cell-content');
     const tsCellStyle = getElFontStyle('.cell-timestamp .cell-content');
 
-    const colCellStyles = cols.map(col => {
+    const colCellStyles = cols.map((col) => {
       const cat = getDataTypeCategory(col.dataType);
       return cat === 'number' ? numCellStyle : cat === 'timestamp' ? tsCellStyle : textCellStyle;
     });
 
     // Build all measurement spans in one batch, read widths after a single layout pass
     const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:-9999px;top:-9999px;pointer-events:none;';
+    probe.style.cssText =
+      'position:absolute;visibility:hidden;white-space:nowrap;left:-9999px;top:-9999px;pointer-events:none;';
     document.body.appendChild(probe);
 
     type Entry = { span: HTMLSpanElement; col: number; kind: 'name' | 'type' | 'cell' };
     const entries: Entry[] = [];
 
-    function addSpan(text: string, fs: FontStyle | null, col: number, kind: 'name' | 'type' | 'cell'): void {
+    function addSpan(
+      text: string,
+      fs: FontStyle | null,
+      col: number,
+      kind: 'name' | 'type' | 'cell',
+    ): void {
       const span = document.createElement('span');
       span.style.whiteSpace = 'nowrap';
       if (fs) applyFont(span, fs);
@@ -419,8 +433,8 @@
     // and separately measure the extra overhead a PK icon adds, by comparing
     // a PK header cell directly against a non-PK one.
     const allHeaderCells = Array.from(container.querySelectorAll<HTMLElement>('.header-cell'));
-    const pkHeaderCell = allHeaderCells.find(el => el.querySelector('.pk-icon')) ?? null;
-    const nonPkHeaderCell = allHeaderCells.find(el => !el.querySelector('.pk-icon')) ?? null;
+    const pkHeaderCell = allHeaderCells.find((el) => el.querySelector('.pk-icon')) ?? null;
+    const nonPkHeaderCell = allHeaderCells.find((el) => !el.querySelector('.pk-icon')) ?? null;
 
     function headerOverheadOf(cell: HTMLElement | null): number {
       if (!cell) return 30;
@@ -493,7 +507,10 @@
       if (!label || label.scrollWidth <= label.clientWidth) return;
       const origIdx = visibleColumns[domIndex]?.originalIndex ?? -1;
       if (origIdx < 0) return;
-      colWidths[origIdx] = Math.min(colWidths[origIdx] + (label.scrollWidth - label.clientWidth) + 1, 300);
+      colWidths[origIdx] = Math.min(
+        colWidths[origIdx] + (label.scrollWidth - label.clientWidth) + 1,
+        300,
+      );
     });
   });
 
@@ -518,7 +535,9 @@
   function onResizePointerUp(): void {
     if (resizingColIndex !== null && onColWidthsChange) {
       const widths: Record<string, number> = {};
-      columns.forEach((col, i) => { widths[col.name] = colWidths[i]; });
+      columns.forEach((col, i) => {
+        widths[col.name] = colWidths[i];
+      });
       onColWidthsChange(widths);
     }
     resizingColIndex = null;
@@ -535,9 +554,7 @@
 
   const totalCount = $derived(_totalRows ?? processedRows.length);
   const pageCount = $derived(Math.max(1, Math.ceil(totalCount / pageSize)));
-  const pageRows = $derived(
-    processedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize),
-  );
+  const pageRows = $derived(processedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize));
 
   const pageOffset = $derived(pageIndex * pageSize);
 
@@ -560,18 +577,20 @@
   // ── Pending changes ───────────────────────────────────────────────────────
 
   let pendingChanges = $state<Map<string, Map<string, CellValue>>>(
-    untrack(() => initialPendingChanges ? new Map(initialPendingChanges) : new Map()),
+    untrack(() => (initialPendingChanges ? new Map(initialPendingChanges) : new Map())),
   );
   // Snapshot of each row's DB values at the time of its first edit — used to
   // build all-columns WHERE clauses for tables without a primary key.
   let originalRows = $state<Map<string, CellValue[]>>(
-    untrack(() => initialOriginalRows ? new Map(initialOriginalRows) : new Map()),
+    untrack(() => (initialOriginalRows ? new Map(initialOriginalRows) : new Map())),
   );
 
   let pendingNewRows = $state<{ key: string }[]>(
     untrack(() =>
       initialPendingChanges
-        ? [...initialPendingChanges.keys()].filter((k) => k.startsWith('__new__')).map((key) => ({ key }))
+        ? [...initialPendingChanges.keys()]
+            .filter((k) => k.startsWith('__new__'))
+            .map((key) => ({ key }))
         : [],
     ),
   );
@@ -579,7 +598,7 @@
 
   // rowKey → original row values snapshot for building DELETE WHERE clauses
   let pendingDeletedRows = $state<Map<string, CellValue[]>>(
-    untrack(() => initialDeletedRows ? new Map(initialDeletedRows) : new Map()),
+    untrack(() => (initialDeletedRows ? new Map(initialDeletedRows) : new Map())),
   );
 
   $effect(() => {
@@ -593,7 +612,7 @@
       pendingNewRows = addAtTop ? [{ key }, ...pendingNewRows] : [...pendingNewRows, { key }];
 
       const updated = new Map(pendingChanges);
-      const newRowMap = new Map<string, unknown>();
+      const newRowMap = new Map<string, CellValue>();
       for (const col of columns) {
         if (col.isAutoIncrement) continue;
         if (col.defaultValue != null) {
@@ -619,7 +638,9 @@
 
         const newRowEl = tableContainerEl.querySelector(`[data-new-row-key="${key}"]`);
         if (!newRowEl) return;
-        const firstTd = newRowEl.querySelectorAll('.data-cell')[0] as HTMLTableCellElement | undefined;
+        const firstTd = newRowEl.querySelectorAll('.data-cell')[0] as
+          | HTMLTableCellElement
+          | undefined;
         if (!firstTd) return;
 
         const tdRect = firstTd.getBoundingClientRect();
@@ -642,11 +663,7 @@
     });
   });
 
-  function getPendingValue(
-    rowKey: string,
-    colName: string,
-    originalValue: CellValue,
-  ): CellValue {
+  function getPendingValue(rowKey: string, colName: string, originalValue: CellValue): CellValue {
     const rowMap = pendingChanges.get(rowKey);
     if (rowMap?.has(colName)) return rowMap.get(colName) as CellValue;
     return originalValue;
@@ -686,7 +703,7 @@
     dataType: string;
   }
   let viewModalTarget = $state<ViewTarget | null>(null);
-  let cellEditorInstance = $state<{ cycle: (dir: 1 | -1) => void } | null>(null);
+  let cellEditorInstance = $state<{ cycle: (_dir: 1 | -1) => void } | null>(null);
   let tableContainerEl = $state<HTMLDivElement | null>(null);
   let tableScrollEl = $state<HTMLDivElement | null>(null);
   let tableScrollWidth = $state(0);
@@ -694,7 +711,9 @@
   $effect(() => {
     if (!tableScrollEl) return;
     tableScrollWidth = tableScrollEl.clientWidth;
-    const ro = new ResizeObserver(() => { tableScrollWidth = tableScrollEl!.clientWidth; });
+    const ro = new ResizeObserver(() => {
+      tableScrollWidth = tableScrollEl!.clientWidth;
+    });
     ro.observe(tableScrollEl);
     return () => ro.disconnect();
   });
@@ -709,21 +728,43 @@
     data: QuickViewData | null;
   } | null>(null);
 
-  async function triggerQuickView(colName: string, cellValue: CellValue, rowKey: string): Promise<void> {
+  async function triggerQuickView(
+    colName: string,
+    cellValue: CellValue,
+    rowKey: string,
+  ): Promise<void> {
     if (!onForeignKeyQuickView) return;
     if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
       quickViewState = null;
       return;
     }
-    quickViewState = { triggerRowKey: rowKey, triggerColName: colName, triggerCellValue: cellValue, loading: true, data: null };
+    quickViewState = {
+      triggerRowKey: rowKey,
+      triggerColName: colName,
+      triggerCellValue: cellValue,
+      loading: true,
+      data: null,
+    };
     try {
       const data = await onForeignKeyQuickView(colName, cellValue);
       if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
-        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, triggerCellValue: cellValue, loading: false, data };
+        quickViewState = {
+          triggerRowKey: rowKey,
+          triggerColName: colName,
+          triggerCellValue: cellValue,
+          loading: false,
+          data,
+        };
       }
     } catch {
       if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
-        quickViewState = { triggerRowKey: rowKey, triggerColName: colName, triggerCellValue: cellValue, loading: false, data: null };
+        quickViewState = {
+          triggerRowKey: rowKey,
+          triggerColName: colName,
+          triggerCellValue: cellValue,
+          loading: false,
+          data: null,
+        };
       }
     }
   }
@@ -790,11 +831,10 @@
       originalValue: row[originalColIndex],
       dataType: col.dataType,
       nullable: col.nullable,
-      top: 0,
-      left: 0,
+      initialViewportTop: 0,
+      initialViewportLeft: 0,
       width: 0,
       height: 0,
-      containerHeight: 0,
     };
   }
 
@@ -902,10 +942,16 @@
     let nextCol = visColIndex;
     if (shiftKey) {
       nextCol -= 1;
-      if (nextCol < 0) { nextCol = colCount - 1; nextRow = Math.max(nextRow - 1, 0); }
+      if (nextCol < 0) {
+        nextCol = colCount - 1;
+        nextRow = Math.max(nextRow - 1, 0);
+      }
     } else {
       nextCol += 1;
-      if (nextCol >= colCount) { nextCol = 0; nextRow = Math.min(nextRow + 1, rowCount - 1); }
+      if (nextCol >= colCount) {
+        nextCol = 0;
+        nextRow = Math.min(nextRow + 1, rowCount - 1);
+      }
     }
 
     // Confirm current edit (without refocusCell — we'll open the next editor instead)
@@ -1059,7 +1105,9 @@
   // Non-contiguous cells selected via option/alt+click, keyed as "row,col"
   let additionalSelectedCells = $state<Set<string>>(new Set());
 
-  function cellKey(row: number, col: number): string { return `${row},${col}`; }
+  function cellKey(row: number, col: number): string {
+    return `${row},${col}`;
+  }
 
   function isCellInSelection(row: number, col: number): boolean {
     if (rowSelectionMode) return false;
@@ -1074,13 +1122,19 @@
 
   function getAltSelectedCells(): { row: number; col: number }[] {
     return [...additionalSelectedCells]
-      .map((k) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; })
-      .sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col);
+      .map((k) => {
+        const [r, c] = k.split(',').map(Number);
+        return { row: r, col: c };
+      })
+      .sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col));
   }
 
   function handleTableKeydown(e: KeyboardEvent): void {
     if (editTarget !== null) {
-      if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelEdit();
+      }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         cellEditorInstance?.cycle(e.key === 'ArrowDown' ? 1 : -1);
@@ -1101,7 +1155,13 @@
       e.preventDefault();
       if (rowSelectionMode) {
         if (selectedRowKeys.size > 1) copySelectedRowsTabSeparated();
-        else { const idx = rowFocus ?? rowAnchor; if (idx !== null) { const r = pageRows[idx]; if (r) copyRowTabSeparated(r); } }
+        else {
+          const idx = rowFocus ?? rowAnchor;
+          if (idx !== null) {
+            const r = pageRows[idx];
+            if (r) copyRowTabSeparated(r);
+          }
+        }
       } else {
         copySelection();
       }
@@ -1112,7 +1172,13 @@
       if (rowSelectionMode) {
         if (!editable || readOnly) return;
         if (selectedRowKeys.size > 1) copySelectedRowsTabSeparated();
-        else { const idx = rowFocus ?? rowAnchor; if (idx !== null) { const r = pageRows[idx]; if (r) copyRowTabSeparated(r); } }
+        else {
+          const idx = rowFocus ?? rowAnchor;
+          if (idx !== null) {
+            const r = pageRows[idx];
+            if (r) copyRowTabSeparated(r);
+          }
+        }
         const next = new Map(pendingDeletedRows);
         for (let r = 0; r < pageRows.length; r++) {
           const rowData = pageRows[r];
@@ -1180,7 +1246,8 @@
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
         const current = rowFocus ?? rowAnchor ?? 0;
-        const next = e.key === 'ArrowUp' ? Math.max(0, current - 1) : Math.min(rowCount - 1, current + 1);
+        const next =
+          e.key === 'ArrowUp' ? Math.max(0, current - 1) : Math.min(rowCount - 1, current + 1);
         additionalSelectedRowIndices = new Set();
         if (e.shiftKey) {
           if (rowAnchor === null) rowAnchor = current;
@@ -1228,9 +1295,10 @@
       return;
     }
 
-    const allInCol0 = additionalSelectedCells.size > 0
-      ? [...additionalSelectedCells].every((k) => k.endsWith(',0'))
-      : focusedCell.col === 0 && (anchorCell?.col ?? 0) === 0;
+    const allInCol0 =
+      additionalSelectedCells.size > 0
+        ? [...additionalSelectedCells].every((k) => k.endsWith(',0'))
+        : focusedCell.col === 0 && (anchorCell?.col ?? 0) === 0;
     if (e.key === 'ArrowLeft' && !e.shiftKey && allInCol0) {
       e.preventDefault();
       let firstRow: number;
@@ -1257,7 +1325,9 @@
         additionalSelectedRowIndices = new Set();
       }
       requestAnimationFrame(() => {
-        const tr = tableContainerEl?.querySelector<HTMLTableRowElement>(`tbody tr:nth-child(${firstRow + 1})`);
+        const tr = tableContainerEl?.querySelector<HTMLTableRowElement>(
+          `tbody tr:nth-child(${firstRow + 1})`,
+        );
         tr?.querySelector<HTMLElement>('.rownum-cell')?.focus();
       });
       return;
@@ -1338,7 +1408,9 @@
 
   function scrollRowIntoView(rowIdx: number): void {
     requestAnimationFrame(() => {
-      const tr = tableContainerEl?.querySelector<HTMLTableRowElement>(`tbody tr:nth-child(${rowIdx + 1})`);
+      const tr = tableContainerEl?.querySelector<HTMLTableRowElement>(
+        `tbody tr:nth-child(${rowIdx + 1})`,
+      );
       tr?.scrollIntoView({ block: 'nearest' });
     });
   }
@@ -1351,7 +1423,11 @@
   }
 
   function escapeHtml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function highlightText(text: string, term: string): string {
@@ -1361,9 +1437,14 @@
     let i = 0;
     while (i < text.length) {
       const idx = lowerText.indexOf(lowerTerm, i);
-      if (idx === -1) { parts.push(escapeHtml(text.slice(i))); break; }
+      if (idx === -1) {
+        parts.push(escapeHtml(text.slice(i)));
+        break;
+      }
       if (idx > i) parts.push(escapeHtml(text.slice(i, idx)));
-      parts.push(`<mark class="search-highlight">${escapeHtml(text.slice(idx, idx + term.length))}</mark>`);
+      parts.push(
+        `<mark class="search-highlight">${escapeHtml(text.slice(idx, idx + term.length))}</mark>`,
+      );
       i = idx + term.length;
     }
     return parts.join('');
@@ -1371,9 +1452,16 @@
 
   // ── Data type categorisation ──────────────────────────────────────────────
 
-  function getDataTypeCategory(dataType: string): 'number' | 'timestamp' | 'boolean' | 'json' | 'text' {
+  function getDataTypeCategory(
+    dataType: string,
+  ): 'number' | 'timestamp' | 'boolean' | 'json' | 'text' {
     const dt = dataType.toLowerCase();
-    if (/^(int|int2|int4|int8|int16|bigint|smallint|float|float4|float8|real|double|numeric|decimal|serial|bigserial|money)/.test(dt)) return 'number';
+    if (
+      /^(int|int2|int4|int8|int16|bigint|smallint|float|float4|float8|real|double|numeric|decimal|serial|bigserial|money)/.test(
+        dt,
+      )
+    )
+      return 'number';
     if (/^(timestamp|date|time|interval)/.test(dt)) return 'timestamp';
     if (/^bool/.test(dt) || dt === 'tinyint(1)') return 'boolean';
     if (/^json/.test(dt)) return 'json';
@@ -1404,7 +1492,10 @@
 
   $effect(() => {
     if (rowSelectionMode) {
-      if (rowAnchor === null) { selectedRowKeys = new Set(); return; }
+      if (rowAnchor === null) {
+        selectedRowKeys = new Set();
+        return;
+      }
       const focus = rowFocus ?? rowAnchor;
       if (additionalSelectedRowIndices.size > 0) {
         const newKeys = new Set<string>();
@@ -1493,7 +1584,9 @@
     e.stopPropagation();
     activeMenuDismiss?.();
     headerContextMenu = { x: e.clientX, y: e.clientY, colName };
-    activeMenuDismiss = () => { headerContextMenu = null; };
+    activeMenuDismiss = () => {
+      headerContextMenu = null;
+    };
   }
 
   function startHeaderRename(colName: string): void {
@@ -1516,8 +1609,13 @@
   }
 
   function handleHeaderRenameKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Enter') { e.preventDefault(); commitHeaderRename(); }
-    else if (e.key === 'Escape') { e.preventDefault(); cancelHeaderRename(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitHeaderRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelHeaderRename();
+    }
   }
 
   // ── Context menu ──────────────────────────────────────────────────────────
@@ -1566,7 +1664,12 @@
     });
   });
 
-  function handleRowContextMenu(e: MouseEvent, row: CellValue[], rowIndex: number, colName: string | null = null): void {
+  function handleRowContextMenu(
+    e: MouseEvent,
+    row: CellValue[],
+    rowIndex: number,
+    colName: string | null = null,
+  ): void {
     e.preventDefault();
     activeMenuDismiss?.();
     const rowKey = buildRowKey(row, columns, pageOffset + rowIndex);
@@ -1581,9 +1684,16 @@
     contextMenuSnapshotIsRowSelection = rowSelectionMode;
     const range = getSelectionRange();
     contextMenuSnapshotIsMultiCol = range ? range.minCol !== range.maxCol : false;
-    activeMenuDismiss = () => { contextMenu = null; };
+    activeMenuDismiss = () => {
+      contextMenu = null;
+    };
     contextMenuClipboardHasContent = false;
-    navigator.clipboard.readText().then((t) => { contextMenuClipboardHasContent = t.length > 0; }).catch(() => {});
+    navigator.clipboard
+      .readText()
+      .then((t) => {
+        contextMenuClipboardHasContent = t.length > 0;
+      })
+      .catch(() => {});
   }
 
   function dismissContextMenu(): void {
@@ -1595,19 +1705,25 @@
 
   function isDatetimeishType(dt: string): boolean {
     const lower = dt.toLowerCase();
-    return lower.includes('date') || lower.includes('timestamp') ||
-      (lower.includes('time') && !lower.includes('timestamp'));
+    return (
+      lower.includes('date') ||
+      lower.includes('timestamp') ||
+      (lower.includes('time') && !lower.includes('timestamp'))
+    );
   }
 
   function getDatetimeInputType(dt: string): 'date' | 'time' | 'datetime-local' {
     const lower = dt.toLowerCase();
-    if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp')) return 'datetime-local';
+    if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp'))
+      return 'datetime-local';
     if (lower.includes('date')) return 'date';
     return 'time';
   }
 
   const contextMenuColDataType = $derived(
-    contextMenu?.colName ? (columns.find(c => c.name === contextMenu!.colName)?.dataType ?? '') : '',
+    contextMenu?.colName
+      ? (columns.find((c) => c.name === contextMenu!.colName)?.dataType ?? '')
+      : '',
   );
   const contextMenuColIsDatetime = $derived(isDatetimeishType(contextMenuColDataType));
 
@@ -1621,7 +1737,11 @@
   }
 
   function parseDbNow(raw: string, type: 'date' | 'time' | 'datetime-local'): string {
-    const normalized = String(raw).replace('T', ' ').replace(/\.\d+/, '').replace(/[+-]\d{2}:\d{2}$/, '').trim();
+    const normalized = String(raw)
+      .replace('T', ' ')
+      .replace(/\.\d+/, '')
+      .replace(/[+-]\d{2}:\d{2}$/, '')
+      .trim();
     const [datePart = '', timePart = '00:00:00'] = normalized.split(' ');
     if (type === 'date') return datePart;
     if (type === 'time') return timePart;
@@ -1631,7 +1751,7 @@
   async function setNowFromContextMenu(): Promise<void> {
     if (!contextMenu?.colName || !editable || readOnly) return;
     const { rowKey, row, colName } = contextMenu;
-    const col = columns.find(c => c.name === colName);
+    const col = columns.find((c) => c.name === colName);
     if (!col) return;
     const type = getDatetimeInputType(col.dataType);
 
@@ -1651,7 +1771,7 @@
       nowValue = formatNow(new Date(), type);
     }
 
-    const originalColIndex = columns.findIndex(c => c.name === colName);
+    const originalColIndex = columns.findIndex((c) => c.name === colName);
     if (!originalRows.has(rowKey)) {
       const next = new Map(originalRows);
       next.set(rowKey, [...row]);
@@ -1687,14 +1807,25 @@
     const rowIndex = pageRows.findIndex(
       (r, i) => buildRowKey(r, columns, pageOffset + i) === rowKey,
     );
-    if (rowIndex < 0) { dismissContextMenu(); return; }
+    if (rowIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const originalColIndex = columns.findIndex((c) => c.name === colName);
-    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    if (originalColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const visColIndex = visibleColumns.findIndex((vc) => vc.originalIndex === originalColIndex);
-    if (visColIndex < 0) { dismissContextMenu(); return; }
+    if (visColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
 
     dismissContextMenu();
-    const fakeEvent = { currentTarget: getFocusedCellEl(rowIndex, visColIndex) } as unknown as MouseEvent;
+    const fakeEvent = {
+      currentTarget: getFocusedCellEl(rowIndex, visColIndex),
+    } as unknown as MouseEvent;
     handleCellDblClick(fakeEvent, row, rowIndex, originalColIndex);
   }
 
@@ -1704,9 +1835,15 @@
     const rowIndex = pageRows.findIndex(
       (r, i) => buildRowKey(r, columns, pageOffset + i) === rowKey,
     );
-    if (rowIndex < 0) { dismissContextMenu(); return; }
+    if (rowIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const originalColIndex = columns.findIndex((c) => c.name === colName);
-    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    if (originalColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const currentValue = getPendingValue(rowKey, colName, row[originalColIndex]);
     const col = columns[originalColIndex];
 
@@ -1724,7 +1861,10 @@
       originalValue: row[originalColIndex],
       dataType: col.dataType,
       nullable: col.nullable,
-      top: 0, left: 0, width: 0, height: 0, containerHeight: 0,
+      initialViewportTop: 0,
+      initialViewportLeft: 0,
+      width: 0,
+      height: 0,
     };
     dismissContextMenu();
   }
@@ -1733,7 +1873,10 @@
     if (!contextMenu?.colName) return;
     const { row, rowKey, colName } = contextMenu;
     const originalColIndex = columns.findIndex((c) => c.name === colName);
-    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    if (originalColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const currentValue = getPendingValue(rowKey, colName, row[originalColIndex]);
     const col = columns[originalColIndex];
 
@@ -1783,7 +1926,12 @@
 
   // ── Copy / Cut / Paste ───────────────────────────────────────────────────
 
-  function getSelectionRange(): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
+  function getSelectionRange(): {
+    minRow: number;
+    maxRow: number;
+    minCol: number;
+    maxCol: number;
+  } | null {
     if (!focusedCell) return null;
     const anchor = anchorCell ?? focusedCell;
     return {
@@ -1814,12 +1962,14 @@
         const rowData = pageRows[r];
         if (!rowData) continue;
         const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-        const cellTexts = cols.sort((a, b) => a - b).map((c) => {
-          const { originalIndex } = visibleColumns[c];
-          const col = columns[originalIndex];
-          const val = getPendingValue(rowKey, col.name, rowData[originalIndex]);
-          return val === null ? '' : String(val);
-        });
+        const cellTexts = cols
+          .sort((a, b) => a - b)
+          .map((c) => {
+            const { originalIndex } = visibleColumns[c];
+            const col = columns[originalIndex];
+            const val = getPendingValue(rowKey, col.name, rowData[originalIndex]);
+            return val === null ? '' : String(val);
+          });
         lines.push(cellTexts.join('\t'));
       }
       return lines.join('\n');
@@ -1849,7 +1999,12 @@
     navigator.clipboard.writeText(text).catch(() => {});
   }
 
-  function applyPendingChange(rowKey: string, colName: string, originalValue: CellValue, newValue: CellValue): void {
+  function applyPendingChange(
+    rowKey: string,
+    colName: string,
+    originalValue: CellValue,
+    newValue: CellValue,
+  ): void {
     const isNewRow = rowKey.startsWith('__new__');
     const updated = new Map(pendingChanges);
     if (isNewRow) {
@@ -1881,7 +2036,11 @@
         const rowData = pageRows[r];
         if (!rowData) continue;
         const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
+        if (!originalRows.has(rowKey)) {
+          const next = new Map(originalRows);
+          next.set(rowKey, [...rowData]);
+          originalRows = next;
+        }
         const { originalIndex } = visibleColumns[c];
         const col = columns[originalIndex];
         if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
@@ -1913,7 +2072,11 @@
     if (!editable || readOnly) return;
     if (rowSelectionMode) {
       let text: string;
-      try { text = await navigator.clipboard.readText(); } catch { return; }
+      try {
+        text = await navigator.clipboard.readText();
+      } catch {
+        return;
+      }
       if (!text) return;
       const clipLines = text.split('\n').filter((l) => l !== '');
       if (clipLines.length === 0) return;
@@ -1927,11 +2090,20 @@
         const rowData = pageRows[r];
         if (!rowData) continue;
         const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
+        if (!originalRows.has(rowKey)) {
+          const next = new Map(originalRows);
+          next.set(rowKey, [...rowData]);
+          originalRows = next;
+        }
         const lineValues = clipLines[i % clipLines.length].split('\t');
         visibleColumns.forEach(({ col, originalIndex }, c) => {
           const pasteValue = lineValues[c] ?? '';
-          applyPendingChange(rowKey, col.name, rowData[originalIndex], coercePasteValue(pasteValue, col));
+          applyPendingChange(
+            rowKey,
+            col.name,
+            rowData[originalIndex],
+            coercePasteValue(pasteValue, col),
+          );
         });
       }
       onChangePending?.(pendingChanges, originalRows);
@@ -1954,13 +2126,22 @@
         const rowData = pageRows[r];
         if (!rowData) continue;
         const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
+        if (!originalRows.has(rowKey)) {
+          const next = new Map(originalRows);
+          next.set(rowKey, [...rowData]);
+          originalRows = next;
+        }
         const { originalIndex } = visibleColumns[c];
         const col = columns[originalIndex];
         if (!col) continue;
         const pasteValue = clipValues[clipIndex % clipValues.length];
         clipIndex++;
-        applyPendingChange(rowKey, col.name, rowData[originalIndex], coercePasteValue(pasteValue, col));
+        applyPendingChange(
+          rowKey,
+          col.name,
+          rowData[originalIndex],
+          coercePasteValue(pasteValue, col),
+        );
       }
     } else {
       const range = getSelectionRange();
@@ -1982,7 +2163,12 @@
           if (!col) continue;
           const pasteValue = clipValues[clipIndex % clipValues.length];
           clipIndex++;
-          applyPendingChange(rowKey, col.name, rowData[originalIndex], coercePasteValue(pasteValue, col));
+          applyPendingChange(
+            rowKey,
+            col.name,
+            rowData[originalIndex],
+            coercePasteValue(pasteValue, col),
+          );
         }
       }
     }
@@ -2003,9 +2189,7 @@
   function copySelectedRowsTabSeparated(): void {
     const lines: string[] = [];
     for (const key of selectedRowKeys) {
-      const found = pageRows.find(
-        (r, i) => buildRowKey(r, columns, pageOffset + i) === key,
-      );
+      const found = pageRows.find((r, i) => buildRowKey(r, columns, pageOffset + i) === key);
       if (found) {
         const text = visibleColumns
           .map(({ originalIndex }) => {
@@ -2027,7 +2211,11 @@
         const rowData = pageRows[r];
         if (!rowData) continue;
         const rowKey = buildRowKey(rowData, columns, pageOffset + r);
-        if (!originalRows.has(rowKey)) { const next = new Map(originalRows); next.set(rowKey, [...rowData]); originalRows = next; }
+        if (!originalRows.has(rowKey)) {
+          const next = new Map(originalRows);
+          next.set(rowKey, [...rowData]);
+          originalRows = next;
+        }
         const { originalIndex } = visibleColumns[c];
         const col = columns[originalIndex];
         if (col) applyPendingChange(rowKey, col.name, rowData[originalIndex], null);
@@ -2076,7 +2264,10 @@
       }
       return cols;
     }
-    return visibleColumns.map(({ originalIndex }) => ({ originalIndex, col: columns[originalIndex] }));
+    return visibleColumns.map(({ originalIndex }) => ({
+      originalIndex,
+      col: columns[originalIndex],
+    }));
   }
 
   function copyColumnNames(): void {
@@ -2111,7 +2302,9 @@
         ]),
       ),
     );
-    navigator.clipboard.writeText(JSON.stringify(objects.length === 1 ? objects[0] : objects, null, 2)).catch(() => {});
+    navigator.clipboard
+      .writeText(JSON.stringify(objects.length === 1 ? objects[0] : objects, null, 2))
+      .catch(() => {});
     dismissContextMenu();
   }
 
@@ -2121,9 +2314,11 @@
     const tbl = tableName ?? 'table_name';
     const colList = cols.map(({ col }) => `"${col.name}"`).join(', ');
     const statements = contextRows.map(({ row, rowKey }) => {
-      const vals = cols.map(({ originalIndex, col }) =>
-        sqlEscape(getPendingValue(rowKey, col.name, row[originalIndex])),
-      ).join(', ');
+      const vals = cols
+        .map(({ originalIndex, col }) =>
+          sqlEscape(getPendingValue(rowKey, col.name, row[originalIndex])),
+        )
+        .join(', ');
       return `INSERT INTO "${tbl}" (${colList}) VALUES (${vals});`;
     });
     navigator.clipboard.writeText(statements.join('\n')).catch(() => {});
@@ -2136,11 +2331,17 @@
     const csvEscape = (v: CellValue) => {
       if (v === null) return '';
       const s = String(v);
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
     };
     const header = cols.map(({ col }) => csvEscape(col.name)).join(',');
     const dataLines = contextRows.map(({ row, rowKey }) =>
-      cols.map(({ originalIndex, col }) => csvEscape(getPendingValue(rowKey, col.name, row[originalIndex]))).join(','),
+      cols
+        .map(({ originalIndex, col }) =>
+          csvEscape(getPendingValue(rowKey, col.name, row[originalIndex])),
+        )
+        .join(','),
     );
     navigator.clipboard.writeText([header, ...dataLines].join('\n')).catch(() => {});
     dismissContextMenu();
@@ -2154,7 +2355,7 @@
     pendingNewRows = [...pendingNewRows, { key }];
     const rowMap = new Map<string, CellValue>();
     columns.forEach((col, i) => {
-      rowMap.set(col.name, (col.isPrimaryKey || col.isUnique) ? null : (row[i] ?? null));
+      rowMap.set(col.name, col.isPrimaryKey || col.isUnique ? null : (row[i] ?? null));
     });
     const updated = new Map(pendingChanges);
     updated.set(key, rowMap);
@@ -2173,11 +2374,13 @@
         const rowData = pageRows[r];
         const key = buildRowKey(rowData, columns, pageOffset + r);
         if (!selectedRowKeys.has(key)) continue;
-        if (allDeleted) next.delete(key); else next.set(key, [...rowData]);
+        if (allDeleted) next.delete(key);
+        else next.set(key, [...rowData]);
       }
     } else {
       const { row, rowKey } = contextMenu;
-      if (next.has(rowKey)) next.delete(rowKey); else next.set(rowKey, [...row]);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.set(rowKey, [...row]);
     }
     pendingDeletedRows = next;
     onDeleteRowsPending?.(pendingDeletedRows);
@@ -2211,7 +2414,14 @@
   }
 </script>
 
-<svelte:window onclick={handleWindowClick} onmouseup={() => { isDraggingSelection = false; if (isDraggingRowSelect) justFinishedRowDrag = true; isDraggingRowSelect = false; }} />
+<svelte:window
+  onclick={handleWindowClick}
+  onmouseup={() => {
+    isDraggingSelection = false;
+    if (isDraggingRowSelect) justFinishedRowDrag = true;
+    isDraggingRowSelect = false;
+  }}
+/>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -2221,7 +2431,10 @@
   style:--cell-max-lines={settings.cellMaxLines}
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
-  onkeydown={(e) => { handleContextMenuKeydown(e); handleTableKeydown(e); }}
+  onkeydown={(e) => {
+    handleContextMenuKeydown(e);
+    handleTableKeydown(e);
+  }}
   onfocusout={(e) => {
     if (!tableContainerEl?.contains(e.relatedTarget as Node | null) && editTarget === null) {
       anchorCell = null;
@@ -2231,26 +2444,54 @@
     }
   }}
 >
-
-  <div class="table-scroll" class:selecting={isDraggingSelection} bind:this={tableScrollEl} ondblclick={(e) => { if (editable && !readOnly && !(e.target as Element).closest('tr')) onAddRow?.(); }} onclick={(e) => { if (justFinishedRowDrag) { justFinishedRowDrag = false; return; } if (rowSelectionMode && !(e.target as Element).closest('tr')) { rowSelectionMode = false; rowAnchor = null; rowFocus = null; additionalSelectedRowIndices = new Set(); } }}>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="table-scroll"
+    class:selecting={isDraggingSelection}
+    bind:this={tableScrollEl}
+    ondblclick={(e) => {
+      if (editable && !readOnly && !(e.target as Element).closest('tr')) onAddRow?.();
+    }}
+    onclick={(e) => {
+      if (justFinishedRowDrag) {
+        justFinishedRowDrag = false;
+        return;
+      }
+      if (rowSelectionMode && !(e.target as Element).closest('tr')) {
+        rowSelectionMode = false;
+        rowAnchor = null;
+        rowFocus = null;
+        additionalSelectedRowIndices = new Set();
+      }
+    }}
+  >
     <table class="data-table">
       <thead>
         <tr class="header-row">
           <!-- Row number column header -->
           <th
             class="rownum-header-cell"
-            onclick={() => { focusedCell = null; onDeselect?.(); }}
-          >#</th>
+            onclick={() => {
+              focusedCell = null;
+              onDeselect?.();
+            }}>#</th
+          >
           {#each visibleColumns as { col, originalIndex }, i}
             {@const isSorted = sortColIndex === originalIndex}
             {@const isDragging = colDragName === col.name && colIsDragging}
             {@const prevColName = i > 0 ? visibleColumns[i - 1].col.name : null}
             {@const isDropIndicator =
               (colDropTarget?.name === col.name && colDropTarget.position === 'before') ||
-              (prevColName !== null && colDropTarget?.name === prevColName && colDropTarget.position === 'after')}
-            {@const isDropAfterLast = i === visibleColumns.length - 1 && colDropTarget?.name === col.name && colDropTarget.position === 'after'}
+              (prevColName !== null &&
+                colDropTarget?.name === prevColName &&
+                colDropTarget.position === 'after')}
+            {@const isDropAfterLast =
+              i === visibleColumns.length - 1 &&
+              colDropTarget?.name === col.name &&
+              colDropTarget.position === 'after'}
             {@const colLabel = columnRenames[col.name] ?? col.name}
-            {@const colIsRenamed = columnRenames[col.name] !== undefined && columnRenames[col.name] !== col.name}
+            {@const colIsRenamed =
+              columnRenames[col.name] !== undefined && columnRenames[col.name] !== col.name}
             {@const isRenamingThis = renamingHeader?.colName === col.name}
             <th
               class="header-cell"
@@ -2258,10 +2499,16 @@
               class:drop-indicator={isDropIndicator}
               class:drop-after-last={isDropAfterLast}
               data-col-name={col.name}
-              style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
+              style="width: {colWidths[originalIndex]}px; min-width: {colWidths[
+                originalIndex
+              ]}px; max-width: {colWidths[originalIndex]}px;"
               title="{colLabel} ({col.dataType}){colIsRenamed ? ` — original: ${col.name}` : ''}"
-              onpointerdown={(e) => { if (!isRenamingThis) onColHeaderPointerDown(e, col.name); }}
-              oncontextmenu={(e) => { if (onRenameColumn) openHeaderContextMenu(e, col.name); }}
+              onpointerdown={(e) => {
+                if (!isRenamingThis) onColHeaderPointerDown(e, col.name);
+              }}
+              oncontextmenu={(e) => {
+                if (onRenameColumn) openHeaderContextMenu(e, col.name);
+              }}
             >
               {#if isRenamingThis}
                 <input
@@ -2282,18 +2529,31 @@
                   title="Sort by {colLabel}"
                 >
                   {#if col.isPrimaryKey}
-                    <svg class="pk-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg
+                      class="pk-icon"
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
                       <circle cx="8" cy="9" r="4"></circle>
                       <path d="M11 12l7 7"></path>
                       <path d="M16 17l2-2"></path>
                     </svg>
                   {/if}
                   <span class="header-label">
-                    <span class="header-name" class:header-name--renamed={colIsRenamed}>{colLabel}</span>
+                    <span class="header-name" class:header-name--renamed={colIsRenamed}
+                      >{colLabel}</span
+                    >
                     <span class="header-type">{col.dataType}</span>
                   </span>
                   {#if isSorted && sortDir !== 'none'}
-                    <span class="sort-indicator" aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}>
+                    <span
+                      class="sort-indicator"
+                      aria-label={sortDir === 'asc' ? 'ascending' : 'descending'}
+                    >
                       {sortDir === 'asc' ? '▲' : '▼'}
                     </span>
                   {/if}
@@ -2316,12 +2576,37 @@
         {#if settings.newRowPosition === 'top'}
           {#each pendingNewRows as newRow}
             <tr class="data-row new-row" data-new-row-key={newRow.key}>
-              <td class="rownum-cell" oncontextmenu={(e) => { e.preventDefault(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: null, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}>
+              <td
+                class="rownum-cell"
+                oncontextmenu={(e) => {
+                  e.preventDefault();
+                  activeMenuDismiss?.();
+                  contextMenu = {
+                    x: e.clientX,
+                    y: e.clientY,
+                    rowKey: newRow.key,
+                    row: [],
+                    colName: null,
+                    isNewRow: true,
+                  };
+                  contextMenuSnapshotHasFocus = focusedCell !== null;
+                  contextMenuSnapshotIsMultiCell = selectionIsMultiCell();
+                  const _r = getSelectionRange();
+                  contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false;
+                  activeMenuDismiss = () => {
+                    contextMenu = null;
+                  };
+                }}
+              >
                 <span class="new-row-indicator" aria-label="New row">+</span>
               </td>
               {#each visibleColumns as { col, originalIndex }}
                 {@const currentValue = pendingChanges.get(newRow.key)?.get(col.name) ?? null}
-                {@const isRequiredEmpty = !col.nullable && !col.isAutoIncrement && col.defaultValue == null && (currentValue === null || currentValue === '')}
+                {@const isRequiredEmpty =
+                  !col.nullable &&
+                  !col.isAutoIncrement &&
+                  col.defaultValue == null &&
+                  (currentValue === null || currentValue === '')}
                 {@const typeCategory = getDataTypeCategory(col.dataType)}
                 <td
                   class="data-cell"
@@ -2329,11 +2614,35 @@
                   class:cell-timestamp={typeCategory === 'timestamp'}
                   class:cell-editable={editable && !readOnly}
                   class:cell-required-empty={isRequiredEmpty}
-                  style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
+                  style="width: {colWidths[originalIndex]}px; min-width: {colWidths[
+                    originalIndex
+                  ]}px; max-width: {colWidths[originalIndex]}px;"
                   tabindex="0"
-                  ondblclick={(e) => handleNewRowCellDblClick(e, newRow.key, currentValue, col, originalIndex)}
-                  oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: col.name, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}
-                  onfocus={() => { focusedCell = null; }}
+                  ondblclick={(e) =>
+                    handleNewRowCellDblClick(e, newRow.key, currentValue, col, originalIndex)}
+                  oncontextmenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activeMenuDismiss?.();
+                    contextMenu = {
+                      x: e.clientX,
+                      y: e.clientY,
+                      rowKey: newRow.key,
+                      row: [],
+                      colName: col.name,
+                      isNewRow: true,
+                    };
+                    contextMenuSnapshotHasFocus = focusedCell !== null;
+                    contextMenuSnapshotIsMultiCell = selectionIsMultiCell();
+                    const _r = getSelectionRange();
+                    contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false;
+                    activeMenuDismiss = () => {
+                      contextMenu = null;
+                    };
+                  }}
+                  onfocus={() => {
+                    focusedCell = null;
+                  }}
                 >
                   <div class="cell-inner">
                     <span class="cell-content">
@@ -2342,8 +2651,37 @@
                       {:else if currentValue === ''}
                         <span class="empty-value">EMPTY</span>
                       {:else if typeCategory === 'boolean' && (typeof currentValue === 'boolean' || typeof currentValue === 'number')}
-                        <span class="bool-value" class:bool-true={currentValue} class:bool-false={!currentValue}>
-                          {#if currentValue}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>{/if}
+                        <span
+                          class="bool-value"
+                          class:bool-true={currentValue}
+                          class:bool-false={!currentValue}
+                        >
+                          {#if currentValue}<svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
+                            >{:else}<svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              aria-hidden="true"
+                              ><line x1="18" y1="6" x2="6" y2="18" /><line
+                                x1="6"
+                                y1="6"
+                                x2="18"
+                                y2="18"
+                              /></svg
+                            >{/if}
                         </span>
                       {:else}
                         {formatCell(currentValue)}
@@ -2392,7 +2730,8 @@
                       const hi = Math.max(rowAnchor, rowFocus ?? rowAnchor);
                       for (let i = lo; i <= hi; i++) next.add(i);
                     }
-                    if (next.has(rowIndex)) next.delete(rowIndex); else next.add(rowIndex);
+                    if (next.has(rowIndex)) next.delete(rowIndex);
+                    else next.add(rowIndex);
                     additionalSelectedRowIndices = next;
                   }
                 } else if (e.shiftKey && rowSelectionMode && rowAnchor !== null) {
@@ -2426,8 +2765,16 @@
               {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
               {@const isPending = hasPendingChange(rowKey, col.name)}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
-              {@const isRequiredEmpty = isPending && (cellValue === null || cellValue === '') && !col.nullable && !col.isAutoIncrement && col.defaultValue == null}
-              {@const cellMatches = !!searchTerm && cellValue !== null && String(cellValue).toLowerCase().includes(searchTerm.toLowerCase())}
+              {@const isRequiredEmpty =
+                isPending &&
+                (cellValue === null || cellValue === '') &&
+                !col.nullable &&
+                !col.isAutoIncrement &&
+                col.defaultValue == null}
+              {@const cellMatches =
+                !!searchTerm &&
+                cellValue !== null &&
+                String(cellValue).toLowerCase().includes(searchTerm.toLowerCase())}
               <td
                 class="data-cell"
                 class:cell-number={typeCategory === 'number'}
@@ -2438,12 +2785,27 @@
                 class:cell-required-empty={isRequiredEmpty}
                 class:cell-fk={col.isForeignKey && cellValue !== null && !!onForeignKeyClick}
                 class:cell-search-match={cellMatches}
-                style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
+                style="width: {colWidths[originalIndex]}px; min-width: {colWidths[
+                  originalIndex
+                ]}px; max-width: {colWidths[originalIndex]}px;"
                 tabindex="0"
                 ondblclick={(e) => handleCellDblClick(e, row, processedRowIndex, originalIndex)}
-                oncontextmenu={(e) => { e.stopPropagation(); if (!rowSelectionMode && !isCellInSelection(rowIndex, colIndex)) { anchorCell = { row: rowIndex, col: colIndex }; focusedCell = { row: rowIndex, col: colIndex }; } handleRowContextMenu(e, row, processedRowIndex, col.name); }}
+                oncontextmenu={(e) => {
+                  e.stopPropagation();
+                  if (!rowSelectionMode && !isCellInSelection(rowIndex, colIndex)) {
+                    anchorCell = { row: rowIndex, col: colIndex };
+                    focusedCell = { row: rowIndex, col: colIndex };
+                  }
+                  handleRowContextMenu(e, row, processedRowIndex, col.name);
+                }}
                 onmousedown={(e) => {
-                  if (e.button === 0 && e.metaKey && e.shiftKey && col.isForeignKey && cellValue !== null) {
+                  if (
+                    e.button === 0 &&
+                    e.metaKey &&
+                    e.shiftKey &&
+                    col.isForeignKey &&
+                    cellValue !== null
+                  ) {
                     e.stopPropagation();
                     triggerQuickView(col.name, cellValue, rowKey);
                     return;
@@ -2461,8 +2823,13 @@
                   if (e.altKey && !e.shiftKey && !e.metaKey) {
                     const key = cellKey(rowIndex, colIndex);
                     const next = new Set(additionalSelectedCells);
-                    if (next.size === 0 && anchorCell) next.add(cellKey(anchorCell.row, anchorCell.col));
-                    if (next.has(key)) { next.delete(key); } else { next.add(key); }
+                    if (next.size === 0 && anchorCell)
+                      next.add(cellKey(anchorCell.row, anchorCell.col));
+                    if (next.has(key)) {
+                      next.delete(key);
+                    } else {
+                      next.add(key);
+                    }
                     additionalSelectedCells = next;
                     skipNextFocusReset = true;
                     anchorCell = { row: rowIndex, col: colIndex };
@@ -2522,9 +2889,34 @@
                         {:else if settings.booleanDisplay === '1-0'}
                           {cellValue ? '1' : '0'}
                         {:else if cellValue}
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
+                          >
                         {:else}
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            aria-hidden="true"
+                            ><line x1="18" y1="6" x2="6" y2="18" /><line
+                              x1="6"
+                              y1="6"
+                              x2="18"
+                              y2="18"
+                            /></svg
+                          >
                         {/if}
                       </span>
                     {:else if cellMatches}
@@ -2546,15 +2938,41 @@
               <td class="quick-view-cell" colspan={visibleColumns.length + 2} tabindex="-1">
                 {#if quickViewState.loading}
                   <div class="quick-view-panel">
-                    <div class="quick-view-header" style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))">
+                    <div
+                      class="quick-view-header"
+                      style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))"
+                    >
                       <span class="quick-view-title">Loading…</span>
-                      <button class="quick-view-close" onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                      <button
+                        class="quick-view-close"
+                        onclick={() => (quickViewState = null)}
+                        aria-label="Close quick view"
+                        ><svg
+                          width="11"
+                          height="11"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2.5"
+                          stroke-linecap="round"
+                          aria-hidden="true"
+                          ><line x1="18" y1="6" x2="6" y2="18" /><line
+                            x1="6"
+                            y1="6"
+                            x2="18"
+                            y2="18"
+                          /></svg
+                        ></button
+                      >
                     </div>
                   </div>
                 {:else if quickViewState.data !== null}
                   {@const qd = quickViewState.data}
                   <div class="quick-view-panel">
-                    <div class="quick-view-header" style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))">
+                    <div
+                      class="quick-view-header"
+                      style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))"
+                    >
                       <span class="quick-view-title">
                         <span class="quick-view-table-name">{qd.tableName}</span>
                         <span class="quick-view-sep"> · </span>
@@ -2562,10 +2980,53 @@
                       </span>
                       <div class="quick-view-actions">
                         {#if onForeignKeyClick}
-                          <button class="quick-view-go" onclick={() => { onForeignKeyClick!(quickViewState!.triggerColName, quickViewState!.triggerCellValue); quickViewState = null; }} aria-label="Go to row in table"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></button>
+                          <button
+                            class="quick-view-go"
+                            onclick={() => {
+                              onForeignKeyClick!(
+                                quickViewState!.triggerColName,
+                                quickViewState!.triggerCellValue,
+                              );
+                              quickViewState = null;
+                            }}
+                            aria-label="Go to row in table"
+                            ><svg
+                              width="11"
+                              height="11"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                              ><path d="M5 12h14" /><path d="M13 6l6 6-6 6" /></svg
+                            ></button
+                          >
                         {/if}
                         <!-- svelte-ignore a11y_autofocus -->
-                        <button class="quick-view-close" autofocus onclick={() => quickViewState = null} aria-label="Close quick view"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                        <button
+                          class="quick-view-close"
+                          autofocus
+                          onclick={() => (quickViewState = null)}
+                          aria-label="Close quick view"
+                          ><svg
+                            width="11"
+                            height="11"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            aria-hidden="true"
+                            ><line x1="18" y1="6" x2="6" y2="18" /><line
+                              x1="6"
+                              y1="6"
+                              x2="18"
+                              y2="18"
+                            /></svg
+                          ></button
+                        >
                       </div>
                     </div>
                     {#if qd.row === null}
@@ -2576,10 +3037,22 @@
                           <thead>
                             <tr>
                               {#each qd.columns as qcol}
-                                <th class="quick-view-th" class:quick-view-th-pk={qcol.isPrimaryKey}>
+                                <th
+                                  class="quick-view-th"
+                                  class:quick-view-th-pk={qcol.isPrimaryKey}
+                                >
                                   {#if qcol.isPrimaryKey}
-                                    <svg class="quick-view-pk" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                      <circle cx="8" cy="9" r="4"></circle><path d="M11 12l7 7"></path><path d="M16 17l2-2"></path>
+                                    <svg
+                                      class="quick-view-pk"
+                                      width="9"
+                                      height="9"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      stroke-width="2"
+                                    >
+                                      <circle cx="8" cy="9" r="4"></circle><path d="M11 12l7 7"
+                                      ></path><path d="M16 17l2-2"></path>
                                     </svg>
                                   {/if}
                                   {qcol.name}
@@ -2590,7 +3063,11 @@
                           <tbody>
                             <tr>
                               {#each qd.columns as qcol, qi}
-                                <td class="quick-view-td" class:quick-view-td-number={getDataTypeCategory(qcol.dataType) === 'number'}>
+                                <td
+                                  class="quick-view-td"
+                                  class:quick-view-td-number={getDataTypeCategory(qcol.dataType) ===
+                                    'number'}
+                                >
                                   {#if qd.row[qi] === null}
                                     <span class="null-value">NULL</span>
                                   {:else if qd.row[qi] === ''}
@@ -2613,46 +3090,124 @@
         {/each}
 
         {#if settings.newRowPosition !== 'top'}
-        {#each pendingNewRows as newRow}
-          <tr class="data-row new-row" data-new-row-key={newRow.key}>
-            <td class="rownum-cell" oncontextmenu={(e) => { e.preventDefault(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: null, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}>
-              <span class="new-row-indicator" aria-label="New row">+</span>
-            </td>
-            {#each visibleColumns as { col, originalIndex }}
-              {@const currentValue = pendingChanges.get(newRow.key)?.get(col.name) ?? null}
-              {@const isRequiredEmpty = !col.nullable && !col.isAutoIncrement && col.defaultValue == null && (currentValue === null || currentValue === '')}
-              {@const typeCategory = getDataTypeCategory(col.dataType)}
+          {#each pendingNewRows as newRow}
+            <tr class="data-row new-row" data-new-row-key={newRow.key}>
               <td
-                class="data-cell"
-                class:cell-number={typeCategory === 'number'}
-                class:cell-timestamp={typeCategory === 'timestamp'}
-                class:cell-editable={editable && !readOnly}
-                class:cell-required-empty={isRequiredEmpty}
-                style="width: {colWidths[originalIndex]}px; min-width: {colWidths[originalIndex]}px; max-width: {colWidths[originalIndex]}px;"
-                tabindex="0"
-                ondblclick={(e) => handleNewRowCellDblClick(e, newRow.key, currentValue, col, originalIndex)}
-                oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); activeMenuDismiss?.(); contextMenu = { x: e.clientX, y: e.clientY, rowKey: newRow.key, row: [], colName: col.name, isNewRow: true }; contextMenuSnapshotHasFocus = focusedCell !== null; contextMenuSnapshotIsMultiCell = selectionIsMultiCell(); const _r = getSelectionRange(); contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false; activeMenuDismiss = () => { contextMenu = null; }; }}
-                onfocus={() => { focusedCell = null; }}
+                class="rownum-cell"
+                oncontextmenu={(e) => {
+                  e.preventDefault();
+                  activeMenuDismiss?.();
+                  contextMenu = {
+                    x: e.clientX,
+                    y: e.clientY,
+                    rowKey: newRow.key,
+                    row: [],
+                    colName: null,
+                    isNewRow: true,
+                  };
+                  contextMenuSnapshotHasFocus = focusedCell !== null;
+                  contextMenuSnapshotIsMultiCell = selectionIsMultiCell();
+                  const _r = getSelectionRange();
+                  contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false;
+                  activeMenuDismiss = () => {
+                    contextMenu = null;
+                  };
+                }}
               >
-                <div class="cell-inner">
-                  <span class="cell-content">
-                    {#if currentValue === null}
-                      <span class="null-value">NULL</span>
-                    {:else if currentValue === ''}
-                      <span class="empty-value">EMPTY</span>
-                    {:else if typeCategory === 'boolean' && (typeof currentValue === 'boolean' || typeof currentValue === 'number')}
-                      <span class="bool-value" class:bool-true={currentValue} class:bool-false={!currentValue}>
-                        {#if currentValue}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>{/if}
-                      </span>
-                    {:else}
-                      {formatCell(currentValue)}
-                    {/if}
-                  </span>
-                </div>
+                <span class="new-row-indicator" aria-label="New row">+</span>
               </td>
-            {/each}
-          </tr>
-        {/each}
+              {#each visibleColumns as { col, originalIndex }}
+                {@const currentValue = pendingChanges.get(newRow.key)?.get(col.name) ?? null}
+                {@const isRequiredEmpty =
+                  !col.nullable &&
+                  !col.isAutoIncrement &&
+                  col.defaultValue == null &&
+                  (currentValue === null || currentValue === '')}
+                {@const typeCategory = getDataTypeCategory(col.dataType)}
+                <td
+                  class="data-cell"
+                  class:cell-number={typeCategory === 'number'}
+                  class:cell-timestamp={typeCategory === 'timestamp'}
+                  class:cell-editable={editable && !readOnly}
+                  class:cell-required-empty={isRequiredEmpty}
+                  style="width: {colWidths[originalIndex]}px; min-width: {colWidths[
+                    originalIndex
+                  ]}px; max-width: {colWidths[originalIndex]}px;"
+                  tabindex="0"
+                  ondblclick={(e) =>
+                    handleNewRowCellDblClick(e, newRow.key, currentValue, col, originalIndex)}
+                  oncontextmenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activeMenuDismiss?.();
+                    contextMenu = {
+                      x: e.clientX,
+                      y: e.clientY,
+                      rowKey: newRow.key,
+                      row: [],
+                      colName: col.name,
+                      isNewRow: true,
+                    };
+                    contextMenuSnapshotHasFocus = focusedCell !== null;
+                    contextMenuSnapshotIsMultiCell = selectionIsMultiCell();
+                    const _r = getSelectionRange();
+                    contextMenuSnapshotIsMultiCol = _r ? _r.minCol !== _r.maxCol : false;
+                    activeMenuDismiss = () => {
+                      contextMenu = null;
+                    };
+                  }}
+                  onfocus={() => {
+                    focusedCell = null;
+                  }}
+                >
+                  <div class="cell-inner">
+                    <span class="cell-content">
+                      {#if currentValue === null}
+                        <span class="null-value">NULL</span>
+                      {:else if currentValue === ''}
+                        <span class="empty-value">EMPTY</span>
+                      {:else if typeCategory === 'boolean' && (typeof currentValue === 'boolean' || typeof currentValue === 'number')}
+                        <span
+                          class="bool-value"
+                          class:bool-true={currentValue}
+                          class:bool-false={!currentValue}
+                        >
+                          {#if currentValue}<svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
+                            >{:else}<svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              aria-hidden="true"
+                              ><line x1="18" y1="6" x2="6" y2="18" /><line
+                                x1="6"
+                                y1="6"
+                                x2="18"
+                                y2="18"
+                              /></svg
+                            >{/if}
+                        </span>
+                      {:else}
+                        {formatCell(currentValue)}
+                      {/if}
+                    </span>
+                  </div>
+                </td>
+              {/each}
+            </tr>
+          {/each}
         {/if}
 
         {#if processedRows.length === 0}
@@ -2672,7 +3227,9 @@
       class="context-menu"
       role="menu"
       tabindex="-1"
-      style="left: {ctxMenuLeft}px; top: {ctxMenuTop}px;{ctxMenuMaxHeight !== null ? ` max-height: ${ctxMenuMaxHeight}px;` : ''}"
+      style="left: {ctxMenuLeft}px; top: {ctxMenuTop}px;{ctxMenuMaxHeight !== null
+        ? ` max-height: ${ctxMenuMaxHeight}px;`
+        : ''}"
       bind:this={contextMenuEl}
       onclick={(e) => e.stopPropagation()}
       onmousedown={(e) => e.preventDefault()}
@@ -2689,19 +3246,31 @@
         </button>
       {:else if contextMenuSnapshotIsRowSelection}
         {#if selectedRowKeys.size > 1}
-          <button class="context-menu-item" role="menuitem" onclick={() => copySelectedRowsTabSeparated()}>
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => copySelectedRowsTabSeparated()}
+          >
             Copy {selectedRowKeys.size} rows (tab-separated)
           </button>
         {:else}
-          <button class="context-menu-item" role="menuitem" onclick={() => copyRowTabSeparated(contextMenu!.row)}>
+          <button
+            class="context-menu-item"
+            role="menuitem"
+            onclick={() => copyRowTabSeparated(contextMenu!.row)}
+          >
             Copy row (tab-separated)
           </button>
         {/if}
         <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
-          {selectedRowKeys.size > 1 ? `Copy ${selectedRowKeys.size} rows as JSON` : 'Copy row as JSON'}
+          {selectedRowKeys.size > 1
+            ? `Copy ${selectedRowKeys.size} rows as JSON`
+            : 'Copy row as JSON'}
         </button>
         <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
-          {selectedRowKeys.size > 1 ? `Copy ${selectedRowKeys.size} rows as CSV` : 'Copy row as CSV'}
+          {selectedRowKeys.size > 1
+            ? `Copy ${selectedRowKeys.size} rows as CSV`
+            : 'Copy row as CSV'}
         </button>
         {#if editable && !readOnly}
           <div class="context-menu-separator"></div>
@@ -2710,10 +3279,18 @@
               Clone row
             </button>
           {/if}
-          <button class="context-menu-item context-menu-item-danger" role="menuitem" onclick={() => deleteRow()}>
+          <button
+            class="context-menu-item context-menu-item-danger"
+            role="menuitem"
+            onclick={() => deleteRow()}
+          >
             {selectedRowKeys.size > 1
-              ? (([...selectedRowKeys].every((k) => pendingDeletedRows.has(k))) ? `Undelete ${selectedRowKeys.size} rows` : `Delete ${selectedRowKeys.size} rows`)
-              : (pendingDeletedRows.has(contextMenu!.rowKey) ? 'Undelete row' : 'Delete row')}
+              ? [...selectedRowKeys].every((k) => pendingDeletedRows.has(k))
+                ? `Undelete ${selectedRowKeys.size} rows`
+                : `Delete ${selectedRowKeys.size} rows`
+              : pendingDeletedRows.has(contextMenu!.rowKey)
+                ? 'Undelete row'
+                : 'Delete row'}
           </button>
         {/if}
       {:else}
@@ -2744,20 +3321,12 @@
         {/if}
         <div class="context-menu-separator"></div>
         {#if editable && !readOnly}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => setSelectionNull()}
-          >
+          <button class="context-menu-item" role="menuitem" onclick={() => setSelectionNull()}>
             Set to NULL
           </button>
         {/if}
         {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={setNowFromContextMenu}
-          >
+          <button class="context-menu-item" role="menuitem" onclick={setNowFromContextMenu}>
             Set to NOW
           </button>
         {/if}
@@ -2778,7 +3347,10 @@
           <button
             class="context-menu-item"
             role="menuitem"
-            onclick={() => { copySelection(); dismissContextMenu(); }}
+            onclick={() => {
+              copySelection();
+              dismissContextMenu();
+            }}
           >
             {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
           </button>
@@ -2786,7 +3358,10 @@
             <button
               class="context-menu-item"
               role="menuitem"
-              onclick={() => { cutSelection(); dismissContextMenu(); }}
+              onclick={() => {
+                cutSelection();
+                dismissContextMenu();
+              }}
             >
               {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
             </button>
@@ -2794,40 +3369,27 @@
               class="context-menu-item"
               role="menuitem"
               disabled={!contextMenuClipboardHasContent}
-              onclick={() => { pasteFromClipboard(); dismissContextMenu(); }}
+              onclick={() => {
+                pasteFromClipboard();
+                dismissContextMenu();
+              }}
             >
               Paste
             </button>
           {/if}
         {/if}
         <div class="context-menu-separator"></div>
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copyAsJson()}
-        >
+        <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
           Copy cell as JSON
         </button>
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copyAsSql()}
-        >
+        <button class="context-menu-item" role="menuitem" onclick={() => copyAsSql()}>
           Copy cell as SQL
         </button>
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copyAsCsv()}
-        >
+        <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
           Copy cell as CSV
         </button>
         <div class="context-menu-separator"></div>
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copyColumnNames()}
-        >
+        <button class="context-menu-item" role="menuitem" onclick={() => copyColumnNames()}>
           {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
         </button>
         {#if contextMenu.colName && onConnectColumn && !contextMenuSnapshotIsMultiCell}
@@ -2835,7 +3397,10 @@
           <button
             class="context-menu-item"
             role="menuitem"
-            onclick={() => { onConnectColumn!(contextMenu!.colName!); dismissContextMenu(); }}
+            onclick={() => {
+              onConnectColumn!(contextMenu!.colName!);
+              dismissContextMenu();
+            }}
           >
             Connect column…
           </button>
@@ -2860,11 +3425,7 @@
         {/if}
         {#if editable && !readOnly}
           <div class="context-menu-separator"></div>
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => cloneRow()}
-          >
+          <button class="context-menu-item" role="menuitem" onclick={() => cloneRow()}>
             Clone row
           </button>
           <button
@@ -2881,11 +3442,14 @@
 
   <!-- Header context menu -->
   {#if headerContextMenu !== null}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="context-menu"
       role="menu"
       tabindex="-1"
-      style="left: {hdrCtxMenuLeft}px; top: {hdrCtxMenuTop}px;{hdrCtxMenuMaxHeight !== null ? ` max-height: ${hdrCtxMenuMaxHeight}px;` : ''}"
+      style="left: {hdrCtxMenuLeft}px; top: {hdrCtxMenuTop}px;{hdrCtxMenuMaxHeight !== null
+        ? ` max-height: ${hdrCtxMenuMaxHeight}px;`
+        : ''}"
       bind:this={headerContextMenuEl}
       onclick={(e) => e.stopPropagation()}
       onmousedown={(e) => e.preventDefault()}
@@ -2902,7 +3466,10 @@
         <button
           class="context-menu-item"
           role="menuitem"
-          onclick={() => { onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName); headerContextMenu = null; }}
+          onclick={() => {
+            onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName);
+            headerContextMenu = null;
+          }}
         >
           Reset name
         </button>
@@ -2932,7 +3499,6 @@
       {database}
     />
   {/if}
-
 </div>
 
 <!-- Modal cell editor (portal, full-screen) -->
@@ -2956,7 +3522,9 @@
     value={viewModalTarget.value}
     colName={viewModalTarget.colName}
     dataType={viewModalTarget.dataType}
-    onClose={() => { viewModalTarget = null; }}
+    onClose={() => {
+      viewModalTarget = null;
+    }}
   />
 {/if}
 
@@ -3285,6 +3853,7 @@
     min-width: 0;
     display: -webkit-box;
     -webkit-line-clamp: var(--cell-max-lines, 1);
+    line-clamp: var(--cell-max-lines, 1);
     -webkit-box-orient: vertical;
     white-space: pre-wrap;
   }
@@ -3550,7 +4119,10 @@
     color: var(--color-text-muted);
     cursor: pointer;
     line-height: 1;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
   }
 
   .quick-view-go:hover,

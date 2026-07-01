@@ -24,8 +24,8 @@
       class:seg-btn--active={value === opt.value}
       role="tab"
       aria-selected={value === opt.value}
-      onclick={() => value !== opt.value && onchange?.(opt.value)}
-    >{opt.label}</button>
+      onclick={() => value !== opt.value && onchange?.(opt.value)}>{opt.label}</button
+    >
   {/each}
 </div>
 
@@ -45,7 +45,9 @@
     font-family: var(--font-family-ui);
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .seg-btn + .seg-btn {

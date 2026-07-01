@@ -57,17 +57,25 @@
     onExecute?: (_sql: string) => void;
   }
 
-  let { connectionId, database: initialDatabase, initialSql = '', editorId, savedQueryId: initialSavedQueryId, savedQueryName: initialSavedQueryName, onExecute }: Props = $props();
+  let {
+    connectionId,
+    database: initialDatabase,
+    initialSql = '',
+    editorId,
+    savedQueryId: initialSavedQueryId,
+    savedQueryName: initialSavedQueryName,
+    onExecute,
+  }: Props = $props();
 
   const connections = useConnections();
   const settingsStore = useSettings();
   const panelStore = usePanels();
 
-  const cached = editorId ? queryEditorCache.get(editorId) : undefined;
+  const cached = untrack(() => (editorId ? queryEditorCache.get(editorId) : undefined));
 
   const isFocusedPanel = $derived(
     panelStore.focusedPanel?.content?.kind === 'query_editor' &&
-    panelStore.focusedPanel?.content?.editorId === editorId
+      panelStore.focusedPanel?.content?.editorId === editorId,
   );
 
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
@@ -80,11 +88,24 @@
   let transactionActive = $state(false);
 
   let databases = $state<string[]>([]);
-  let selectedDatabase = $state<string>(untrack(() => cached?.selectedDatabase ?? initialDatabase ?? connections.getById(connectionId)?.database ?? ''));
+  let selectedDatabase = $state<string>(
+    untrack(
+      () =>
+        cached?.selectedDatabase ??
+        initialDatabase ??
+        connections.getById(connectionId)?.database ??
+        '',
+    ),
+  );
 
   $effect(() => {
     if (!editorId) return;
-    queryEditorCache.save(editorId, { sql: sqlText, results, executedStatements, selectedDatabase });
+    queryEditorCache.save(editorId, {
+      sql: sqlText,
+      results,
+      executedStatements,
+      selectedDatabase,
+    });
   });
 
   $effect(() => {
@@ -99,7 +120,9 @@
 
   let currentSavedQueryId = $state<string | undefined>(untrack(() => initialSavedQueryId));
   let currentSavedQueryName = $state<string | undefined>(untrack(() => initialSavedQueryName));
-  let savedSql = $state<string | null>(untrack(() => initialSavedQueryId ? (cached?.sql ?? initialSql) : null));
+  let savedSql = $state<string | null>(
+    untrack(() => (initialSavedQueryId ? (cached?.sql ?? initialSql) : null)),
+  );
 
   $effect(() => {
     if (initialSavedQueryName !== undefined) currentSavedQueryName = initialSavedQueryName;
@@ -125,7 +148,7 @@
 
   $effect(() => {
     if (!toolbarEl) return;
-    const ro = new ResizeObserver(entries => {
+    const ro = new ResizeObserver((entries) => {
       toolbarWidth = entries[0].contentRect.width;
     });
     ro.observe(toolbarEl);
@@ -218,7 +241,10 @@
       currentSavedQueryName = saved.name;
       savedSql = sqlText;
       saveDialogOpen = false;
-      panelStore.updateQueryEditorMeta(editorId, { savedQueryId: saved.id, savedQueryName: saved.name });
+      panelStore.updateQueryEditorMeta(editorId, {
+        savedQueryId: saved.id,
+        savedQueryName: saved.name,
+      });
       savedQueriesInvalidator.invalidate();
     } finally {
       isSaving = false;
@@ -343,7 +369,10 @@
       { tag: tags.number, color: resolveCSSVar('--color-editor-number') },
       { tag: tags.comment, color: resolveCSSVar('--color-editor-comment') },
       { tag: tags.operator, color: resolveCSSVar('--color-editor-operator') },
-      { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: resolveCSSVar('--color-editor-function') },
+      {
+        tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+        color: resolveCSSVar('--color-editor-function'),
+      },
       { tag: [tags.typeName, tags.className], color: resolveCSSVar('--color-editor-type') },
     ]);
   }
@@ -364,9 +393,10 @@
       '.cm-cursor, .cm-dropCursor': {
         borderLeftColor: resolveCSSVar('--color-editor-cursor'),
       },
-      '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground': {
-        backgroundColor: 'var(--color-editor-selection)',
-      },
+      '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground':
+        {
+          backgroundColor: 'var(--color-editor-selection)',
+        },
       '.cm-gutters': {
         backgroundColor: resolveCSSVar('--color-editor-gutter-bg'),
         color: resolveCSSVar('--color-editor-gutter-text'),
@@ -416,15 +446,17 @@
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
-      results = [{
-        queryId: '',
-        columns: [],
-        rows: [],
-        totalRows: null,
-        durationMs: 0,
-        affectedRows: null,
-        error: errorMessage(err),
-      }];
+      results = [
+        {
+          queryId: '',
+          columns: [],
+          rows: [],
+          totalRows: null,
+          durationMs: 0,
+          affectedRows: null,
+          error: errorMessage(err),
+        },
+      ];
     } finally {
       isRunning = false;
     }
@@ -444,15 +476,17 @@
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
-      results = [{
-        queryId: '',
-        columns: [],
-        rows: [],
-        totalRows: null,
-        durationMs: 0,
-        affectedRows: null,
-        error: errorMessage(err),
-      }];
+      results = [
+        {
+          queryId: '',
+          columns: [],
+          rows: [],
+          totalRows: null,
+          durationMs: 0,
+          affectedRows: null,
+          error: errorMessage(err),
+        },
+      ];
     } finally {
       isRunning = false;
     }
@@ -470,15 +504,17 @@
       results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null);
       onExecute?.(stmt);
     } catch (err) {
-      results = [{
-        queryId: '',
-        columns: [],
-        rows: [],
-        totalRows: null,
-        durationMs: 0,
-        affectedRows: null,
-        error: errorMessage(err),
-      }];
+      results = [
+        {
+          queryId: '',
+          columns: [],
+          rows: [],
+          totalRows: null,
+          durationMs: 0,
+          affectedRows: null,
+          error: errorMessage(err),
+        },
+      ];
     } finally {
       isRunning = false;
     }
@@ -528,15 +564,17 @@
         dialect: explainResult.dialect,
       });
     } catch (err) {
-      results = [{
-        queryId: '',
-        columns: [],
-        rows: [],
-        totalRows: null,
-        durationMs: 0,
-        affectedRows: null,
-        error: errorMessage(err),
-      }];
+      results = [
+        {
+          queryId: '',
+          columns: [],
+          rows: [],
+          totalRows: null,
+          durationMs: 0,
+          affectedRows: null,
+          error: errorMessage(err),
+        },
+      ];
     } finally {
       isRunning = false;
     }
@@ -546,23 +584,24 @@
 
   async function beginTransaction(): Promise<void> {
     const profile = connections.getById(connectionId);
-    const sql = (profile?.dbType === 'mysql' || profile?.dbType === 'mariadb')
-      ? 'START TRANSACTION'
-      : 'BEGIN';
+    const sql =
+      profile?.dbType === 'mysql' || profile?.dbType === 'mariadb' ? 'START TRANSACTION' : 'BEGIN';
     isRunning = true;
     try {
       await executeMultiQuery(connectionId, sql);
       transactionActive = true;
     } catch (err) {
-      results = [{
-        queryId: '',
-        columns: [],
-        rows: [],
-        totalRows: null,
-        durationMs: 0,
-        affectedRows: null,
-        error: errorMessage(err),
-      }];
+      results = [
+        {
+          queryId: '',
+          columns: [],
+          rows: [],
+          totalRows: null,
+          durationMs: 0,
+          affectedRows: null,
+          error: errorMessage(err),
+        },
+      ];
     } finally {
       isRunning = false;
     }
@@ -574,15 +613,17 @@
       await executeMultiQuery(connectionId, 'COMMIT');
       transactionActive = false;
     } catch (err) {
-      results = [{
-        queryId: '',
-        columns: [],
-        rows: [],
-        totalRows: null,
-        durationMs: 0,
-        affectedRows: null,
-        error: errorMessage(err),
-      }];
+      results = [
+        {
+          queryId: '',
+          columns: [],
+          rows: [],
+          totalRows: null,
+          durationMs: 0,
+          affectedRows: null,
+          error: errorMessage(err),
+        },
+      ];
     } finally {
       isRunning = false;
     }
@@ -594,15 +635,17 @@
       await executeMultiQuery(connectionId, 'ROLLBACK');
       transactionActive = false;
     } catch (err) {
-      results = [{
-        queryId: '',
-        columns: [],
-        rows: [],
-        totalRows: null,
-        durationMs: 0,
-        affectedRows: null,
-        error: errorMessage(err),
-      }];
+      results = [
+        {
+          queryId: '',
+          columns: [],
+          rows: [],
+          totalRows: null,
+          durationMs: 0,
+          affectedRows: null,
+          error: errorMessage(err),
+        },
+      ];
     } finally {
       isRunning = false;
     }
@@ -653,10 +696,34 @@
 
     const runKeymap = keymap.of([
       { key: 'Mod-Enter', run: runQueryCommand },
-      { key: 'Mod-Shift-Enter', run: () => { runSelection(); return true; } },
-      { key: 'Mod-Shift-r', run: () => { runUnderCursor(); return true; } },
-      { key: 'Mod-Shift-f', run: () => { formatQuery(); return true; } },
-      { key: 'Alt-e', run: () => { runExplain(); return true; } },
+      {
+        key: 'Mod-Shift-Enter',
+        run: () => {
+          runSelection();
+          return true;
+        },
+      },
+      {
+        key: 'Mod-Shift-r',
+        run: () => {
+          runUnderCursor();
+          return true;
+        },
+      },
+      {
+        key: 'Mod-Shift-f',
+        run: () => {
+          formatQuery();
+          return true;
+        },
+      },
+      {
+        key: 'Alt-e',
+        run: () => {
+          runExplain();
+          return true;
+        },
+      },
     ]);
 
     const state = EditorState.create({
@@ -720,7 +787,7 @@
     {#if databases.length > 0}
       <Select
         bind:value={selectedDatabase}
-        options={databases.map(db => ({ value: db, label: db }))}
+        options={databases.map((db) => ({ value: db, label: db }))}
         size="xs"
         aria-label="Select database"
         mono
@@ -743,7 +810,17 @@
       title={currentSavedQueryId ? 'Save query' : 'Save query as…'}
       aria-label="Save query"
     >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
         <polyline points="17 21 17 13 7 13 7 21"></polyline>
         <polyline points="7 3 7 8 15 8"></polyline>
@@ -759,7 +836,12 @@
         style="top:{saveDialogTop}px;left:{saveDialogLeft}px"
         use:portal
       >
-        <form onsubmit={(e) => { e.preventDefault(); confirmSave(); }}>
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            confirmSave();
+          }}
+        >
           <input
             bind:this={saveNameInputEl}
             bind:value={saveNameInput}
@@ -769,9 +851,15 @@
             maxlength="120"
             autocomplete="off"
             spellcheck={false}
-            onkeydown={(e) => { if (e.key === 'Escape') saveDialogOpen = false; }}
+            onkeydown={(e) => {
+              if (e.key === 'Escape') saveDialogOpen = false;
+            }}
           />
-          <button type="submit" class="save-confirm-btn" disabled={!saveNameInput.trim() || isSaving}>
+          <button
+            type="submit"
+            class="save-confirm-btn"
+            disabled={!saveNameInput.trim() || isSaving}
+          >
             Save
           </button>
         </form>
@@ -782,16 +870,18 @@
       <button
         bind:this={actionsMenuTriggerEl}
         class="toolbar-btn toolbar-btn--icon"
-        onclick={() => { actionsMenuOpen = !actionsMenuOpen; }}
+        onclick={() => {
+          actionsMenuOpen = !actionsMenuOpen;
+        }}
         title="More actions"
         aria-label="More actions"
         aria-expanded={actionsMenuOpen}
         aria-haspopup="menu"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="2" cy="7" r="1.25" fill="currentColor"/>
-          <circle cx="7" cy="7" r="1.25" fill="currentColor"/>
-          <circle cx="12" cy="7" r="1.25" fill="currentColor"/>
+          <circle cx="2" cy="7" r="1.25" fill="currentColor" />
+          <circle cx="7" cy="7" r="1.25" fill="currentColor" />
+          <circle cx="12" cy="7" r="1.25" fill="currentColor" />
         </svg>
       </button>
 
@@ -803,20 +893,51 @@
           style="top:{actionsMenuTop}px;left:{actionsMenuLeft}px"
           use:portal
         >
-          <button class="actions-menu-item" role="menuitem" onclick={() => { runSelection(); actionsMenuOpen = false; }} disabled={isRunning}>
+          <button
+            class="actions-menu-item"
+            role="menuitem"
+            onclick={() => {
+              runSelection();
+              actionsMenuOpen = false;
+            }}
+            disabled={isRunning}
+          >
             <span>Run Selection</span>
             <kbd>⇧↵</kbd>
           </button>
-          <button class="actions-menu-item" role="menuitem" onclick={() => { runUnderCursor(); actionsMenuOpen = false; }} disabled={isRunning}>
+          <button
+            class="actions-menu-item"
+            role="menuitem"
+            onclick={() => {
+              runUnderCursor();
+              actionsMenuOpen = false;
+            }}
+            disabled={isRunning}
+          >
             <span>Run Cursor</span>
             <kbd>⇧R</kbd>
           </button>
           <div class="actions-menu-sep" role="separator"></div>
-          <button class="actions-menu-item" role="menuitem" onclick={() => { formatQuery(); actionsMenuOpen = false; }}>
+          <button
+            class="actions-menu-item"
+            role="menuitem"
+            onclick={() => {
+              formatQuery();
+              actionsMenuOpen = false;
+            }}
+          >
             <span>Format SQL</span>
             <kbd>⇧F</kbd>
           </button>
-          <button class="actions-menu-item" role="menuitem" onclick={() => { runExplain(); actionsMenuOpen = false; }} disabled={isRunning}>
+          <button
+            class="actions-menu-item"
+            role="menuitem"
+            onclick={() => {
+              runExplain();
+              actionsMenuOpen = false;
+            }}
+            disabled={isRunning}
+          >
             <span>Explain</span>
           </button>
         </div>
@@ -840,20 +961,11 @@
         Run Cursor
       </button>
 
-      <button
-        class="toolbar-btn"
-        onclick={formatQuery}
-        title="Format SQL (Cmd+Shift+F)"
-      >
+      <button class="toolbar-btn" onclick={formatQuery} title="Format SQL (Cmd+Shift+F)">
         Format
       </button>
 
-      <button
-        class="toolbar-btn"
-        onclick={runExplain}
-        disabled={isRunning}
-        title="Explain query"
-      >
+      <button class="toolbar-btn" onclick={runExplain} disabled={isRunning} title="Explain query">
         Explain
       </button>
     {/if}
@@ -868,8 +980,12 @@
         {#if !transactionActive}
           <button class="tx-btn" onclick={beginTransaction} disabled={isRunning}>Begin</button>
         {:else}
-          <button class="tx-btn tx-btn--commit" onclick={commitTransaction} disabled={isRunning}>Commit</button>
-          <button class="tx-btn tx-btn--rollback" onclick={rollbackTransaction} disabled={isRunning}>Rollback</button>
+          <button class="tx-btn tx-btn--commit" onclick={commitTransaction} disabled={isRunning}
+            >Commit</button
+          >
+          <button class="tx-btn tx-btn--rollback" onclick={rollbackTransaction} disabled={isRunning}
+            >Rollback</button
+          >
         {/if}
       </div>
     </div>
@@ -880,7 +996,12 @@
   </div>
 
   <div class="results-wrapper" bind:this={resultsWrapperEl} tabindex="-1">
-    <ResultsPanel {results} statements={executedStatements} {connectionId} database={selectedDatabase || undefined} />
+    <ResultsPanel
+      {results}
+      statements={executedStatements}
+      {connectionId}
+      database={selectedDatabase || undefined}
+    />
   </div>
 </div>
 
@@ -1082,8 +1203,14 @@
   }
 
   @keyframes dropdown-in {
-    from { opacity: 0; transform: scaleY(0.92) translateY(-4px); }
-    to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
+    from {
+      opacity: 0;
+      transform: scaleY(0.92) translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1) translateY(0);
+    }
   }
 
   .actions-menu-item {

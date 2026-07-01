@@ -48,9 +48,13 @@ pub async fn ssh_create_tunnel(
         ));
     }
 
-    let ssh_host = row.ssh_host.ok_or_else(|| AppError::new("SSH_ERROR", "SSH host not set"))?;
+    let ssh_host = row
+        .ssh_host
+        .ok_or_else(|| AppError::new("SSH_ERROR", "SSH host not set"))?;
     let ssh_port = row.ssh_port.unwrap_or(22) as u16;
-    let ssh_user = row.ssh_user.ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
+    let ssh_user = row
+        .ssh_user
+        .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
 
     let auth_type = row.ssh_auth_type.as_deref().unwrap_or("password");
     let ssh_password = (auth_type == "password")
@@ -132,7 +136,10 @@ mod tests {
         let active = manager.is_active("nonexistent-id");
         let local_port = manager.local_port("nonexistent-id");
         assert!(!active, "expected inactive for unknown tunnel id");
-        assert!(local_port.is_none(), "expected no port for unknown tunnel id");
+        assert!(
+            local_port.is_none(),
+            "expected no port for unknown tunnel id"
+        );
     }
 
     #[test]
@@ -146,13 +153,19 @@ mod tests {
     #[test]
     fn tunnel_status_serializes_correctly() {
         // Verify the full expected JSON shape of SshTunnelStatus.
-        let active_status = SshTunnelStatus { active: true, local_port: Some(54321) };
+        let active_status = SshTunnelStatus {
+            active: true,
+            local_port: Some(54321),
+        };
         let json = serde_json::to_string(&active_status).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["active"], serde_json::json!(true));
         assert_eq!(v["localPort"], serde_json::json!(54321));
 
-        let inactive_status = SshTunnelStatus { active: false, local_port: None };
+        let inactive_status = SshTunnelStatus {
+            active: false,
+            local_port: None,
+        };
         let json2 = serde_json::to_string(&inactive_status).unwrap();
         let v2: serde_json::Value = serde_json::from_str(&json2).unwrap();
         assert_eq!(v2["active"], serde_json::json!(false));

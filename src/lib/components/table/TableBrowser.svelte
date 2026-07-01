@@ -2,11 +2,14 @@
   // Shared across all TableBrowser instances — persists across remounts.
   type CellValue = string | number | boolean | null;
   const tableScrollPositions = new Map<string, number>();
-  const tablePendingState = new Map<string, {
-    changes: Map<string, Map<string, CellValue>>;
-    originalRows: Map<string, CellValue[]>;
-    deletedRows: Map<string, CellValue[]>;
-  }>();
+  const tablePendingState = new Map<
+    string,
+    {
+      changes: Map<string, Map<string, CellValue>>;
+      originalRows: Map<string, CellValue[]>;
+      deletedRows: Map<string, CellValue[]>;
+    }
+  >();
 
   export function clearTablePendingState(key: string): void {
     tablePendingState.delete(key);
@@ -16,7 +19,13 @@
 
 <script lang="ts">
   import { untrack, tick } from 'svelte';
-  import { executeQuery, executeSelection, updateRows, insertRow, deleteRows } from '$lib/tauri/query';
+  import {
+    executeQuery,
+    executeSelection,
+    updateRows,
+    insertRow,
+    deleteRows,
+  } from '$lib/tauri/query';
   import Loader from '$lib/components/ui/Loader.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
@@ -27,7 +36,10 @@
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
   import type { QueryResult, ColumnMeta, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
-  import DataTable, { type PageInfo, type QuickViewData } from '$lib/components/table/DataTable.svelte';
+  import DataTable, {
+    type PageInfo,
+    type QuickViewData,
+  } from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
   import FilterEditor, {
     type FilterEditorState,
@@ -42,7 +54,11 @@
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
   import SqlPreviewModal from '$lib/components/table/SqlPreviewModal.svelte';
   import type { DbType } from '$lib/types';
-  import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
+  import {
+    exportResultToFile,
+    exportResultToClipboard,
+    type ExportFormat,
+  } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
   import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
@@ -165,14 +181,18 @@
           primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
         });
       } else {
-        result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+        result.columns.forEach((col, i) => {
+          primaryKeys[col.name] = origRow[i] ?? null;
+        });
       }
 
-      const setClauses = [...colMap.entries()].map(([col, val]) => `${q(col)} = ${v(val)}`).join(', ');
+      const setClauses = [...colMap.entries()]
+        .map(([col, val]) => `${q(col)} = ${v(val)}`)
+        .join(', ');
       const whereClauses = Object.entries(primaryKeys)
-        .map(([col, val]) => val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`)
+        .map(([col, val]) => (val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`))
         .join(' AND ');
-      const limit = (dbType === 'mysql' || dbType === 'mariadb') ? ' LIMIT 1' : '';
+      const limit = dbType === 'mysql' || dbType === 'mariadb' ? ' LIMIT 1' : '';
       stmts.push(`UPDATE ${tableRef} SET ${setClauses} WHERE ${whereClauses}${limit};`);
     }
 
@@ -185,12 +205,14 @@
           primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
         });
       } else {
-        result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+        result.columns.forEach((col, i) => {
+          primaryKeys[col.name] = origRow[i] ?? null;
+        });
       }
       const whereClauses = Object.entries(primaryKeys)
-        .map(([col, val]) => val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`)
+        .map(([col, val]) => (val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`))
         .join(' AND ');
-      const limit = (dbType === 'mysql' || dbType === 'mariadb') ? ' LIMIT 1' : '';
+      const limit = dbType === 'mysql' || dbType === 'mariadb' ? ' LIMIT 1' : '';
       stmts.push(`DELETE FROM ${tableRef} WHERE ${whereClauses}${limit};`);
     }
 
@@ -204,9 +226,7 @@
   let connectionReadOnly = $derived(connections.getById(connectionId)?.readOnly ?? false);
 
   const tableHasNoPk = $derived(
-    result !== null &&
-    result.columns.length > 0 &&
-    result.columns.every((c) => !c.isPrimaryKey),
+    result !== null && result.columns.length > 0 && result.columns.every((c) => !c.isPrimaryKey),
   );
 
   const showNoPkWarning = $derived(tableHasNoPk && !connectionReadOnly && !noPkWarnDismissed);
@@ -225,10 +245,14 @@
 
   const pendingRowCount = $derived(pendingChanges.size + pendingDeletedRows.size);
   const pendingCellCount = $derived(
-    [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) + pendingDeletedRows.size
+    [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) +
+      pendingDeletedRows.size,
   );
 
-  function handleChangePending(changes: Map<string, Map<string, CellValue>>, rows: Map<string, CellValue[]>): void {
+  function handleChangePending(
+    changes: Map<string, Map<string, CellValue>>,
+    rows: Map<string, CellValue[]>,
+  ): void {
     // Deep-copy to plain Maps so TableBrowser owns its data independently of DataTable's reactive proxies.
     pendingChanges = new Map([...changes].map(([k, v]) => [k, new Map(v)]));
     originalRows = new Map([...rows].map(([k, v]) => [k, [...v]]));
@@ -351,7 +375,9 @@
 
   // Load column prefs from DB whenever connection/db/table change.
   $effect(() => {
-    const conn = connectionId, db = database, tbl = table;
+    const conn = connectionId,
+      db = database,
+      tbl = table;
     hiddenColumns = new Set();
     initialColWidths = undefined;
     initialColumnOrder = undefined;
@@ -416,12 +442,16 @@
 
   function isRuleActive(rule: FilterRule): boolean {
     if (rule.rawSql !== undefined) return rule.rawSql.trim() !== '';
-    return rule.column !== '' && (rule.operator === 'IS NULL' || rule.operator === 'IS NOT NULL' || rule.value.trim() !== '');
+    return (
+      rule.column !== '' &&
+      (rule.operator === 'IS NULL' || rule.operator === 'IS NOT NULL' || rule.value.trim() !== '')
+    );
   }
 
   function formatRuleText(rule: FilterRule): string {
     if (rule.rawSql !== undefined) return rule.rawSql;
-    if (rule.operator === 'IS NULL' || rule.operator === 'IS NOT NULL') return `${rule.column} ${rule.operator}`;
+    if (rule.operator === 'IS NULL' || rule.operator === 'IS NOT NULL')
+      return `${rule.column} ${rule.operator}`;
     if (rule.operator === 'IN') return `${rule.column} IN (${rule.value})`;
     return `${rule.column} ${rule.operator} ${rule.value}`;
   }
@@ -438,7 +468,11 @@
     return t.slice(1, -1).trim();
   }
 
-  type SummaryGroup = { keyword: string; bordered: boolean; rules: { conjunction: string; text: string; first: boolean }[] };
+  type SummaryGroup = {
+    keyword: string;
+    bordered: boolean;
+    rules: { conjunction: string; text: string; first: boolean }[];
+  };
 
   const filterSummaryBlocks = $derived.by((): SummaryGroup[] => {
     if (filterEditorState.mode === 'sql') {
@@ -450,11 +484,19 @@
             return {
               keyword: part.keyword,
               bordered: true,
-              rules: innerParts.map((ip, ri) => ({ conjunction: ip.keyword, text: ip.condition, first: ri === 0 })),
+              rules: innerParts.map((ip, ri) => ({
+                conjunction: ip.keyword,
+                text: ip.condition,
+                first: ri === 0,
+              })),
             };
           }
         }
-        return { keyword: part.keyword, bordered: false, rules: [{ conjunction: '', text: part.condition, first: true }] };
+        return {
+          keyword: part.keyword,
+          bordered: false,
+          rules: [{ conjunction: '', text: part.condition, first: true }],
+        };
       });
     }
     const activeGroups = filterEditorState.groups
@@ -464,7 +506,11 @@
     return activeGroups.map((g, gi) => ({
       keyword: gi === 0 ? 'WHERE' : filterEditorState.groupJunction,
       bordered: multi && g.active.length > 1,
-      rules: g.active.map((r, ri) => ({ conjunction: g.conjunction, text: formatRuleText(r), first: ri === 0 })),
+      rules: g.active.map((r, ri) => ({
+        conjunction: g.conjunction,
+        text: formatRuleText(r),
+        first: ri === 0,
+      })),
     }));
   });
 
@@ -479,7 +525,11 @@
 
   function portal(node: HTMLElement): { destroy(): void } {
     document.body.appendChild(node);
-    return { destroy() { node.remove(); } };
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
   }
 
   let lastQueryMs = $state<number | null>(null);
@@ -552,7 +602,12 @@
       const quotedTable = quoteIdentifier(table);
       const countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
       const [queryResult, schemaColumns, indexes, fks, countResult] = await Promise.all([
-        executeQuery(connectionId, buildSql(), untrack(() => page), PAGE_SIZE),
+        executeQuery(
+          connectionId,
+          buildSql(),
+          untrack(() => page),
+          PAGE_SIZE,
+        ),
         listColumns(connectionId, database, table).catch(() => []),
         listIndexes(connectionId, database, table).catch(() => []),
         listForeignKeys(connectionId, database, table).catch(() => []),
@@ -583,7 +638,9 @@
               dataType: s?.dataType ?? col.dataType,
               nullable: s ? s.nullable : col.nullable,
               isPrimaryKey: s?.isPrimaryKey ?? false,
-              isForeignKey: (s?.isForeignKey ?? false) || vrStore.hasForwardFrom(connectionId, database, table, col.name),
+              isForeignKey:
+                (s?.isForeignKey ?? false) ||
+                vrStore.hasForwardFrom(connectionId, database, table, col.name),
               defaultValue: s?.defaultValue ?? null,
               isAutoIncrement: s?.isAutoIncrement ?? false,
               isUnique: uniqueColNames.has(col.name),
@@ -619,7 +676,9 @@
     showFilterEditor = false;
     showColumnPicker = false;
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
-    untrack(() => { load(); });
+    untrack(() => {
+      load();
+    });
   });
 
   // Column picker position
@@ -670,9 +729,19 @@
     const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
     const pattern = `'%${escaped}%'`;
     if (dbType === 'postgres') {
-      return '(' + columns.map((c) => `CAST(${quoteIdentifier(c.name)} AS TEXT) ILIKE ${pattern}`).join(' OR ') + ')';
+      return (
+        '(' +
+        columns
+          .map((c) => `CAST(${quoteIdentifier(c.name)} AS TEXT) ILIKE ${pattern}`)
+          .join(' OR ') +
+        ')'
+      );
     }
-    return '(' + columns.map((c) => `CAST(${quoteIdentifier(c.name)} AS CHAR) LIKE ${pattern}`).join(' OR ') + ')';
+    return (
+      '(' +
+      columns.map((c) => `CAST(${quoteIdentifier(c.name)} AS CHAR) LIKE ${pattern}`).join(' OR ') +
+      ')'
+    );
   }
 
   // Re-load with debounce when search term changes while the bar is open.
@@ -737,7 +806,11 @@
     doExport(format, toFile, undefined);
   }
 
-  async function doExport(format: ExportFormat, toFile: boolean, tblName: string | undefined): Promise<void> {
+  async function doExport(
+    format: ExportFormat,
+    toFile: boolean,
+    tblName: string | undefined,
+  ): Promise<void> {
     exportError = null;
     try {
       if (toFile) {
@@ -847,7 +920,10 @@
     });
   }
 
-  async function handleForeignKeyQuickView(colName: string, value: CellValue): Promise<QuickViewData | null> {
+  async function handleForeignKeyQuickView(
+    colName: string,
+    value: CellValue,
+  ): Promise<QuickViewData | null> {
     const fk = foreignKeys.find((f) => f.columns.includes(colName));
     if (fk) {
       const colIdx = fk.columns.indexOf(colName);
@@ -887,7 +963,7 @@
       await connections.connect(targetConnId);
     }
     const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
-    const q = (name: string) => targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``;
+    const q = (name: string) => (targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``);
     const quotedDb = q(vr.to.database);
     const quotedTable = q(vr.to.table);
     const quotedCol = q(vr.to.column);
@@ -937,8 +1013,8 @@
     // Only handle when this panel is focused/visible
     if (!tableBrowserEl || !document.contains(tableBrowserEl)) return;
     // Check if any part of this component is active (contains focus)
-    const hasFocus = tableBrowserEl.contains(document.activeElement) ||
-      document.activeElement === document.body;
+    const hasFocus =
+      tableBrowserEl.contains(document.activeElement) || document.activeElement === document.body;
     if (!hasFocus) return;
 
     switch (action) {
@@ -984,8 +1060,14 @@
 
   $effect(() => {
     if (!isFocused) return;
-    function onMenuImportCsv() { importSource = 'file'; showCsvImport = true; }
-    function onMenuImportSql() { importSource = 'file'; showSqlImport = true; }
+    function onMenuImportCsv() {
+      importSource = 'file';
+      showCsvImport = true;
+    }
+    function onMenuImportSql() {
+      importSource = 'file';
+      showSqlImport = true;
+    }
     document.addEventListener('menu-import-csv', onMenuImportCsv);
     document.addEventListener('menu-import-sql', onMenuImportSql);
     return () => {
@@ -1024,8 +1106,15 @@
       title={`Click to copy ${database}.${table}`}
       role="button"
       tabindex="0"
-      onclick={() => navigator.clipboard.writeText(`${database}.${table}`).then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'))}
-      onkeydown={(e) => e.key === 'Enter' && navigator.clipboard.writeText(`${database}.${table}`).then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'))}
+      onclick={() =>
+        navigator.clipboard
+          .writeText(`${database}.${table}`)
+          .then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'))}
+      onkeydown={(e) =>
+        e.key === 'Enter' &&
+        navigator.clipboard
+          .writeText(`${database}.${table}`)
+          .then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'))}
     >
       <span class="db-name">{database}</span>
       <span class="separator">.</span>
@@ -1042,7 +1131,18 @@
       aria-label="Filters"
       aria-expanded={showFilterEditor}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg
+      >
       {#if filterStateIsActive(filterEditorState)}
         <span class="badge">
           {activeRuleCount(filterEditorState)}
@@ -1051,198 +1151,308 @@
     </button>
 
     <div class="toolbar-right">
+      {#if dtPageInfo !== null}
+        <span class="row-range">
+          {#if dtPageInfo.pageRowsLength === 0}
+            0
+          {:else}
+            {@const pageOffset = (page - 1) * PAGE_SIZE}
+            {(pageOffset + 1).toLocaleString()}–{Math.min(
+              pageOffset + dtPageInfo.pageRowsLength,
+              dtPageInfo.processedRowsLength,
+            ).toLocaleString()}
+          {/if}
+          of {dtPageInfo.processedRowsLength.toLocaleString()}
+        </span>
 
-    {#if dtPageInfo !== null}
-      <span class="row-range">
-        {#if dtPageInfo.pageRowsLength === 0}
-          0
-        {:else}
-          {@const pageOffset = (page - 1) * PAGE_SIZE}
-          {(pageOffset + 1).toLocaleString()}–{Math.min(pageOffset + dtPageInfo.pageRowsLength, dtPageInfo.processedRowsLength).toLocaleString()}
-        {/if}
-        of {dtPageInfo.processedRowsLength.toLocaleString()}
-      </span>
-
-      <div class="page-nav-group">
-        <button
-          class="page-nav-btn"
-          onclick={prevTablePage}
-          disabled={page === 1}
-          aria-label="Previous page"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
-        <button
-          class="page-nav-btn page-nav-btn--next"
-          onclick={nextTablePage}
-          disabled={page >= dtPageInfo.pageCount}
-          aria-label="Next page"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-        </button>
-      </div>
-    {/if}
-
-    {#if pendingRowCount > 0}
-      <div class="save-split-btn">
-        <button
-          class="toolbar-btn save-btn save-split-main"
-          onclick={saveChanges}
-          disabled={isSaving}
-          title="Save pending changes to the database"
-          aria-label="Save {pendingCellCount} pending changes"
-        >
-          {isSaving ? 'Saving…' : `Save ${pendingCellCount} change${pendingCellCount !== 1 ? 's' : ''}`}
-        </button>
-        <button
-          class="toolbar-btn save-btn save-split-arrow"
-          onclick={() => { showSqlPreview = true; }}
-          disabled={isSaving}
-          title="Preview SQL"
-          aria-label="Preview SQL"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-      </div>
-
-      <button
-        class="toolbar-btn discard-btn"
-        onclick={discardChanges}
-        disabled={isSaving}
-        title="Discard all pending changes"
-        aria-label="Discard changes"
-      >
-        Discard
-      </button>
-    {/if}
-
-    <!-- Insert row button -->
-    {#if result !== null && !connectionReadOnly}
-      <button
-        class="refresh-button"
-        onclick={() => addRowTrigger++}
-        title="Insert new row"
-        aria-label="Insert new row"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>
-    {/if}
-
-    <!-- Actions button (Columns / Export / Import / Refresh) -->
-    <div class="export-dropdown">
-      <button
-        bind:this={columnPickerAnchorEl}
-        class="refresh-button"
-        onclick={(e) => {
-          if (!showActionsMenu) {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            actionsMenuTop = r.bottom + 4;
-            actionsMenuLeft = r.right - 240;
-          }
-          showActionsMenu = !showActionsMenu;
-          exportError = null;
-        }}
-        aria-expanded={showActionsMenu}
-        aria-label="Table actions"
-        title="Actions"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
-      </button>
-
-      {#if showActionsMenu}
-        <div use:portal class="export-positioner" style="top: {actionsMenuTop}px; left: {actionsMenuLeft}px;">
-          <div class="export-menu actions-menu" role="menu">
-
-            <!-- Refresh -->
-            <button
-              class="export-menu-row"
-              role="menuitem"
-              onclick={() => { showActionsMenu = false; handleRefresh(); }}
-              disabled={isLoading}
+        <div class="page-nav-group">
+          <button
+            class="page-nav-btn"
+            onclick={prevTablePage}
+            disabled={page === 1}
+            aria-label="Previous page"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
             >
-              <RefreshIcon />
-              <span>Refresh</span>
-            </button>
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <button
+            class="page-nav-btn page-nav-btn--next"
+            onclick={nextTablePage}
+            disabled={page >= dtPageInfo.pageCount}
+            aria-label="Next page"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      {/if}
 
-            <!-- Columns -->
-            {#if currentColumns.length > 0}
+      {#if pendingRowCount > 0}
+        <div class="save-split-btn">
+          <button
+            class="toolbar-btn save-btn save-split-main"
+            onclick={saveChanges}
+            disabled={isSaving}
+            title="Save pending changes to the database"
+            aria-label="Save {pendingCellCount} pending changes"
+          >
+            {isSaving
+              ? 'Saving…'
+              : `Save ${pendingCellCount} change${pendingCellCount !== 1 ? 's' : ''}`}
+          </button>
+          <button
+            class="toolbar-btn save-btn save-split-arrow"
+            onclick={() => {
+              showSqlPreview = true;
+            }}
+            disabled={isSaving}
+            title="Preview SQL"
+            aria-label="Preview SQL"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg
+            >
+          </button>
+        </div>
+
+        <button
+          class="toolbar-btn discard-btn"
+          onclick={discardChanges}
+          disabled={isSaving}
+          title="Discard all pending changes"
+          aria-label="Discard changes"
+        >
+          Discard
+        </button>
+      {/if}
+
+      <!-- Insert row button -->
+      {#if result !== null && !connectionReadOnly}
+        <button
+          class="refresh-button"
+          onclick={() => addRowTrigger++}
+          title="Insert new row"
+          aria-label="Insert new row"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+          >
+        </button>
+      {/if}
+
+      <!-- Actions button (Columns / Export / Import / Refresh) -->
+      <div class="export-dropdown">
+        <button
+          bind:this={columnPickerAnchorEl}
+          class="refresh-button"
+          onclick={(e) => {
+            if (!showActionsMenu) {
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              actionsMenuTop = r.bottom + 4;
+              actionsMenuLeft = r.right - 240;
+            }
+            showActionsMenu = !showActionsMenu;
+            exportError = null;
+          }}
+          aria-expanded={showActionsMenu}
+          aria-label="Table actions"
+          title="Actions"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            ><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle
+              cx="19"
+              cy="12"
+              r="1.2"
+            /></svg
+          >
+        </button>
+
+        {#if showActionsMenu}
+          <div
+            use:portal
+            class="export-positioner"
+            style="top: {actionsMenuTop}px; left: {actionsMenuLeft}px;"
+          >
+            <div class="export-menu actions-menu" role="menu">
+              <!-- Refresh -->
               <button
                 class="export-menu-row"
                 role="menuitem"
-                onclick={() => { showActionsMenu = false; openColumnPicker(); }}
+                onclick={() => {
+                  showActionsMenu = false;
+                  handleRefresh();
+                }}
+                disabled={isLoading}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-                <span>Columns</span>
-                {#if hiddenColumns.size > 0}
-                  <span class="badge actions-menu-badge">{hiddenColumns.size} hidden</span>
-                {/if}
+                <RefreshIcon />
+                <span>Refresh</span>
               </button>
-              <div class="actions-menu-divider"></div>
-            {/if}
 
-            <!-- Import -->
-            <div class="export-menu-title">Import</div>
-            <div class="export-menu-section">
-              <span class="export-format-label">CSV</span>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showActionsMenu = false; importSource = 'clipboard'; showCsvImport = true; }}
-              >Clipboard</button>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showActionsMenu = false; importSource = 'file'; showCsvImport = true; }}
-              >File</button>
+              <!-- Columns -->
+              {#if currentColumns.length > 0}
+                <button
+                  class="export-menu-row"
+                  role="menuitem"
+                  onclick={() => {
+                    showActionsMenu = false;
+                    openColumnPicker();
+                  }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                    ><rect x="3" y="3" width="18" height="18" rx="2" /><line
+                      x1="9"
+                      y1="3"
+                      x2="9"
+                      y2="21"
+                    /><line x1="15" y1="3" x2="15" y2="21" /></svg
+                  >
+                  <span>Columns</span>
+                  {#if hiddenColumns.size > 0}
+                    <span class="badge actions-menu-badge">{hiddenColumns.size} hidden</span>
+                  {/if}
+                </button>
+                <div class="actions-menu-divider"></div>
+              {/if}
+
+              <!-- Import -->
+              <div class="export-menu-title">Import</div>
+              <div class="export-menu-section">
+                <span class="export-format-label">CSV</span>
+                <button
+                  class="export-menu-item"
+                  role="menuitem"
+                  onclick={() => {
+                    showActionsMenu = false;
+                    importSource = 'clipboard';
+                    showCsvImport = true;
+                  }}>Clipboard</button
+                >
+                <button
+                  class="export-menu-item"
+                  role="menuitem"
+                  onclick={() => {
+                    showActionsMenu = false;
+                    importSource = 'file';
+                    showCsvImport = true;
+                  }}>File</button
+                >
+              </div>
+              <div class="export-menu-section">
+                <span class="export-format-label">SQL</span>
+                <button
+                  class="export-menu-item"
+                  role="menuitem"
+                  onclick={() => {
+                    showActionsMenu = false;
+                    importSource = 'clipboard';
+                    showSqlImport = true;
+                  }}>Clipboard</button
+                >
+                <button
+                  class="export-menu-item"
+                  role="menuitem"
+                  onclick={() => {
+                    showActionsMenu = false;
+                    importSource = 'file';
+                    showSqlImport = true;
+                  }}>File</button
+                >
+              </div>
+
+              <!-- Export -->
+              {#if result !== null}
+                <div class="export-menu-title">Export</div>
+                {#each EXPORT_FORMATS as fmt}
+                  <div class="export-menu-section">
+                    <span class="export-format-label">{fmt.label}</span>
+                    <button
+                      class="export-menu-item"
+                      role="menuitem"
+                      onclick={() => {
+                        showActionsMenu = false;
+                        startExport(fmt.format, false);
+                      }}>Clipboard</button
+                    >
+                    <button
+                      class="export-menu-item"
+                      role="menuitem"
+                      onclick={() => {
+                        showActionsMenu = false;
+                        startExport(fmt.format, true);
+                      }}>File</button
+                    >
+                  </div>
+                {/each}
+              {/if}
             </div>
-            <div class="export-menu-section">
-              <span class="export-format-label">SQL</span>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showActionsMenu = false; importSource = 'clipboard'; showSqlImport = true; }}
-              >Clipboard</button>
-              <button
-                class="export-menu-item"
-                role="menuitem"
-                onclick={() => { showActionsMenu = false; importSource = 'file'; showSqlImport = true; }}
-              >File</button>
-            </div>
-
-            <!-- Export -->
-            {#if result !== null}
-              <div class="export-menu-title">Export</div>
-              {#each EXPORT_FORMATS as fmt}
-                <div class="export-menu-section">
-                  <span class="export-format-label">{fmt.label}</span>
-                  <button
-                    class="export-menu-item"
-                    role="menuitem"
-                    onclick={() => { showActionsMenu = false; startExport(fmt.format, false); }}
-                  >Clipboard</button>
-                  <button
-                    class="export-menu-item"
-                    role="menuitem"
-                    onclick={() => { showActionsMenu = false; startExport(fmt.format, true); }}
-                  >File</button>
-                </div>
-              {/each}
-            {/if}
-
+            <div
+              class="export-backdrop"
+              role="presentation"
+              onclick={() => (showActionsMenu = false)}
+              onkeydown={(e) => {
+                if (e.key === 'Escape') showActionsMenu = false;
+              }}
+            ></div>
           </div>
-          <div
-            class="export-backdrop"
-            role="presentation"
-            onclick={() => (showActionsMenu = false)}
-            onkeydown={(e) => { if (e.key === 'Escape') showActionsMenu = false; }}
-          ></div>
-        </div>
-      {/if}
-    </div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -1267,16 +1477,29 @@
       </button>
       <button
         class="fsb-clear"
-        onclick={() => { filterEditorState = emptyFilterState(); }}
+        onclick={() => {
+          filterEditorState = emptyFilterState();
+        }}
         title="Clear filters"
-        aria-label="Clear filters"
-      >×</button>
+        aria-label="Clear filters">×</button
+      >
     </div>
   {/if}
 
   {#if showLocalSearch}
     <div class="local-search-bar">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        ><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg
+      >
       <input
         bind:this={localSearchInputEl}
         bind:value={localSearchTerm}
@@ -1292,11 +1515,29 @@
       />
       {#if localSearchTerm && dtPageInfo !== null}
         <span class="local-search-count">
-          {dtPageInfo.processedRowsLength.toLocaleString()} match{dtPageInfo.processedRowsLength !== 1 ? 'es' : ''}
+          {dtPageInfo.processedRowsLength.toLocaleString()} match{dtPageInfo.processedRowsLength !==
+          1
+            ? 'es'
+            : ''}
         </span>
       {/if}
-      <button class="local-search-close" onclick={closeLocalSearch} aria-label="Close search" title="Close (Esc)">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <button
+        class="local-search-close"
+        onclick={closeLocalSearch}
+        aria-label="Close search"
+        title="Close (Esc)"
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        >
       </button>
     </div>
   {/if}
@@ -1322,10 +1563,43 @@
     <div class="save-error-bar" role="alert">
       <span class="save-error-label">Export failed:</span>
       <span class="save-error-message">{exportError}</span>
-      <button class="save-error-copy" onclick={() => navigator.clipboard.writeText(exportError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      <button
+        class="save-error-copy"
+        onclick={() =>
+          navigator.clipboard
+            .writeText(exportError!)
+            .then(() => toast.addToast('Copied', 'success', 1500))}
+        aria-label="Copy error message"
+        title="Copy"
+      >
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          ><rect x="9" y="9" width="13" height="13" rx="2" /><path
+            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+          /></svg
+        >
       </button>
-      <button class="save-error-close" onclick={() => (exportError = null)} aria-label="Dismiss"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="save-error-close" onclick={() => (exportError = null)} aria-label="Dismiss"
+        ><svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        ></button
+      >
     </div>
   {/if}
 
@@ -1333,24 +1607,71 @@
     <div class="save-error-bar" role="alert">
       <span class="save-error-label">Save failed:</span>
       <span class="save-error-message">{saveError}</span>
-      <button class="save-error-copy" onclick={() => navigator.clipboard.writeText(saveError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      <button
+        class="save-error-copy"
+        onclick={() =>
+          navigator.clipboard
+            .writeText(saveError!)
+            .then(() => toast.addToast('Copied', 'success', 1500))}
+        aria-label="Copy error message"
+        title="Copy"
+      >
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          ><rect x="9" y="9" width="13" height="13" rx="2" /><path
+            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+          /></svg
+        >
       </button>
-      <button class="save-error-close" onclick={() => (saveError = null)} aria-label="Dismiss"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="save-error-close" onclick={() => (saveError = null)} aria-label="Dismiss"
+        ><svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        ></button
+      >
     </div>
   {/if}
 
   {#if showNoPkWarning}
     <div class="no-pk-warning-bar" role="alert">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path
+          d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+        />
+        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
       </svg>
       <span class="no-pk-warning-text">
-        This table has no primary key. Edits are matched by all column values — avoid editing tables with duplicate rows.
+        This table has no primary key. Edits are matched by all column values — avoid editing tables
+        with duplicate rows.
       </span>
       <button class="no-pk-warning-btn" onclick={dismissNoPkWarning}>OK</button>
-      <button class="no-pk-warning-btn" onclick={dismissNoPkWarningForever}>Don't show again</button>
+      <button class="no-pk-warning-btn" onclick={dismissNoPkWarningForever}>Don't show again</button
+      >
     </div>
   {/if}
 
@@ -1363,8 +1684,29 @@
       <div class="error-box" role="alert">
         <div class="error-header">
           <span class="error-label">Error</span>
-          <button class="error-copy" onclick={() => navigator.clipboard.writeText(error!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy error">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <button
+            class="error-copy"
+            onclick={() =>
+              navigator.clipboard
+                .writeText(error!)
+                .then(() => toast.addToast('Copied', 'success', 1500))}
+            aria-label="Copy error message"
+            title="Copy error"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              ><rect x="9" y="9" width="13" height="13" rx="2" /><path
+                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+              /></svg
+            >
           </button>
         </div>
         <span class="error-message">{error}</span>
@@ -1388,13 +1730,25 @@
           onCellSelect={handleCellSelect}
           onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}
-          onForeignKeyClick={(foreignKeys.length > 0 || vrStore.hasAnyForTable(connectionId, database, table)) ? handleForeignKeyClick : undefined}
-          onForeignKeyQuickView={(foreignKeys.length > 0 || vrStore.hasAnyForTable(connectionId, database, table)) ? handleForeignKeyQuickView : undefined}
-          onConnectColumn={(colName) => { connectColumnName = colName; }}
-          initialColWidths={initialColWidths}
-          initialColumnOrder={initialColumnOrder}
-          onColWidthsChange={(widths) => saveColPrefs(connectionId, database, table, { colWidths: widths })}
-          onColumnOrderChange={(order) => { currentColumnOrder = order; saveColPrefs(connectionId, database, table, { columnOrder: order }); }}
+          onForeignKeyClick={foreignKeys.length > 0 ||
+          vrStore.hasAnyForTable(connectionId, database, table)
+            ? handleForeignKeyClick
+            : undefined}
+          onForeignKeyQuickView={foreignKeys.length > 0 ||
+          vrStore.hasAnyForTable(connectionId, database, table)
+            ? handleForeignKeyQuickView
+            : undefined}
+          onConnectColumn={(colName) => {
+            connectColumnName = colName;
+          }}
+          {initialColWidths}
+          {initialColumnOrder}
+          onColWidthsChange={(widths) =>
+            saveColPrefs(connectionId, database, table, { colWidths: widths })}
+          onColumnOrderChange={(order) => {
+            currentColumnOrder = order;
+            saveColPrefs(connectionId, database, table, { columnOrder: order });
+          }}
           {columnOrderOverride}
           initialPendingChanges={tableKey === 0 ? _restoredPending?.changes : undefined}
           initialOriginalRows={tableKey === 0 ? _restoredPending?.originalRows : undefined}
@@ -1417,7 +1771,9 @@
       <ColumnPicker
         columns={currentColumns}
         {hiddenColumns}
-        columnOrder={currentColumnOrder.length > 0 ? currentColumnOrder : currentColumns.map(c => c.name)}
+        columnOrder={currentColumnOrder.length > 0
+          ? currentColumnOrder
+          : currentColumns.map((c) => c.name)}
         onToggle={toggleColumn}
         onClose={() => (showColumnPicker = false)}
         onReorder={(order) => {
@@ -1428,10 +1784,14 @@
         onReset={() => {
           hiddenColumns = new Set();
           columnRenames = {};
-          const dbOrder = currentColumns.map(c => c.name);
+          const dbOrder = currentColumns.map((c) => c.name);
           currentColumnOrder = dbOrder;
           columnOrderOverride = [...dbOrder];
-          saveColPrefs(connectionId, database, table, { hiddenColumns: [], columnOrder: [], columnRenames: {} });
+          saveColPrefs(connectionId, database, table, {
+            hiddenColumns: [],
+            columnOrder: [],
+            columnRenames: {},
+          });
         }}
         {columnRenames}
         onRename={handleRenameColumn}
@@ -1440,7 +1800,11 @@
   {/if}
 
   {#if showFilterEditor}
-    <div use:portal class="filter-positioner" style="top: {filterEditorTop}px; left: {filterEditorLeft}px;">
+    <div
+      use:portal
+      class="filter-positioner"
+      style="top: {filterEditorTop}px; left: {filterEditorLeft}px;"
+    >
       <FilterEditor
         columns={currentColumns}
         value={filterEditorState}
@@ -1461,7 +1825,11 @@
     {connectionId}
     source={importSource}
     onclose={() => (showCsvImport = false)}
-    onimported={(count) => { showCsvImport = false; load(); toast.addToast(`Imported ${count} row${count !== 1 ? 's' : ''}`, 'success', 3000); }}
+    onimported={(count) => {
+      showCsvImport = false;
+      load();
+      toast.addToast(`Imported ${count} row${count !== 1 ? 's' : ''}`, 'success', 3000);
+    }}
   />
 {/if}
 
@@ -1470,7 +1838,9 @@
     {connectionId}
     source={importSource}
     onclose={() => (showSqlImport = false)}
-    onimported={(count) => { toast.addToast(`Executed ${count} statement${count !== 1 ? 's' : ''}`, 'success', 3000); }}
+    onimported={(count) => {
+      toast.addToast(`Executed ${count} statement${count !== 1 ? 's' : ''}`, 'success', 3000);
+    }}
   />
 {/if}
 
@@ -1484,9 +1854,17 @@
 {#if showSqlPreview}
   <SqlPreviewModal
     statements={buildPreviewStatements()}
-    onrun={() => { showSqlPreview = false; saveChanges(); }}
-    oncancel={() => { showSqlPreview = false; }}
-    ondiscard={() => { showSqlPreview = false; discardChanges(); }}
+    onrun={() => {
+      showSqlPreview = false;
+      saveChanges();
+    }}
+    oncancel={() => {
+      showSqlPreview = false;
+    }}
+    ondiscard={() => {
+      showSqlPreview = false;
+      discardChanges();
+    }}
   />
 {/if}
 
@@ -1584,7 +1962,9 @@
     background: var(--color-bg-tertiary);
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .page-nav-btn--next {
@@ -1769,7 +2149,9 @@
     cursor: pointer;
     font-size: var(--font-size-base);
     line-height: 1;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .fsb-clear:hover {
@@ -1869,7 +2251,9 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
     opacity: 0.7;
-    transition: opacity var(--transition-fast), background var(--transition-fast);
+    transition:
+      opacity var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .save-error-copy:hover {
@@ -1991,7 +2375,9 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
     opacity: 0.6;
-    transition: opacity var(--transition-fast), background var(--transition-fast);
+    transition:
+      opacity var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .error-copy:hover {
@@ -2075,7 +2461,9 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
     white-space: nowrap;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     font-family: var(--font-family-ui);
   }
 
@@ -2103,7 +2491,9 @@
     cursor: pointer;
     border-radius: 0;
     text-align: left;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     font-family: var(--font-family-ui);
   }
 
@@ -2226,7 +2616,9 @@
     color: var(--color-text-muted);
     cursor: pointer;
     border-radius: var(--radius-sm);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .local-search-close:hover {

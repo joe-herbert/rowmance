@@ -119,13 +119,12 @@ pub async fn virtual_relations_create(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    let row = sqlx::query_as::<_, VirtualRelationRow>(
-        "SELECT * FROM virtual_relations WHERE id = ?",
-    )
-    .bind(&id)
-    .fetch_one(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row =
+        sqlx::query_as::<_, VirtualRelationRow>("SELECT * FROM virtual_relations WHERE id = ?")
+            .bind(&id)
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     Ok(VirtualRelation::from(row))
 }
@@ -163,13 +162,12 @@ pub async fn virtual_relations_update(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    let row = sqlx::query_as::<_, VirtualRelationRow>(
-        "SELECT * FROM virtual_relations WHERE id = ?",
-    )
-    .bind(&id)
-    .fetch_one(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row =
+        sqlx::query_as::<_, VirtualRelationRow>("SELECT * FROM virtual_relations WHERE id = ?")
+            .bind(&id)
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     Ok(VirtualRelation::from(row))
 }

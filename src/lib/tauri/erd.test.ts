@@ -5,9 +5,7 @@ import { getErdGraph } from './erd';
 const mockInvoke = vi.mocked(invoke);
 
 const stubGraph = {
-  nodes: [
-    { name: 'users', columns: [{ name: 'id', dataType: 'int', isPrimaryKey: true }] },
-  ],
+  nodes: [{ name: 'users', columns: [{ name: 'id', dataType: 'int', isPrimaryKey: true }] }],
   edges: [],
 };
 
@@ -32,7 +30,11 @@ describe('getErdGraph', () => {
   });
 
   it('propagates invoke errors', async () => {
-    mockInvoke.mockRejectedValue({ code: 'CONNECTION_NOT_FOUND', message: 'Not found', detail: null });
+    mockInvoke.mockRejectedValue({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'Not found',
+      detail: null,
+    });
     await expect(getErdGraph('bad', 'db')).rejects.toMatchObject({ code: 'CONNECTION_NOT_FOUND' });
   });
 });

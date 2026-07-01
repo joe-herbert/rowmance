@@ -44,7 +44,7 @@
     }
     const conflicted = new Set<ShortcutAction>();
     for (const actions of counts.values()) {
-      if (actions.length > 1) actions.forEach(a => conflicted.add(a));
+      if (actions.length > 1) actions.forEach((a) => conflicted.add(a));
     }
     return conflicted;
   });
@@ -125,7 +125,9 @@
   };
 
   function bindingTooltip(binding: string): string {
-    return parseBinding(binding).map(p => KEY_LABELS[p] ?? p).join('+');
+    return parseBinding(binding)
+      .map((p) => KEY_LABELS[p] ?? p)
+      .join('+');
   }
 
   const KEY_SYMBOLS: Record<string, string> = {
@@ -161,9 +163,9 @@
   const GROUP_ORDER: ShortcutGroup[] = ['Query Editor', 'Navigation', 'Table View', 'General'];
 
   const groupedDefinitions = $derived.by(() => {
-    return GROUP_ORDER.map(group => ({
+    return GROUP_ORDER.map((group) => ({
       group,
-      defs: SHORTCUT_DEFINITIONS.filter(d => d.group === group),
+      defs: SHORTCUT_DEFINITIONS.filter((d) => d.group === group),
     }));
   });
 </script>
@@ -209,11 +211,30 @@
                 <span class="recording-hint">Press a key combo…</span>
               {:else if current}
                 <span class="kbd-wrap">
-                  <kbd class="kbd" class:overridden={isOverridden} class:conflict={isConflict} title={bindingTooltip(current)}>{parseBinding(current).map(formatKey).join(' ')}</kbd>
+                  <kbd
+                    class="kbd"
+                    class:overridden={isOverridden}
+                    class:conflict={isConflict}
+                    title={bindingTooltip(current)}
+                    >{parseBinding(current).map(formatKey).join(' ')}</kbd
+                  >
                   {#if isConflict}
-                    <svg class="conflict-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Z" fill="currentColor"/>
-                      <path d="M7.25 4.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5ZM8 11.5a.875.875 0 1 0 0-1.75.875.875 0 0 0 0 1.75Z" fill="currentColor"/>
+                    <svg
+                      class="conflict-icon"
+                      width="13"
+                      height="13"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Z"
+                        fill="currentColor"
+                      />
+                      <path
+                        d="M7.25 4.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5ZM8 11.5a.875.875 0 1 0 0-1.75.875.875 0 0 0 0 1.75Z"
+                        fill="currentColor"
+                      />
                     </svg>
                   {/if}
                 </span>
@@ -224,11 +245,7 @@
             <td class="col-controls">
               <div class="controls-inner">
                 {#if isRecording}
-                  <button
-                    class="cancel-btn"
-                    onclick={stopRecording}
-                    aria-label="Cancel recording"
-                  >
+                  <button class="cancel-btn" onclick={stopRecording} aria-label="Cancel recording">
                     Cancel
                   </button>
                 {:else}
@@ -362,7 +379,6 @@
     color: var(--color-text-secondary);
     line-height: 1.4;
   }
-
 
   .kbd.overridden {
     border-color: var(--color-accent);

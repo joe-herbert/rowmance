@@ -27,10 +27,12 @@ mod macos {
     use core_foundation_sys::data::CFDataRef;
     use security_framework_sys::base::errSecDuplicateItem;
     use security_framework_sys::item::{
-        kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword,
-        kSecReturnData, kSecUseDataProtectionKeychain, kSecValueData,
+        kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnData,
+        kSecUseDataProtectionKeychain, kSecValueData,
     };
-    use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemDelete, SecItemUpdate};
+    use security_framework_sys::keychain_item::{
+        SecItemAdd, SecItemCopyMatching, SecItemDelete, SecItemUpdate,
+    };
 
     const ERR_SEC_NOT_FOUND: i32 = -25300; // errSecItemNotFound
 
@@ -105,7 +107,9 @@ mod macos {
         if status == errSecDuplicateItem {
             let find = CFDictionary::from_CFType_pairs(&query[..find_len]);
             let attrs = CFDictionary::from_CFType_pairs(&query[find_len..]);
-            return unsafe { SecItemUpdate(find.as_concrete_TypeRef(), attrs.as_concrete_TypeRef()) };
+            return unsafe {
+                SecItemUpdate(find.as_concrete_TypeRef(), attrs.as_concrete_TypeRef())
+            };
         }
         status
     }
@@ -184,15 +188,15 @@ pub async fn keychain_retrieve(
     connection_id: String,
     secret_type: String,
 ) -> Result<Option<String>, AppError> {
-    Ok(read_keychain_secret("rowmance", &format!("{connection_id}:{secret_type}")))
+    Ok(read_keychain_secret(
+        "rowmance",
+        &format!("{connection_id}:{secret_type}"),
+    ))
 }
 
 /// Delete a secret from the OS keychain. No-ops if not present.
 #[tauri::command]
-pub async fn keychain_delete(
-    connection_id: String,
-    secret_type: String,
-) -> Result<(), AppError> {
+pub async fn keychain_delete(connection_id: String, secret_type: String) -> Result<(), AppError> {
     let account = format!("{connection_id}:{secret_type}");
     keychain_remove("rowmance", &account)
 }
@@ -236,11 +240,10 @@ fn keychain_remove(service: &str, account: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-
 #[cfg(not(target_os = "macos"))]
 fn keychain_remove(service: &str, account: &str) -> Result<(), AppError> {
-    let e = Entry::new(service, account)
-        .map_err(|e| AppError::new("KEYCHAIN_ERROR", e.to_string()))?;
+    let e =
+        Entry::new(service, account).map_err(|e| AppError::new("KEYCHAIN_ERROR", e.to_string()))?;
     match e.delete_credential() {
         Ok(_) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
@@ -275,12 +278,10 @@ pub async fn migrate_passwords_to_keychain(sqlite: &SqlitePool) {
                     let _ = keychain_write("rowmance", &account, pw.as_bytes());
                 }
                 // Null out the stored password.
-                let _ = sqlx::query(
-                    "UPDATE connection_profiles SET password = NULL WHERE id = ?",
-                )
-                .bind(&row.id)
-                .execute(sqlite)
-                .await;
+                let _ = sqlx::query("UPDATE connection_profiles SET password = NULL WHERE id = ?")
+                    .bind(&row.id)
+                    .execute(sqlite)
+                    .await;
             }
         }
     }

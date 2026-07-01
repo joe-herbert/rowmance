@@ -10,9 +10,9 @@
   --glass-blur: blur(22px) saturate(160%);
 
   --color-bg-primary: rgba(255, 255, 255, 0.58);
-  --color-bg-secondary: rgba(255, 255, 255, 0.50);
+  --color-bg-secondary: rgba(255, 255, 255, 0.5);
   --color-bg-tertiary: rgba(255, 255, 255, 0.42);
-  --color-bg-overlay: rgba(245, 243, 255, 0.90);
+  --color-bg-overlay: rgba(245, 243, 255, 0.9);
   --color-bg-hover: rgba(255, 255, 255, 0.55);
   --color-bg-active: rgba(255, 255, 255, 0.65);
 
@@ -49,7 +49,11 @@
   --color-table-row-alt: transparent;
   --color-table-row-hover: rgba(124, 92, 255, 0.07);
   --color-table-row-selected: rgba(124, 92, 255, 0.13);
-  --color-table-header-bg: linear-gradient(90deg, rgba(237, 218, 255, 0.95) 0%, rgba(214, 241, 255, 0.95) 100%);
+  --color-table-header-bg: linear-gradient(
+    90deg,
+    rgba(237, 218, 255, 0.95) 0%,
+    rgba(214, 241, 255, 0.95) 100%
+  );
 
   --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
   --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
@@ -67,9 +71,9 @@
     --glass-blur: blur(22px) saturate(160%);
 
     --color-bg-primary: rgba(255, 255, 255, 0.58);
-    --color-bg-secondary: rgba(255, 255, 255, 0.50);
+    --color-bg-secondary: rgba(255, 255, 255, 0.5);
     --color-bg-tertiary: rgba(255, 255, 255, 0.42);
-    --color-bg-overlay: rgba(245, 243, 255, 0.90);
+    --color-bg-overlay: rgba(245, 243, 255, 0.9);
     --color-bg-hover: rgba(255, 255, 255, 0.55);
     --color-bg-active: rgba(255, 255, 255, 0.65);
 
@@ -106,7 +110,11 @@
     --color-table-row-alt: rgba(0, 0, 0, 0.02);
     --color-table-row-hover: rgba(124, 92, 255, 0.07);
     --color-table-row-selected: rgba(124, 92, 255, 0.13);
-    --color-table-header-bg: linear-gradient(90deg, rgba(237, 218, 255, 0.95) 0%, rgba(214, 241, 255, 0.95) 100%);
+    --color-table-header-bg: linear-gradient(
+      90deg,
+      rgba(237, 218, 255, 0.95) 0%,
+      rgba(214, 241, 255, 0.95) 100%
+    );
 
     --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
     --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);

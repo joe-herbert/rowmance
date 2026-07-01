@@ -81,14 +81,16 @@ async fn get_graph_mysql(pool: &sqlx::MySqlPool, database: &str) -> Result<ErdGr
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    let nodes = group_into_tables(col_rows.into_iter().map(|r| (
-        r.table_name.unwrap_or_default(),
-        ErdColumn {
-            name: r.column_name.unwrap_or_default(),
-            data_type: r.data_type.unwrap_or_default(),
-            is_primary_key: r.column_key.as_deref() == Some("PRI"),
-        },
-    )));
+    let nodes = group_into_tables(col_rows.into_iter().map(|r| {
+        (
+            r.table_name.unwrap_or_default(),
+            ErdColumn {
+                name: r.column_name.unwrap_or_default(),
+                data_type: r.data_type.unwrap_or_default(),
+                is_primary_key: r.column_key.as_deref() == Some("PRI"),
+            },
+        )
+    }));
 
     #[derive(sqlx::FromRow)]
     struct FkRow {
@@ -170,14 +172,16 @@ async fn get_graph_postgres(pool: &sqlx::PgPool, schema: &str) -> Result<ErdGrap
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    let nodes = group_into_tables(col_rows.into_iter().map(|r| (
-        r.table_name.unwrap_or_default(),
-        ErdColumn {
-            name: r.column_name.unwrap_or_default(),
-            data_type: r.data_type.unwrap_or_default(),
-            is_primary_key: r.is_primary_key.unwrap_or(false),
-        },
-    )));
+    let nodes = group_into_tables(col_rows.into_iter().map(|r| {
+        (
+            r.table_name.unwrap_or_default(),
+            ErdColumn {
+                name: r.column_name.unwrap_or_default(),
+                data_type: r.data_type.unwrap_or_default(),
+                is_primary_key: r.is_primary_key.unwrap_or(false),
+            },
+        )
+    }));
 
     #[derive(sqlx::FromRow)]
     struct FkRow {
@@ -371,10 +375,20 @@ mod tests {
     use super::*;
 
     fn col(name: &str, pk: bool) -> ErdColumn {
-        ErdColumn { name: name.to_owned(), data_type: "int".to_owned(), is_primary_key: pk }
+        ErdColumn {
+            name: name.to_owned(),
+            data_type: "int".to_owned(),
+            is_primary_key: pk,
+        }
     }
 
-    fn fk(constraint: &str, from_table: &str, from_col: &str, to_table: &str, to_col: &str) -> FkNorm {
+    fn fk(
+        constraint: &str,
+        from_table: &str,
+        from_col: &str,
+        to_table: &str,
+        to_col: &str,
+    ) -> FkNorm {
         FkNorm {
             constraint_name: constraint.to_owned(),
             table_name: from_table.to_owned(),

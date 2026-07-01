@@ -81,8 +81,12 @@ describe('deleteConnectionHandler', () => {
   it('disconnects before deleting when the connection is active', async () => {
     isActive.mockReturnValue(true);
     const callOrder: string[] = [];
-    disconnect.mockImplementation(async () => { callOrder.push('disconnect'); });
-    deleteProfile.mockImplementation(async () => { callOrder.push('delete'); });
+    disconnect.mockImplementation(async () => {
+      callOrder.push('disconnect');
+    });
+    deleteProfile.mockImplementation(async () => {
+      callOrder.push('delete');
+    });
 
     await deleteConnectionHandler(profile, isActive, confirmFn, disconnect, deleteProfile, reload);
 
@@ -107,8 +111,12 @@ describe('deleteConnectionHandler', () => {
 
   it('calls reload after a successful delete', async () => {
     const callOrder: string[] = [];
-    deleteProfile.mockImplementation(async () => { callOrder.push('delete'); });
-    reload.mockImplementation(async () => { callOrder.push('reload'); });
+    deleteProfile.mockImplementation(async () => {
+      callOrder.push('delete');
+    });
+    reload.mockImplementation(async () => {
+      callOrder.push('reload');
+    });
 
     await deleteConnectionHandler(profile, isActive, confirmFn, disconnect, deleteProfile, reload);
 
@@ -167,9 +175,7 @@ describe('statusClass', () => {
   });
 
   it('connecting takes priority over error', () => {
-    expect(
-      statusClass(id, new Set([id]), new Map([[id, 'err']]), new Set()),
-    ).toBe('connecting');
+    expect(statusClass(id, new Set([id]), new Map([[id, 'err']]), new Set())).toBe('connecting');
   });
 });
 
@@ -185,15 +191,15 @@ describe('statusLabel', () => {
   });
 
   it('returns the error message for a failed connection', () => {
-    expect(
-      statusLabel(id, new Set(), new Map([[id, 'Connection refused']]), new Set()),
-    ).toBe('Connection refused');
+    expect(statusLabel(id, new Set(), new Map([[id, 'Connection refused']]), new Set())).toBe(
+      'Connection refused',
+    );
   });
 
   it('returns the stored error message verbatim', () => {
-    expect(
-      statusLabel(id, new Set(), new Map([[id, 'Connection refused']]), new Set()),
-    ).toBe('Connection refused');
+    expect(statusLabel(id, new Set(), new Map([[id, 'Connection refused']]), new Set())).toBe(
+      'Connection refused',
+    );
   });
 
   it('returns "Not connected" for an idle connection', () => {

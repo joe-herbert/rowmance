@@ -126,13 +126,15 @@ describe('buildEdgesFromFkRows', () => {
   });
 
   it('creates one edge for a single-column FK', () => {
-    const rows: FkRow[] = [{
-      constraintName: 'fk_order_user',
-      tableName: 'orders',
-      columnName: 'user_id',
-      referencedTableName: 'users',
-      referencedColumnName: 'id',
-    }];
+    const rows: FkRow[] = [
+      {
+        constraintName: 'fk_order_user',
+        tableName: 'orders',
+        columnName: 'user_id',
+        referencedTableName: 'users',
+        referencedColumnName: 'id',
+      },
+    ];
     const edges = buildEdgesFromFkRows(rows);
     expect(edges).toHaveLength(1);
     expect(edges[0].constraintName).toBe('fk_order_user');

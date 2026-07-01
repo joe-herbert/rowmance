@@ -19,16 +19,26 @@
     onRename?: (_colName: string, _label: string) => void;
   }
 
-  let { columns, hiddenColumns, onToggle, onClose, columnOrder, onReorder, onReset, columnRenames = {}, onRename }: Props = $props();
+  let {
+    columns,
+    hiddenColumns,
+    onToggle,
+    onClose,
+    columnOrder,
+    onReorder,
+    onReset,
+    columnRenames = {},
+    onRename,
+  }: Props = $props();
 
   let panelEl = $state<HTMLDivElement | null>(null);
 
   const orderedColumns = $derived.by((): ColumnMeta[] => {
     if (!columnOrder || columnOrder.length === 0) return columns;
-    const colMap = new Map(columns.map(c => [c.name, c]));
-    const ordered = columnOrder.map(n => colMap.get(n)).filter(Boolean) as ColumnMeta[];
+    const colMap = new Map(columns.map((c) => [c.name, c]));
+    const ordered = columnOrder.map((n) => colMap.get(n)).filter(Boolean) as ColumnMeta[];
     const inOrder = new Set(columnOrder);
-    const remaining = columns.filter(c => !inOrder.has(c.name));
+    const remaining = columns.filter((c) => !inOrder.has(c.name));
     return [...ordered, ...remaining];
   });
 
@@ -42,9 +52,7 @@
   // Single insert-position index (0 = before first, N = after last).
   const insertAt = $derived.by(() => {
     if (!dragDropTarget || !isDragging) return null;
-    return dragDropTarget.position === 'after'
-      ? dragDropTarget.index + 1
-      : dragDropTarget.index;
+    return dragDropTarget.position === 'after' ? dragDropTarget.index + 1 : dragDropTarget.index;
   });
 
   $effect(() => {
@@ -83,7 +91,7 @@
           const newOrder = [...orderedColumns];
           const [moved] = newOrder.splice(from, 1);
           newOrder.splice(toIdx, 0, moved);
-          onReorder?.(newOrder.map(c => c.name));
+          onReorder?.(newOrder.map((c) => c.name));
         }
       }
       dragFromIndex = null;
@@ -141,8 +149,13 @@
   }
 
   function handleRenameKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
-    else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelRename();
+    }
   }
 
   function openColContextMenu(e: MouseEvent, colName: string): void {
@@ -175,14 +188,37 @@
   });
 </script>
 
-<div bind:this={panelEl} class="column-picker" class:is-dragging={isDragging} role="dialog" aria-label="Column visibility">
+<div
+  bind:this={panelEl}
+  class="column-picker"
+  class:is-dragging={isDragging}
+  role="dialog"
+  aria-label="Column visibility"
+>
   <div class="picker-header">
     <span class="picker-title">Columns</span>
     <div class="picker-header-actions">
       {#if onReset}
-        <button class="reset-btn" onclick={onReset} title="Show all columns in default order" aria-label="Reset columns">Reset</button>
+        <button
+          class="reset-btn"
+          onclick={onReset}
+          title="Show all columns in default order"
+          aria-label="Reset columns">Reset</button
+        >
       {/if}
-      <button class="close-btn" onclick={onClose} aria-label="Close column picker"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="close-btn" onclick={onClose} aria-label="Close column picker"
+        ><svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        ></button
+      >
     </div>
   </div>
 
@@ -190,7 +226,8 @@
     {#each orderedColumns as col, index (col.name)}
       {@const hidden = hiddenColumns.has(col.name)}
       {@const label = columnRenames[col.name] ?? col.name}
-      {@const isRenamed = columnRenames[col.name] !== undefined && columnRenames[col.name] !== col.name}
+      {@const isRenamed =
+        columnRenames[col.name] !== undefined && columnRenames[col.name] !== col.name}
       {@const isRenaming = renamingColumn === col.name}
       {#if insertAt === index}
         <li class="drop-line" role="presentation"></li>
@@ -209,9 +246,9 @@
             onpointerdown={(e) => onDragHandlePointerDown(e, index)}
           >
             <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
-              <circle cx="3" cy="2.5" r="1.2"/><circle cx="7" cy="2.5" r="1.2"/>
-              <circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/>
-              <circle cx="3" cy="11.5" r="1.2"/><circle cx="7" cy="11.5" r="1.2"/>
+              <circle cx="3" cy="2.5" r="1.2" /><circle cx="7" cy="2.5" r="1.2" />
+              <circle cx="3" cy="7" r="1.2" /><circle cx="7" cy="7" r="1.2" />
+              <circle cx="3" cy="11.5" r="1.2" /><circle cx="7" cy="11.5" r="1.2" />
             </svg>
           </span>
         {/if}
@@ -230,11 +267,15 @@
         {:else}
           <button
             class="column-label"
-            onclick={() => { if (!isDragging) onToggle(col.name); }}
+            onclick={() => {
+              if (!isDragging) onToggle(col.name);
+            }}
             aria-pressed={!hidden}
           >
             <Checkbox size="sm" checked={!hidden} onchange={() => {}} />
-            <span class="column-name" class:column-hidden={hidden} class:column-renamed={isRenamed}>{label}</span>
+            <span class="column-name" class:column-hidden={hidden} class:column-renamed={isRenamed}
+              >{label}</span
+            >
             <span class="column-type">{col.dataType}</span>
             {#if col.isPrimaryKey}
               <span class="badge pk-badge" title="Primary key">PK</span>
@@ -253,7 +294,8 @@
 </div>
 
 {#if colContextMenu !== null}
-  <!-- svelte-ignore a11y_interactive_supports_focus a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_interactive_supports_focus -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="col-context-menu"
     role="menu"
@@ -271,7 +313,10 @@
       <button
         class="col-ctx-item"
         role="menuitem"
-        onclick={() => { onRename?.(colContextMenu!.colName, colContextMenu!.colName); colContextMenu = null; }}
+        onclick={() => {
+          onRename?.(colContextMenu!.colName, colContextMenu!.colName);
+          colContextMenu = null;
+        }}
       >
         Reset name
       </button>
@@ -335,7 +380,10 @@
     font-family: var(--font-family-ui);
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     line-height: 1.4;
   }
 
@@ -548,7 +596,9 @@
     color: var(--color-text-secondary);
     text-align: left;
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .col-ctx-item:hover {

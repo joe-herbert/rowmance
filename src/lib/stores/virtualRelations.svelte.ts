@@ -9,7 +9,9 @@ vrApi.listVirtualRelations().then((loaded) => {
 
 export function useVirtualRelations() {
   return {
-    get relations() { return relations; },
+    get relations() {
+      return relations;
+    },
 
     async add(input: { from: ColumnRef; to: ColumnRef; label?: string }): Promise<VirtualRelation> {
       const vr = await vrApi.createVirtualRelation({
@@ -52,8 +54,14 @@ export function useVirtualRelations() {
     hasAny(connectionId: string, database: string, table: string, column: string): boolean {
       return relations.some(
         (r) =>
-          (r.from.connectionId === connectionId && r.from.database === database && r.from.table === table && r.from.column === column) ||
-          (r.to.connectionId === connectionId && r.to.database === database && r.to.table === table && r.to.column === column),
+          (r.from.connectionId === connectionId &&
+            r.from.database === database &&
+            r.from.table === table &&
+            r.from.column === column) ||
+          (r.to.connectionId === connectionId &&
+            r.to.database === database &&
+            r.to.table === table &&
+            r.to.column === column),
       );
     },
 
@@ -61,7 +69,10 @@ export function useVirtualRelations() {
     hasForwardFrom(connectionId: string, database: string, table: string, column: string): boolean {
       return relations.some(
         (r) =>
-          r.from.connectionId === connectionId && r.from.database === database && r.from.table === table && r.from.column === column,
+          r.from.connectionId === connectionId &&
+          r.from.database === database &&
+          r.from.table === table &&
+          r.from.column === column,
       );
     },
 
@@ -69,7 +80,9 @@ export function useVirtualRelations() {
     hasAnyForTable(connectionId: string, database: string, table: string): boolean {
       return relations.some(
         (r) =>
-          r.from.connectionId === connectionId && r.from.database === database && r.from.table === table,
+          r.from.connectionId === connectionId &&
+          r.from.database === database &&
+          r.from.table === table,
       );
     },
   };

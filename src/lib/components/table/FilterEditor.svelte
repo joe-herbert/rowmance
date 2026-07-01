@@ -42,7 +42,10 @@
 
   function isActiveRule(r: FilterRule): boolean {
     if (r.rawSql !== undefined) return r.rawSql.trim() !== '';
-    return r.column !== '' && (r.operator === 'IS NULL' || r.operator === 'IS NOT NULL' || r.value.trim() !== '');
+    return (
+      r.column !== '' &&
+      (r.operator === 'IS NULL' || r.operator === 'IS NOT NULL' || r.value.trim() !== '')
+    );
   }
 
   export function filterStateIsActive(state: FilterEditorState): boolean {
@@ -72,7 +75,10 @@
     if (state.mode === 'sql') return state.sql.trim();
 
     const activeGroups = state.groups
-      .map((g) => ({ conjunction: g.conjunction, parts: g.rules.filter(isActiveRule).map((r) => buildRuleSql(r, quoteIdentifier)) }))
+      .map((g) => ({
+        conjunction: g.conjunction,
+        parts: g.rules.filter(isActiveRule).map((r) => buildRuleSql(r, quoteIdentifier)),
+      }))
       .filter((g) => g.parts.length > 0);
 
     if (activeGroups.length === 0) return '';
@@ -106,28 +112,52 @@
       if (inString) {
         current += ch;
         if (ch === stringChar) {
-          if (trimmed[i + 1] === stringChar) { current += trimmed[i + 1]; i += 2; continue; }
+          if (trimmed[i + 1] === stringChar) {
+            current += trimmed[i + 1];
+            i += 2;
+            continue;
+          }
           inString = false;
         }
         i++;
         continue;
       }
 
-      if (ch === "'" || ch === '"' || ch === '`') { inString = true; stringChar = ch; current += ch; i++; continue; }
-      if (ch === '(') { depth++; current += ch; i++; continue; }
-      if (ch === ')') { depth--; current += ch; i++; continue; }
+      if (ch === "'" || ch === '"' || ch === '`') {
+        inString = true;
+        stringChar = ch;
+        current += ch;
+        i++;
+        continue;
+      }
+      if (ch === '(') {
+        depth++;
+        current += ch;
+        i++;
+        continue;
+      }
+      if (ch === ')') {
+        depth--;
+        current += ch;
+        i++;
+        continue;
+      }
 
       if (depth === 0) {
         const upper = trimmed.slice(i).toUpperCase();
         if (/^AND[\s(]/.test(upper)) {
           if (current.trim()) parts.push({ keyword: pendingKeyword, condition: current.trim() });
-          current = ''; pendingKeyword = 'AND'; i += 3;
+          current = '';
+          pendingKeyword = 'AND';
+          i += 3;
           while (i < trimmed.length && /\s/.test(trimmed[i])) i++;
           continue;
         }
         if (/^OR[\s(]/.test(upper)) {
           if (current.trim()) parts.push({ keyword: pendingKeyword, condition: current.trim() });
-          current = ''; pendingKeyword = 'OR'; i += 2;
+          current = '';
+          pendingKeyword = 'OR';
+          i += 2;
           while (i < trimmed.length && /\s/.test(trimmed[i])) i++;
           continue;
         }
@@ -152,12 +182,19 @@
       const ch = t[i];
       if (inString) {
         if (ch === stringChar) {
-          if (t[i + 1] === stringChar) { i++; continue; }
+          if (t[i + 1] === stringChar) {
+            i++;
+            continue;
+          }
           inString = false;
         }
         continue;
       }
-      if (ch === "'" || ch === '"' || ch === '`') { inString = true; stringChar = ch; continue; }
+      if (ch === "'" || ch === '"' || ch === '`') {
+        inString = true;
+        stringChar = ch;
+        continue;
+      }
       if (ch === '(') depth++;
       else if (ch === ')') depth--;
       if (depth === 0) return null;
@@ -166,14 +203,17 @@
   }
 
   function unquoteColumn(s: string): string {
-    if ((s.startsWith('`') && s.endsWith('`')) || (s.startsWith('"') && s.endsWith('"'))) return s.slice(1, -1);
+    if ((s.startsWith('`') && s.endsWith('`')) || (s.startsWith('"') && s.endsWith('"')))
+      return s.slice(1, -1);
     return s;
   }
 
   function unquoteValue(s: string): string | null {
     const t = s.trim();
-    if (t.startsWith("'") && t.endsWith("'") && t.length >= 2) return t.slice(1, -1).replaceAll("''", "'");
-    if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('`') && t.endsWith('`'))) return t.slice(1, -1);
+    if (t.startsWith("'") && t.endsWith("'") && t.length >= 2)
+      return t.slice(1, -1).replaceAll("''", "'");
+    if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('`') && t.endsWith('`')))
+      return t.slice(1, -1);
     if (/^[\w.%-]+$/.test(t)) return t;
     return null;
   }
@@ -192,10 +232,16 @@
     if (inMatch) return { column, operator: 'IN', value: inMatch[1].trim() };
 
     const notLikeMatch = after.match(/^NOT\s+LIKE\s+(.+)$/i);
-    if (notLikeMatch) { const val = unquoteValue(notLikeMatch[1]); if (val !== null) return { column, operator: 'NOT LIKE', value: val }; }
+    if (notLikeMatch) {
+      const val = unquoteValue(notLikeMatch[1]);
+      if (val !== null) return { column, operator: 'NOT LIKE', value: val };
+    }
 
     const likeMatch = after.match(/^LIKE\s+(.+)$/i);
-    if (likeMatch) { const val = unquoteValue(likeMatch[1]); if (val !== null) return { column, operator: 'LIKE', value: val }; }
+    if (likeMatch) {
+      const val = unquoteValue(likeMatch[1]);
+      if (val !== null) return { column, operator: 'LIKE', value: val };
+    }
 
     const opMatch = after.match(/^(!=|<>|>=|<=|>|<|=)\s*(.+)$/);
     if (opMatch) {
@@ -211,11 +257,20 @@
   function conditionToRule(condition: string): FilterRule {
     const parsed = parseSqlCondition(condition);
     if (parsed) return { id: crypto.randomUUID(), ...parsed };
-    return { id: crypto.randomUUID(), rawSql: condition, column: '', operator: '=' as FilterOperator, value: '' };
+    return {
+      id: crypto.randomUUID(),
+      rawSql: condition,
+      column: '',
+      operator: '=' as FilterOperator,
+      value: '',
+    };
   }
 
   /** Converts a SQL WHERE string into groups of builder rules. */
-  export function parseSqlToGroups(sql: string): { groupJunction: 'AND' | 'OR'; groups: FilterGroup[] } {
+  export function parseSqlToGroups(sql: string): {
+    groupJunction: 'AND' | 'OR';
+    groups: FilterGroup[];
+  } {
     const topConditions = parseSqlConditions(sql);
     const topKeywords = topConditions.map((c) => c.keyword).filter((k) => k !== 'WHERE');
     const groupJunction: 'AND' | 'OR' = topKeywords[0] === 'OR' ? 'OR' : 'AND';
@@ -226,9 +281,17 @@
         const innerConds = parseSqlConditions(inner);
         const innerKeywords = innerConds.map((c) => c.keyword).filter((k) => k !== 'WHERE');
         const conjunction: 'AND' | 'OR' = innerKeywords[0] === 'OR' ? 'OR' : 'AND';
-        return { id: crypto.randomUUID(), conjunction, rules: innerConds.map((c) => conditionToRule(c.condition)) };
+        return {
+          id: crypto.randomUUID(),
+          conjunction,
+          rules: innerConds.map((c) => conditionToRule(c.condition)),
+        };
       }
-      return { id: crypto.randomUUID(), conjunction: 'AND' as const, rules: [conditionToRule(condition)] };
+      return {
+        id: crypto.randomUUID(),
+        conjunction: 'AND' as const,
+        rules: [conditionToRule(condition)],
+      };
     });
 
     return { groupJunction, groups };
@@ -279,14 +342,17 @@
     draft.mode = newMode;
   }
 
-  let draft = $state<FilterEditorState>(untrack(() => ({
-    mode: value.mode,
-    groupJunction: value.groupJunction,
-    groups: value.groups.length > 0
-      ? value.groups.map((g) => ({ ...g, rules: g.rules.map((r) => ({ ...r })) }))
-      : [{ id: crypto.randomUUID(), conjunction: 'AND', rules: [newRule()] }],
-    sql: value.sql,
-  })));
+  let draft = $state<FilterEditorState>(
+    untrack(() => ({
+      mode: value.mode,
+      groupJunction: value.groupJunction,
+      groups:
+        value.groups.length > 0
+          ? value.groups.map((g) => ({ ...g, rules: g.rules.map((r) => ({ ...r })) }))
+          : [{ id: crypto.randomUUID(), conjunction: 'AND', rules: [newRule()] }],
+      sql: value.sql,
+    })),
+  );
   let panelEl = $state<HTMLDivElement | null>(null);
   let openPickerRuleId = $state<string | null>(null);
   let pickerTriggerEl = $state<HTMLButtonElement | null>(null);
@@ -295,7 +361,19 @@
   let pickerLeft = $state(0);
   let pickerOpenUp = $state(false);
 
-  const OPERATORS: FilterOperator[] = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL', 'IN'];
+  const OPERATORS: FilterOperator[] = [
+    '=',
+    '!=',
+    '>',
+    '<',
+    '>=',
+    '<=',
+    'LIKE',
+    'NOT LIKE',
+    'IS NULL',
+    'IS NOT NULL',
+    'IN',
+  ];
   const VALUE_LESS_OPS: FilterOperator[] = ['IS NULL', 'IS NOT NULL'];
 
   function needsValue(op: FilterOperator): boolean {
@@ -325,7 +403,10 @@
   function openPicker(ruleId: string, triggerEl: HTMLButtonElement): void {
     openPickerRuleId = ruleId;
     pickerTriggerEl = triggerEl;
-    requestAnimationFrame(() => { positionPicker(); requestAnimationFrame(positionPicker); });
+    requestAnimationFrame(() => {
+      positionPicker();
+      requestAnimationFrame(positionPicker);
+    });
   }
 
   function closePicker(): void {
@@ -334,7 +415,12 @@
   }
 
   function formatDateDisplay(value: string, category: 'datetime' | 'date' | 'time'): string {
-    if (!value) return category === 'datetime' ? 'Pick date & time…' : category === 'time' ? 'Pick time…' : 'Pick date…';
+    if (!value)
+      return category === 'datetime'
+        ? 'Pick date & time…'
+        : category === 'time'
+          ? 'Pick time…'
+          : 'Pick date…';
     return value;
   }
 
@@ -385,7 +471,10 @@
   }
 
   function addGroup(): void {
-    draft.groups = [...draft.groups, { id: crypto.randomUUID(), conjunction: 'AND', rules: [newRule()] }];
+    draft.groups = [
+      ...draft.groups,
+      { id: crypto.randomUUID(), conjunction: 'AND', rules: [newRule()] },
+    ];
   }
 
   function removeGroup(groupId: string): void {
@@ -412,27 +501,38 @@
 
   function updateRuleColumn(groupId: string, ruleId: string, column: string): void {
     draft.groups = draft.groups.map((g) =>
-      g.id === groupId ? { ...g, rules: g.rules.map((r) => r.id === ruleId ? { ...r, column } : r) } : g,
+      g.id === groupId
+        ? { ...g, rules: g.rules.map((r) => (r.id === ruleId ? { ...r, column } : r)) }
+        : g,
     );
   }
 
   function updateRuleOperator(groupId: string, ruleId: string, operator: FilterOperator): void {
     draft.groups = draft.groups.map((g) =>
       g.id === groupId
-        ? { ...g, rules: g.rules.map((r) => r.id === ruleId ? { ...r, operator, value: needsValue(operator) ? r.value : '' } : r) }
+        ? {
+            ...g,
+            rules: g.rules.map((r) =>
+              r.id === ruleId ? { ...r, operator, value: needsValue(operator) ? r.value : '' } : r,
+            ),
+          }
         : g,
     );
   }
 
   function updateRuleValue(groupId: string, ruleId: string, val: string): void {
     draft.groups = draft.groups.map((g) =>
-      g.id === groupId ? { ...g, rules: g.rules.map((r) => r.id === ruleId ? { ...r, value: val } : r) } : g,
+      g.id === groupId
+        ? { ...g, rules: g.rules.map((r) => (r.id === ruleId ? { ...r, value: val } : r)) }
+        : g,
     );
   }
 
   function updateRuleRawSql(groupId: string, ruleId: string, rawSql: string): void {
     draft.groups = draft.groups.map((g) =>
-      g.id === groupId ? { ...g, rules: g.rules.map((r) => r.id === ruleId ? { ...r, rawSql } : r) } : g,
+      g.id === groupId
+        ? { ...g, rules: g.rules.map((r) => (r.id === ruleId ? { ...r, rawSql } : r)) }
+        : g,
     );
   }
 
@@ -463,7 +563,10 @@
 
   function handleDocumentKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
-      if (openPickerRuleId !== null) { closePicker(); return; }
+      if (openPickerRuleId !== null) {
+        closePicker();
+        return;
+      }
       onClose();
     }
   }
@@ -489,17 +592,49 @@
   <div class="fe-header">
     <span class="fe-title">Filters</span>
     {#if draft.mode === 'builder'}
-      <button class="fe-add-group-btn" onclick={addGroup} title="Add group" aria-label="Add filter group">
-        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <button
+        class="fe-add-group-btn"
+        onclick={addGroup}
+        title="Add group"
+        aria-label="Add filter group"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          ><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+        >
         Add group
       </button>
     {/if}
     <SegmentedControl
-      options={[{ value: 'builder', label: 'Builder' }, { value: 'sql', label: 'SQL' }]}
+      options={[
+        { value: 'builder', label: 'Builder' },
+        { value: 'sql', label: 'SQL' },
+      ]}
       value={draft.mode}
       onchange={(v) => switchMode(v as 'builder' | 'sql')}
     />
-    <button class="fe-close-btn" onclick={onClose} aria-label="Close filters"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <button class="fe-close-btn" onclick={onClose} aria-label="Close filters"
+      ><svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        aria-hidden="true"
+        ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+      ></button
+    >
   </div>
 
   {#if draft.mode === 'builder'}
@@ -513,8 +648,8 @@
               <button
                 class="conjunction-pill"
                 onclick={() => (draft.groupJunction = draft.groupJunction === 'AND' ? 'OR' : 'AND')}
-                title="Click to toggle AND / OR"
-              >{draft.groupJunction}</button>
+                title="Click to toggle AND / OR">{draft.groupJunction}</button
+              >
             </div>
           {/if}
 
@@ -529,8 +664,8 @@
                       class="conjunction-pill"
                       onclick={() => toggleGroupConjunction(group.id)}
                       title="Click to toggle AND / OR"
-                      aria-label="Toggle AND/OR"
-                    >{group.conjunction}</button>
+                      aria-label="Toggle AND/OR">{group.conjunction}</button
+                    >
                   {/if}
 
                   {#if rule.rawSql !== undefined}
@@ -539,14 +674,18 @@
                       class="fe-value-input fe-value-input--raw"
                       type="text"
                       value={rule.rawSql}
-                      oninput={(e) => updateRuleRawSql(group.id, rule.id, (e.target as HTMLInputElement).value)}
+                      oninput={(e) =>
+                        updateRuleRawSql(group.id, rule.id, (e.target as HTMLInputElement).value)}
                       aria-label="Raw SQL condition"
-                      autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                      autocomplete="off"
+                      autocapitalize="off"
+                      autocorrect="off"
+                      spellcheck="false"
                     />
                   {:else}
                     <Select
                       value={rule.column}
-                      options={columns.map(col => ({ value: col.name, label: col.name }))}
+                      options={columns.map((col) => ({ value: col.name, label: col.name }))}
                       onchange={(v) => updateRuleColumn(group.id, rule.id, v)}
                       aria-label="Column"
                       size="xs"
@@ -556,7 +695,7 @@
 
                     <Select
                       value={rule.operator}
-                      options={OPERATORS.map(op => ({ value: op, label: op }))}
+                      options={OPERATORS.map((op) => ({ value: op, label: op }))}
                       onchange={(v) => updateRuleOperator(group.id, rule.id, v as FilterOperator)}
                       aria-label="Operator"
                       size="xs"
@@ -570,21 +709,36 @@
                         <div class="fe-bool-picker" aria-label="Filter value">
                           <button
                             class="fe-bool-btn fe-bool-btn--true"
-                            class:fe-bool-btn--selected={rule.value === 'true' || rule.value === '1'}
-                            onclick={() => updateRuleValue(group.id, rule.id, settings.settings.booleanDisplay === '1-0' ? '1' : 'true')}
-                            type="button"
-                          >{booleanTrueLabel()}</button>
+                            class:fe-bool-btn--selected={rule.value === 'true' ||
+                              rule.value === '1'}
+                            onclick={() =>
+                              updateRuleValue(
+                                group.id,
+                                rule.id,
+                                settings.settings.booleanDisplay === '1-0' ? '1' : 'true',
+                              )}
+                            type="button">{booleanTrueLabel()}</button
+                          >
                           <button
                             class="fe-bool-btn fe-bool-btn--false"
-                            class:fe-bool-btn--selected={rule.value === 'false' || rule.value === '0'}
-                            onclick={() => updateRuleValue(group.id, rule.id, settings.settings.booleanDisplay === '1-0' ? '0' : 'false')}
-                            type="button"
-                          >{booleanFalseLabel()}</button>
+                            class:fe-bool-btn--selected={rule.value === 'false' ||
+                              rule.value === '0'}
+                            onclick={() =>
+                              updateRuleValue(
+                                group.id,
+                                rule.id,
+                                settings.settings.booleanDisplay === '1-0' ? '0' : 'false',
+                              )}
+                            type="button">{booleanFalseLabel()}</button
+                          >
                         </div>
                       {:else if enumValues !== null}
                         <Select
                           value={rule.value || undefined}
-                          options={[{ value: '', label: '— pick value —' }, ...enumValues.map(v => ({ value: v, label: v }))]}
+                          options={[
+                            { value: '', label: '— pick value —' },
+                            ...enumValues.map((v) => ({ value: v, label: v })),
+                          ]}
                           onchange={(v) => updateRuleValue(group.id, rule.id, v)}
                           aria-label="Filter value"
                           size="xs"
@@ -600,16 +754,29 @@
                             type="button"
                             aria-label="Filter value"
                             onclick={(e) => openPicker(rule.id, e.currentTarget)}
-                          >{formatDateDisplay(rule.value, dateCategory)}</button>
+                            >{formatDateDisplay(rule.value, dateCategory)}</button
+                          >
                         {:else}
                           <input
                             class="fe-value-input"
                             type="text"
                             value={rule.value}
-                            placeholder={rule.operator === 'LIKE' || rule.operator === 'NOT LIKE' ? '%value%' : rule.operator === 'IN' ? "'a','b','c'" : 'value'}
-                            oninput={(e) => updateRuleValue(group.id, rule.id, (e.target as HTMLInputElement).value)}
+                            placeholder={rule.operator === 'LIKE' || rule.operator === 'NOT LIKE'
+                              ? '%value%'
+                              : rule.operator === 'IN'
+                                ? "'a','b','c'"
+                                : 'value'}
+                            oninput={(e) =>
+                              updateRuleValue(
+                                group.id,
+                                rule.id,
+                                (e.target as HTMLInputElement).value,
+                              )}
                             aria-label="Filter value"
-                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                            autocomplete="off"
+                            autocapitalize="off"
+                            autocorrect="off"
+                            spellcheck="false"
                           />
                         {/if}
                       {/if}
@@ -618,24 +785,65 @@
                     {/if}
                   {/if}
 
-                  <button class="rule-remove-btn" onclick={() => removeRule(group.id, rule.id)} aria-label="Remove filter" title="Remove"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                  <button
+                    class="rule-remove-btn"
+                    onclick={() => removeRule(group.id, rule.id)}
+                    aria-label="Remove filter"
+                    title="Remove"
+                    ><svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      aria-hidden="true"
+                      ><line x1="18" y1="6" x2="6" y2="18" /><line
+                        x1="6"
+                        y1="6"
+                        x2="18"
+                        y2="18"
+                      /></svg
+                    ></button
+                  >
                 </div>
               {/each}
             </div>
 
             <div class="fe-add-row fe-group-footer">
               <button class="fe-add-btn" onclick={() => addRule(group.id)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  ><line x1="12" y1="5" x2="12" y2="19" /><line
+                    x1="5"
+                    y1="12"
+                    x2="19"
+                    y2="12"
+                  /></svg
+                >
                 Add filter
               </button>
               {#if draft.groups.length > 1}
-                <button class="group-remove-btn" onclick={() => removeGroup(group.id)} aria-label="Delete group">Delete group</button>
+                <button
+                  class="group-remove-btn"
+                  onclick={() => removeGroup(group.id)}
+                  aria-label="Delete group">Delete group</button
+                >
               {/if}
             </div>
           </div>
         {/each}
       {/if}
-
     </div>
   {:else}
     <div class="fe-body fe-body--sql">
@@ -645,9 +853,16 @@
         class="sql-textarea"
         bind:value={draft.sql}
         placeholder="condition… (Shift+Enter for newline, Enter to apply)"
-        autocomplete="off" autocapitalize="off" spellcheck="false"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
         rows="3"
-        onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); applyFilter(); } }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            applyFilter();
+          }
+        }}
       ></textarea>
     </div>
   {/if}
@@ -659,8 +874,8 @@
 </div>
 
 {#if openPickerRuleId !== null}
-  {@const activeRule = draft.groups.flatMap(g => g.rules).find(r => r.id === openPickerRuleId)}
-  {@const activeGroup = draft.groups.find(g => g.rules.some(r => r.id === openPickerRuleId))}
+  {@const activeRule = draft.groups.flatMap((g) => g.rules).find((r) => r.id === openPickerRuleId)}
+  {@const activeGroup = draft.groups.find((g) => g.rules.some((r) => r.id === openPickerRuleId))}
   {@const dateCategory = activeRule ? getDateCategory(activeRule.column) : null}
   {#if activeRule && activeGroup && dateCategory}
     <div
@@ -669,17 +884,28 @@
       class:picker-popup--up={pickerOpenUp}
       style="top:{pickerTop}px; left:{pickerLeft}px"
       use:portal
-      onkeydown={(e) => { if (e.key === 'Escape') closePicker(); }}
+      onkeydown={(e) => {
+        if (e.key === 'Escape') closePicker();
+      }}
       role="dialog"
       aria-label="Pick {dateCategory === 'datetime' ? 'date and time' : dateCategory}"
       tabindex="-1"
     >
       {#if dateCategory === 'date'}
-        <DatePicker value={activeRule.value} onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)} />
+        <DatePicker
+          value={activeRule.value}
+          onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)}
+        />
       {:else if dateCategory === 'time'}
-        <TimePicker value={activeRule.value} onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)} />
+        <TimePicker
+          value={activeRule.value}
+          onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)}
+        />
       {:else}
-        <DateTimePicker value={activeRule.value} onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)} />
+        <DateTimePicker
+          value={activeRule.value}
+          onchange={(v) => updateRuleValue(activeGroup.id, activeRule.id, v)}
+        />
       {/if}
     </div>
   {/if}
@@ -734,7 +960,10 @@
     color: var(--color-text-muted);
     cursor: pointer;
     white-space: nowrap;
-    transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .fe-add-group-btn:hover {
@@ -760,7 +989,10 @@
     line-height: 1;
   }
 
-  .fe-close-btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+  .fe-close-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
 
   .fe-body {
     padding: var(--spacing-2) var(--spacing-3);
@@ -773,7 +1005,9 @@
     scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
   }
 
-  .fe-body--sql { gap: var(--spacing-1); }
+  .fe-body--sql {
+    gap: var(--spacing-1);
+  }
 
   .fe-empty {
     font-size: var(--font-size-xs);
@@ -818,7 +1052,10 @@
     font-family: var(--font-family-ui);
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .group-remove-btn:hover {
@@ -857,7 +1094,10 @@
     transition: background var(--transition-fast);
   }
 
-  .conjunction-pill:hover { background: var(--color-accent); color: var(--color-text-on-accent); }
+  .conjunction-pill:hover {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+  }
 
   .conjunction-spacer {
     flex-shrink: 0;
@@ -885,10 +1125,19 @@
     transition: border-color var(--transition-fast);
   }
 
-  .fe-value-input:focus { border-color: var(--color-accent); }
-  .fe-value-input::placeholder { color: var(--color-text-muted); font-family: var(--font-family-ui); }
-  .fe-value-input--raw { border-style: dashed; }
-  .fe-value-spacer { flex: 1; }
+  .fe-value-input:focus {
+    border-color: var(--color-accent);
+  }
+  .fe-value-input::placeholder {
+    color: var(--color-text-muted);
+    font-family: var(--font-family-ui);
+  }
+  .fe-value-input--raw {
+    border-style: dashed;
+  }
+  .fe-value-spacer {
+    flex: 1;
+  }
 
   .fe-bool-picker {
     display: flex;
@@ -907,13 +1156,22 @@
     font-family: var(--font-family-mono);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      border-color var(--transition-fast);
   }
 
-  .fe-bool-btn--true { color: var(--color-success); }
-  .fe-bool-btn--false { color: var(--color-danger); }
+  .fe-bool-btn--true {
+    color: var(--color-success);
+  }
+  .fe-bool-btn--false {
+    color: var(--color-danger);
+  }
 
-  .fe-bool-btn:hover { background: var(--color-bg-hover); border-color: var(--color-border-strong); }
+  .fe-bool-btn:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border-strong);
+  }
 
   .fe-bool-btn--true.fe-bool-btn--selected {
     background: var(--color-success-subtle);
@@ -940,8 +1198,13 @@
     white-space: nowrap;
   }
 
-  .fe-date-trigger:hover { border-color: var(--color-border-strong); background: var(--color-bg-hover); }
-  .fe-date-trigger--empty { color: var(--color-text-muted); }
+  .fe-date-trigger:hover {
+    border-color: var(--color-border-strong);
+    background: var(--color-bg-hover);
+  }
+  .fe-date-trigger--empty {
+    color: var(--color-text-muted);
+  }
 
   .raw-sql-tag {
     flex-shrink: 0;
@@ -971,13 +1234,20 @@
     color: var(--color-text-muted);
     cursor: pointer;
     border-radius: var(--radius-sm);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     line-height: 1;
   }
 
-  .rule-remove-btn:hover { background: var(--color-danger-subtle); color: var(--color-danger); }
+  .rule-remove-btn:hover {
+    background: var(--color-danger-subtle);
+    color: var(--color-danger);
+  }
 
-  .fe-add-row { padding-top: var(--spacing-1); }
+  .fe-add-row {
+    padding-top: var(--spacing-1);
+  }
 
   .fe-add-btn {
     display: flex;
@@ -991,10 +1261,17 @@
     font-family: var(--font-family-ui);
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
-  .fe-add-btn:hover { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-accent-subtle); }
+  .fe-add-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
 
   /* ── SQL mode ───────────────────────────────────────────────────────────── */
 
@@ -1023,8 +1300,13 @@
     box-sizing: border-box;
   }
 
-  .sql-textarea:focus { border-color: var(--color-accent); }
-  .sql-textarea::placeholder { color: var(--color-text-muted); font-family: var(--font-family-ui); }
+  .sql-textarea:focus {
+    border-color: var(--color-accent);
+  }
+  .sql-textarea::placeholder {
+    color: var(--color-text-muted);
+    font-family: var(--font-family-ui);
+  }
 
   /* ── Footer ─────────────────────────────────────────────────────────────── */
 
@@ -1048,10 +1330,15 @@
     font-family: var(--font-family-ui);
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
-  .fe-clear-btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+  .fe-clear-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
 
   .fe-apply-btn {
     padding: 3px var(--spacing-3);
@@ -1063,8 +1350,13 @@
     font-family: var(--font-family-ui);
     color: var(--color-accent);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
-  .fe-apply-btn:hover { background: var(--color-accent); color: var(--color-text-on-accent); }
+  .fe-apply-btn:hover {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+  }
 </style>

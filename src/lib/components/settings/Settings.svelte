@@ -45,22 +45,32 @@
   const isCustomTheme = $derived(!BUILTIN_THEMES.includes(settings.theme));
 
   const themeOptions = $derived([
-    { group: 'Built-in', options: [
-      { value: 'system', label: 'System' },
-      { value: 'light', label: 'Light' },
-      { value: 'dark', label: 'Dark' },
-      { value: 'high-contrast', label: 'High Contrast' },
-    ]},
-    ...(userThemes.length > 0 ? [{ group: 'Custom', options: userThemes.map(t => ({ value: t.name, label: t.name })) }] : []),
+    {
+      group: 'Built-in',
+      options: [
+        { value: 'system', label: 'System' },
+        { value: 'light', label: 'Light' },
+        { value: 'dark', label: 'Dark' },
+        { value: 'high-contrast', label: 'High Contrast' },
+      ],
+    },
+    ...(userThemes.length > 0
+      ? [{ group: 'Custom', options: userThemes.map((t) => ({ value: t.name, label: t.name })) }]
+      : []),
   ]);
 
   const themeBaseOptions = $derived([
-    { group: 'Built-in', options: [
-      { value: 'light', label: 'Light' },
-      { value: 'dark', label: 'Dark' },
-      { value: 'high-contrast', label: 'High Contrast' },
-    ]},
-    ...(userThemes.length > 0 ? [{ group: 'Custom', options: userThemes.map(t => ({ value: t.name, label: t.name })) }] : []),
+    {
+      group: 'Built-in',
+      options: [
+        { value: 'light', label: 'Light' },
+        { value: 'dark', label: 'Dark' },
+        { value: 'high-contrast', label: 'High Contrast' },
+      ],
+    },
+    ...(userThemes.length > 0
+      ? [{ group: 'Custom', options: userThemes.map((t) => ({ value: t.name, label: t.name })) }]
+      : []),
   ]);
 
   onMount(async () => {
@@ -116,7 +126,10 @@
     for (let i = 0; i < style.length; i++) {
       if (style[i].startsWith('--')) inlineProps.push(style[i]);
     }
-    inlineProps.forEach((p) => { stash[p] = style.getPropertyValue(p); style.removeProperty(p); });
+    inlineProps.forEach((p) => {
+      stash[p] = style.getPropertyValue(p);
+      style.removeProperty(p);
+    });
 
     const prevTheme = root.getAttribute('data-theme') ?? 'system';
     root.setAttribute('data-theme', base);
@@ -143,7 +156,7 @@
     if (!oldName || newName === oldName) return;
     try {
       const meta = await themesApi.themesRename(oldName, newName);
-      userThemes = userThemes.map((t) => t.name === oldName ? meta : t);
+      userThemes = userThemes.map((t) => (t.name === oldName ? meta : t));
       await update('theme', meta.name);
     } catch (err) {
       toast.addToast(errorMessage(err), 'error', 0);
@@ -187,7 +200,7 @@
       if (!userThemes.some((t) => t.name === meta.name)) {
         userThemes = [...userThemes, meta];
       } else {
-        userThemes = userThemes.map((t) => t.name === meta.name ? meta : t);
+        userThemes = userThemes.map((t) => (t.name === meta.name ? meta : t));
       }
       await update('theme', meta.name);
     } catch (err) {
@@ -200,15 +213,17 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => {
-  if (e.key === 'Escape' && creatingTheme) cancelCreateTheme();
-  if (e.key === 'Escape' && confirmingDelete) confirmingDelete = false;
-}} />
+<svelte:window
+  onkeydown={(e) => {
+    if (e.key === 'Escape' && creatingTheme) cancelCreateTheme();
+    if (e.key === 'Escape' && confirmingDelete) confirmingDelete = false;
+  }}
+/>
 
 <div class="settings-page">
   <!-- Sidebar nav -->
   <nav class="settings-nav" aria-label="Settings sections">
-    {#each (['general', 'editor', 'keyboard', 'connections', 'appearance'] as const) as section}
+    {#each ['general', 'editor', 'keyboard', 'connections', 'appearance'] as const as section}
       <button
         class="nav-item"
         class:active={activeSection === section}
@@ -237,7 +252,8 @@
             min="10"
             max="1000"
             value={settings.pageSize}
-            onchange={(e) => update('pageSize', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
+            onchange={(e) =>
+              update('pageSize', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
           />
         </div>
 
@@ -252,7 +268,8 @@
             min="1"
             max="20"
             value={settings.cellMaxLines}
-            onchange={(e) => update('cellMaxLines', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
+            onchange={(e) =>
+              update('cellMaxLines', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
           />
         </div>
 
@@ -278,7 +295,11 @@
             min="50"
             max="5000"
             value={settings.historyMaxEntries}
-            onchange={(e) => update('historyMaxEntries', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
+            onchange={(e) =>
+              update(
+                'historyMaxEntries',
+                parseInt((e.currentTarget as HTMLInputElement).value, 10),
+              )}
           />
         </div>
 
@@ -289,7 +310,11 @@
           </div>
           <Select
             value={settings.booleanDisplay}
-            options={[{ value: 'tick-cross', label: '✓ / ✗' }, { value: 'true-false', label: 'True / False' }, { value: '1-0', label: '1 / 0' }]}
+            options={[
+              { value: 'tick-cross', label: '✓ / ✗' },
+              { value: 'true-false', label: 'True / False' },
+              { value: '1-0', label: '1 / 0' },
+            ]}
             onchange={(v) => update('booleanDisplay', v as 'tick-cross' | 'true-false' | '1-0')}
           />
         </div>
@@ -297,11 +322,15 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Click Outside Cell Edit</span>
-            <span class="label-hint">What happens when you click outside an active cell editor</span>
+            <span class="label-hint">What happens when you click outside an active cell editor</span
+            >
           </div>
           <Select
             value={settings.clickOutsideEdit}
-            options={[{ value: 'discard', label: 'Discard changes' }, { value: 'confirm', label: 'Keep changes' }]}
+            options={[
+              { value: 'discard', label: 'Discard changes' },
+              { value: 'confirm', label: 'Keep changes' },
+            ]}
             onchange={(v) => update('clickOutsideEdit', v as 'discard' | 'confirm')}
           />
         </div>
@@ -309,11 +338,17 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">NOW Button Time Source</span>
-            <span class="label-hint">Time used when clicking NOW in the date/time cell editor<br />If you choose 'Database server', it will fall back to 'My machine' on error</span>
+            <span class="label-hint"
+              >Time used when clicking NOW in the date/time cell editor<br />If you choose 'Database
+              server', it will fall back to 'My machine' on error</span
+            >
           </div>
           <Select
             value={settings.nowTimeSource}
-            options={[{ value: 'user', label: 'My machine' }, { value: 'database', label: 'Database server' }]}
+            options={[
+              { value: 'user', label: 'My machine' },
+              { value: 'database', label: 'Database server' },
+            ]}
             onchange={(v) => update('nowTimeSource', v as 'user' | 'database')}
           />
         </div>
@@ -325,12 +360,14 @@
           </div>
           <Select
             value={settings.newRowPosition}
-            options={[{ value: 'bottom', label: 'Bottom' }, { value: 'top', label: 'Top' }]}
+            options={[
+              { value: 'bottom', label: 'Bottom' },
+              { value: 'top', label: 'Top' },
+            ]}
             onchange={(v) => update('newRowPosition', v as 'top' | 'bottom')}
           />
         </div>
       </div>
-
     {:else if activeSection === 'editor'}
       <h2 class="section-title">Editor</h2>
 
@@ -346,7 +383,8 @@
             min="1"
             max="8"
             value={settings.editorTabSize}
-            onchange={(e) => update('editorTabSize', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
+            onchange={(e) =>
+              update('editorTabSize', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
           />
         </div>
 
@@ -385,7 +423,8 @@
             min="8"
             max="32"
             value={settings.fontSize}
-            onchange={(e) => update('fontSize', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
+            onchange={(e) =>
+              update('fontSize', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
           />
         </div>
       </div>
@@ -400,7 +439,11 @@
           </div>
           <Select
             value={settings.formatKeywordCase}
-            options={[{ value: 'upper', label: 'UPPER' }, { value: 'lower', label: 'lower' }, { value: 'preserve', label: 'Preserve' }]}
+            options={[
+              { value: 'upper', label: 'UPPER' },
+              { value: 'lower', label: 'lower' },
+              { value: 'preserve', label: 'Preserve' },
+            ]}
             onchange={(v) => update('formatKeywordCase', v as 'upper' | 'lower' | 'preserve')}
           />
         </div>
@@ -410,10 +453,7 @@
             <span class="label-text">Compact Mode</span>
             <span class="label-hint">Keep each query on a single line when formatting</span>
           </div>
-          <Checkbox
-            checked={settings.formatCompact}
-            onchange={(c) => update('formatCompact', c)}
-          />
+          <Checkbox checked={settings.formatCompact} onchange={(c) => update('formatCompact', c)} />
         </div>
 
         <div class="setting-row">
@@ -423,8 +463,13 @@
           </div>
           <Select
             value={settings.formatIndentStyle}
-            options={[{ value: 'standard', label: 'Standard' }, { value: 'tabularLeft', label: 'Tabular left' }, { value: 'tabularRight', label: 'Tabular right' }]}
-            onchange={(v) => update('formatIndentStyle', v as 'standard' | 'tabularLeft' | 'tabularRight')}
+            options={[
+              { value: 'standard', label: 'Standard' },
+              { value: 'tabularLeft', label: 'Tabular left' },
+              { value: 'tabularRight', label: 'Tabular right' },
+            ]}
+            onchange={(v) =>
+              update('formatIndentStyle', v as 'standard' | 'tabularLeft' | 'tabularRight')}
           />
         </div>
 
@@ -440,22 +485,23 @@
             max="10"
             value={settings.formatLinesBetweenQueries}
             onchange={(e) => {
-              const v = Math.min(10, Math.max(0, parseInt((e.currentTarget as HTMLInputElement).value, 10) || 0));
+              const v = Math.min(
+                10,
+                Math.max(0, parseInt((e.currentTarget as HTMLInputElement).value, 10) || 0),
+              );
               (e.currentTarget as HTMLInputElement).value = String(v);
               update('formatLinesBetweenQueries', v);
             }}
           />
         </div>
       </div>
-
     {:else if activeSection === 'keyboard'}
       <h2 class="section-title">Keyboard Shortcuts</h2>
       <p class="section-description">
-        Click <strong>Record</strong> next to any action, then press the key combination you want.
-        Press Escape to cancel recording.
+        Click <strong>Record</strong> next to any action, then press the key combination you want. Press
+        Escape to cancel recording.
       </p>
       <KeyboardShortcuts />
-
     {:else if activeSection === 'connections'}
       <h2 class="section-title">Connections</h2>
 
@@ -474,7 +520,9 @@
         <div class="setting-row setting-row--block">
           <div class="setting-label">
             <span class="label-text">System Databases</span>
-            <span class="label-hint">Databases shown with a wrench icon. Press Enter to add an entry.</span>
+            <span class="label-hint"
+              >Databases shown with a wrench icon. Press Enter to add an entry.</span
+            >
           </div>
           <div class="tag-list">
             {#each settings.systemDatabases as db}
@@ -483,8 +531,12 @@
                 <button
                   class="tag-remove"
                   aria-label="Remove {db}"
-                  onclick={() => update('systemDatabases', settings.systemDatabases.filter(d => d !== db))}
-                >×</button>
+                  onclick={() =>
+                    update(
+                      'systemDatabases',
+                      settings.systemDatabases.filter((d) => d !== db),
+                    )}>×</button
+                >
               </span>
             {/each}
             <input
@@ -508,7 +560,10 @@
         <div class="setting-row setting-row--block">
           <div class="setting-label">
             <span class="label-text">System Table Patterns</span>
-            <span class="label-hint">Tables matching these names are shown with a wrench icon. Matched case-insensitively. Press Enter to add an entry.</span>
+            <span class="label-hint"
+              >Tables matching these names are shown with a wrench icon. Matched case-insensitively.
+              Press Enter to add an entry.</span
+            >
           </div>
           <div class="tag-list">
             {#each settings.systemTablePatterns as pattern}
@@ -517,8 +572,12 @@
                 <button
                   class="tag-remove"
                   aria-label="Remove {pattern}"
-                  onclick={() => update('systemTablePatterns', settings.systemTablePatterns.filter(p => p !== pattern))}
-                >×</button>
+                  onclick={() =>
+                    update(
+                      'systemTablePatterns',
+                      settings.systemTablePatterns.filter((p) => p !== pattern),
+                    )}>×</button
+                >
               </span>
             {/each}
             <input
@@ -539,7 +598,6 @@
           </div>
         </div>
       </div>
-
     {:else if activeSection === 'appearance'}
       <h2 class="section-title">Appearance</h2>
 
@@ -554,7 +612,10 @@
               value={settings.theme}
               options={themeOptions}
               aria-label="Select theme"
-              onchange={(v) => { confirmingDelete = false; update('theme', v); }}
+              onchange={(v) => {
+                confirmingDelete = false;
+                update('theme', v);
+              }}
             />
             <button class="action-btn" onclick={startCreatingTheme}>+ New</button>
             <button class="action-btn" onclick={importTheme}>Import</button>
@@ -579,17 +640,26 @@
           </div>
           <Select
             value={settings.openItemsLocation}
-            options={[{ value: 'sidebar', label: 'Open panel (sidebar)' }, { value: 'top', label: 'Tab bar (top of main area)' }]}
+            options={[
+              { value: 'sidebar', label: 'Open panel (sidebar)' },
+              { value: 'top', label: 'Tab bar (top of main area)' },
+            ]}
             onchange={(v) => update('openItemsLocation', v as 'sidebar' | 'top')}
           />
         </div>
       </div>
 
-
       {#if isCustomTheme}
         {#key settings.theme}
           <div class="theme-editor-wrap" style="margin-top: var(--spacing-3);">
-            <ThemeEditor themeName={settings.theme} onrename={renameTheme} ondelete={() => { confirmingDelete = true; }} onexport={exportTheme} />
+            <ThemeEditor
+              themeName={settings.theme}
+              onrename={renameTheme}
+              ondelete={() => {
+                confirmingDelete = true;
+              }}
+              onexport={exportTheme}
+            />
           </div>
         {/key}
       {/if}
@@ -602,18 +672,26 @@
     <div class="modal">
       <header class="modal-header">
         <h2 class="modal-title">New Theme</h2>
-        <button class="close-btn" onclick={cancelCreateTheme} aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="close-btn" onclick={cancelCreateTheme} aria-label="Close"
+          ><svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            aria-hidden="true"
+            ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+          ></button
+        >
       </header>
 
       <div class="modal-body">
         <div class="modal-field">
           <label class="modal-label" for="new-theme-base">Base theme</label>
           <span class="modal-hint">Your new theme starts as a copy of this</span>
-          <Select
-            id="new-theme-base"
-            bind:value={newThemeBase}
-            options={themeBaseOptions}
-          />
+          <Select id="new-theme-base" bind:value={newThemeBase} options={themeBaseOptions} />
         </div>
 
         <div class="modal-field">
@@ -625,7 +703,9 @@
             type="text"
             placeholder="My Theme"
             bind:value={newThemeName}
-            onkeydown={(e) => { if (e.key === 'Enter') confirmCreateTheme(); }}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') confirmCreateTheme();
+            }}
             autofocus
           />
         </div>
@@ -637,7 +717,11 @@
 
       <footer class="modal-footer">
         <button class="action-btn" onclick={cancelCreateTheme}>Cancel</button>
-        <button class="action-btn action-btn--primary" onclick={confirmCreateTheme} disabled={!newThemeName.trim()}>Create</button>
+        <button
+          class="action-btn action-btn--primary"
+          onclick={confirmCreateTheme}
+          disabled={!newThemeName.trim()}>Create</button
+        >
       </footer>
     </div>
   </Modal>
@@ -648,10 +732,24 @@
     <div class="modal">
       <header class="modal-header">
         <h2 class="modal-title">Delete Theme</h2>
-        <button class="close-btn" onclick={() => (confirmingDelete = false)} aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="close-btn" onclick={() => (confirmingDelete = false)} aria-label="Close"
+          ><svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            aria-hidden="true"
+            ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+          ></button
+        >
       </header>
       <div class="modal-body">
-        <p class="modal-confirm-text">Delete <strong>{settings.theme}</strong>? This cannot be undone.</p>
+        <p class="modal-confirm-text">
+          Delete <strong>{settings.theme}</strong>? This cannot be undone.
+        </p>
       </div>
       <footer class="modal-footer">
         <button class="action-btn" onclick={() => (confirmingDelete = false)}>Cancel</button>
@@ -684,7 +782,9 @@
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
     border-radius: 0;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     font-family: var(--font-family-ui);
   }
 
@@ -790,7 +890,6 @@
     border-color: var(--color-accent);
   }
 
-
   .theme-selector-row {
     display: flex;
     align-items: center;
@@ -885,7 +984,9 @@
     font-size: var(--font-size-md);
     padding: var(--spacing-1);
     border-radius: var(--radius-sm);
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .close-btn:hover {
@@ -966,7 +1067,6 @@
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono, monospace);
   }
-
 
   .tag-remove {
     color: var(--color-accent);

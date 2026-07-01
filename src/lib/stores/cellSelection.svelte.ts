@@ -16,7 +16,11 @@ let current = $state<CellSelection | null>(null);
 
 export function useCellSelection() {
   return {
-    get current() { return current; },
-    set(s: CellSelection | null) { current = s; },
+    get current() {
+      return current;
+    },
+    set(s: CellSelection | null) {
+      current = s;
+    },
   };
 }

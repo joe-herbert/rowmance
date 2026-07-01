@@ -181,7 +181,9 @@
         break;
       case 'saved_query': {
         const connId =
-          item.connectionId ?? connections.profiles.find((p) => connections.isActive(p.id))?.id ?? '';
+          item.connectionId ??
+          connections.profiles.find((p) => connections.isActive(p.id))?.id ??
+          '';
         panels.openInFocused({ kind: 'query_editor', connectionId: connId, initialSql: item.sql });
         break;
       }
@@ -237,7 +239,16 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="backdrop" role="dialog" aria-modal="true" aria-label="Command Palette" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}>
+<div
+  class="backdrop"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Command Palette"
+  tabindex="-1"
+  onclick={(e) => {
+    if (e.target === e.currentTarget) onclose();
+  }}
+>
   <div class="palette" use:focusTrap>
     <div class="search-row">
       <span class="search-icon" aria-hidden="true">⌘</span>

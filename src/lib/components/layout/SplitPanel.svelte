@@ -176,7 +176,9 @@
     content: '';
     position: absolute;
     background: var(--color-border);
-    transition: background var(--transition-fast), opacity var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      opacity var(--transition-fast);
     border-radius: 1px;
   }
 

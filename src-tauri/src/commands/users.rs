@@ -1,8 +1,8 @@
 /// Tauri commands for user management.
 use serde::Serialize;
+use sqlx::Row;
 use std::sync::Arc;
 use tauri::State;
-use sqlx::Row;
 
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::AppError;
@@ -150,10 +150,26 @@ pub async fn users_get_grants(
             let mut grants: Vec<String> = Vec::new();
 
             if let Some(a) = attrs {
-                let super_str = if a.rolsuper { "SUPERUSER" } else { "NOSUPERUSER" };
-                let createdb_str = if a.rolcreatedb { "CREATEDB" } else { "NOCREATEDB" };
-                let createrole_str = if a.rolcreaterole { "CREATEROLE" } else { "NOCREATEROLE" };
-                let bypassrls_str = if a.rolbypassrls { "BYPASSRLS" } else { "NOBYPASSRLS" };
+                let super_str = if a.rolsuper {
+                    "SUPERUSER"
+                } else {
+                    "NOSUPERUSER"
+                };
+                let createdb_str = if a.rolcreatedb {
+                    "CREATEDB"
+                } else {
+                    "NOCREATEDB"
+                };
+                let createrole_str = if a.rolcreaterole {
+                    "CREATEROLE"
+                } else {
+                    "NOCREATEROLE"
+                };
+                let bypassrls_str = if a.rolbypassrls {
+                    "BYPASSRLS"
+                } else {
+                    "NOBYPASSRLS"
+                };
                 grants.push(format!(
                     "ALTER ROLE \"{username}\" {super_str} {createdb_str} {createrole_str} {bypassrls_str};"
                 ));

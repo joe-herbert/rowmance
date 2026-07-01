@@ -313,7 +313,8 @@ pub async fn list_foreign_keys(
     .fetch_all(pool)
     .await?;
 
-    let mut map: std::collections::BTreeMap<String, ForeignKeyInfo> = std::collections::BTreeMap::new();
+    let mut map: std::collections::BTreeMap<String, ForeignKeyInfo> =
+        std::collections::BTreeMap::new();
     for r in rows {
         let name = r.constraint_name.unwrap_or_default();
         let col = r.column_name.unwrap_or_default();

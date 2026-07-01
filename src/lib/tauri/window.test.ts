@@ -11,7 +11,7 @@ const MockWebviewWindow = vi.mocked(WebviewWindow);
 
 beforeEach(() => {
   MockWebviewWindow.mockClear();
-  MockWebviewWindow.mockImplementation(() => ({ once: vi.fn() }));
+  MockWebviewWindow.mockImplementation(() => ({ once: vi.fn() }) as never);
 });
 
 describe('openNewWindow', () => {

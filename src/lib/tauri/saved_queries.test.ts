@@ -42,7 +42,12 @@ describe('createFolder', () => {
 
   it('passes parentId and position when provided', async () => {
     const input = { name: 'Sub Folder', parentId: 'parent-1', position: 2 };
-    mockInvoke.mockResolvedValue({ id: 'f2', name: 'Sub Folder', parentId: 'parent-1', position: 2 });
+    mockInvoke.mockResolvedValue({
+      id: 'f2',
+      name: 'Sub Folder',
+      parentId: 'parent-1',
+      position: 2,
+    });
     await createFolder(input);
     expect(mockInvoke).toHaveBeenCalledWith('saved_queries_create_folder', { input });
   });
@@ -85,7 +90,17 @@ describe('listSavedQueries', () => {
   });
 
   it('returns the value from invoke', async () => {
-    const queries = [{ id: 'q1', name: 'My Query', sql: 'SELECT 1', folderId: null, connectionId: null, createdAt: '', updatedAt: '' }];
+    const queries = [
+      {
+        id: 'q1',
+        name: 'My Query',
+        sql: 'SELECT 1',
+        folderId: null,
+        connectionId: null,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ];
     mockInvoke.mockResolvedValue(queries);
     const result = await listSavedQueries();
     expect(result).toBe(queries);
@@ -95,7 +110,15 @@ describe('listSavedQueries', () => {
 describe('createSavedQuery', () => {
   it('invokes saved_queries_create with input', async () => {
     const input = { name: 'New Query', sql: 'SELECT 1' };
-    mockInvoke.mockResolvedValue({ id: 'q1', name: 'New Query', sql: 'SELECT 1', folderId: null, connectionId: null, createdAt: '', updatedAt: '' });
+    mockInvoke.mockResolvedValue({
+      id: 'q1',
+      name: 'New Query',
+      sql: 'SELECT 1',
+      folderId: null,
+      connectionId: null,
+      createdAt: '',
+      updatedAt: '',
+    });
     await createSavedQuery(input);
     expect(mockInvoke).toHaveBeenCalledWith('saved_queries_create', { input });
   });
@@ -111,7 +134,15 @@ describe('createSavedQuery', () => {
 describe('updateSavedQuery', () => {
   it('invokes saved_queries_update with id and input', async () => {
     const input = { name: 'Updated', sql: 'SELECT 3' };
-    mockInvoke.mockResolvedValue({ id: 'q1', name: 'Updated', sql: 'SELECT 3', folderId: null, connectionId: null, createdAt: '', updatedAt: '' });
+    mockInvoke.mockResolvedValue({
+      id: 'q1',
+      name: 'Updated',
+      sql: 'SELECT 3',
+      folderId: null,
+      connectionId: null,
+      createdAt: '',
+      updatedAt: '',
+    });
     await updateSavedQuery('q1', input);
     expect(mockInvoke).toHaveBeenCalledWith('saved_queries_update', { id: 'q1', input });
   });

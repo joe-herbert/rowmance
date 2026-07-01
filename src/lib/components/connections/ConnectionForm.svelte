@@ -49,7 +49,7 @@
   let passwordDirty = $state(false);
   let showPassword = $state(false);
   // SQLite file path — stored in `host` on the profile.
-  let filePath = $state(untrack(() => profile?.dbType === 'sqlite' ? (profile?.host ?? '') : ''));
+  let filePath = $state(untrack(() => (profile?.dbType === 'sqlite' ? (profile?.host ?? '') : '')));
   let color = $state(untrack(() => profile?.color ?? ''));
   let readOnly = $state(untrack(() => profile?.readOnly ?? false));
 
@@ -89,7 +89,10 @@
 
     try {
       if (url.toLowerCase().startsWith('sqlite:')) {
-        const path = url.replace(/^sqlite:\/\/\//, '/').replace(/^sqlite:\/\//, '').replace(/^sqlite:/i, '');
+        const path = url
+          .replace(/^sqlite:\/\/\//, '/')
+          .replace(/^sqlite:\/\//, '')
+          .replace(/^sqlite:/i, '');
         dbType = 'sqlite';
         filePath = path;
         showUrlInput = false;
@@ -167,9 +170,15 @@
         readOnly,
         groupId: profile?.groupId ?? groupId ?? null,
         sshEnabled: false,
-        sshHost: null, sshPort: null, sshUser: null, sshAuthType: null, sshKeyPath: null,
+        sshHost: null,
+        sshPort: null,
+        sshUser: null,
+        sshAuthType: null,
+        sshKeyPath: null,
         sslEnabled: false,
-        sslCaPath: null, sslCertPath: null, sslKeyPath: null,
+        sslCaPath: null,
+        sslCertPath: null,
+        sslKeyPath: null,
         poolMin,
         poolMax,
       };
@@ -246,7 +255,10 @@
         // result accurately reflects what connecting from the sidebar will do.
         testResult = await connectionsApi.testConnection(profile!.id, undefined);
       } else {
-        testResult = await connectionsApi.testConnectionUnsaved(buildInput(), password || undefined);
+        testResult = await connectionsApi.testConnectionUnsaved(
+          buildInput(),
+          password || undefined,
+        );
       }
     } catch (err) {
       saveError = errorMessage(err);
@@ -267,11 +279,10 @@
   }
 
   const isValid = $derived(
-    name.trim() !== '' && (
-      dbType === 'sqlite'
+    name.trim() !== '' &&
+      (dbType === 'sqlite'
         ? filePath.trim() !== ''
-        : host.trim() !== '' && database.trim() !== '' && username.trim() !== ''
-    )
+        : host.trim() !== '' && database.trim() !== '' && username.trim() !== ''),
   );
 
   const allTabs: { id: Tab; label: string }[] = [
@@ -282,9 +293,7 @@
   ];
 
   const tabs = $derived(
-    dbType === 'sqlite'
-      ? allTabs.filter((t) => t.id !== 'ssh' && t.id !== 'ssl')
-      : allTabs
+    dbType === 'sqlite' ? allTabs.filter((t) => t.id !== 'ssh' && t.id !== 'ssl') : allTabs,
   );
 
   $effect(() => {
@@ -292,7 +301,6 @@
       activeTab = 'basic';
     }
   });
-
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -302,12 +310,45 @@
     <header class="dialog-header">
       <h2 class="dialog-title">{title}</h2>
       {#if !isEditing}
-        <button type="button" class="url-toggle-btn" onclick={() => { showUrlInput = !showUrlInput; urlError = ''; if (!showUrlInput) connectionUrl = ''; }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <button
+          type="button"
+          class="url-toggle-btn"
+          onclick={() => {
+            showUrlInput = !showUrlInput;
+            urlError = '';
+            if (!showUrlInput) connectionUrl = '';
+          }}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            ><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path
+              d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+            /></svg
+          >
           From URL
         </button>
       {/if}
-      <button class="close-btn" aria-label="Close" onclick={onclose}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="close-btn" aria-label="Close" onclick={onclose}
+        ><svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        ></button
+      >
     </header>
 
     <!-- Tab strip -->
@@ -325,12 +366,29 @@
       {/each}
     </div>
 
-    <form class="form" onsubmit={(e) => { e.preventDefault(); handleSave(); }}>
+    <form
+      class="form"
+      onsubmit={(e) => {
+        e.preventDefault();
+        handleSave();
+      }}
+    >
       <!-- Basic tab -->
       {#if activeTab === 'basic'}
         <div class="field">
           <label for="conn-name" class="label">Name</label>
-          <input id="conn-name" class="input" type="text" bind:value={name} placeholder="My Database" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <input
+            id="conn-name"
+            class="input"
+            type="text"
+            bind:value={name}
+            placeholder="My Database"
+            required
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+          />
         </div>
 
         {#if showUrlInput}
@@ -350,9 +408,16 @@
                   autocorrect="off"
                   autocapitalize="off"
                   spellcheck="false"
-                  onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyConnectionUrl(); } }}
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      applyConnectionUrl();
+                    }
+                  }}
                 />
-                <button type="button" class="btn btn--ghost btn--sm" onclick={applyConnectionUrl}>Apply</button>
+                <button type="button" class="btn btn--ghost btn--sm" onclick={applyConnectionUrl}
+                  >Apply</button
+                >
               </div>
               {#if urlError}<div class="url-error">{urlError}</div>{/if}
             </div>
@@ -381,7 +446,12 @@
             <div class="color-row">
               <input id="conn-color" class="color-input" type="color" bind:value={color} />
               {#if color}
-                <button type="button" class="color-clear" onclick={() => (color = '')} aria-label="Clear colour">Clear</button>
+                <button
+                  type="button"
+                  class="color-clear"
+                  onclick={() => (color = '')}
+                  aria-label="Clear colour">Clear</button
+                >
               {/if}
             </div>
           </div>
@@ -391,31 +461,91 @@
           <div class="field">
             <label for="conn-file" class="label">File Path</label>
             <div class="file-row">
-              <input id="conn-file" class="input" type="text" bind:value={filePath} placeholder="/path/to/database.db" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') filePath = p; }); }}>Browse</button>
+              <input
+                id="conn-file"
+                class="input"
+                type="text"
+                bind:value={filePath}
+                placeholder="/path/to/database.db"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+              />
+              <button
+                type="button"
+                class="btn btn--ghost btn--sm"
+                onclick={() => {
+                  openFileDialog({ multiple: false }).then((p) => {
+                    if (typeof p === 'string') filePath = p;
+                  });
+                }}>Browse</button
+              >
             </div>
           </div>
         {:else}
           <div class="field-row">
             <div class="field field--grow">
               <label for="conn-host" class="label">Host</label>
-              <input id="conn-host" class="input" type="text" bind:value={host} placeholder="localhost" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <input
+                id="conn-host"
+                class="input"
+                type="text"
+                bind:value={host}
+                placeholder="localhost"
+                required
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+              />
             </div>
             <div class="field field--port">
               <label for="conn-port" class="label">Port</label>
-              <input id="conn-port" class="input" type="number" bind:value={port} min="1" max="65535" required autocomplete="off" />
+              <input
+                id="conn-port"
+                class="input"
+                type="number"
+                bind:value={port}
+                min="1"
+                max="65535"
+                required
+                autocomplete="off"
+              />
             </div>
           </div>
 
           <div class="field">
             <label for="conn-database" class="label">Database</label>
-            <input id="conn-database" class="input" type="text" bind:value={database} placeholder="my_database" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <input
+              id="conn-database"
+              class="input"
+              type="text"
+              bind:value={database}
+              placeholder="my_database"
+              required
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
           </div>
 
           <div class="field-row">
             <div class="field field--grow">
               <label for="conn-username" class="label">Username</label>
-              <input id="conn-username" class="input" type="text" bind:value={username} placeholder="root" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <input
+                id="conn-username"
+                class="input"
+                type="text"
+                bind:value={username}
+                placeholder="root"
+                required
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+              />
             </div>
             <div class="field field--grow">
               <label for="conn-password" class="label">Password</label>
@@ -437,7 +567,36 @@
                   class="btn btn--ghost btn--sm btn--icon"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onclick={() => (showPassword = !showPassword)}
-                >{#if showPassword}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>{:else}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>{/if}</button>
+                  >{#if showPassword}<svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      ><path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      /><line x1="1" y1="1" x2="23" y2="23" /></svg
+                    >{:else}<svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      ><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
+                        cx="12"
+                        cy="12"
+                        r="3"
+                      /></svg
+                    >{/if}</button
+                >
               </div>
             </div>
           </div>
@@ -448,119 +607,273 @@
           <Checkbox id="conn-readonly" bind:checked={readOnly} />
         </div>
 
-      <!-- SSH tab -->
+        <!-- SSH tab -->
       {:else if activeTab === 'ssh'}
         {#if dbType === 'sqlite'}
           <p class="tab-hint">SSH tunnelling is not available for SQLite connections.</p>
         {:else}
-        <div class="field field--inline">
-          <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
-          <Checkbox id="ssh-enabled" bind:checked={sshEnabled} />
-        </div>
-
-        {#if sshEnabled}
-          <div class="field-row">
-            <div class="field field--grow">
-              <label for="ssh-host" class="label">SSH Host</label>
-              <input id="ssh-host" class="input" type="text" bind:value={sshHost} placeholder="ssh.example.com" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-            </div>
-            <div class="field field--port">
-              <label for="ssh-port" class="label">Port</label>
-              <input id="ssh-port" class="input" type="number" bind:value={sshPort} min="1" max="65535" autocomplete="off" />
-            </div>
+          <div class="field field--inline">
+            <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
+            <Checkbox id="ssh-enabled" bind:checked={sshEnabled} />
           </div>
 
-          <div class="field">
-            <label for="ssh-user" class="label">SSH User</label>
-            <input id="ssh-user" class="input" type="text" bind:value={sshUser} placeholder="ubuntu" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-          </div>
-
-          <div class="field">
-            <label for="ssh-auth" class="label">Authentication</label>
-            <Select
-              id="ssh-auth"
-              bind:value={sshAuthType}
-              options={[{ value: 'password', label: 'Password' }, { value: 'key', label: 'Private Key' }]}
-              size="md"
-            />
-          </div>
-
-          {#if sshAuthType === 'password'}
-            <div class="field">
-              <label for="ssh-password" class="label">SSH Password</label>
-              <div class="password-row">
-                <input id="ssh-password" class="input" type={showSshPassword ? 'text' : 'password'} bind:value={sshPassword} placeholder={isEditing ? '••••••••' : ''} autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-                <button
-                  type="button"
-                  class="btn btn--ghost btn--sm btn--icon"
-                  aria-label={showSshPassword ? 'Hide password' : 'Show password'}
-                  onclick={() => (showSshPassword = !showSshPassword)}
-                >{#if showSshPassword}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>{:else}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>{/if}</button>
+          {#if sshEnabled}
+            <div class="field-row">
+              <div class="field field--grow">
+                <label for="ssh-host" class="label">SSH Host</label>
+                <input
+                  id="ssh-host"
+                  class="input"
+                  type="text"
+                  bind:value={sshHost}
+                  placeholder="ssh.example.com"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="field field--port">
+                <label for="ssh-port" class="label">Port</label>
+                <input
+                  id="ssh-port"
+                  class="input"
+                  type="number"
+                  bind:value={sshPort}
+                  min="1"
+                  max="65535"
+                  autocomplete="off"
+                />
               </div>
             </div>
+
+            <div class="field">
+              <label for="ssh-user" class="label">SSH User</label>
+              <input
+                id="ssh-user"
+                class="input"
+                type="text"
+                bind:value={sshUser}
+                placeholder="ubuntu"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+              />
+            </div>
+
+            <div class="field">
+              <label for="ssh-auth" class="label">Authentication</label>
+              <Select
+                id="ssh-auth"
+                bind:value={sshAuthType}
+                options={[
+                  { value: 'password', label: 'Password' },
+                  { value: 'key', label: 'Private Key' },
+                ]}
+                size="md"
+              />
+            </div>
+
+            {#if sshAuthType === 'password'}
+              <div class="field">
+                <label for="ssh-password" class="label">SSH Password</label>
+                <div class="password-row">
+                  <input
+                    id="ssh-password"
+                    class="input"
+                    type={showSshPassword ? 'text' : 'password'}
+                    bind:value={sshPassword}
+                    placeholder={isEditing ? '••••••••' : ''}
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn--ghost btn--sm btn--icon"
+                    aria-label={showSshPassword ? 'Hide password' : 'Show password'}
+                    onclick={() => (showSshPassword = !showSshPassword)}
+                    >{#if showSshPassword}<svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        ><path
+                          d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                        /><line x1="1" y1="1" x2="23" y2="23" /></svg
+                      >{:else}<svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        ><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
+                          cx="12"
+                          cy="12"
+                          r="3"
+                        /></svg
+                      >{/if}</button
+                  >
+                </div>
+              </div>
+            {:else}
+              <div class="field">
+                <label for="ssh-key" class="label">Private Key File</label>
+                <div class="file-row">
+                  <input
+                    id="ssh-key"
+                    class="input"
+                    type="text"
+                    bind:value={sshKeyPath}
+                    placeholder="/Users/you/.ssh/id_rsa"
+                    readonly
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn--ghost btn--sm"
+                    onclick={() => {
+                      openFileDialog({ multiple: false }).then((p) => {
+                        if (typeof p === 'string') sshKeyPath = p;
+                      });
+                    }}>Browse</button
+                  >
+                </div>
+              </div>
+            {/if}
           {:else}
-            <div class="field">
-              <label for="ssh-key" class="label">Private Key File</label>
-              <div class="file-row">
-                <input id="ssh-key" class="input" type="text" bind:value={sshKeyPath} placeholder="/Users/you/.ssh/id_rsa" readonly autocomplete="off" spellcheck="false" />
-                <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sshKeyPath = p; }); }}>Browse</button>
-              </div>
-            </div>
+            <p class="tab-hint">Enable SSH tunnelling to connect through a bastion host.</p>
           {/if}
-        {:else}
-          <p class="tab-hint">Enable SSH tunnelling to connect through a bastion host.</p>
-        {/if}
         {/if}
 
-      <!-- SSL tab -->
+        <!-- SSL tab -->
       {:else if activeTab === 'ssl'}
         {#if dbType === 'sqlite'}
           <p class="tab-hint">SSL/TLS is not available for SQLite connections.</p>
         {:else}
-        <div class="field field--inline">
-          <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
-          <Checkbox id="ssl-enabled" bind:checked={sslEnabled} />
-        </div>
-
-        {#if sslEnabled}
-          <div class="field">
-            <label for="ssl-ca" class="label">CA Certificate</label>
-            <div class="file-row">
-              <input id="ssl-ca" class="input" type="text" bind:value={sslCaPath} placeholder="/path/to/ca.pem" readonly autocomplete="off" spellcheck="false" />
-              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslCaPath = p; }); }}>Browse</button>
-            </div>
+          <div class="field field--inline">
+            <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
+            <Checkbox id="ssl-enabled" bind:checked={sslEnabled} />
           </div>
 
-          <div class="field">
-            <label for="ssl-cert" class="label">Client Certificate</label>
-            <div class="file-row">
-              <input id="ssl-cert" class="input" type="text" bind:value={sslCertPath} placeholder="/path/to/client-cert.pem" readonly autocomplete="off" spellcheck="false" />
-              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslCertPath = p; }); }}>Browse</button>
+          {#if sslEnabled}
+            <div class="field">
+              <label for="ssl-ca" class="label">CA Certificate</label>
+              <div class="file-row">
+                <input
+                  id="ssl-ca"
+                  class="input"
+                  type="text"
+                  bind:value={sslCaPath}
+                  placeholder="/path/to/ca.pem"
+                  readonly
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--sm"
+                  onclick={() => {
+                    openFileDialog({ multiple: false }).then((p) => {
+                      if (typeof p === 'string') sslCaPath = p;
+                    });
+                  }}>Browse</button
+                >
+              </div>
             </div>
-          </div>
 
-          <div class="field">
-            <label for="ssl-key" class="label">Client Key</label>
-            <div class="file-row">
-              <input id="ssl-key" class="input" type="text" bind:value={sslKeyPath} placeholder="/path/to/client-key.pem" readonly autocomplete="off" spellcheck="false" />
-              <button type="button" class="btn btn--ghost btn--sm" onclick={() => { openFileDialog({ multiple: false }).then(p => { if (typeof p === 'string') sslKeyPath = p; }); }}>Browse</button>
+            <div class="field">
+              <label for="ssl-cert" class="label">Client Certificate</label>
+              <div class="file-row">
+                <input
+                  id="ssl-cert"
+                  class="input"
+                  type="text"
+                  bind:value={sslCertPath}
+                  placeholder="/path/to/client-cert.pem"
+                  readonly
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--sm"
+                  onclick={() => {
+                    openFileDialog({ multiple: false }).then((p) => {
+                      if (typeof p === 'string') sslCertPath = p;
+                    });
+                  }}>Browse</button
+                >
+              </div>
             </div>
-          </div>
-        {:else}
-          <p class="tab-hint">Enable SSL/TLS to encrypt the connection to the database server.</p>
+
+            <div class="field">
+              <label for="ssl-key" class="label">Client Key</label>
+              <div class="file-row">
+                <input
+                  id="ssl-key"
+                  class="input"
+                  type="text"
+                  bind:value={sslKeyPath}
+                  placeholder="/path/to/client-key.pem"
+                  readonly
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--sm"
+                  onclick={() => {
+                    openFileDialog({ multiple: false }).then((p) => {
+                      if (typeof p === 'string') sslKeyPath = p;
+                    });
+                  }}>Browse</button
+                >
+              </div>
+            </div>
+          {:else}
+            <p class="tab-hint">Enable SSL/TLS to encrypt the connection to the database server.</p>
+          {/if}
         {/if}
-        {/if}
 
-      <!-- Advanced tab -->
+        <!-- Advanced tab -->
       {:else if activeTab === 'advanced'}
         <div class="field">
           <label for="pool-min" class="label">Minimum Pool Connections</label>
-          <input id="pool-min" class="input" type="number" bind:value={poolMin} min="1" max="50" autocomplete="off" />
+          <input
+            id="pool-min"
+            class="input"
+            type="number"
+            bind:value={poolMin}
+            min="1"
+            max="50"
+            autocomplete="off"
+          />
         </div>
 
         <div class="field">
           <label for="pool-max" class="label">Maximum Pool Connections</label>
-          <input id="pool-max" class="input" type="number" bind:value={poolMax} min="1" max="100" autocomplete="off" />
+          <input
+            id="pool-max"
+            class="input"
+            type="number"
+            bind:value={poolMax}
+            min="1"
+            max="100"
+            autocomplete="off"
+          />
         </div>
 
         <div class="field field--inline">
@@ -571,8 +884,32 @@
 
       <!-- Test result -->
       {#if testResult}
-        <div class="test-result" class:test-result--success={testResult.success} class:test-result--fail={!testResult.success}>
-          {#if testResult.success}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>{/if}
+        <div
+          class="test-result"
+          class:test-result--success={testResult.success}
+          class:test-result--fail={!testResult.success}
+        >
+          {#if testResult.success}<svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
+            >{:else}<svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              aria-hidden="true"
+              ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+            >{/if}
           {testResult.message}
           {#if testResult.latencyMs !== null}
             <span class="latency">{testResult.latencyMs}ms</span>
@@ -607,11 +944,7 @@
         </div>
         <div class="actions-right">
           <button type="button" class="btn btn--ghost" onclick={onclose}>Cancel</button>
-          <button
-            type="submit"
-            class="btn btn--primary"
-            disabled={saving || testing || !isValid}
-          >
+          <button type="submit" class="btn btn--primary" disabled={saving || testing || !isValid}>
             {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Connection'}
           </button>
         </div>
@@ -654,7 +987,9 @@
     padding: var(--spacing-1);
     border-radius: var(--radius-sm);
     line-height: 1;
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .close-btn:hover {
@@ -678,7 +1013,9 @@
     margin-bottom: -1px;
     cursor: pointer;
     font-family: var(--font-family-ui);
-    transition: color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast);
   }
 
   .tab-btn:hover {
@@ -710,7 +1047,9 @@
     justify-content: space-between;
   }
 
-  .field--grow { flex: 1; }
+  .field--grow {
+    flex: 1;
+  }
 
   .field--port {
     width: 90px;
@@ -737,7 +1076,9 @@
     color: var(--color-text-primary);
     font-size: var(--font-size-md);
     font-family: var(--font-family-ui);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
     outline: none;
     width: 100%;
     box-sizing: border-box;
@@ -796,7 +1137,9 @@
     text-decoration: underline;
   }
 
-  .color-clear:hover { color: var(--color-text-secondary); }
+  .color-clear:hover {
+    color: var(--color-text-secondary);
+  }
 
   .tab-hint {
     font-size: var(--font-size-sm);
@@ -815,8 +1158,14 @@
     gap: var(--spacing-2);
   }
 
-  .test-result--success { background: var(--color-success-subtle); color: var(--color-success); }
-  .test-result--fail { background: var(--color-danger-subtle); color: var(--color-danger); }
+  .test-result--success {
+    background: var(--color-success-subtle);
+    color: var(--color-success);
+  }
+  .test-result--fail {
+    background: var(--color-danger-subtle);
+    color: var(--color-danger);
+  }
 
   .latency {
     margin-left: auto;
@@ -870,7 +1219,9 @@
     font-weight: var(--font-weight-medium);
     font-family: var(--font-family-ui);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast),
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
       border-color var(--transition-fast);
     white-space: nowrap;
   }
@@ -882,7 +1233,10 @@
     flex-shrink: 0;
   }
 
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   .btn--primary {
     background: var(--color-accent);
@@ -890,7 +1244,9 @@
     border: 1px solid transparent;
   }
 
-  .btn--primary:not(:disabled):hover { background: var(--color-accent-hover); }
+  .btn--primary:not(:disabled):hover {
+    background: var(--color-accent-hover);
+  }
 
   .btn--ghost {
     background: transparent;
@@ -917,7 +1273,9 @@
     padding: 0 var(--spacing-2);
     height: 24px;
     font-family: var(--font-family-ui);
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
     margin-right: var(--spacing-2);
     flex-shrink: 0;
   }
@@ -944,7 +1302,9 @@
     align-items: center;
   }
 
-  .url-row .input { flex: 1; }
+  .url-row .input {
+    flex: 1;
+  }
 
   .url-error {
     padding: var(--spacing-2) var(--spacing-3);

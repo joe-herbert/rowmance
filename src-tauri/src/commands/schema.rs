@@ -328,10 +328,12 @@ pub async fn schema_execute_ddl(
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     match profile_row {
-        None => return Err(AppError::new(
-            "CONNECTION_NOT_FOUND",
-            format!("No connection with id {connection_id}"),
-        )),
+        None => {
+            return Err(AppError::new(
+                "CONNECTION_NOT_FOUND",
+                format!("No connection with id {connection_id}"),
+            ))
+        }
         Some(row) if row.read_only != 0 => {
             return Err(AppError::new(
                 "READ_ONLY_VIOLATION",

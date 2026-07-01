@@ -32,27 +32,42 @@
   const STORAGE_KEY = 'globalSearch.filters';
 
   function loadSaved(): Record<string, unknown> {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'); } catch { return {}; }
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    } catch {
+      return {};
+    }
   }
 
   const saved = loadSaved();
 
-  let filterKind    = $state<KindFilter>((saved.filterKind    as KindFilter)    ?? null);
-  let matchMode     = $state<MatchMode>((saved.matchMode      as MatchMode)     ?? 'normal');
-  let filterDbType  = $state<DbType | null>((saved.filterDbType  as DbType)     ?? null);
-  let filterAccess  = $state<AccessFilter>((saved.filterAccess  as AccessFilter) ?? null);
-  let filterGroup   = $state<GroupFilter>((saved.filterGroup    as GroupFilter)  ?? null);
+  let filterKind = $state<KindFilter>((saved.filterKind as KindFilter) ?? null);
+  let matchMode = $state<MatchMode>((saved.matchMode as MatchMode) ?? 'normal');
+  let filterDbType = $state<DbType | null>((saved.filterDbType as DbType) ?? null);
+  let filterAccess = $state<AccessFilter>((saved.filterAccess as AccessFilter) ?? null);
+  let filterGroup = $state<GroupFilter>((saved.filterGroup as GroupFilter) ?? null);
   let filtersExpanded = $state<boolean>((saved.filtersExpanded as boolean) ?? true);
 
   $effect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      filterKind, matchMode, filterDbType, filterAccess, filterGroup, filtersExpanded,
-    }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        filterKind,
+        matchMode,
+        filterDbType,
+        filterAccess,
+        filterGroup,
+        filtersExpanded,
+      }),
+    );
   });
 
   const isFiltersActive = $derived(
-    filterKind !== null || matchMode !== 'normal' || filterDbType !== null ||
-    filterAccess !== null || filterGroup !== null,
+    filterKind !== null ||
+      matchMode !== 'normal' ||
+      filterDbType !== null ||
+      filterAccess !== null ||
+      filterGroup !== null,
   );
 
   function clearFilters() {
@@ -75,11 +90,14 @@
   const matchOptions: Array<{ label: string; value: MatchMode; title: string }> = [
     { label: 'Strict', value: 'strict', title: 'Near-exact matches only' },
     { label: 'Normal', value: 'normal', title: 'Balanced fuzzy matching' },
-    { label: 'Fuzzy',  value: 'fuzzy',  title: 'Loose matching — more results' },
+    { label: 'Fuzzy', value: 'fuzzy', title: 'Loose matching — more results' },
   ];
 
   const dbTypeLabels: Record<DbType, string> = {
-    mysql: 'MySQL', mariadb: 'MariaDB', postgres: 'Postgres', sqlite: 'SQLite',
+    mysql: 'MySQL',
+    mariadb: 'MariaDB',
+    postgres: 'Postgres',
+    sqlite: 'SQLite',
   };
 
   const availableDbTypes = $derived(
@@ -88,25 +106,32 @@
 
   const hasAnyGroup = $derived(connections.profiles.some((p) => p.groupId !== null));
 
-  const usedGroupIds = $derived(new Set(connections.profiles.map((p) => p.groupId).filter(Boolean)));
+  const usedGroupIds = $derived(
+    new Set(connections.profiles.map((p) => p.groupId).filter(Boolean)),
+  );
 
   const availableGroups = $derived(
-    connections.groups.filter((g) => usedGroupIds.has(g.id)).sort((a, b) => a.position - b.position),
+    connections.groups
+      .filter((g) => usedGroupIds.has(g.id))
+      .sort((a, b) => a.position - b.position),
   );
 
   const hasUngrouped = $derived(connections.profiles.some((p) => p.groupId === null));
 
   const accessOptions: Array<{ label: string; value: AccessFilter }> = [
-    { label: 'All',       value: null       },
-    { label: 'Writable',  value: 'writable' },
+    { label: 'All', value: null },
+    { label: 'Writable', value: 'writable' },
     { label: 'Read-only', value: 'readonly' },
   ];
 
   const fuseOptions = $derived.by(() => {
     switch (matchMode) {
-      case 'strict': return { threshold: 0,   distance: 0,   minMatchCharLength: 1, ignoreLocation: true  };
-      case 'fuzzy':  return { threshold: 0.6, distance: 200, minMatchCharLength: 1, ignoreLocation: true  };
-      default:       return { threshold: 0.4, distance: 100, minMatchCharLength: 1, ignoreLocation: false };
+      case 'strict':
+        return { threshold: 0, distance: 0, minMatchCharLength: 1, ignoreLocation: true };
+      case 'fuzzy':
+        return { threshold: 0.6, distance: 200, minMatchCharLength: 1, ignoreLocation: true };
+      default:
+        return { threshold: 0.4, distance: 100, minMatchCharLength: 1, ignoreLocation: false };
     }
   });
 
@@ -251,12 +276,17 @@
 
   // ── Connection-level filtering helpers ────────────────────────────────────
 
-  function matchesConnectionFilters(dbType: DbType, readOnly: boolean, groupId: string | null): boolean {
+  function matchesConnectionFilters(
+    dbType: DbType,
+    readOnly: boolean,
+    groupId: string | null,
+  ): boolean {
     if (filterDbType && dbType !== filterDbType) return false;
     if (filterAccess === 'readonly' && !readOnly) return false;
     if (filterAccess === 'writable' && readOnly) return false;
     if (filterGroup === 'ungrouped' && groupId !== null) return false;
-    if (filterGroup !== null && filterGroup !== 'ungrouped' && groupId !== filterGroup) return false;
+    if (filterGroup !== null && filterGroup !== 'ungrouped' && groupId !== filterGroup)
+      return false;
     return true;
   }
 
@@ -279,21 +309,27 @@
 
   const fuseDatabases = $derived(
     new Fuse(
-      databaseEntries.filter((e) => matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId)),
+      databaseEntries.filter((e) =>
+        matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId),
+      ),
       { keys: ['database', 'connectionName'], includeScore: true, ...fuseOptions },
     ),
   );
 
   const fuseTables = $derived(
     new Fuse(
-      tableEntries.filter((e) => matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId)),
+      tableEntries.filter((e) =>
+        matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId),
+      ),
       { keys: ['name', 'database', 'connectionName'], includeScore: true, ...fuseOptions },
     ),
   );
 
   const fuseColumns = $derived(
     new Fuse(
-      columnEntries.filter((e) => matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId)),
+      columnEntries.filter((e) =>
+        matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId),
+      ),
       { keys: ['name', 'dataType', 'table'], includeScore: true, ...fuseOptions },
     ),
   );
@@ -319,10 +355,16 @@
     }
 
     const results: ResultItem[] = [];
-    if (!fk || fk === 'connection') for (const r of fuseConnections.search(q).slice(0, 3)) results.push(r.item);
-    if (!fk || fk === 'database') for (const r of fuseDatabases.search(q).slice(0, 5)) results.push({ kind: 'database', ...r.item });
-    if (!fk || fk === 'table') for (const r of fuseTables.search(q).slice(0, 8)) results.push({ kind: 'table', ...r.item });
-    if (!fk || fk === 'column') for (const r of fuseColumns.search(q).slice(0, 8)) results.push({ kind: 'column', ...r.item });
+    if (!fk || fk === 'connection')
+      for (const r of fuseConnections.search(q).slice(0, 3)) results.push(r.item);
+    if (!fk || fk === 'database')
+      for (const r of fuseDatabases.search(q).slice(0, 5))
+        results.push({ kind: 'database', ...r.item });
+    if (!fk || fk === 'table')
+      for (const r of fuseTables.search(q).slice(0, 8)) results.push({ kind: 'table', ...r.item });
+    if (!fk || fk === 'column')
+      for (const r of fuseColumns.search(q).slice(0, 8))
+        results.push({ kind: 'column', ...r.item });
     return results.slice(0, 30);
   });
 
@@ -334,7 +376,11 @@
         panels.openInFocused({ kind: 'query_editor', connectionId: item.id });
         break;
       case 'database':
-        panels.openInFocused({ kind: 'erd', connectionId: item.connectionId, database: item.database });
+        panels.openInFocused({
+          kind: 'erd',
+          connectionId: item.connectionId,
+          database: item.database,
+        });
         break;
       case 'table':
         panels.openInFocused({
@@ -364,7 +410,8 @@
       selectedIndex = (selectedIndex + 1) % Math.max(filtered.length, 1);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      selectedIndex = (selectedIndex - 1 + Math.max(filtered.length, 1)) % Math.max(filtered.length, 1);
+      selectedIndex =
+        (selectedIndex - 1 + Math.max(filtered.length, 1)) % Math.max(filtered.length, 1);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const item = filtered[selectedIndex];
@@ -389,39 +436,57 @@
 
   function itemCategory(item: ResultItem): string {
     switch (item.kind) {
-      case 'connection': return 'Connections';
-      case 'database': return 'Databases';
-      case 'table': return 'Tables';
-      case 'column': return 'Columns';
+      case 'connection':
+        return 'Connections';
+      case 'database':
+        return 'Databases';
+      case 'table':
+        return 'Tables';
+      case 'column':
+        return 'Columns';
     }
   }
 
   function itemLabel(item: ResultItem): string {
     switch (item.kind) {
-      case 'connection': return item.name;
-      case 'database': return item.database;
-      case 'table': return item.name;
-      case 'column': return item.name;
+      case 'connection':
+        return item.name;
+      case 'database':
+        return item.database;
+      case 'table':
+        return item.name;
+      case 'column':
+        return item.name;
     }
   }
 
   function itemSubtitle(item: ResultItem): string {
     switch (item.kind) {
-      case 'connection': return item.dbType;
-      case 'database': return item.connectionName;
-      case 'table': return `${item.connectionName} › ${item.database}`;
-      case 'column': return `${item.dataType}${item.isPrimaryKey ? ' · PK' : ''} · ${item.table}`;
+      case 'connection':
+        return item.dbType;
+      case 'database':
+        return item.connectionName;
+      case 'table':
+        return `${item.connectionName} › ${item.database}`;
+      case 'column':
+        return `${item.dataType}${item.isPrimaryKey ? ' · PK' : ''} · ${item.table}`;
     }
   }
 
   function itemColor(item: ResultItem): string | null {
     switch (item.kind) {
-      case 'connection': return item.color;
-      default: return (item as DbEntry).connectionColor;
+      case 'connection':
+        return item.color;
+      default:
+        return (item as DbEntry).connectionColor;
     }
   }
 
-  interface GroupedItem { item: ResultItem; showCategory: boolean; index: number }
+  interface GroupedItem {
+    item: ResultItem;
+    showCategory: boolean;
+    index: number;
+  }
 
   const groupedItems = $derived.by<GroupedItem[]>(() => {
     let lastCat = '';
@@ -445,12 +510,22 @@
   aria-modal="true"
   aria-label="Global Search"
   tabindex="-1"
-  onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}
+  onclick={(e) => {
+    if (e.target === e.currentTarget) onclose();
+  }}
 >
   <div class="palette" use:focusTrap>
     <div class="search-row">
       <span class="search-icon" aria-hidden="true">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+        >
           <circle cx="11" cy="11" r="7"></circle>
           <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
         </svg>
@@ -469,13 +544,27 @@
       />
       {#if isLoading}
         <span class="loading-indicator" aria-label="Loading schema…">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="spin">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            class="spin"
+          >
             <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
           </svg>
         </span>
       {/if}
       {#if isFiltersActive}
-        <button class="search-action-btn" onclick={clearFilters} type="button" title="Clear all filters">
+        <button
+          class="search-action-btn"
+          onclick={clearFilters}
+          type="button"
+          title="Clear all filters"
+        >
           Clear
         </button>
       {/if}
@@ -483,103 +572,139 @@
         class="search-action-btn search-action-btn--icon"
         class:active={filtersExpanded}
         class:has-filters={isFiltersActive && !filtersExpanded}
-        onclick={() => { filtersExpanded = !filtersExpanded; inputEl?.focus(); }}
+        onclick={() => {
+          filtersExpanded = !filtersExpanded;
+          inputEl?.focus();
+        }}
         type="button"
         title={filtersExpanded ? 'Hide filters' : 'Show filters'}
         aria-expanded={filtersExpanded}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
         </svg>
       </button>
     </div>
 
     {#if filtersExpanded}
-    <div class="filter-row">
-      <div role="group" aria-label="Filter by type" class="filter-group">
-        {#each filterOptions as opt}
-          <button
-            class="filter-chip"
-            class:active={filterKind === opt.value}
-            onclick={() => { filterKind = opt.value; inputEl?.focus(); }}
-            tabindex="0"
-            type="button"
-          >{opt.label}</button>
-        {/each}
-      </div>
-      <div role="group" aria-label="Match strictness" class="filter-group filter-group--right">
-        {#each matchOptions as opt}
-          <button
-            class="filter-chip filter-chip--match"
-            class:active={matchMode === opt.value}
-            onclick={() => { matchMode = opt.value; inputEl?.focus(); }}
-            tabindex="0"
-            type="button"
-            title={opt.title}
-          >{opt.label}</button>
-        {/each}
-      </div>
-    </div>
-
-    <div class="filter-row">
-      <div role="group" aria-label="Filter by database type" class="filter-group">
-        <span class="filter-label">DB</span>
-        <button
-          class="filter-chip"
-          class:active={filterDbType === null}
-          onclick={() => { filterDbType = null; inputEl?.focus(); }}
-          type="button"
-        >All</button>
-        {#each availableDbTypes as dt}
-          <button
-            class="filter-chip"
-            class:active={filterDbType === dt}
-            onclick={() => { filterDbType = dt; inputEl?.focus(); }}
-            type="button"
-          >{dbTypeLabels[dt]}</button>
-        {/each}
-      </div>
-      <div role="group" aria-label="Filter by access" class="filter-group filter-group--right">
-        {#each accessOptions as opt}
-          <button
-            class="filter-chip"
-            class:active={filterAccess === opt.value}
-            onclick={() => { filterAccess = opt.value; inputEl?.focus(); }}
-            type="button"
-          >{opt.label}</button>
-        {/each}
-      </div>
-    </div>
-
-    {#if hasAnyGroup}
       <div class="filter-row">
-        <div role="group" aria-label="Filter by folder" class="filter-group filter-group--wrap">
-          <span class="filter-label">Folder</span>
-          <button
-            class="filter-chip"
-            class:active={filterGroup === null}
-            onclick={() => { filterGroup = null; inputEl?.focus(); }}
-            type="button"
-          >All</button>
-          {#each availableGroups as group}
+        <div role="group" aria-label="Filter by type" class="filter-group">
+          {#each filterOptions as opt}
             <button
               class="filter-chip"
-              class:active={filterGroup === group.id}
-              onclick={() => { filterGroup = group.id; inputEl?.focus(); }}
-              type="button"
-            >{group.name}</button>
+              class:active={filterKind === opt.value}
+              onclick={() => {
+                filterKind = opt.value;
+                inputEl?.focus();
+              }}
+              tabindex="0"
+              type="button">{opt.label}</button
+            >
           {/each}
-          {#if hasUngrouped}
+        </div>
+        <div role="group" aria-label="Match strictness" class="filter-group filter-group--right">
+          {#each matchOptions as opt}
             <button
-              class="filter-chip"
-              class:active={filterGroup === 'ungrouped'}
-              onclick={() => { filterGroup = 'ungrouped'; inputEl?.focus(); }}
+              class="filter-chip filter-chip--match"
+              class:active={matchMode === opt.value}
+              onclick={() => {
+                matchMode = opt.value;
+                inputEl?.focus();
+              }}
+              tabindex="0"
               type="button"
-            >Ungrouped</button>
-          {/if}
+              title={opt.title}>{opt.label}</button
+            >
+          {/each}
         </div>
       </div>
-    {/if}
+
+      <div class="filter-row">
+        <div role="group" aria-label="Filter by database type" class="filter-group">
+          <span class="filter-label">DB</span>
+          <button
+            class="filter-chip"
+            class:active={filterDbType === null}
+            onclick={() => {
+              filterDbType = null;
+              inputEl?.focus();
+            }}
+            type="button">All</button
+          >
+          {#each availableDbTypes as dt}
+            <button
+              class="filter-chip"
+              class:active={filterDbType === dt}
+              onclick={() => {
+                filterDbType = dt;
+                inputEl?.focus();
+              }}
+              type="button">{dbTypeLabels[dt]}</button
+            >
+          {/each}
+        </div>
+        <div role="group" aria-label="Filter by access" class="filter-group filter-group--right">
+          {#each accessOptions as opt}
+            <button
+              class="filter-chip"
+              class:active={filterAccess === opt.value}
+              onclick={() => {
+                filterAccess = opt.value;
+                inputEl?.focus();
+              }}
+              type="button">{opt.label}</button
+            >
+          {/each}
+        </div>
+      </div>
+
+      {#if hasAnyGroup}
+        <div class="filter-row">
+          <div role="group" aria-label="Filter by folder" class="filter-group filter-group--wrap">
+            <span class="filter-label">Folder</span>
+            <button
+              class="filter-chip"
+              class:active={filterGroup === null}
+              onclick={() => {
+                filterGroup = null;
+                inputEl?.focus();
+              }}
+              type="button">All</button
+            >
+            {#each availableGroups as group}
+              <button
+                class="filter-chip"
+                class:active={filterGroup === group.id}
+                onclick={() => {
+                  filterGroup = group.id;
+                  inputEl?.focus();
+                }}
+                type="button">{group.name}</button
+              >
+            {/each}
+            {#if hasUngrouped}
+              <button
+                class="filter-chip"
+                class:active={filterGroup === 'ungrouped'}
+                onclick={() => {
+                  filterGroup = 'ungrouped';
+                  inputEl?.focus();
+                }}
+                type="button">Ungrouped</button
+              >
+            {/if}
+          </div>
+        </div>
+      {/if}
     {/if}
 
     <ul id="global-search-list" class="results-list" role="listbox">
@@ -588,24 +713,55 @@
           <li class="category-label" role="presentation">
             <span class="category-icon" aria-hidden="true">
               {#if item.kind === 'connection'}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
                   <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                   <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                 </svg>
               {:else if item.kind === 'database'}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
                   <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
                   <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path>
                   <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"></path>
                 </svg>
               {:else if item.kind === 'table'}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
                   <rect x="3" y="4" width="18" height="16" rx="2"></rect>
                   <line x1="3" y1="9.5" x2="21" y2="9.5"></line>
                   <line x1="9" y1="9.5" x2="9" y2="20"></line>
                 </svg>
               {:else}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
                   <line x1="3" y1="6" x2="21" y2="6"></line>
                   <line x1="3" y1="12" x2="21" y2="12"></line>
                   <line x1="3" y1="18" x2="21" y2="18"></line>
@@ -721,7 +877,10 @@
     padding: 2px var(--spacing-2);
     cursor: pointer;
     line-height: 1.6;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
   }
 
   .search-action-btn:hover {
@@ -766,7 +925,9 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .spin {
@@ -816,7 +977,10 @@
     font-size: var(--font-size-xs);
     font-family: var(--font-family-ui);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     line-height: 1.6;
   }
 

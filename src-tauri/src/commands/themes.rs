@@ -45,10 +45,13 @@ pub(crate) fn list_in_dir(dir: &Path) -> Result<Vec<ThemeMeta>, AppError> {
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
             continue;
         }
-        let raw = std::fs::read_to_string(&path)
-            .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+        let raw =
+            std::fs::read_to_string(&path).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
         if let Ok(data) = serde_json::from_str::<ThemeData>(&raw) {
-            metas.push(ThemeMeta { name: data.name, extends: data.extends });
+            metas.push(ThemeMeta {
+                name: data.name,
+                extends: data.extends,
+            });
         }
     }
     metas.sort_by(|a, b| a.name.cmp(&b.name));
@@ -57,8 +60,8 @@ pub(crate) fn list_in_dir(dir: &Path) -> Result<Vec<ThemeMeta>, AppError> {
 
 pub(crate) fn read_in_dir(dir: &Path, name: &str) -> Result<ThemeData, AppError> {
     let path = theme_path(dir, name);
-    let raw = std::fs::read_to_string(&path)
-        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+    let raw =
+        std::fs::read_to_string(&path).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
     serde_json::from_str(&raw).map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))
 }
 
@@ -113,7 +116,10 @@ pub fn themes_rename(old_name: String, new_name: String) -> Result<ThemeMeta, Ap
     if old_name != new_name {
         delete_in_dir(&dir, &old_name)?;
     }
-    Ok(ThemeMeta { name: new_name, extends: data.extends })
+    Ok(ThemeMeta {
+        name: new_name,
+        extends: data.extends,
+    })
 }
 
 #[command]
@@ -133,7 +139,10 @@ pub fn themes_import(file_path: String) -> Result<ThemeMeta, AppError> {
         .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?;
     let dir = themes_dir()?;
     write_in_dir(&dir, &data.name, &data)?;
-    Ok(ThemeMeta { name: data.name, extends: data.extends })
+    Ok(ThemeMeta {
+        name: data.name,
+        extends: data.extends,
+    })
 }
 
 #[command]
@@ -147,7 +156,10 @@ pub fn themes_duplicate(source: String, new_name: String) -> Result<ThemeMeta, A
     });
     data.name = new_name.clone();
     write_in_dir(&dir, &new_name, &data)?;
-    Ok(ThemeMeta { name: new_name, extends: data.extends })
+    Ok(ThemeMeta {
+        name: new_name,
+        extends: data.extends,
+    })
 }
 
 #[cfg(test)]
@@ -156,7 +168,11 @@ mod tests {
     use std::collections::HashMap;
 
     fn make_theme(name: &str, extends: &str) -> ThemeData {
-        ThemeData { name: name.to_owned(), extends: extends.to_owned(), variables: HashMap::new() }
+        ThemeData {
+            name: name.to_owned(),
+            extends: extends.to_owned(),
+            variables: HashMap::new(),
+        }
     }
 
     fn seed(dir: &Path, name: &str, extends: &str) {
@@ -176,12 +192,19 @@ mod tests {
         let dir = tmp.path().join("themes");
         let mut vars = HashMap::new();
         vars.insert("--color-accent".to_owned(), "#ff0000".to_owned());
-        let data = ThemeData { name: "my-theme".to_owned(), extends: "dark".to_owned(), variables: vars };
+        let data = ThemeData {
+            name: "my-theme".to_owned(),
+            extends: "dark".to_owned(),
+            variables: vars,
+        };
         write_in_dir(&dir, "my-theme", &data).unwrap();
         let read_back = read_in_dir(&dir, "my-theme").unwrap();
         assert_eq!(read_back.name, "my-theme");
         assert_eq!(read_back.extends, "dark");
-        assert_eq!(read_back.variables.get("--color-accent").unwrap(), "#ff0000");
+        assert_eq!(
+            read_back.variables.get("--color-accent").unwrap(),
+            "#ff0000"
+        );
     }
 
     #[test]
@@ -233,7 +256,10 @@ mod tests {
         let mut data = read_in_dir(&dir, "source").unwrap();
         data.name = "copy".to_owned();
         write_in_dir(&dir, "copy", &data).unwrap();
-        let meta = ThemeMeta { name: "copy".to_owned(), extends: data.extends.clone() };
+        let meta = ThemeMeta {
+            name: "copy".to_owned(),
+            extends: data.extends.clone(),
+        };
         assert_eq!(meta.name, "copy");
         assert_eq!(meta.extends, "light");
         let metas = list_in_dir(&dir).unwrap();

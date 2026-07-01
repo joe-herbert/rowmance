@@ -106,7 +106,13 @@
             type="text"
             bind:value={editingName}
             onblur={commitRename}
-            onkeydown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); if (e.key === 'Escape') { editingName = themeName; (e.currentTarget as HTMLInputElement).blur(); } }}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+              if (e.key === 'Escape') {
+                editingName = themeName;
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }}
             aria-label="Theme name"
             autocomplete="off"
             autocorrect="off"
@@ -123,7 +129,9 @@
           <button class="meta-btn" onclick={onexport} aria-label="Export theme">Export</button>
         {/if}
         {#if ondelete}
-          <button class="meta-btn meta-btn--danger" onclick={ondelete} aria-label="Delete theme">Delete</button>
+          <button class="meta-btn meta-btn--danger" onclick={ondelete} aria-label="Delete theme"
+            >Delete</button
+          >
         {/if}
       </div>
     </div>
@@ -142,14 +150,16 @@
                   type="color"
                   class="color-input"
                   value={value.startsWith('#') ? value : '#000000'}
-                  oninput={(e) => handleChange(varName, (e.currentTarget as HTMLInputElement).value)}
+                  oninput={(e) =>
+                    handleChange(varName, (e.currentTarget as HTMLInputElement).value)}
                   aria-label="Pick colour for {varName}"
                 />
                 <input
                   type="text"
                   class="text-input text-input--sm"
-                  value={value}
-                  onchange={(e) => handleChange(varName, (e.currentTarget as HTMLInputElement).value)}
+                  {value}
+                  onchange={(e) =>
+                    handleChange(varName, (e.currentTarget as HTMLInputElement).value)}
                   aria-label="Colour value for {varName}"
                   autocomplete="off"
                   autocorrect="off"
@@ -161,7 +171,7 @@
               <input
                 type="text"
                 class="text-input"
-                value={value}
+                {value}
                 onchange={(e) => handleChange(varName, (e.currentTarget as HTMLInputElement).value)}
                 aria-label="Value for {varName}"
                 autocomplete="off"
@@ -231,7 +241,9 @@
     font-size: var(--font-size-xs);
     font-family: var(--font-family-ui);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .meta-btn:hover {
@@ -266,7 +278,9 @@
     font-family: var(--font-family-ui);
     min-width: 80px;
     max-width: 200px;
-    transition: border-color var(--transition-fast), background var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .theme-name-input:hover {

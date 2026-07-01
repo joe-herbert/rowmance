@@ -106,7 +106,8 @@
     height: 14px;
   }
 
-  .checkbox-wrapper:not(.checkbox-wrapper--disabled):hover .checkbox-box:not(.checkbox-box--checked) {
+  .checkbox-wrapper:not(.checkbox-wrapper--disabled):hover
+    .checkbox-box:not(.checkbox-box--checked) {
     border-color: var(--color-accent);
     background: var(--color-accent-subtle);
   }

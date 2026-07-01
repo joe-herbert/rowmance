@@ -124,7 +124,9 @@
       id: nextId(),
       nodeType: String(table['access_type'] ?? 'table'),
       relation: table['table_name'] ? String(table['table_name']) : null,
-      estimatedRows: Number(table['rows_examined_per_scan'] ?? table['rows_produced_per_join'] ?? 0),
+      estimatedRows: Number(
+        table['rows_examined_per_scan'] ?? table['rows_produced_per_join'] ?? 0,
+      ),
       actualRows: null,
       cost: Number(costInfo?.['read_cost'] ?? costInfo?.['eval_cost'] ?? 0),
       children: [],
@@ -251,21 +253,10 @@
   {#if parseError}
     <div class="explain-error">{parseError}</div>
   {:else}
-    <svg
-      class="explain-svg"
-      bind:this={svgEl}
-      aria-label="Query execution plan"
-      role="img"
-    >
+    <svg class="explain-svg" bind:this={svgEl} aria-label="Query execution plan" role="img">
       <g transform="translate({transform.x},{transform.y}) scale({transform.k})">
         {#each layoutEdges as edge}
-          <line
-            class="plan-edge"
-            x1={edge.x1}
-            y1={edge.y1}
-            x2={edge.x2}
-            y2={edge.y2}
-          />
+          <line class="plan-edge" x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} />
         {/each}
 
         {#each layoutNodes as n (n.node.id)}
@@ -287,7 +278,8 @@
             {/if}
             <text class="plan-node-meta" x={NODE_WIDTH / 2} y="54" text-anchor="middle">
               {#if n.node.cost > 0}cost: {n.node.cost.toFixed(2)}{/if}
-              {#if n.node.actualRows !== null} · rows: {n.node.actualRows}{/if}
+              {#if n.node.actualRows !== null}
+                · rows: {n.node.actualRows}{/if}
             </text>
           </g>
         {/each}
@@ -355,7 +347,7 @@
     fill: var(--color-bg-primary);
     stroke: var(--color-border-strong);
     stroke-width: 1px;
-    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.08));
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.08));
   }
 
   :global(.plan-node-warning) {

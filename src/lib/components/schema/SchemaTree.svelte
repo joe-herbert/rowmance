@@ -264,11 +264,19 @@
       aria-label="Search tables"
     />
     {#if searchQuery}
-      <button
-        class="search-clear"
-        onclick={() => (searchQuery = '')}
-        aria-label="Clear search"
-      ><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="search-clear" onclick={() => (searchQuery = '')} aria-label="Clear search"
+        ><svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+        ></button
+      >
     {/if}
   </div>
 
@@ -326,7 +334,7 @@
 
           {#if isExpanded && databases}
             <ul class="tree-children" role="group">
-              {#each [...databases.keys()].filter(db => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
+              {#each [...databases.keys()].filter((db) => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
                 {@const dbKey = `${profile.id}/${database}`}
                 {@const isDbExpanded = expandedDatabases.has(dbKey)}
                 {@const isDbLoading = loadingKeys.has(dbKey)}
@@ -361,7 +369,7 @@
 
                   {#if isDbExpanded && tables.length > 0}
                     <ul class="tree-children" role="group">
-                      {#each tables.filter(t => settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) as table}
+                      {#each tables.filter((t) => settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) as table}
                         {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                         <li class="tree-node leaf-node" role="treeitem" aria-selected={false}>
                           <button
@@ -420,7 +428,14 @@
   >
     <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
     <div class="ctx-sep" role="separator"></div>
-    <button class="ctx-item" role="menuitem" onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); closeDbContextMenu(); }}>
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
+        closeDbContextMenu();
+      }}
+    >
       {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
     </button>
   </div>
@@ -489,7 +504,9 @@
     font-size: 9px;
     color: var(--color-text-muted);
     border-radius: var(--radius-sm);
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .search-clear:hover {
@@ -627,7 +644,6 @@
     flex-shrink: 0;
     font-size: var(--font-size-xs);
   }
-
 
   .node-label {
     flex: 1;

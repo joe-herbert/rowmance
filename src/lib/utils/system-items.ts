@@ -1,10 +1,21 @@
 export const BUILTIN_DATABASES: string[] = [
   // MySQL / MariaDB
-  'information_schema', 'mysql', 'performance_schema', 'sys',
+  'information_schema',
+  'mysql',
+  'performance_schema',
+  'sys',
   // PostgreSQL
-  'postgres', 'template0', 'template1', 'pg_catalog', 'pg_toast', 'pg_temp',
+  'postgres',
+  'template0',
+  'template1',
+  'pg_catalog',
+  'pg_toast',
+  'pg_temp',
   // SQL Server
-  'master', 'model', 'msdb', 'tempdb',
+  'master',
+  'model',
+  'msdb',
+  'tempdb',
 ];
 
 export const BUILTIN_TABLE_PATTERNS: string[] = [

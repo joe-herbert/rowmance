@@ -4,7 +4,11 @@
   import type { ColumnMeta } from '$lib/types';
   import DataTable from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
-  import { exportResultToFile, exportResultToClipboard, type ExportFormat } from '$lib/tauri/export';
+  import {
+    exportResultToFile,
+    exportResultToClipboard,
+    type ExportFormat,
+  } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
@@ -31,7 +35,6 @@
 
   $effect(() => {
     // Reset to first tab whenever results change.
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     results;
     activeTab = 0;
   });
@@ -82,7 +85,9 @@
 
   // ── Derived editing values ────────────────────────────────────────────────
 
-  let connectionReadOnly = $derived(connectionId ? (connections.getById(connectionId)?.readOnly ?? false) : true);
+  let connectionReadOnly = $derived(
+    connectionId ? (connections.getById(connectionId)?.readOnly ?? false) : true,
+  );
   let canEdit = $derived(!!connectionId && !connectionReadOnly && hasData);
 
   // Extract table name from the active statement's SQL
@@ -103,7 +108,8 @@
 
   let canSave = $derived(canEdit && detectedTable !== null && !!detectedDatabase);
   let pendingCount = $derived(
-    [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) + pendingDeletedRows.size
+    [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) +
+      pendingDeletedRows.size,
   );
 
   // Client-side filtered rows for local search
@@ -111,8 +117,8 @@
     if (!result) return [];
     const term = localSearchTerm.trim().toLowerCase();
     if (!term) return result.rows;
-    return result.rows.filter(row =>
-      row.some(cell => cell !== null && String(cell).toLowerCase().includes(term))
+    return result.rows.filter((row) =>
+      row.some((cell) => cell !== null && String(cell).toLowerCase().includes(term)),
     );
   });
 
@@ -121,7 +127,6 @@
   // ── Reset effects ─────────────────────────────────────────────────────────
 
   $effect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     results;
     untrack(() => {
       pendingChanges = new Map();
@@ -140,7 +145,6 @@
   });
 
   $effect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     activeTab;
     untrack(() => {
       pendingChanges = new Map();
@@ -154,7 +158,10 @@
 
   // ── Editing callbacks ─────────────────────────────────────────────────────
 
-  function handleChangePending(changes: Map<string, Map<string, CellValue>>, rows: Map<string, CellValue[]>): void {
+  function handleChangePending(
+    changes: Map<string, Map<string, CellValue>>,
+    rows: Map<string, CellValue[]>,
+  ): void {
     pendingChanges = new Map([...changes].map(([k, v]) => [k, new Map(v)]));
     originalRows = new Map([...rows].map(([k, v]) => [k, [...v]]));
   }
@@ -202,10 +209,14 @@
             primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
           });
         } else {
-          result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+          result.columns.forEach((col, i) => {
+            primaryKeys[col.name] = origRow[i] ?? null;
+          });
         }
         const changes: Record<string, unknown> = {};
-        for (const [col, val] of colMap) { changes[col] = val; }
+        for (const [col, val] of colMap) {
+          changes[col] = val;
+        }
         rowChanges.push({ primaryKeys, changes });
       }
 
@@ -219,7 +230,9 @@
             primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
           });
         } else {
-          result.columns.forEach((col, i) => { primaryKeys[col.name] = origRow[i] ?? null; });
+          result.columns.forEach((col, i) => {
+            primaryKeys[col.name] = origRow[i] ?? null;
+          });
         }
         deleteChanges.push({ primaryKeys });
       }
@@ -301,7 +314,9 @@
       if (!exportBtnEl?.contains(t) && !exportMenuEl?.contains(t)) showExportMenu = false;
     }
     document.addEventListener('mousedown', onMousedown, true);
-    return () => { document.removeEventListener('mousedown', onMousedown, true); };
+    return () => {
+      document.removeEventListener('mousedown', onMousedown, true);
+    };
   });
 
   const EXPORT_FORMATS: { label: string; format: ExportFormat; needsTableName: boolean }[] = [
@@ -340,7 +355,11 @@
     doExport(format, toFile, undefined);
   }
 
-  async function doExport(format: ExportFormat, toFile: boolean, tableName: string | undefined): Promise<void> {
+  async function doExport(
+    format: ExportFormat,
+    toFile: boolean,
+    tableName: string | undefined,
+  ): Promise<void> {
     exportError = null;
     try {
       if (toFile) {
@@ -397,7 +416,9 @@
               class:tab-btn--error={r.error !== null}
               role="tab"
               aria-selected={activeTab === i}
-              onclick={() => { activeTab = i; }}
+              onclick={() => {
+                activeTab = i;
+              }}
             >
               Result {i + 1}
               {#if r.error !== null}
@@ -416,8 +437,29 @@
       <div class="error-box" role="alert">
         <div class="error-header">
           <span class="error-label">Error</span>
-          <button class="error-copy" onclick={() => navigator.clipboard.writeText(result!.error!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy error">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <button
+            class="error-copy"
+            onclick={() =>
+              navigator.clipboard
+                .writeText(result!.error!)
+                .then(() => toast.addToast('Copied', 'success', 1500))}
+            aria-label="Copy error message"
+            title="Copy error"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              ><rect x="9" y="9" width="13" height="13" rx="2" /><path
+                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+              /></svg
+            >
           </button>
         </div>
         <span class="error-message">{result.error}</span>
@@ -425,17 +467,30 @@
     {:else if hasData}
       <div class="results-toolbar">
         {#if canEdit}
-          <button class="toolbar-btn" onclick={() => { addRowTrigger++; }}>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="1" x2="5" y2="9"/><line x1="1" y1="5" x2="9" y2="5"/></svg>
+          <button
+            class="toolbar-btn"
+            onclick={() => {
+              addRowTrigger++;
+            }}
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              aria-hidden="true"
+              ><line x1="5" y1="1" x2="5" y2="9" /><line x1="1" y1="5" x2="9" y2="5" /></svg
+            >
             Add Row
           </button>
         {/if}
         <button bind:this={columnPickerAnchorEl} class="toolbar-btn" onclick={openColumnPicker}>
           Columns
         </button>
-        <button class="toolbar-btn" onclick={openLocalSearch}>
-          Search
-        </button>
+        <button class="toolbar-btn" onclick={openLocalSearch}> Search </button>
         <div class="toolbar-spacer"></div>
         {#if pendingCount > 0}
           <span class="pending-label">{pendingCount} pending</span>
@@ -472,14 +527,20 @@
             editable={canEdit}
             {hiddenColumns}
             {addRowTrigger}
-            onAddRow={() => { addRowTrigger++; }}
+            onAddRow={() => {
+              addRowTrigger++;
+            }}
             onChangePending={handleChangePending}
             onDeleteRowsPending={handleDeleteRowsPending}
             initialColWidths={Object.keys(colWidths).length > 0 ? colWidths : undefined}
             initialColumnOrder={columnOrder.length > 0 ? columnOrder : undefined}
             {columnOrderOverride}
-            onColWidthsChange={(widths) => { colWidths = widths; }}
-            onColumnOrderChange={(order) => { columnOrder = order; }}
+            onColWidthsChange={(widths) => {
+              colWidths = widths;
+            }}
+            onColumnOrderChange={(order) => {
+              columnOrder = order;
+            }}
             {connectionId}
             database={detectedDatabase ?? undefined}
           />
@@ -491,16 +552,18 @@
           <ColumnPicker
             columns={currentColumns}
             {hiddenColumns}
-            columnOrder={columnOrder.length > 0 ? columnOrder : currentColumns.map(c => c.name)}
+            columnOrder={columnOrder.length > 0 ? columnOrder : currentColumns.map((c) => c.name)}
             onToggle={toggleColumn}
-            onClose={() => { showColumnPicker = false; }}
+            onClose={() => {
+              showColumnPicker = false;
+            }}
             onReorder={(order) => {
               columnOrder = order;
               columnOrderOverride = [...order];
             }}
             onReset={() => {
               hiddenColumns = new Set();
-              const dbOrder = currentColumns.map(c => c.name);
+              const dbOrder = currentColumns.map((c) => c.name);
               columnOrder = dbOrder;
               columnOrderOverride = [...dbOrder];
             }}
@@ -530,8 +593,29 @@
         <div class="export-details-bar">
           <div class="export-error-wrap">
             <span class="export-error">{exportError}</span>
-            <button class="export-error-copy" onclick={() => navigator.clipboard.writeText(exportError!).then(() => toast.addToast('Copied', 'success', 1500))} aria-label="Copy error message" title="Copy">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <button
+              class="export-error-copy"
+              onclick={() =>
+                navigator.clipboard
+                  .writeText(exportError!)
+                  .then(() => toast.addToast('Copied', 'success', 1500))}
+              aria-label="Copy error message"
+              title="Copy"
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                ><rect x="9" y="9" width="13" height="13" rx="2" /><path
+                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                /></svg
+              >
             </button>
           </div>
         </div>
@@ -556,7 +640,10 @@
           <button
             bind:this={exportBtnEl}
             class="export-btn"
-            onclick={() => { showExportMenu = !showExportMenu; exportError = null; }}
+            onclick={() => {
+              showExportMenu = !showExportMenu;
+              exportError = null;
+            }}
             aria-expanded={showExportMenu}
             aria-label="Export results"
           >
@@ -681,7 +768,9 @@
     color: var(--color-text-secondary);
     cursor: pointer;
     white-space: nowrap;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .tab-btn:hover {
@@ -735,7 +824,9 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
     opacity: 0.6;
-    transition: opacity var(--transition-fast), background var(--transition-fast);
+    transition:
+      opacity var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .error-copy:hover {
@@ -819,7 +910,9 @@
     color: var(--color-text-secondary);
     cursor: pointer;
     white-space: nowrap;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .toolbar-btn:hover:not(:disabled) {
@@ -902,7 +995,9 @@
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .local-search-close:hover {
@@ -964,7 +1059,9 @@
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     white-space: nowrap;
   }
 
@@ -1015,7 +1112,9 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
     white-space: nowrap;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .export-menu-item:hover {
@@ -1060,7 +1159,9 @@
     font-size: var(--font-size-xs);
     color: var(--color-accent);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .export-confirm-btn:hover {
@@ -1112,7 +1213,9 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
     opacity: 0.7;
-    transition: opacity var(--transition-fast), background var(--transition-fast);
+    transition:
+      opacity var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .export-error-copy:hover {

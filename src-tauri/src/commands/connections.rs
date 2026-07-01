@@ -162,8 +162,7 @@ pub struct ConnectionProfileInput {
 
 fn retrieve_keychain_password(connection_id: &str) -> String {
     let account = format!("{connection_id}:db_password");
-    crate::commands::keychain::read_keychain_secret("rowmance", &account)
-        .unwrap_or_default()
+    crate::commands::keychain::read_keychain_secret("rowmance", &account).unwrap_or_default()
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -516,6 +515,7 @@ pub async fn connections_connect(
             row.ssl_ca_path.as_deref(),
             row.ssl_cert_path.as_deref(),
             row.ssl_key_path.as_deref(),
+            row.read_only,
         )
         .await
         .map_err(AppError::from)?;
@@ -666,7 +666,10 @@ mod tests {
 
     async fn setup_db() -> SqlitePool {
         let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
-        sqlx::migrate!("src/db/migrations").run(&pool).await.unwrap();
+        sqlx::migrate!("src/db/migrations")
+            .run(&pool)
+            .await
+            .unwrap();
         pool
     }
 
@@ -885,13 +888,12 @@ mod tests {
             .await
             .unwrap();
 
-        let row = sqlx::query_as::<_, ConnectionGroupRow>(
-            "SELECT * FROM connection_groups WHERE id = ?",
-        )
-        .bind("g-del")
-        .fetch_optional(&pool)
-        .await
-        .unwrap();
+        let row =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("g-del")
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
         assert!(row.is_none());
     }
 
@@ -1046,11 +1048,8 @@ mod tests {
         insert_group(&pool, "rg-3", "Group 3").await;
 
         // Reorder: rg-1 → pos 2, rg-2 → pos 0, rg-3 → pos 1
-        let updates: &[(&str, Option<&str>, i64)] = &[
-            ("rg-1", None, 2),
-            ("rg-2", None, 0),
-            ("rg-3", None, 1),
-        ];
+        let updates: &[(&str, Option<&str>, i64)] =
+            &[("rg-1", None, 2), ("rg-2", None, 0), ("rg-3", None, 1)];
 
         for (id, parent_id, position) in updates {
             sqlx::query!(

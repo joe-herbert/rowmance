@@ -61,10 +61,7 @@ impl SshTunnelManager {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .map_err(RowmanceError::Io)?;
-        let local_port = listener
-            .local_addr()
-            .map_err(RowmanceError::Io)?
-            .port();
+        let local_port = listener.local_addr().map_err(RowmanceError::Io)?.port();
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 

@@ -90,16 +90,19 @@ self.onmessage = async (event: MessageEvent<WorkerInput>) => {
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const layoutEdges: LayoutEdge[] = ((layouted.edges ?? []) as any[]).map((e: any, i: number) => ({
-      id: e.id,
-      relation: edges[i],
+    const layoutEdges: LayoutEdge[] = ((layouted.edges ?? []) as any[]).map(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      sections: ((e.sections ?? []) as any[]).map((s: any) => ({
-        startPoint: s.startPoint ?? { x: 0, y: 0 },
-        endPoint: s.endPoint ?? { x: 0, y: 0 },
-        bendPoints: s.bendPoints,
-      })),
-    }));
+      (e: any, i: number) => ({
+        id: e.id,
+        relation: edges[i],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sections: ((e.sections ?? []) as any[]).map((s: any) => ({
+          startPoint: s.startPoint ?? { x: 0, y: 0 },
+          endPoint: s.endPoint ?? { x: 0, y: 0 },
+          bendPoints: s.bendPoints,
+        })),
+      }),
+    );
 
     const result: LayoutResult = {
       nodes: layoutNodes,

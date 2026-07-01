@@ -45,7 +45,11 @@ describe('updaterInstall', () => {
   });
 
   it('propagates invoke errors', async () => {
-    mockInvoke.mockRejectedValue({ code: 'UPDATER_ERROR', message: 'Download failed', detail: null });
+    mockInvoke.mockRejectedValue({
+      code: 'UPDATER_ERROR',
+      message: 'Download failed',
+      detail: null,
+    });
     await expect(updaterInstall()).rejects.toMatchObject({ code: 'UPDATER_ERROR' });
   });
 });

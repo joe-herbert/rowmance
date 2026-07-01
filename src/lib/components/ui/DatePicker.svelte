@@ -24,8 +24,18 @@
   let viewMonth = $state(untrack(() => parseValue(value)?.month ?? today.getMonth()));
 
   const MONTHS = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
   const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
@@ -51,19 +61,29 @@
   });
 
   function prevMonth(): void {
-    if (viewMonth === 0) { viewMonth = 11; viewYear--; }
-    else viewMonth--;
+    if (viewMonth === 0) {
+      viewMonth = 11;
+      viewYear--;
+    } else viewMonth--;
   }
 
   function nextMonth(): void {
-    if (viewMonth === 11) { viewMonth = 0; viewYear++; }
-    else viewMonth++;
+    if (viewMonth === 11) {
+      viewMonth = 0;
+      viewYear++;
+    } else viewMonth++;
   }
 
   function selectCell(cell: Cell): void {
-    let y = viewYear, mo = viewMonth + cell.offset;
-    if (mo < 0) { mo = 11; y--; }
-    else if (mo > 11) { mo = 0; y++; }
+    let y = viewYear,
+      mo = viewMonth + cell.offset;
+    if (mo < 0) {
+      mo = 11;
+      y--;
+    } else if (mo > 11) {
+      mo = 0;
+      y++;
+    }
     const mm = String(mo + 1).padStart(2, '0');
     const dd = String(cell.day).padStart(2, '0');
     onchange(`${y}-${mm}-${dd}`);
@@ -87,11 +107,31 @@
 <div class="date-picker">
   <div class="dp-header">
     <button class="dp-nav" onclick={prevMonth} aria-label="Previous month">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg
+      >
     </button>
     <span class="dp-month-year">{MONTHS[viewMonth]} {viewYear}</span>
     <button class="dp-nav" onclick={nextMonth} aria-label="Next month">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg
+      >
     </button>
   </div>
 
@@ -149,7 +189,9 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     color: var(--color-text-muted);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     padding: 0;
   }
 
@@ -189,7 +231,9 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .dp-day:hover:not(.dp-day--selected) {
