@@ -1067,7 +1067,7 @@
                 <DbIcon system={isDbSystem} aria-hidden="true" />
                 <span class="db-name">{database}</span>
                 {#if isDbLoading}
-                  <span class="loading-dots" aria-label="Loading">…</span>
+                  <span class="spin-ring" aria-label="Loading"></span>
                 {/if}
               </button>
 
