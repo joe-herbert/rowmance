@@ -27,6 +27,7 @@ describe('executeQuery', () => {
       sql: 'SELECT 1',
       page: 1,
       pageSize: 50,
+      database: null,
     });
   });
 
@@ -44,6 +45,7 @@ describe('executeSelection', () => {
     expect(mockInvoke).toHaveBeenCalledWith('query_execute_selection', {
       connectionId: 'conn-2',
       sql: 'SELECT 2',
+      database: null,
     });
   });
 });
@@ -94,6 +96,7 @@ describe('explainQuery', () => {
     expect(mockInvoke).toHaveBeenCalledWith('query_explain', {
       connectionId: 'conn-1',
       sql: 'SELECT 1',
+      database: null,
     });
   });
 

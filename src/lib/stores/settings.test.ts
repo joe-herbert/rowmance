@@ -17,6 +17,10 @@ beforeEach(async () => {
     resetSetting: vi.fn().mockResolvedValue(undefined),
   }));
 
+  vi.doMock('$lib/tauri/window', () => ({
+    syncTrafficLightPosition: vi.fn(),
+  }));
+
   ({ useSettings } = await import('./settings.svelte'));
 });
 
