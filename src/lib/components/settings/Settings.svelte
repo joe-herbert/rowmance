@@ -275,17 +275,6 @@
 
         <div class="setting-row">
           <div class="setting-label">
-            <span class="label-text">Transaction Mode</span>
-            <span class="label-hint">Show transaction toolbar in query editor</span>
-          </div>
-          <Checkbox
-            checked={settings.transactionMode}
-            onchange={(c) => update('transactionMode', c)}
-          />
-        </div>
-
-        <div class="setting-row">
-          <div class="setting-label">
             <span class="label-text">History Max Entries</span>
             <span class="label-hint">Maximum number of query history entries</span>
           </div>

@@ -312,7 +312,6 @@ export interface AppSettings {
   fontSize: number;
   shortcutPreset: 'vscode' | 'vim' | 'jetbrains';
   autoUpdateCheck: boolean;
-  transactionMode: boolean;
   historyMaxEntries: number;
   sidebarFloating: boolean;
   leftSidebarVisible: boolean;
@@ -344,7 +343,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 13,
   shortcutPreset: 'vscode',
   autoUpdateCheck: true,
-  transactionMode: false,
   historyMaxEntries: 500,
   sidebarFloating: false,
   leftSidebarVisible: true,
