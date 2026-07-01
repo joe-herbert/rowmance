@@ -16,7 +16,7 @@ export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
       '--color-text-primary', '--color-text-secondary', '--color-text-muted',
       '--color-text-disabled', '--color-text-on-accent',
       '--color-accent', '--color-accent-hover', '--color-accent-subtle',
-      '--color-danger', '--color-danger-hover', '--color-danger-subtle',
+      '--color-danger', '--color-danger-subtle',
       '--color-warning', '--color-warning-subtle',
       '--color-success', '--color-success-subtle',
       '--color-null',
@@ -33,14 +33,6 @@ export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
       '--color-editor-comment', '--color-editor-operator',
       '--color-editor-function', '--color-editor-type',
       '--color-editor-bracket-match',
-    ],
-  },
-  {
-    label: 'Connections',
-    vars: [
-      '--color-connection-connected',
-      '--color-connection-connecting',
-      '--color-connection-error',
     ],
   },
   {
@@ -64,8 +56,7 @@ export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
     label: 'Typography',
     vars: [
       '--font-family-ui', '--font-family-mono',
-      '--font-size-xs', '--font-size-sm', '--font-size-md',
-      '--font-size-lg', '--font-size-xl',
+      '--font-size-xs', '--font-size-sm', '--font-size-md', '--font-size-lg',
       '--font-weight-normal', '--font-weight-medium', '--font-weight-semibold',
       '--line-height-tight', '--line-height-normal',
     ],
@@ -83,11 +74,11 @@ export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
   },
   {
     label: 'Shadows',
-    vars: ['--shadow-sm', '--shadow-md', '--shadow-lg', '--shadow-overlay'],
+    vars: ['--shadow-sm', '--shadow-md', '--shadow-overlay'],
   },
   {
     label: 'Transitions',
-    vars: ['--transition-fast', '--transition-md', '--transition-slow'],
+    vars: ['--transition-fast', '--transition-md'],
   },
 ];
 

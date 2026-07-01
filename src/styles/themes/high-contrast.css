@@ -28,7 +28,6 @@
   --color-accent-subtle: #1a1a00;
 
   --color-danger: #ff6b6b;
-  --color-danger-hover: #ff4444;
   --color-danger-subtle: #1a0000;
 
   --color-warning: #ffcc00;
@@ -55,10 +54,6 @@
   --color-editor-type: #88ffff;
   --color-editor-bracket-match: #333300;
 
-  --color-connection-connected: #00ff88;
-  --color-connection-connecting: #ffcc00;
-  --color-connection-error: #ff6b6b;
-
   --color-scrollbar-thumb: rgba(255, 255, 255, 0.4);
   --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.6);
   --color-scrollbar-track: #000000;
@@ -70,7 +65,6 @@
 
   --shadow-sm: 0 1px 2px rgba(255, 255, 255, 0.1);
   --shadow-md: 0 2px 8px rgba(255, 255, 255, 0.1);
-  --shadow-lg: 0 4px 24px rgba(255, 255, 255, 0.15);
   --shadow-overlay: 0 8px 32px rgba(255, 255, 255, 0.2);
 
   /* Bold borders everywhere */

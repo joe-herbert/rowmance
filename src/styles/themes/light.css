@@ -53,7 +53,6 @@
 
   --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
   --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
-  --shadow-lg: 0 12px 40px rgba(60, 40, 120, 0.16);
   --shadow-overlay: 0 24px 60px rgba(60, 40, 120, 0.22);
 }
 
@@ -111,7 +110,6 @@
 
     --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
     --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
-    --shadow-lg: 0 12px 40px rgba(60, 40, 120, 0.16);
     --shadow-overlay: 0 24px 60px rgba(60, 40, 120, 0.22);
   }
 }

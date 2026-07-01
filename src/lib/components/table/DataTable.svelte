@@ -3177,7 +3177,7 @@
 
   /* box-shadow works on <tr> with border-collapse: separate */
   .data-row.row-selected {
-    background: var(--color-accent-subtle);
+    background: var(--color-table-row-selected);
   }
 
   .data-row.row-selected .rownum-cell {
@@ -3185,7 +3185,7 @@
   }
 
   .data-row.row-selected:hover {
-    background: var(--color-accent-subtle);
+    background: var(--color-table-row-selected);
   }
 
   /* ── Filler column (absorbs extra width so rownum stays fixed) ──────────── */
