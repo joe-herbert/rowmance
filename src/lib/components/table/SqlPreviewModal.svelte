@@ -6,9 +6,10 @@
     onrun: () => void;
     oncancel: () => void;
     ondiscard: () => void;
+    onopeneditor?: () => void;
   }
 
-  const { statements, onrun, oncancel, ondiscard }: Props = $props();
+  const { statements, onrun, oncancel, ondiscard, onopeneditor }: Props = $props();
 
   let copied = $state(false);
 
@@ -68,6 +69,9 @@
     <div class="modal-footer">
       <button class="btn btn--discard" onclick={ondiscard}>Cancel and Discard</button>
       <div class="footer-right">
+        {#if onopeneditor}
+          <button class="btn" onclick={onopeneditor}>Open in Editor</button>
+        {/if}
         <button class="btn" onclick={oncancel}>Cancel</button>
         <button class="btn btn--primary" onclick={onrun}>Run</button>
       </div>

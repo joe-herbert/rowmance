@@ -1880,6 +1880,11 @@
       showSqlPreview = false;
       discardChanges();
     }}
+    onopeneditor={() => {
+      const sql = buildPreviewStatements().join('\n\n');
+      showSqlPreview = false;
+      panelStore.openInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
+    }}
   />
 {/if}
 
