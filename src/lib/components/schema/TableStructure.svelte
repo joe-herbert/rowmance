@@ -79,6 +79,10 @@
   // ── Edit state ─────────────────────────────────────────────────────────────
 
   let editMode = $state(false);
+
+  $effect(() => {
+    if (isReadOnly) editMode = false;
+  });
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
 

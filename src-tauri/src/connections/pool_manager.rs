@@ -16,9 +16,12 @@ use std::sync::Arc;
 use crate::error::RowmanceError;
 
 /// Unified handle for a pool that may be MySQL/MariaDB, PostgreSQL, or SQLite.
+/// The `bool` on the MySql variant is `read_only`: the after_connect hook only
+/// applies to pool-allocated connections, so callers that create direct
+/// connections (e.g. for a specific database) must enforce it manually.
 #[derive(Debug)]
 pub enum RemotePool {
-    MySql(sqlx::MySqlPool),
+    MySql(sqlx::MySqlPool, bool),
     Postgres(sqlx::PgPool),
     Sqlite(sqlx::SqlitePool),
 }
@@ -111,7 +114,7 @@ impl ConnectionManager {
                     pool_opts
                 };
                 let p = pool_opts.connect_with(opts).await?;
-                RemotePool::MySql(p)
+                RemotePool::MySql(p, read_only)
             }
             "postgres" => {
                 let mut opts = PgConnectOptions::new()
@@ -185,7 +188,7 @@ impl ConnectionManager {
     pub async fn disconnect(&self, id: &str) {
         if let Some((_, pool)) = self.pools.remove(id) {
             match pool {
-                RemotePool::MySql(p) => p.close().await,
+                RemotePool::MySql(p, _) => p.close().await,
                 RemotePool::Postgres(p) => p.close().await,
                 RemotePool::Sqlite(p) => p.close().await,
             }

@@ -185,7 +185,7 @@ pub async fn query_delete_rows(
     let mut total_deleted: u64 = 0;
 
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             for row_del in &rows {
                 if row_del.primary_keys.is_empty() {
                     continue;
@@ -340,7 +340,7 @@ pub async fn query_update_rows(
     let mut total_updated: u64 = 0;
 
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             for change in &changes {
                 if change.changes.is_empty() || change.primary_keys.is_empty() {
                     continue;
@@ -548,7 +548,7 @@ pub async fn query_insert_row(
     let cols: Vec<(&String, &serde_json::Value)> = values.iter().collect();
 
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_mysql(c)).collect();
             let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
             let sql = format!(
@@ -734,7 +734,7 @@ pub async fn query_execute_multi(
         let start = std::time::Instant::now();
 
         let exec_result = match pool_ref.value() {
-            RemotePool::MySql(pool) => {
+            RemotePool::MySql(pool, read_only) => {
                 if let Some(db) = &database {
                     let mut conn = (*pool.connect_options())
                         .clone()
@@ -742,6 +742,14 @@ pub async fn query_execute_multi(
                         .connect()
                         .await
                         .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                    // after_connect only runs for pool-allocated connections; apply
+                    // read-only enforcement manually for direct connections.
+                    if *read_only {
+                        sqlx::query("SET SESSION TRANSACTION READ ONLY")
+                            .execute(&mut conn)
+                            .await
+                            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    }
                     execute_mysql(&mut conn, stmt, 10_000, 0).await
                 } else {
                     let mut conn = pool
@@ -846,7 +854,7 @@ pub async fn query_execute(
     let offset = (page.saturating_sub(1)) * page_size;
 
     let result = match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, read_only) => {
             if let Some(db) = &database {
                 // `USE db` cannot be sent as a prepared statement (MySQL error 1295).
                 // Open a short-lived direct connection with the target database set in
@@ -857,6 +865,14 @@ pub async fn query_execute(
                     .connect()
                     .await
                     .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                // after_connect only runs for pool-allocated connections; apply
+                // read-only enforcement manually for direct connections.
+                if *read_only {
+                    sqlx::query("SET SESSION TRANSACTION READ ONLY")
+                        .execute(&mut conn)
+                        .await
+                        .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                }
                 execute_mysql(&mut conn, &sql, page_size, offset).await
             } else {
                 let mut conn = pool
@@ -1430,7 +1446,7 @@ pub async fn query_explain(
 ) -> Result<ExplainResult, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let base_opts = (*pool.connect_options()).clone();
             let opts = if let Some(db) = &database {
                 base_opts.database(db)

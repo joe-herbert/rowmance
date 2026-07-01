@@ -172,7 +172,7 @@ async fn csv_execute_from_text(
     let mut inserted = 0u32;
 
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             if create_table {
                 let col_defs: Vec<String> = effective_columns
                     .iter()
@@ -376,7 +376,7 @@ async fn sql_execute_from_text(
         }
 
         let result = match pool_ref.value() {
-            RemotePool::MySql(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
+            RemotePool::MySql(pool, _) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
             RemotePool::Postgres(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
             RemotePool::Sqlite(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
         };

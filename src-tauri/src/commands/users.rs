@@ -36,7 +36,7 @@ pub async fn users_list(
 ) -> Result<Vec<DbUser>, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let rows = sqlx::query(
                 "SELECT CAST(User AS CHAR) AS username, CAST(Host AS CHAR) AS host, \
                  Super_priv, Create_priv, \
@@ -114,7 +114,7 @@ pub async fn users_get_grants(
 ) -> Result<Vec<String>, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let h = host.as_deref().unwrap_or("%");
             let escaped_user = escape_sql_string(&username);
             let escaped_host = escape_sql_string(h);
@@ -219,7 +219,7 @@ pub async fn users_create(
 ) -> Result<(), AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let h = host.as_deref().unwrap_or("%");
             let eu = escape_sql_string(&username);
             let eh = escape_sql_string(h);
@@ -266,7 +266,7 @@ pub async fn users_drop(
 ) -> Result<(), AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let h = host.as_deref().unwrap_or("%");
             let eu = escape_sql_string(&username);
             let eh = escape_sql_string(h);
@@ -302,7 +302,7 @@ pub async fn users_set_password(
 ) -> Result<(), AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let h = host.as_deref().unwrap_or("%");
             let eu = escape_sql_string(&username);
             let eh = escape_sql_string(h);
@@ -341,7 +341,7 @@ pub async fn users_rename(
 ) -> Result<(), AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let h = host.as_deref().unwrap_or("%");
             let nh = new_host.as_deref().unwrap_or("%");
             let eu = escape_sql_string(&username);
@@ -381,7 +381,7 @@ pub async fn users_execute_grant(
 ) -> Result<(), AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => sqlx::query(&sql)
+        RemotePool::MySql(pool, _) => sqlx::query(&sql)
             .execute(pool)
             .await
             .map(|_| ())

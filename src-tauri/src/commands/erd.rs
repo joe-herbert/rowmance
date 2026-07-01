@@ -49,7 +49,7 @@ pub async fn erd_get_graph(
 ) -> Result<ErdGraph, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => get_graph_mysql(pool, &database).await,
+        RemotePool::MySql(pool, _) => get_graph_mysql(pool, &database).await,
         RemotePool::Postgres(pool) => get_graph_postgres(pool, &database).await,
         RemotePool::Sqlite(pool) => get_graph_sqlite(pool).await,
     }

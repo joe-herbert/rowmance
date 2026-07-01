@@ -40,7 +40,7 @@ pub async fn schema_list_databases(
 ) -> Result<Vec<String>, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => crate::connections::mysql::list_databases(pool)
+        RemotePool::MySql(pool, _) => crate::connections::mysql::list_databases(pool)
             .await
             .map_err(AppError::from),
         RemotePool::Postgres(pool) => crate::connections::postgres::list_databases(pool)
@@ -61,7 +61,7 @@ pub async fn schema_list_tables(
 ) -> Result<Vec<TableInfo>, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let tables = crate::connections::mysql::list_tables(pool, &database)
                 .await
                 .map_err(AppError::from)?;
@@ -113,7 +113,7 @@ pub async fn schema_list_columns(
 ) -> Result<Vec<ColumnInfo>, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let cols = crate::connections::mysql::list_columns(pool, &database, &table)
                 .await
                 .map_err(AppError::from)?;
@@ -204,7 +204,7 @@ pub async fn schema_list_indexes(
 ) -> Result<Vec<IndexInfo>, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let rows = crate::connections::mysql::list_indexes(pool, &database, &table)
                 .await
                 .map_err(AppError::from)?;
@@ -259,7 +259,7 @@ pub async fn schema_list_foreign_keys(
 ) -> Result<Vec<ForeignKeyInfo>, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => {
+        RemotePool::MySql(pool, _) => {
             let rows = crate::connections::mysql::list_foreign_keys(pool, &database, &table)
                 .await
                 .map_err(AppError::from)?;
@@ -345,7 +345,7 @@ pub async fn schema_execute_ddl(
 
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => sqlx::query(&sql)
+        RemotePool::MySql(pool, _) => sqlx::query(&sql)
             .execute(pool)
             .await
             .map(|_| ())
@@ -375,7 +375,7 @@ pub async fn schema_get_ddl(
 ) -> Result<String, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool) => crate::connections::mysql::get_ddl(pool, &object_name)
+        RemotePool::MySql(pool, _) => crate::connections::mysql::get_ddl(pool, &object_name)
             .await
             .map_err(AppError::from),
         RemotePool::Postgres(pool) => {
