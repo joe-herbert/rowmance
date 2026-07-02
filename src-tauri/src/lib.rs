@@ -270,6 +270,8 @@ pub fn run() {
             commands::connections::connection_groups_delete,
             commands::connections::connection_groups_update,
             commands::connections::connection_groups_reorder,
+            commands::connections::connections_export,
+            commands::connections::connections_import,
             // Keychain
             commands::keychain::keychain_store,
             commands::keychain::keychain_retrieve,

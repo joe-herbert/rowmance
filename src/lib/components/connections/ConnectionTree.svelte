@@ -17,6 +17,8 @@
   import { useToast } from '$lib/stores/toast.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import ExportConnectionsDialog from './ExportConnectionsDialog.svelte';
+  import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import { portal } from '$lib/actions/portal';
@@ -337,6 +339,52 @@
   let newGroupName = $state('');
   let newGroupError = $state('');
   let newGroupLoading = $state(false);
+
+  // ── Import / Export ───────────────────────────────────────────────────────
+
+  let showExportDialog = $state(false);
+  let exportSingleId = $state<string | null>(null);
+  let exportPreselectIds = $state<string[] | null>(null);
+
+  async function handleImportConnections() {
+    closeAllCtx();
+    const files = await openFileDialog({
+      multiple: true,
+      filters: [{ name: 'Connection file', extensions: ['json'] }],
+    });
+    if (!files) return;
+    const paths = Array.isArray(files) ? files : [files];
+    if (paths.length === 0) return;
+
+    let totalImported = 0;
+    const errors: string[] = [];
+    for (const filePath of paths) {
+      try {
+        const result = await connectionsApi.importConnections(filePath);
+        totalImported += result.imported;
+      } catch (err) {
+        errors.push(errorMessage(err));
+      }
+    }
+
+    await connectionStore.load();
+
+    if (errors.length > 0) {
+      toast.addToast(`Import failed: ${errors[0]}`, 'error', 0);
+    } else {
+      toast.addToast(
+        `Imported ${totalImported} connection${totalImported !== 1 ? 's' : ''}`,
+        'success',
+      );
+    }
+  }
+
+  function handleExportConnections() {
+    closeAllCtx();
+    exportSingleId = null;
+    exportPreselectIds = null;
+    showExportDialog = true;
+  }
 
   function startCreateGroup() {
     closeAllCtx();
@@ -1135,6 +1183,11 @@
       }}>New Connection</button
     >
     <button class="ctx-item" role="menuitem" onclick={startCreateGroup}>New Group</button>
+    <div class="ctx-sep" role="separator"></div>
+    <button class="ctx-item" role="menuitem" onclick={handleImportConnections}>Import Connections…</button>
+    {#if connectionStore.profiles.length > 0}
+      <button class="ctx-item" role="menuitem" onclick={handleExportConnections}>Export Connections…</button>
+    {/if}
     {#if connectionStore.activeIds.size > 0}
       <div class="ctx-sep" role="separator"></div>
       <button class="ctx-item" role="menuitem" onclick={ctxDisconnectAll}>Disconnect All</button>
@@ -1226,6 +1279,22 @@
         }
       }}>Rename Group</button
     >
+    {#if (grouped().byGroup.get(grpCtx.group.id) ?? []).length > 0}
+      <div class="ctx-sep" role="separator"></div>
+      <button
+        class="ctx-item"
+        role="menuitem"
+        onclick={() => {
+          if (grpCtx) {
+            const ids = (grouped().byGroup.get(grpCtx.group.id) ?? []).map((p) => p.id);
+            exportPreselectIds = ids;
+            grpCtx = null;
+            showExportDialog = true;
+          }
+        }}>Export Connections…</button
+      >
+    {/if}
+    <div class="ctx-sep" role="separator"></div>
     <button
       class="ctx-item ctx-item--danger"
       role="menuitem"
@@ -1267,6 +1336,17 @@
           connCtx = null;
         }
       }}>Copy Name</button
+    >
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        if (connCtx) {
+          exportSingleId = connCtx.profile.id;
+          connCtx = null;
+          showExportDialog = true;
+        }
+      }}>Export Connection…</button
     >
     <div class="ctx-sep" role="separator"></div>
     <button
@@ -1753,6 +1833,30 @@
     danger={true}
     onconfirm={confirmState.onconfirm}
     oncancel={() => (confirmState = null)}
+  />
+{/if}
+
+{#if showExportDialog}
+  <ExportConnectionsDialog
+    profiles={connectionStore.profiles}
+    preselectIds={exportPreselectIds ?? (exportSingleId ? [exportSingleId] : null)}
+    onclose={() => {
+      showExportDialog = false;
+      exportSingleId = null;
+      exportPreselectIds = null;
+    }}
+    onsuccess={(count) => {
+      showExportDialog = false;
+      exportSingleId = null;
+      exportPreselectIds = null;
+      toast.addToast(`Exported ${count} connection${count !== 1 ? 's' : ''}`, 'success');
+    }}
+    onerror={(msg) => {
+      showExportDialog = false;
+      exportSingleId = null;
+      exportPreselectIds = null;
+      toast.addToast(`Export failed: ${msg}`, 'error', 0);
+    }}
   />
 {/if}
 

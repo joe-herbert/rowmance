@@ -791,6 +791,233 @@ pub async fn connection_groups_reorder(
     Ok(())
 }
 
+// ── Import / Export types ─────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionExportPasswords {
+    #[serde(rename = "dbPassword")]
+    pub db_password: Option<String>,
+    #[serde(rename = "sshPassword")]
+    pub ssh_password: Option<String>,
+    #[serde(rename = "sshKeyPassphrase")]
+    pub ssh_key_passphrase: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionExportEntry {
+    pub name: String,
+    #[serde(rename = "dbType")]
+    pub db_type: String,
+    pub host: String,
+    pub port: i64,
+    pub database: String,
+    pub username: String,
+    pub color: Option<String>,
+    #[serde(rename = "readOnly")]
+    pub read_only: bool,
+    #[serde(rename = "sshEnabled")]
+    pub ssh_enabled: bool,
+    #[serde(rename = "sshHost")]
+    pub ssh_host: Option<String>,
+    #[serde(rename = "sshPort")]
+    pub ssh_port: Option<i64>,
+    #[serde(rename = "sshUser")]
+    pub ssh_user: Option<String>,
+    #[serde(rename = "sshAuthType")]
+    pub ssh_auth_type: Option<String>,
+    #[serde(rename = "sshKeyPath")]
+    pub ssh_key_path: Option<String>,
+    #[serde(rename = "sslEnabled")]
+    pub ssl_enabled: bool,
+    #[serde(rename = "sslCaPath")]
+    pub ssl_ca_path: Option<String>,
+    #[serde(rename = "sslCertPath")]
+    pub ssl_cert_path: Option<String>,
+    #[serde(rename = "sslKeyPath")]
+    pub ssl_key_path: Option<String>,
+    #[serde(rename = "poolMin")]
+    pub pool_min: i64,
+    #[serde(rename = "poolMax")]
+    pub pool_max: i64,
+    /// Present only when exported with include_sensitive = true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub passwords: Option<ConnectionExportPasswords>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionExportFile {
+    pub version: u32,
+    pub connections: Vec<ConnectionExportEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConnectionImportResult {
+    pub imported: u32,
+}
+
+// ── Export command ────────────────────────────────────────────────────────────
+
+/// Export one or more connection profiles to a JSON file.
+/// When `include_sensitive` is true the plaintext passwords are embedded.
+#[tauri::command]
+pub async fn connections_export(
+    sqlite: State<'_, SqlitePool>,
+    ids: Vec<String>,
+    file_path: String,
+    include_sensitive: bool,
+) -> Result<(), AppError> {
+    let mut entries = Vec::new();
+
+    for id in &ids {
+        let row = sqlx::query_as::<_, ConnectionProfileRow>(
+            "SELECT * FROM connection_profiles WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+        if let Some(row) = row {
+            let passwords = if include_sensitive {
+                Some(ConnectionExportPasswords {
+                    db_password: retrieve_keychain_secret(id, "db_password"),
+                    ssh_password: retrieve_keychain_secret(id, "ssh_password"),
+                    ssh_key_passphrase: retrieve_keychain_secret(id, "ssh_key_passphrase"),
+                })
+            } else {
+                None
+            };
+
+            entries.push(ConnectionExportEntry {
+                name: row.name,
+                db_type: row.db_type,
+                host: row.host,
+                port: row.port,
+                database: row.database,
+                username: row.username,
+                color: row.color,
+                read_only: row.read_only,
+                ssh_enabled: row.ssh_enabled,
+                ssh_host: row.ssh_host,
+                ssh_port: row.ssh_port,
+                ssh_user: row.ssh_user,
+                ssh_auth_type: row.ssh_auth_type,
+                ssh_key_path: row.ssh_key_path,
+                ssl_enabled: row.ssl_enabled,
+                ssl_ca_path: row.ssl_ca_path,
+                ssl_cert_path: row.ssl_cert_path,
+                ssl_key_path: row.ssl_key_path,
+                pool_min: row.pool_min,
+                pool_max: row.pool_max,
+                passwords,
+            });
+        }
+    }
+
+    let export_file = ConnectionExportFile {
+        version: 1,
+        connections: entries,
+    };
+
+    let json = serde_json::to_string_pretty(&export_file)
+        .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?;
+
+    std::fs::write(&file_path, json).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+
+    Ok(())
+}
+
+// ── Import command ────────────────────────────────────────────────────────────
+
+/// Import connection profiles from a JSON file produced by `connections_export`.
+/// Any embedded passwords are stored in the OS keychain.
+#[tauri::command]
+pub async fn connections_import(
+    sqlite: State<'_, SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    file_path: String,
+) -> Result<ConnectionImportResult, AppError> {
+    let json = std::fs::read_to_string(&file_path)
+        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+
+    let export_file: ConnectionExportFile = serde_json::from_str(&json).map_err(|e| {
+        AppError::new(
+            "PARSE_ERROR",
+            format!("Invalid connection export file: {e}"),
+        )
+    })?;
+
+    let mut imported = 0u32;
+
+    for entry in export_file.connections {
+        let id = Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            INSERT INTO connection_profiles (
+                id, group_id, name, db_type, host, port, database, username, color,
+                read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
+                ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
+                pool_min, pool_max, created_at, updated_at
+            ) VALUES (
+                ?, NULL, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?
+            )
+            "#,
+        )
+        .bind(&id)
+        .bind(&entry.name)
+        .bind(&entry.db_type)
+        .bind(&entry.host)
+        .bind(entry.port)
+        .bind(&entry.database)
+        .bind(&entry.username)
+        .bind(&entry.color)
+        .bind(entry.read_only)
+        .bind(entry.ssh_enabled)
+        .bind(&entry.ssh_host)
+        .bind(entry.ssh_port)
+        .bind(&entry.ssh_user)
+        .bind(&entry.ssh_auth_type)
+        .bind(&entry.ssh_key_path)
+        .bind(entry.ssl_enabled)
+        .bind(&entry.ssl_ca_path)
+        .bind(&entry.ssl_cert_path)
+        .bind(&entry.ssl_key_path)
+        .bind(entry.pool_min)
+        .bind(entry.pool_max)
+        .bind(&now)
+        .bind(&now)
+        .execute(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+        connections.register_name(&id, &entry.name);
+
+        if let Some(passwords) = entry.passwords {
+            if let Some(pw) = passwords.db_password.filter(|p| !p.is_empty()) {
+                let account = format!("{id}:db_password");
+                let _ = crate::commands::keychain::keychain_write_secret("rowmance", &account, &pw);
+            }
+            if let Some(pw) = passwords.ssh_password.filter(|p| !p.is_empty()) {
+                let account = format!("{id}:ssh_password");
+                let _ = crate::commands::keychain::keychain_write_secret("rowmance", &account, &pw);
+            }
+            if let Some(pw) = passwords.ssh_key_passphrase.filter(|p| !p.is_empty()) {
+                let account = format!("{id}:ssh_key_passphrase");
+                let _ = crate::commands::keychain::keychain_write_secret("rowmance", &account, &pw);
+            }
+        }
+
+        imported += 1;
+    }
+
+    Ok(ConnectionImportResult { imported })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

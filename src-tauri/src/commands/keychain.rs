@@ -201,6 +201,11 @@ pub async fn keychain_delete(connection_id: String, secret_type: String) -> Resu
     keychain_remove("rowmance", &account)
 }
 
+/// Write a secret by service and account — used by other command modules.
+pub fn keychain_write_secret(service: &str, account: &str, value: &str) -> Result<(), AppError> {
+    keychain_write(service, account, value.as_bytes())
+}
+
 #[cfg(target_os = "macos")]
 fn keychain_write(service: &str, account: &str, value: &[u8]) -> Result<(), AppError> {
     let dpk_status = macos::write_dpk(service, account, value);

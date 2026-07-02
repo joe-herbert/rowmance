@@ -72,3 +72,19 @@ export async function updateConnectionGroup(
 export async function deleteConnectionGroup(id: string): Promise<void> {
   return invoke<void>('connection_groups_delete', { id });
 }
+
+export interface ConnectionImportResult {
+  imported: number;
+}
+
+export async function exportConnections(
+  ids: string[],
+  filePath: string,
+  includeSensitive: boolean,
+): Promise<void> {
+  return invoke<void>('connections_export', { ids, filePath, includeSensitive });
+}
+
+export async function importConnections(filePath: string): Promise<ConnectionImportResult> {
+  return invoke<ConnectionImportResult>('connections_import', { filePath });
+}
