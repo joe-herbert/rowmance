@@ -927,6 +927,42 @@ pub async fn connections_export(
     Ok(())
 }
 
+// ── Database URL command ──────────────────────────────────────────────────────
+
+/// Build a database URL for a connection profile, including the password from
+/// the OS keychain. Returns a URL suitable for use with database clients.
+#[tauri::command]
+pub async fn connections_get_db_url(
+    sqlite: State<'_, SqlitePool>,
+    id: String,
+) -> Result<String, AppError> {
+    let row = sqlx::query_as::<_, ConnectionProfileRow>(
+        "SELECT * FROM connection_profiles WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
+    .ok_or_else(|| AppError::new("NOT_FOUND", format!("Connection {id} not found")))?;
+
+    let password = retrieve_keychain_password(&id);
+
+    let url = match row.db_type.as_str() {
+        "mysql" | "mariadb" => format!(
+            "mysql://{}:{}@{}:{}/{}",
+            row.username, password, row.host, row.port, row.database
+        ),
+        "postgres" => format!(
+            "postgres://{}:{}@{}:{}/{}",
+            row.username, password, row.host, row.port, row.database
+        ),
+        "sqlite" => format!("sqlite://{}", row.host),
+        other => return Err(AppError::new("UNSUPPORTED", format!("Unknown db_type: {other}"))),
+    };
+
+    Ok(url)
+}
+
 // ── Import command ────────────────────────────────────────────────────────────
 
 /// Import connection profiles from a JSON file produced by `connections_export`.

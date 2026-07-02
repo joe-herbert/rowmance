@@ -272,6 +272,7 @@ pub fn run() {
             commands::connections::connection_groups_reorder,
             commands::connections::connections_export,
             commands::connections::connections_import,
+            commands::connections::connections_get_db_url,
             // Keychain
             commands::keychain::keychain_store,
             commands::keychain::keychain_retrieve,

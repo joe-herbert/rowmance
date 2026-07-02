@@ -1340,6 +1340,22 @@
     <button
       class="ctx-item"
       role="menuitem"
+      onclick={async () => {
+        if (connCtx) {
+          const id = connCtx.profile.id;
+          connCtx = null;
+          try {
+            const url = await connectionsApi.getConnectionDbUrl(id);
+            await navigator.clipboard.writeText(url);
+          } catch (err) {
+            errorModal = { title: 'Copy Failed', message: errorMessage(err) };
+          }
+        }
+      }}>Copy as Database URL</button
+    >
+    <button
+      class="ctx-item"
+      role="menuitem"
       onclick={() => {
         if (connCtx) {
           exportSingleId = connCtx.profile.id;

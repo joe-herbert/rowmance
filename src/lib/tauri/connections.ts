@@ -88,3 +88,7 @@ export async function exportConnections(
 export async function importConnections(filePath: string): Promise<ConnectionImportResult> {
   return invoke<ConnectionImportResult>('connections_import', { filePath });
 }
+
+export async function getConnectionDbUrl(id: string): Promise<string> {
+  return invoke<string>('connections_get_db_url', { id });
+}
