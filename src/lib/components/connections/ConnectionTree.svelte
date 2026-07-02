@@ -1324,6 +1324,22 @@
         }
       }}>Edit</button
     >
+    <button
+      class="ctx-item"
+      role="menuitem"
+      onclick={async () => {
+        if (connCtx) {
+          const id = connCtx.profile.id;
+          connCtx = null;
+          try {
+            await connectionsApi.duplicateConnection(id);
+            await connectionStore.load();
+          } catch (err) {
+            errorModal = { title: 'Duplicate Failed', message: errorMessage(err) };
+          }
+        }
+      }}>Duplicate</button
+    >
     <button class="ctx-item" role="menuitem" onclick={ctxConnToggleReadOnly}
       >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</button
     >

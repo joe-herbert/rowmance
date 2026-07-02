@@ -92,3 +92,7 @@ export async function importConnections(filePath: string): Promise<ConnectionImp
 export async function getConnectionDbUrl(id: string): Promise<string> {
   return invoke<string>('connections_get_db_url', { id });
 }
+
+export async function duplicateConnection(id: string): Promise<ConnectionProfile> {
+  return invoke<ConnectionProfile>('connections_duplicate', { id });
+}

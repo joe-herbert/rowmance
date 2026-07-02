@@ -273,6 +273,7 @@ pub fn run() {
             commands::connections::connections_export,
             commands::connections::connections_import,
             commands::connections::connections_get_db_url,
+            commands::connections::connections_duplicate,
             // Keychain
             commands::keychain::keychain_store,
             commands::keychain::keychain_retrieve,

@@ -791,6 +791,92 @@ pub async fn connection_groups_reorder(
     Ok(())
 }
 
+/// Duplicate an existing connection profile with a "Copy of …" name.
+/// Keychain secrets (db password, SSH password, SSH key passphrase) are
+/// copied to the new connection's keychain entries.
+#[tauri::command]
+pub async fn connections_duplicate(
+    sqlite: State<'_, SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    id: String,
+) -> Result<ConnectionProfile, AppError> {
+    let row = sqlx::query_as::<_, ConnectionProfileRow>(
+        "SELECT * FROM connection_profiles WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
+    .ok_or_else(|| AppError::new("CONNECTION_NOT_FOUND", format!("No connection with id {id}")))?;
+
+    let new_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let new_name = format!("Copy of {}", row.name);
+
+    sqlx::query(
+        r#"
+        INSERT INTO connection_profiles (
+            id, group_id, name, db_type, host, port, database, username, color,
+            read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
+            ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
+            pool_min, pool_max, created_at, updated_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?
+        )
+        "#,
+    )
+    .bind(&new_id)
+    .bind(&row.group_id)
+    .bind(&new_name)
+    .bind(&row.db_type)
+    .bind(&row.host)
+    .bind(row.port)
+    .bind(&row.database)
+    .bind(&row.username)
+    .bind(&row.color)
+    .bind(row.read_only)
+    .bind(row.ssh_enabled)
+    .bind(&row.ssh_host)
+    .bind(row.ssh_port)
+    .bind(&row.ssh_user)
+    .bind(&row.ssh_auth_type)
+    .bind(&row.ssh_key_path)
+    .bind(row.ssl_enabled)
+    .bind(&row.ssl_ca_path)
+    .bind(&row.ssl_cert_path)
+    .bind(&row.ssl_key_path)
+    .bind(row.pool_min)
+    .bind(row.pool_max)
+    .bind(&now)
+    .bind(&now)
+    .execute(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    for secret_type in &["db_password", "ssh_password", "ssh_key_passphrase"] {
+        if let Some(secret) = retrieve_keychain_secret(&id, secret_type) {
+            if !secret.is_empty() {
+                let account = format!("{new_id}:{secret_type}");
+                let _ = crate::commands::keychain::keychain_write_secret("rowmance", &account, &secret);
+            }
+        }
+    }
+
+    let new_row =
+        sqlx::query_as::<_, ConnectionProfileRow>("SELECT * FROM connection_profiles WHERE id = ?")
+            .bind(&new_id)
+            .fetch_one(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    connections.register_name(&new_id, &new_row.name);
+
+    Ok(ConnectionProfile::from(new_row))
+}
+
 // ── Import / Export types ─────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
