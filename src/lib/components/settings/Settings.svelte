@@ -12,6 +12,7 @@
   import KeyboardShortcuts from '$lib/components/settings/KeyboardShortcuts.svelte';
   import ThemeEditor from '$lib/components/settings/ThemeEditor.svelte';
   import * as themesApi from '$lib/tauri/themes';
+  import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import type { AppSettings, ThemeMeta } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
@@ -73,13 +74,36 @@
       : []),
   ]);
 
+  let resolvedQueriesDir = $state('');
+
   onMount(async () => {
     try {
       userThemes = await themesApi.themesList();
     } catch (err) {
       toast.addToast(errorMessage(err), 'error', 0);
     }
+    try {
+      resolvedQueriesDir = await savedQueriesApi.fileGetDir();
+    } catch {
+      resolvedQueriesDir = '';
+    }
   });
+
+  async function browseQueriesDirectory() {
+    const chosen = await openDialog({ directory: true, multiple: false });
+    if (!chosen || typeof chosen !== 'string') return;
+    await update('savedQueriesDirectory', chosen);
+    resolvedQueriesDir = chosen;
+  }
+
+  async function resetQueriesDirectory() {
+    await update('savedQueriesDirectory', '');
+    try {
+      resolvedQueriesDir = await savedQueriesApi.fileGetDir();
+    } catch {
+      resolvedQueriesDir = '';
+    }
+  }
 
   function startCreatingTheme() {
     newThemeName = '';
@@ -369,6 +393,41 @@
             ]}
             onchange={(v) => update('newRowPosition', v as 'top' | 'bottom')}
           />
+        </div>
+      </div>
+
+      <h3 class="subsection-title">Saved Queries</h3>
+
+      <div class="setting-group">
+        <div class="setting-row setting-row--block">
+          <div class="setting-label">
+            <span class="label-text">Queries Directory</span>
+            <span class="label-hint">
+              Where .sql query files are stored. Point this to a folder inside a git repo to share
+              queries with your team.
+            </span>
+          </div>
+          <div class="dir-setting">
+            <div class="dir-input-row">
+              <input
+                class="setting-input dir-input"
+                type="text"
+                placeholder={resolvedQueriesDir || 'Default location'}
+                value={settings.savedQueriesDirectory}
+                onchange={async (e) => {
+                  const val = (e.currentTarget as HTMLInputElement).value.trim();
+                  await update('savedQueriesDirectory', val);
+                  resolvedQueriesDir = val || await savedQueriesApi.fileGetDir();
+                }}
+                spellcheck={false}
+                aria-label="Queries directory path"
+              />
+              <button class="action-btn" onclick={browseQueriesDirectory}>Browse…</button>
+            </div>
+            {#if settings.savedQueriesDirectory}
+              <button class="action-btn" onclick={resetQueriesDirectory}>Reset to default</button>
+            {/if}
+          </div>
         </div>
       </div>
     {:else if activeSection === 'editor'}
@@ -1048,6 +1107,26 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--spacing-2);
+  }
+
+  .dir-setting {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+  }
+
+  .dir-input-row {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: center;
+  }
+
+  .dir-input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-family-mono, monospace);
+    font-size: var(--font-size-xs);
   }
 
   .tag-list {

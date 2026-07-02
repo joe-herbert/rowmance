@@ -13,8 +13,8 @@
   import * as schemaApi from '$lib/tauri/schema';
   import type {
     QueryHistoryEntry,
-    SavedQuery,
-    SavedQueryFolder,
+    FileQuery,
+    FileQueryFolder,
     ColumnInfo,
     IndexInfo,
     ForeignKeyInfo,
@@ -167,8 +167,8 @@
 
   // ── Saved Queries ─────────────────────────────────────────────────────────────
 
-  let savedFolders = $state<SavedQueryFolder[]>([]);
-  let savedQueries = $state<SavedQuery[]>([]);
+  let savedFolders = $state<FileQueryFolder[]>([]);
+  let savedQueries = $state<FileQuery[]>([]);
   let savedLoading = $state(false);
   let expandedFolders = $state<Set<string>>(new Set());
 
@@ -194,6 +194,10 @@
   let ctxMenuLeft = $state(0);
   let ctxMenuTop = $state(0);
 
+  // Connection assignment dialog
+  let assigningQuery = $state<FileQuery | null>(null);
+  let assignConnectionId = $state('');
+
   $effect(() => {
     if (!savedCtxMenu) return;
     ctxMenuLeft = savedCtxMenu.x;
@@ -213,10 +217,9 @@
   async function loadSavedQueries() {
     savedLoading = true;
     try {
-      [savedFolders, savedQueries] = await Promise.all([
-        savedQueriesApi.listFolders(),
-        savedQueriesApi.listSavedQueries(),
-      ]);
+      const result = await savedQueriesApi.fileListSavedQueries();
+      savedFolders = result.folders;
+      savedQueries = result.queries;
     } catch (err) {
       toast.addToast(errorMessage(err), 'error', 0);
     } finally {
@@ -231,7 +234,7 @@
     expandedFolders = next;
   }
 
-  function openSavedQuery(query: SavedQuery) {
+  function openFileQuery(query: FileQuery) {
     const existing = panelStore.openItems.find(
       (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id,
     );
@@ -239,9 +242,10 @@
       panelStore.showItem(existing);
       return;
     }
+    const connId = query.connectionId ?? connectionStore.profiles[0]?.id ?? '';
     panelStore.openInFocused({
       kind: 'query_editor',
-      connectionId: query.connectionId ?? connectionStore.profiles[0]?.id ?? '',
+      connectionId: connId,
       database: query.database ?? undefined,
       initialSql: query.sql,
       savedQueryId: query.id,
@@ -249,9 +253,52 @@
     });
   }
 
+  function handleQueryClick(query: FileQuery) {
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
+    if (query.connectionStatus === 'unresolved') {
+      assigningQuery = query;
+      assignConnectionId = connectionStore.profiles[0]?.id ?? '';
+      return;
+    }
+    openFileQuery(query);
+  }
+
+  async function confirmAssignConnection() {
+    if (!assigningQuery || !assignConnectionId) return;
+    const query = assigningQuery;
+    try {
+      if (query.fileConnectionId) {
+        await savedQueriesApi.fileAssignConnection(query.fileConnectionId, assignConnectionId);
+      }
+      await loadSavedQueries();
+      // Open with the newly assigned connection.
+      const updated = savedQueries.find((q) => q.id === query.id);
+      openFileQuery(updated ?? { ...query, connectionId: assignConnectionId, connectionStatus: 'resolved' });
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+    } finally {
+      assigningQuery = null;
+    }
+  }
+
+  function openQueryAnyway() {
+    if (!assigningQuery) return;
+    const query = assigningQuery;
+    assigningQuery = null;
+    openFileQuery({ ...query, connectionId: connectionStore.profiles[0]?.id ?? '' });
+  }
+
   async function createFolder() {
     if (!newFolderName.trim()) return;
-    await savedQueriesApi.createFolder({ name: newFolderName.trim() });
+    try {
+      await savedQueriesApi.fileCreateFolder(newFolderName.trim());
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+      return;
+    }
     newFolderName = '';
     showNewFolder = false;
     await loadSavedQueries();
@@ -261,12 +308,17 @@
     if (!newQueryName.trim()) return;
     const connectionId =
       connectionStore.profiles.find((p) => connectionStore.isActive(p.id))?.id ?? null;
-    await savedQueriesApi.createSavedQuery({
-      name: newQueryName.trim(),
-      sql: '',
-      folderId: newQueryFolderId,
-      connectionId,
-    });
+    try {
+      await savedQueriesApi.fileCreateSavedQuery({
+        name: newQueryName.trim(),
+        sql: '',
+        folderId: newQueryFolderId,
+        connectionId,
+      });
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+      return;
+    }
     newQueryName = '';
     showNewQuery = false;
     newQueryFolderId = null;
@@ -282,7 +334,7 @@
 
   async function confirmDeleteQuery() {
     if (!confirmDeleteQueryId) return;
-    await savedQueriesApi.deleteSavedQuery(confirmDeleteQueryId);
+    await savedQueriesApi.fileDeleteSavedQuery(confirmDeleteQueryId);
     confirmDeleteQueryId = null;
     await loadSavedQueries();
   }
@@ -301,25 +353,32 @@
     });
   }
 
-  async function commitRenameQuery(query: SavedQuery) {
+  async function commitRenameQuery(query: FileQuery) {
     if (!renameQueryValue.trim()) {
       renamingQueryId = null;
       return;
     }
     const name = renameQueryValue.trim();
     renamingQueryId = null;
-    await savedQueriesApi.updateSavedQuery(query.id, {
-      name,
-      sql: query.sql,
-      connectionId: query.connectionId,
-      folderId: query.folderId,
-      database: query.database,
-    });
-    const open = panelStore.openItems.find(
-      (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id,
-    );
-    if (open?.content.kind === 'query_editor' && open.content.editorId) {
-      panelStore.updateQueryEditorMeta(open.content.editorId, { savedQueryName: name });
+    try {
+      const updated = await savedQueriesApi.fileUpdateSavedQuery(query.id, {
+        name,
+        sql: query.sql,
+        connectionId: query.fileConnectionId,
+        folderId: query.folderId,
+        database: query.database,
+      });
+      const open = panelStore.openItems.find(
+        (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === query.id,
+      );
+      if (open?.content.kind === 'query_editor' && open.content.editorId) {
+        panelStore.updateQueryEditorMeta(open.content.editorId, {
+          savedQueryName: name,
+          savedQueryId: updated.id,
+        });
+      }
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
     }
     await loadSavedQueries();
   }
@@ -329,12 +388,16 @@
     const original = savedQueries.find((q) => q.id === savedCtxMenu?.id);
     if (!original) return;
     savedCtxMenu = null;
-    await savedQueriesApi.createSavedQuery({
-      name: `${original.name} (copy)`,
-      sql: original.sql,
-      folderId: original.folderId,
-      connectionId: original.connectionId,
-    });
+    try {
+      await savedQueriesApi.fileCreateSavedQuery({
+        name: `${original.name} (copy)`,
+        sql: original.sql,
+        folderId: original.folderId,
+        connectionId: original.fileConnectionId,
+      });
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+    }
     await loadSavedQueries();
   }
 
@@ -344,10 +407,28 @@
       confirmDeleteQueryId = savedCtxMenu.id;
       savedCtxMenu = null;
     } else {
-      await savedQueriesApi.deleteFolder(savedCtxMenu.id);
+      try {
+        await savedQueriesApi.fileDeleteFolder(savedCtxMenu.id);
+      } catch (err) {
+        toast.addToast(errorMessage(err), 'error', 0);
+      }
       savedCtxMenu = null;
       await loadSavedQueries();
     }
+  }
+
+  async function handleSavedCtxRenameFolder() {
+    if (!savedCtxMenu || savedCtxMenu.kind !== 'folder') return;
+    const { id, name } = savedCtxMenu;
+    savedCtxMenu = null;
+    const newName = prompt('Rename folder', name);
+    if (!newName || newName === name) return;
+    try {
+      await savedQueriesApi.fileRenameFolder(id, newName.trim());
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+    }
+    await loadSavedQueries();
   }
 
   function closeSavedCtxMenu() {
@@ -375,8 +456,8 @@
   });
 
   // Group queries by folderId.
-  const queriesByFolder = $derived.by<Map<string | null, SavedQuery[]>>(() => {
-    const map = new Map<string | null, SavedQuery[]>();
+  const queriesByFolder = $derived.by<Map<string | null, FileQuery[]>>(() => {
+    const map = new Map<string | null, FileQuery[]>();
     for (const q of savedQueries) {
       const key = q.folderId;
       const arr = map.get(key) ?? [];
@@ -483,30 +564,29 @@
   async function commitQueryDrop(queryId: string, zone: DropZone) {
     const query = savedQueries.find((q) => q.id === queryId);
     if (!query) return;
-    if (zone.type === 'into-folder') {
-      const maxPos = savedQueries
-        .filter((q) => q.folderId === zone.folderId)
-        .reduce((m, q) => Math.max(m, q.position), -1);
-      await savedQueriesApi.updateSavedQuery(queryId, {
-        name: query.name,
-        sql: query.sql,
-        connectionId: query.connectionId,
-        folderId: zone.folderId,
-        database: query.database,
-        position: maxPos + 1,
-      });
-    } else if (zone.type === 'into-unfiled') {
-      const maxPos = savedQueries
-        .filter((q) => q.folderId === null)
-        .reduce((m, q) => Math.max(m, q.position), -1);
-      await savedQueriesApi.updateSavedQuery(queryId, {
-        name: query.name,
-        sql: query.sql,
-        connectionId: query.connectionId,
-        folderId: null,
-        database: query.database,
-        position: maxPos + 1,
-      });
+
+    if (zone.type === 'into-folder' || zone.type === 'into-unfiled') {
+      const newFolderId = zone.type === 'into-folder' ? zone.folderId : null;
+      try {
+        const updated = await savedQueriesApi.fileUpdateSavedQuery(queryId, {
+          name: query.name,
+          sql: query.sql,
+          connectionId: query.fileConnectionId,
+          folderId: newFolderId,
+          database: query.database,
+        });
+        // ID changes when moving to a different folder — update open panel.
+        if (updated.id !== queryId) {
+          const open = panelStore.openItems.find(
+            (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === queryId,
+          );
+          if (open?.content.kind === 'query_editor' && open.content.editorId) {
+            panelStore.updateQueryEditorMeta(open.content.editorId, { savedQueryId: updated.id });
+          }
+        }
+      } catch (err) {
+        toast.addToast(errorMessage(err), 'error', 0);
+      }
     } else if (zone.type === 'before-query' || zone.type === 'after-query') {
       const targetFolderId = zone.folderId;
       const folderQueries = savedQueries.filter((q) => q.folderId === targetFolderId);
@@ -514,43 +594,18 @@
       const refIdx = ordered.findIndex((q) => q.id === zone.queryId);
       if (refIdx === -1) return;
       ordered.splice(zone.type === 'before-query' ? refIdx : refIdx + 1, 0, query);
-      await Promise.all(
-        ordered.map((q, i) =>
-          savedQueriesApi.updateSavedQuery(q.id, {
-            name: q.name,
-            sql: q.sql,
-            connectionId: q.connectionId,
-            folderId: targetFolderId,
-            database: q.database,
-            position: i,
-          }),
-        ),
-      );
+      try {
+        await savedQueriesApi.fileUpdatePositions(
+          ordered.map((q, i) => ({ id: q.id, position: i })),
+        );
+      } catch (err) {
+        toast.addToast(errorMessage(err), 'error', 0);
+      }
     }
   }
 
-  async function commitFolderDrop(folderId: string, zone: DropZone) {
-    if (zone.type !== 'before-folder' && zone.type !== 'after-folder') return;
-    const folder = savedFolders.find((f) => f.id === folderId);
-    if (!folder) return;
-    const ordered = savedFolders.filter((f) => f.id !== folderId);
-    const refIdx = ordered.findIndex((f) => f.id === zone.folderId);
-    if (refIdx === -1) return;
-    ordered.splice(zone.type === 'before-folder' ? refIdx : refIdx + 1, 0, folder);
-    await Promise.all(
-      ordered.map((f, i) =>
-        savedQueriesApi.updateFolder(f.id, { name: f.name, parentId: f.parentId, position: i }),
-      ),
-    );
-  }
-
-  function handleQueryClick(query: SavedQuery) {
-    if (suppressNextClick) {
-      suppressNextClick = false;
-      return;
-    }
-    openSavedQuery(query);
-  }
+  // Folder reordering is alphabetical in the file system — no-op.
+  async function commitFolderDrop(_folderId: string, _zone: DropZone) {}
 
   function handleFolderToggle(folderId: string) {
     if (suppressNextClick) {
@@ -860,11 +915,14 @@
                         {:else}
                           <button
                             class="query-btn"
+                            class:unresolved={query.connectionStatus === 'unresolved'}
                             onclick={() => handleQueryClick(query)}
                             onpointerdown={(e) => startDrag(e, 'query', query.id)}
                             oncontextmenu={(e) =>
                               showSavedCtxMenu(e, 'query', query.id, query.name)}
-                            title="Open {query.name}"
+                            title={query.connectionStatus === 'unresolved'
+                              ? `${query.name} — connection not found, click to assign`
+                              : `Open ${query.name}`}
                           >
                             <span class="query-icon" aria-hidden="true"
                               ><svg
@@ -882,6 +940,9 @@
                               ></span
                             >
                             <span class="query-name">{query.name}</span>
+                            {#if query.connectionStatus === 'unresolved'}
+                              <span class="conn-warn" aria-label="Connection not assigned" title="Connection not assigned — click to assign">!</span>
+                            {/if}
                             <span class="drag-handle" aria-hidden="true"
                               ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
                                 ><circle cx="2" cy="2" r="1.2" /><circle
@@ -1024,11 +1085,14 @@
                         {:else}
                           <button
                             class="query-btn"
+                            class:unresolved={query.connectionStatus === 'unresolved'}
                             onclick={() => handleQueryClick(query)}
                             onpointerdown={(e) => startDrag(e, 'query', query.id)}
                             oncontextmenu={(e) =>
                               showSavedCtxMenu(e, 'query', query.id, query.name)}
-                            title="Open {query.name}"
+                            title={query.connectionStatus === 'unresolved'
+                              ? `${query.name} — connection not found, click to assign`
+                              : `Open ${query.name}`}
                           >
                             <span class="query-icon" aria-hidden="true"
                               ><svg
@@ -1046,6 +1110,9 @@
                               ></span
                             >
                             <span class="query-name">{query.name}</span>
+                            {#if query.connectionStatus === 'unresolved'}
+                              <span class="conn-warn" aria-label="Connection not assigned" title="Connection not assigned — click to assign">!</span>
+                            {/if}
                             <span class="drag-handle" aria-hidden="true"
                               ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
                                 ><circle cx="2" cy="2" r="1.2" /><circle
@@ -1193,11 +1260,12 @@
     use:portal
   >
     {#if savedCtxMenu.kind === 'query'}
+      {@const ctxQuery = savedQueries.find((q) => q.id === savedCtxMenu?.id)}
       <button
         class="ctx-item"
         role="menuitem"
         onclick={() => {
-          openSavedQuery(savedQueries.find((q) => q.id === savedCtxMenu?.id)!);
+          if (ctxQuery) handleQueryClick(ctxQuery);
           closeSavedCtxMenu();
         }}
       >
@@ -1214,6 +1282,11 @@
         Rename
       </button>
       <div class="ctx-sep" role="separator"></div>
+    {:else}
+      <button class="ctx-item" role="menuitem" onclick={handleSavedCtxRenameFolder}>
+        Rename
+      </button>
+      <div class="ctx-sep" role="separator"></div>
     {/if}
     <button class="ctx-item danger" role="menuitem" onclick={handleSavedCtxDelete}> Delete </button>
   </div>
@@ -1222,7 +1295,7 @@
 {#if confirmDeleteQueryId !== null}
   <ConfirmDialog
     title="Delete query"
-    message="Delete this saved query? This cannot be undone."
+    message="Delete this saved query? This will delete the .sql file. This cannot be undone."
     confirmText="Delete"
     cancelText="Cancel"
     danger={true}
@@ -1231,6 +1304,41 @@
       confirmDeleteQueryId = null;
     }}
   />
+{/if}
+
+{#if assigningQuery !== null}
+  <div class="assign-overlay" use:portal>
+    <div class="assign-dialog" role="dialog" aria-modal="true" aria-label="Assign connection">
+      <h3 class="assign-title">Assign connection</h3>
+      <p class="assign-desc">
+        This query was saved with a connection that doesn't exist on this machine.
+      </p>
+      {#if assigningQuery.fileFingerprint}
+        <p class="assign-fingerprint">
+          <span class="assign-fp-label">Original connection:</span>
+          <code class="assign-fp-value">{assigningQuery.fileFingerprint}</code>
+        </p>
+      {/if}
+      <label class="assign-label" for="assign-select">Map to local connection:</label>
+      <select id="assign-select" class="assign-select" bind:value={assignConnectionId}>
+        {#each connectionStore.profiles as p (p.id)}
+          <option value={p.id}>{p.name}</option>
+        {/each}
+      </select>
+      <p class="assign-note">This mapping is saved locally and applied to all files sharing the same original connection.</p>
+      <div class="assign-actions">
+        <button class="assign-btn secondary" onclick={openQueryAnyway}>Open anyway</button>
+        <button class="assign-btn secondary" onclick={() => (assigningQuery = null)}>Cancel</button>
+        <button
+          class="assign-btn primary"
+          disabled={!assignConnectionId}
+          onclick={confirmAssignConnection}
+        >
+          Assign &amp; open
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -1665,6 +1773,151 @@
 
   .ctx-item.danger:hover {
     background: var(--color-danger-subtle);
+  }
+
+  /* ── Connection status ───────────────────────────────────────────────────── */
+
+  .query-btn.unresolved {
+    color: var(--color-warning, #f59e0b);
+  }
+
+  .conn-warn {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    display: grid;
+    place-items: center;
+    background: var(--color-warning, #f59e0b);
+    color: #000;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  /* ── Connection assignment dialog ────────────────────────────────────────── */
+
+  .assign-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 600;
+  }
+
+  .assign-dialog {
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: var(--spacing-5);
+    width: min(420px, calc(100vw - 32px));
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+  }
+
+  .assign-title {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  .assign-desc {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  .assign-fingerprint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .assign-fp-label {
+    font-weight: 600;
+  }
+
+  .assign-fp-value {
+    font-family: var(--font-family-mono, monospace);
+    background: var(--color-bg-secondary);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    word-break: break-all;
+  }
+
+  .assign-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  .assign-select {
+    width: 100%;
+    padding: var(--spacing-2) var(--spacing-2);
+    background: var(--color-bg-input, var(--color-bg-secondary));
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+  }
+
+  .assign-note {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin: 0;
+    font-style: italic;
+  }
+
+  .assign-actions {
+    display: flex;
+    gap: var(--spacing-2);
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .assign-btn {
+    padding: var(--spacing-1) var(--spacing-3);
+    font-size: var(--font-size-sm);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-family-ui);
+    transition: background var(--transition-fast);
+  }
+
+  .assign-btn.secondary {
+    background: transparent;
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-text-secondary);
+  }
+
+  .assign-btn.secondary:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .assign-btn.primary {
+    background: var(--color-accent);
+    border: 1px solid transparent;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .assign-btn.primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .assign-btn.primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .placeholder-panel {

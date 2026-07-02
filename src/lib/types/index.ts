@@ -182,6 +182,44 @@ export interface SavedQuery {
   updatedAt: string;
 }
 
+// ── File-based saved queries ──────────────────────────────────────────────────
+
+/** Connection resolution status for a file-based query. */
+export type ConnectionStatus = 'resolved' | 'fingerprint_matched' | 'unresolved' | 'none';
+
+/** A saved query loaded from a .sql file on disk. */
+export interface FileQuery {
+  /** Relative path from the queries directory, e.g. "reports/monthly.sql". */
+  id: string;
+  folderId: string | null;
+  name: string;
+  sql: string;
+  /** Resolved local connection ID (null when unresolved or none). */
+  connectionId: string | null;
+  /** How the connection was resolved. */
+  connectionStatus: ConnectionStatus;
+  /** Raw connection_id stored in the file header (may belong to another user). */
+  fileConnectionId: string | null;
+  /** Connection fingerprint stored in the file header. */
+  fileFingerprint: string | null;
+  database: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FileQueryFolder {
+  /** Relative path from the queries directory, e.g. "reports". */
+  id: string;
+  parentId: string | null;
+  name: string;
+}
+
+export interface FileQueryListResult {
+  folders: FileQueryFolder[];
+  queries: FileQuery[];
+}
+
 // ── ERD ──────────────────────────────────────────────────────────────────────
 
 export interface ErdColumn {
@@ -331,6 +369,8 @@ export interface AppSettings {
   cellMaxLines: number;
   newlineReplacement: string;
   newRowPosition: 'top' | 'bottom';
+  /** Absolute path to the saved queries directory. Empty string = use default. */
+  savedQueriesDirectory: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -363,6 +403,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cellMaxLines: 1,
   newlineReplacement: '↵',
   newRowPosition: 'bottom',
+  savedQueriesDirectory: '',
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

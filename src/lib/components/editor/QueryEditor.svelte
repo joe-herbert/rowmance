@@ -47,6 +47,7 @@
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
+  import type { FileQuery } from '$lib/types';
 
   interface Props {
     connectionId: string;
@@ -211,12 +212,17 @@
     if (currentSavedQueryId) {
       isSaving = true;
       try {
-        await savedQueriesApi.updateSavedQuery(currentSavedQueryId, {
+        const updated: FileQuery = await savedQueriesApi.fileUpdateSavedQuery(currentSavedQueryId, {
           name: currentSavedQueryName ?? 'Query',
           sql: sqlText,
           connectionId,
           database: selectedDatabase || null,
         });
+        // ID may change if the file was renamed/moved.
+        if (updated.id !== currentSavedQueryId) {
+          currentSavedQueryId = updated.id;
+          panelStore.updateQueryEditorMeta(editorId, { savedQueryId: updated.id });
+        }
         savedSql = sqlText;
         savedQueriesInvalidator.invalidate();
       } finally {
@@ -232,7 +238,7 @@
     if (!editorId || !saveNameInput.trim()) return;
     isSaving = true;
     try {
-      const saved = await savedQueriesApi.createSavedQuery({
+      const saved: FileQuery = await savedQueriesApi.fileCreateSavedQuery({
         name: saveNameInput.trim(),
         sql: sqlText,
         connectionId,

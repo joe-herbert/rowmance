@@ -168,11 +168,14 @@
       ? (queryEditorCache.get(item.content.editorId)?.sql ?? item.content.initialSql ?? '')
       : (item.content.initialSql ?? '');
     try {
-      await savedQueriesApi.updateSavedQuery(item.content.savedQueryId, {
+      const updated = await savedQueriesApi.fileUpdateSavedQuery(item.content.savedQueryId, {
         name,
         sql: currentSql,
         connectionId: item.content.connectionId,
       });
+      if (updated.id !== item.content.savedQueryId && item.content.editorId) {
+        panelStore.updateQueryEditorMeta(item.content.editorId, { savedQueryId: updated.id });
+      }
     } catch {
       /* ignore */
     }
