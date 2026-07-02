@@ -92,15 +92,16 @@ pub async fn list_tables(
         })
         .collect();
 
-    for table in &mut tables {
-        let tbl_esc = table.name.replace('"', "\"\"");
-        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM \"{}\"", tbl_esc))
-            .fetch_one(pool)
-            .await?;
-        table.row_count = Some(count);
-    }
-
     Ok(tables)
+}
+
+/// Count all rows in a table. Used by the background count task.
+pub async fn count_table(pool: &SqlitePool, table: &str) -> Result<i64, RowmanceError> {
+    let tbl_esc = table.replace('"', "\"\"");
+    let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM \"{}\"", tbl_esc))
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
 }
 
 /// List all columns for a given table using PRAGMA table_info.

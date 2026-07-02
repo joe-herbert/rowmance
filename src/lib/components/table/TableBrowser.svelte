@@ -11,9 +11,24 @@
     }
   >();
 
+  type CachedSchema = {
+    columns: import('$lib/types').ColumnInfo[];
+    indexes: import('$lib/types').IndexInfo[];
+    foreignKeys: import('$lib/types').ForeignKeyInfo[];
+  };
+  const tableSchemaCache = new Map<string, CachedSchema>();
+
   export function clearTablePendingState(key: string): void {
     tablePendingState.delete(key);
     tableScrollPositions.delete(key);
+  }
+
+  export function invalidateTableSchema(
+    connectionId: string,
+    database: string,
+    table: string,
+  ): void {
+    tableSchemaCache.delete(`${connectionId}:${database}:${table}`);
   }
 </script>
 
@@ -29,12 +44,13 @@
   import Loader from '$lib/components/ui/Loader.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
+  import { listen } from '@tauri-apps/api/event';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
-  import type { QueryResult, ColumnMeta, ForeignKeyInfo } from '$lib/types';
+  import type { QueryResult, ColumnMeta, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import DataTable, {
     type PageInfo,
@@ -104,6 +120,19 @@
   let foreignKeys = $state<ForeignKeyInfo[]>([]);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
+
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ queryId: string; totalRows: number }>('query-count-updated', (event) => {
+      const { queryId, totalRows } = event.payload;
+      if (result?.queryId === queryId) {
+        result = { ...result, totalRows };
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  });
 
   // ── Pending changes ───────────────────────────────────────────────────────
 
@@ -603,18 +632,33 @@
       const quotedDb = quoteIdentifier(database);
       const quotedTable = quoteIdentifier(table);
       const countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
-      const [queryResult, schemaColumns, indexes, fks, countResult] = await Promise.all([
+
+      const schemaKey = `${connectionId}:${database}:${table}`;
+      const cachedSchema = tableSchemaCache.get(schemaKey);
+      const schemaPromise: Promise<{ columns: ColumnInfo[]; indexes: IndexInfo[]; foreignKeys: ForeignKeyInfo[] }> =
+        cachedSchema
+          ? Promise.resolve(cachedSchema)
+          : Promise.all([
+              listColumns(connectionId, database, table).catch((): ColumnInfo[] => []),
+              listIndexes(connectionId, database, table).catch((): IndexInfo[] => []),
+              listForeignKeys(connectionId, database, table).catch((): ForeignKeyInfo[] => []),
+            ]).then(([columns, indexes, fks]) => {
+              const schema = { columns, indexes, foreignKeys: fks };
+              tableSchemaCache.set(schemaKey, schema);
+              return schema;
+            });
+
+      const [queryResult, schema, countResult] = await Promise.all([
         executeQuery(
           connectionId,
           buildSql(),
           untrack(() => page),
           PAGE_SIZE,
         ),
-        listColumns(connectionId, database, table).catch(() => []),
-        listIndexes(connectionId, database, table).catch(() => []),
-        listForeignKeys(connectionId, database, table).catch(() => []),
+        schemaPromise,
         filterActive ? executeSelection(connectionId, countSql, database) : Promise.resolve(null),
       ]);
+      const { columns: schemaColumns, indexes, foreignKeys: fks } = schema;
       foreignKeys = fks;
 
       if (countResult && !countResult.error) {
@@ -661,6 +705,7 @@
   }
 
   function handleRefresh(): void {
+    tableSchemaCache.delete(`${connectionId}:${database}:${table}`);
     load();
   }
 
@@ -1042,7 +1087,7 @@
   }
 
   function nextTablePage(): void {
-    if (dtPageInfo && page < dtPageInfo.pageCount) {
+    if (dtPageInfo && (dtPageInfo.pageCount === null || page < dtPageInfo.pageCount)) {
       page++;
       load();
     }
@@ -1174,12 +1219,14 @@
             0
           {:else}
             {@const pageOffset = (page - 1) * PAGE_SIZE}
-            {(pageOffset + 1).toLocaleString()}–{Math.min(
-              pageOffset + dtPageInfo.pageRowsLength,
-              dtPageInfo.processedRowsLength,
+            {(pageOffset + 1).toLocaleString()}–{(dtPageInfo.processedRowsLength !== null
+              ? Math.min(pageOffset + dtPageInfo.pageRowsLength, dtPageInfo.processedRowsLength)
+              : pageOffset + dtPageInfo.pageRowsLength
             ).toLocaleString()}
           {/if}
-          of {dtPageInfo.processedRowsLength.toLocaleString()}
+          of {dtPageInfo.processedRowsLength !== null
+            ? dtPageInfo.processedRowsLength.toLocaleString()
+            : '…'}
         </span>
 
         <div class="page-nav-group">
@@ -1205,7 +1252,7 @@
           <button
             class="page-nav-btn page-nav-btn--next"
             onclick={nextTablePage}
-            disabled={page >= dtPageInfo.pageCount}
+            disabled={dtPageInfo.pageCount !== null && page >= dtPageInfo.pageCount}
             aria-label="Next page"
           >
             <svg
@@ -1530,7 +1577,7 @@
         autocapitalize="off"
         spellcheck={false}
       />
-      {#if localSearchTerm && dtPageInfo !== null}
+      {#if localSearchTerm && dtPageInfo !== null && dtPageInfo.processedRowsLength !== null}
         <span class="local-search-count">
           {dtPageInfo.processedRowsLength.toLocaleString()} match{dtPageInfo.processedRowsLength !==
           1

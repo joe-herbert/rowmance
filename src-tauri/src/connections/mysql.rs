@@ -80,18 +80,6 @@ pub async fn list_tables(
         })
         .collect();
 
-    for table in &mut tables {
-        if matches!(table.row_count, Some(0) | None) {
-            let db_esc = database.replace('`', "``");
-            let tbl_esc = table.name.replace('`', "``");
-            let count: i64 =
-                sqlx::query_scalar(&format!("SELECT COUNT(*) FROM `{}`.`{}`", db_esc, tbl_esc))
-                    .fetch_one(pool)
-                    .await?;
-            table.row_count = Some(count);
-        }
-    }
-
     Ok(tables)
 }
 
@@ -295,6 +283,17 @@ pub async fn list_foreign_keys(
         entry.referenced_columns.push(ref_col);
     }
     Ok(map.into_values().collect())
+}
+
+/// Count all rows in a table. Used by the background count task.
+pub async fn count_table(pool: &MySqlPool, database: &str, table: &str) -> Result<i64, RowmanceError> {
+    let db_esc = database.replace('`', "``");
+    let tbl_esc = table.replace('`', "``");
+    let count: i64 =
+        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM `{}`.`{}`", db_esc, tbl_esc))
+            .fetch_one(pool)
+            .await?;
+    Ok(count)
 }
 
 /// Return the CREATE TABLE / CREATE VIEW DDL for an object.

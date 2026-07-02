@@ -9,16 +9,30 @@ use sqlx::{
     mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    Executor,
 };
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::error::RowmanceError;
 
+/// Reset MySQL connection to the given database using the text protocol (COM_QUERY).
+/// Extracted as a standalone `async fn` to give the borrow checker a concrete
+/// lifetime, working around the HKT limitation on `raw_sql().execute(&mut conn)`.
+async fn mysql_reset_db(conn: &mut sqlx::mysql::MySqlConnection, use_sql: &str) -> bool {
+    conn.execute(sqlx::raw_sql(use_sql)).await.is_ok()
+}
+
+/// Reset Postgres connection to the given schema using the text protocol.
+async fn pg_reset_schema(conn: &mut sqlx::postgres::PgConnection, set_path_sql: &str) -> bool {
+    conn.execute(sqlx::raw_sql(set_path_sql)).await.is_ok()
+}
+
 /// Unified handle for a pool that may be MySQL/MariaDB, PostgreSQL, or SQLite.
-/// The `bool` on the MySql variant is `read_only`: the after_connect hook only
-/// applies to pool-allocated connections, so callers that create direct
-/// connections (e.g. for a specific database) must enforce it manually.
+/// The `bool` on the MySql variant is `read_only`: enforced via after_connect
+/// (`SET SESSION TRANSACTION READ ONLY`) for all pool connections. The
+/// after_release hook resets the database/schema context so released connections
+/// are always clean for the next caller.
 #[derive(Debug)]
 pub enum RemotePool {
     MySql(sqlx::MySqlPool, bool),
@@ -96,23 +110,34 @@ impl ConnectionManager {
                     }
                 }
 
-                let pool_opts = MySqlPoolOptions::new()
+                let mut pool_opts = MySqlPoolOptions::new()
                     .min_connections(pool_min)
                     .max_connections(pool_max);
                 // SET SESSION TRANSACTION READ ONLY on every connection so the
                 // server enforces read-only regardless of what SQL is sent.
-                let pool_opts = if read_only {
-                    pool_opts.after_connect(|conn, _meta| {
+                if read_only {
+                    pool_opts = pool_opts.after_connect(|conn, _meta| {
                         Box::pin(async move {
                             sqlx::query("SET SESSION TRANSACTION READ ONLY")
                                 .execute(conn)
                                 .await?;
                             Ok(())
                         })
-                    })
-                } else {
-                    pool_opts
-                };
+                    });
+                }
+                // Reset the database context when a connection is released back
+                // to the pool, so other callers always start with the default db.
+                // The USE statement must go over the text protocol (COM_QUERY) —
+                // MySQL rejects it as a prepared statement (error 1295). We build
+                // the SQL once and leak it to obtain a 'static reference, which is
+                // required by the `for<'c>` closure signature of after_release.
+                // One leaked string per pool (i.e., per connection profile) is
+                // negligible — pools live for the process lifetime anyway.
+                let db_esc = database.replace('`', "``");
+                let use_sql: &'static str = Box::leak(format!("USE `{}`", db_esc).into_boxed_str());
+                pool_opts = pool_opts.after_release(move |conn, _meta| {
+                    Box::pin(async move { Ok(mysql_reset_db(conn, use_sql).await) })
+                });
                 let p = pool_opts.connect_with(opts).await?;
                 RemotePool::MySql(p, read_only)
             }
@@ -149,9 +174,17 @@ impl ConnectionManager {
                     opts = opts.options([("default_transaction_read_only", "on")]);
                 }
 
+                // Reset the search_path when a connection is released back to
+                // the pool, so other callers always start with the default schema.
+                // Leak the SQL string once to satisfy the `for<'c>` closure bound.
+                let schema_esc = database.replace('\'', "''");
+                let set_path_sql: &'static str = Box::leak(format!("SET search_path = '{}'", schema_esc).into_boxed_str());
                 let p = PgPoolOptions::new()
                     .min_connections(pool_min)
                     .max_connections(pool_max)
+                    .after_release(move |conn, _meta| {
+                        Box::pin(async move { Ok(pg_reset_schema(conn, set_path_sql).await) })
+                    })
                     .connect_with(opts)
                     .await?;
                 RemotePool::Postgres(p)

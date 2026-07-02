@@ -5,7 +5,15 @@ use sqlparser::ast::Statement as SqlStatement;
 use sqlparser::dialect::{MySqlDialect, PostgreSqlDialect, SQLiteDialect};
 use sqlparser::parser::Parser;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Emitter, State};
+
+#[derive(Clone, Serialize)]
+struct QueryCountPayload {
+    #[serde(rename = "queryId")]
+    query_id: String,
+    #[serde(rename = "totalRows")]
+    total_rows: i64,
+}
 
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::AppError;
@@ -692,6 +700,7 @@ fn split_statements(sql: &str) -> Vec<String> {
 /// Execute multiple SQL statements and return all result sets.
 #[tauri::command]
 pub async fn query_execute_multi(
+    app: tauri::AppHandle,
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
@@ -707,6 +716,7 @@ pub async fn query_execute_multi(
     let mut results: Vec<QueryResult> = Vec::new();
 
     // If a transaction is active, route all statements through the held connection.
+    // Background counts are skipped for transaction queries.
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         for stmt in &statements {
@@ -741,75 +751,60 @@ pub async fn query_execute_multi(
 
     match pool_ref.value() {
         RemotePool::MySql(pool, read_only) => {
+            let pool_clone = pool.clone();
+            let read_only = *read_only;
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(db) = &database {
-                let mut conn = (*pool.connect_options())
-                    .clone()
-                    .database(db)
-                    .connect()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                if *read_only {
-                    sqlx::query("SET SESSION TRANSACTION READ ONLY")
-                    .execute(&mut conn)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                let db_esc = db.replace('`', "``");
+                let use_sql = format!("USE `{}`", db_esc);
+                if !mysql_switch_db(&mut *conn, &use_sql).await {
+                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database `{}`", db)));
                 }
-                for stmt in &statements {
-                    let query_id = uuid::Uuid::new_v4().to_string();
-                    let start = std::time::Instant::now();
-                    let exec_result = execute_mysql(&mut conn, stmt, 10_000, 0).await;
-                    let duration_ms = start.elapsed().as_millis() as u64;
-                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
-                }
-            } else {
-                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                for stmt in &statements {
-                    let query_id = uuid::Uuid::new_v4().to_string();
-                    let start = std::time::Instant::now();
-                    let exec_result = execute_mysql(&mut conn, stmt, 10_000, 0).await;
-                    let duration_ms = start.elapsed().as_millis() as u64;
-                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+            }
+            for stmt in &statements {
+                let query_id = uuid::Uuid::new_v4().to_string();
+                let start = std::time::Instant::now();
+                let exec_result = execute_mysql(&mut conn, stmt, 10_000, 0).await;
+                let duration_ms = start.elapsed().as_millis() as u64;
+                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                if results.last().map(|r| r.error.is_none() && !r.columns.is_empty()).unwrap_or(false) {
+                    spawn_query_count_mysql(app.clone(), pool_clone.clone(), read_only, stmt.to_string(), database.clone(), query_id);
                 }
             }
         }
         RemotePool::Postgres(pool) => {
+            let pool_clone = pool.clone();
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
-                // Use a direct connection with search_path baked into the startup
-                // options — it never returns to the pool, so schema state cannot
-                // leak to other callers. read_only enforcement is preserved because
-                // pool.connect_options() already carries default_transaction_read_only.
-                let mut conn = (*pool.connect_options())
-                    .clone()
-                    .options([("search_path", schema.as_str())])
-                    .connect()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                for stmt in &statements {
-                    let query_id = uuid::Uuid::new_v4().to_string();
-                    let start = std::time::Instant::now();
-                    let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
-                    let duration_ms = start.elapsed().as_millis() as u64;
-                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                let schema_esc = schema.replace('\'', "''");
+                let set_path_sql = format!("SET search_path = '{}'", schema_esc);
+                if !pg_switch_schema(&mut *conn, &set_path_sql).await {
+                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to schema '{}'", schema)));
                 }
-            } else {
-                let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                for stmt in &statements {
-                    let query_id = uuid::Uuid::new_v4().to_string();
-                    let start = std::time::Instant::now();
-                    let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
-                    let duration_ms = start.elapsed().as_millis() as u64;
-                    push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+            }
+            for stmt in &statements {
+                let query_id = uuid::Uuid::new_v4().to_string();
+                let start = std::time::Instant::now();
+                let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
+                let duration_ms = start.elapsed().as_millis() as u64;
+                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                if results.last().map(|r| r.error.is_none() && !r.columns.is_empty()).unwrap_or(false) {
+                    spawn_query_count_postgres(app.clone(), pool_clone.clone(), stmt.to_string(), database.clone(), query_id);
                 }
             }
         }
         RemotePool::Sqlite(pool) => {
+            let pool_clone = pool.clone();
             let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             for stmt in &statements {
                 let query_id = uuid::Uuid::new_v4().to_string();
                 let start = std::time::Instant::now();
                 let exec_result = execute_sqlite(&mut conn, stmt, 10_000, 0).await;
                 let duration_ms = start.elapsed().as_millis() as u64;
-                push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                if results.last().map(|r| r.error.is_none() && !r.columns.is_empty()).unwrap_or(false) {
+                    spawn_query_count_sqlite(app.clone(), pool_clone.clone(), stmt.to_string(), query_id);
+                }
             }
         }
     }
@@ -840,8 +835,11 @@ async fn push_result(
 }
 
 /// Execute a SQL query, returning a paginated result set.
+/// The total row count is fetched asynchronously and pushed via the
+/// `query-count-updated` Tauri event keyed by `queryId`.
 #[tauri::command]
 pub async fn query_execute(
+    app: tauri::AppHandle,
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
@@ -857,6 +855,7 @@ pub async fn query_execute(
     let offset = (page.saturating_sub(1)) * page_size;
 
     // If a transaction is active, route through the held connection.
+    // Background count is skipped for transaction queries.
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         let result = match &mut *guard {
@@ -880,63 +879,72 @@ pub async fn query_execute(
 
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
 
-    let result = match pool_ref.value() {
+    enum PoolKind {
+        MySql(sqlx::MySqlPool, bool),
+        Postgres(sqlx::PgPool),
+        Sqlite(sqlx::SqlitePool),
+    }
+
+    let (result, pool_kind) = match pool_ref.value() {
         RemotePool::MySql(pool, read_only) => {
+            let read_only = *read_only;
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(db) = &database {
-                // `USE db` cannot be sent as a prepared statement (MySQL error 1295).
-                // Open a short-lived direct connection with the target database set in
-                // the options so we never need to issue USE at all.
-                let mut conn = (*pool.connect_options())
-                    .clone()
-                    .database(db)
-                    .connect()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                // after_connect only runs for pool-allocated connections; apply
-                // read-only enforcement manually for direct connections.
-                if *read_only {
-                    sqlx::query("SET SESSION TRANSACTION READ ONLY")
-                    .execute(&mut conn)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                // Use the text protocol (COM_QUERY) via raw_sql so USE works —
+                // prepared statements (COM_STMT_PREPARE) reject USE with error 1295.
+                let db_esc = db.replace('`', "``");
+                let use_sql = format!("USE `{}`", db_esc);
+                if !mysql_switch_db(&mut *conn, &use_sql).await {
+                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database `{}`", db)));
                 }
-                execute_mysql(&mut conn, &sql, page_size, offset).await
-            } else {
-                let mut conn = pool
-                    .acquire()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                execute_mysql(&mut conn, &sql, page_size, offset).await
             }
+            let res = execute_mysql(&mut conn, &sql, page_size, offset).await;
+            (res, PoolKind::MySql(pool.clone(), read_only))
         }
         RemotePool::Postgres(pool) => {
+            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
-                let mut conn = (*pool.connect_options())
-                    .clone()
-                    .options([("search_path", schema.as_str())])
-                    .connect()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                execute_postgres(&mut conn, &sql, page_size, offset).await
-            } else {
+                let schema_esc = schema.replace('\'', "''");
+                let set_path_sql = format!("SET search_path = '{}'", schema_esc);
+                if !pg_switch_schema(&mut *conn, &set_path_sql).await {
+                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to schema '{}'", schema)));
+                }
+            }
+            let res = execute_postgres(&mut conn, &sql, page_size, offset).await;
+            (res, PoolKind::Postgres(pool.clone()))
+        }
+        RemotePool::Sqlite(pool) => {
+            let res = {
                 let mut conn = pool
                     .acquire()
                     .await
                     .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                execute_postgres(&mut conn, &sql, page_size, offset).await
-            }
-        }
-        RemotePool::Sqlite(pool) => {
-            let mut conn = pool
-                .acquire()
-                .await
-                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            execute_sqlite(&mut conn, &sql, page_size, offset).await
+                execute_sqlite(&mut conn, &sql, page_size, offset).await
+            };
+            (res, PoolKind::Sqlite(pool.clone()))
         }
     };
 
     let duration_ms = start.elapsed().as_millis() as u64;
-    Ok(build_query_result(result, query_id, &connection_id, &sql, duration_ms, sqlite.inner()).await)
+    let query_result = build_query_result(result, query_id, &connection_id, &sql, duration_ms, sqlite.inner()).await;
+
+    // Spawn background count only for successful SELECT results.
+    if query_result.error.is_none() && !query_result.columns.is_empty() {
+        let qid = query_result.query_id.clone();
+        match pool_kind {
+            PoolKind::MySql(pool, read_only) => {
+                spawn_query_count_mysql(app, pool, read_only, sql, database, qid);
+            }
+            PoolKind::Postgres(pool) => {
+                spawn_query_count_postgres(app, pool, sql, database, qid);
+            }
+            PoolKind::Sqlite(pool) => {
+                spawn_query_count_sqlite(app, pool, sql, qid);
+            }
+        }
+    }
+
+    Ok(query_result)
 }
 
 async fn build_query_result(
@@ -963,6 +971,7 @@ async fn build_query_result(
 /// Run a selection/fragment of SQL (no pagination wrapper).
 #[tauri::command]
 pub async fn query_execute_selection(
+    app: tauri::AppHandle,
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
@@ -971,7 +980,7 @@ pub async fn query_execute_selection(
     database: Option<String>,
 ) -> Result<QueryResult, AppError> {
     // Delegate to the main executor with page=1 and a large page size.
-    query_execute(sqlite, connections, transactions, connection_id, sql, 1, 10_000, database).await
+    query_execute(app, sqlite, connections, transactions, connection_id, sql, 1, 10_000, database).await
 }
 
 // ── Type formatting helpers ───────────────────────────────────────────────────
@@ -1069,6 +1078,97 @@ fn returns_rows_sqlite(sql: &str) -> bool {
     }
 }
 
+// ── Text-protocol helpers ─────────────────────────────────────────────────────
+// These standalone `async fn`s give the borrow checker a concrete lifetime,
+// working around the HKT limitation when using `raw_sql().execute(&mut conn)`
+// inside `tokio::spawn` or `after_release` closures.
+
+async fn mysql_switch_db(conn: &mut sqlx::mysql::MySqlConnection, use_sql: &str) -> bool {
+    use sqlx::Executor;
+    conn.execute(sqlx::raw_sql(use_sql)).await.is_ok()
+}
+
+async fn pg_switch_schema(conn: &mut sqlx::postgres::PgConnection, set_path_sql: &str) -> bool {
+    use sqlx::Executor;
+    conn.execute(sqlx::raw_sql(set_path_sql)).await.is_ok()
+}
+
+// ── Background count helpers ──────────────────────────────────────────────────
+
+fn spawn_query_count_mysql(
+    app: tauri::AppHandle,
+    pool: sqlx::MySqlPool,
+    _read_only: bool,
+    sql: String,
+    database: Option<String>,
+    query_id: String,
+) {
+    tokio::spawn(async move {
+        let sql = sql.trim_end_matches(';');
+        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
+        let mut conn = match pool.acquire().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        if let Some(db) = &database {
+            let db_esc = db.replace('`', "``");
+            let use_sql = format!("USE `{}`", db_esc);
+            if !mysql_switch_db(&mut *conn, &use_sql).await {
+                return;
+            }
+        }
+        if let Ok(Some(total_rows)) = sqlx::query_scalar::<_, i64>(&count_sql).fetch_optional(&mut *conn).await {
+            let _ = app.emit("query-count-updated", QueryCountPayload { query_id, total_rows });
+        }
+    });
+}
+
+fn spawn_query_count_postgres(
+    app: tauri::AppHandle,
+    pool: sqlx::PgPool,
+    sql: String,
+    database: Option<String>,
+    query_id: String,
+) {
+    tokio::spawn(async move {
+        let sql = sql.trim_end_matches(';');
+        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
+        let mut conn = match pool.acquire().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        if let Some(schema) = &database {
+            let schema_esc = schema.replace('\'', "''");
+            let set_path_sql = format!("SET search_path = '{}'", schema_esc);
+            if !pg_switch_schema(&mut *conn, &set_path_sql).await {
+                return;
+            }
+        }
+        if let Ok(Some(total_rows)) = sqlx::query_scalar::<_, i64>(&count_sql).fetch_optional(&mut *conn).await {
+            let _ = app.emit("query-count-updated", QueryCountPayload { query_id, total_rows });
+        }
+    });
+}
+
+fn spawn_query_count_sqlite(
+    app: tauri::AppHandle,
+    pool: sqlx::SqlitePool,
+    sql: String,
+    query_id: String,
+) {
+    tokio::spawn(async move {
+        let sql = sql.trim_end_matches(';');
+        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
+        let count: Option<i64> = match pool.acquire().await {
+            Ok(mut conn) => sqlx::query_scalar::<_, i64>(&count_sql).fetch_one(&mut *conn).await.ok(),
+            Err(_) => return,
+        };
+        if let Some(total_rows) = count {
+            let _ = app.emit("query-count-updated", QueryCountPayload { query_id, total_rows });
+        }
+    });
+}
+
 // ── Dialect-specific executors ────────────────────────────────────────────────
 
 type ExecuteResult = Result<
@@ -1091,13 +1191,6 @@ async fn execute_mysql(
     let is_select = returns_rows_mysql(sql);
 
     if is_select {
-        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
-        let total_rows: Option<i64> = sqlx::query(&count_sql)
-            .fetch_one(&mut *conn)
-            .await
-            .ok()
-            .and_then(|row| row.try_get::<i64, _>(0).ok());
-
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
@@ -1142,7 +1235,7 @@ async fn execute_mysql(
             })
             .collect();
 
-        Ok((columns, data, total_rows, None))
+        Ok((columns, data, None, None))
     } else {
         let result = sqlx::query(sql)
             .execute(&mut *conn)
@@ -1162,13 +1255,6 @@ async fn execute_postgres(
     let is_select = returns_rows_postgres(sql);
 
     if is_select {
-        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
-        let total_rows: Option<i64> = sqlx::query(&count_sql)
-            .fetch_one(&mut *conn)
-            .await
-            .ok()
-            .and_then(|row| row.try_get::<i64, _>(0).ok());
-
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
@@ -1209,7 +1295,7 @@ async fn execute_postgres(
             .map(|row| (0..row.len()).map(|i| pg_value_to_json(row, i)).collect())
             .collect();
 
-        Ok((columns, data, total_rows, None))
+        Ok((columns, data, None, None))
     } else {
         let result = sqlx::query(sql)
             .execute(&mut *conn)
@@ -1229,13 +1315,6 @@ async fn execute_sqlite(
     let is_select = returns_rows_sqlite(sql);
 
     if is_select {
-        let count_sql = format!("SELECT COUNT(*) FROM ({sql}) AS _count_query");
-        let total_rows: Option<i64> = sqlx::query(&count_sql)
-            .fetch_one(&mut *conn)
-            .await
-            .ok()
-            .and_then(|row| row.try_get::<i64, _>(0).ok());
-
         let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
@@ -1280,7 +1359,7 @@ async fn execute_sqlite(
             })
             .collect();
 
-        Ok((columns, data, total_rows, None))
+        Ok((columns, data, None, None))
     } else {
         let result = sqlx::query(sql)
             .execute(&mut *conn)
@@ -1531,19 +1610,18 @@ pub async fn query_explain(
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
         RemotePool::MySql(pool, _) => {
-            let base_opts = (*pool.connect_options()).clone();
-            let opts = if let Some(db) = &database {
-                base_opts.database(db)
-            } else {
-                base_opts
-            };
-            let mut conn = opts
-                .connect()
+            let mut conn = pool
+                .acquire()
                 .await
                 .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            if let Some(db) = &database {
+                if !mysql_switch_db(&mut conn, db).await {
+                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database {db}")));
+                }
+            }
             let explain_sql = format!("EXPLAIN FORMAT=JSON {sql}");
             let rows = sqlx::query(&explain_sql)
-                .fetch_all(&mut conn)
+                .fetch_all(&mut *conn)
                 .await
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             let raw = if let Some(row) = rows.first() {
@@ -1559,27 +1637,19 @@ pub async fn query_explain(
         }
         RemotePool::Postgres(pool) => {
             let explain_sql = format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}");
-            let rows = if let Some(schema) = &database {
-                let mut conn = (*pool.connect_options())
-                    .clone()
-                    .options([("search_path", schema.as_str())])
-                    .connect()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                sqlx::query(&explain_sql)
-                    .fetch_all(&mut conn)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
-            } else {
-                let mut conn = pool
-                    .acquire()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                sqlx::query(&explain_sql)
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
-            };
+            let mut conn = pool
+                .acquire()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            if let Some(schema) = &database {
+                if !pg_switch_schema(&mut conn, schema).await {
+                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch schema to {schema}")));
+                }
+            }
+            let rows = sqlx::query(&explain_sql)
+                .fetch_all(&mut *conn)
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             let plans: Vec<serde_json::Value> = rows
                 .iter()
                 .map(|row| {

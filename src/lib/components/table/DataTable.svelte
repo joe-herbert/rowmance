@@ -29,10 +29,10 @@
 
   export interface PageInfo {
     pageIndex: number;
-    pageCount: number;
+    pageCount: number | null;
     pageOffset: number;
     pageRowsLength: number;
-    processedRowsLength: number;
+    processedRowsLength: number | null;
   }
 
   interface Props {
@@ -552,8 +552,18 @@
 
   // ── Pagination ────────────────────────────────────────────────────────────
 
-  const totalCount = $derived(_totalRows ?? processedRows.length);
-  const pageCount = $derived(Math.max(1, Math.ceil(totalCount / pageSize)));
+  // Use raw rows.length (server page size) to detect last page, not processedRows which
+  // can be smaller due to client-side filtering even when more server pages exist.
+  const totalCount = $derived<number | null>(
+    _totalRows !== null
+      ? _totalRows
+      : rows.length < pageSize
+        ? rowOffset + rows.length
+        : null,
+  );
+  const pageCount = $derived<number | null>(
+    totalCount !== null ? Math.max(1, Math.ceil(totalCount / pageSize)) : null,
+  );
   const pageRows = $derived(processedRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize));
 
   const pageOffset = $derived(pageIndex * pageSize);

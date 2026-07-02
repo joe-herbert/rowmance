@@ -15,6 +15,7 @@
   import type { TableInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import Fuse from 'fuse.js';
+  import { listen } from '@tauri-apps/api/event';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
@@ -24,6 +25,26 @@
 
   // Schema cache: connectionId → database → tables
   let schemaCache = $state<Map<string, Map<string, TableInfo[]>>>(new Map());
+
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ connectionId: string; database: string; tableName: string; count: number }>(
+      'table-count-updated',
+      (event) => {
+        const { connectionId, database, tableName, count } = event.payload;
+        const connMap = schemaCache.get(connectionId);
+        const tables = connMap?.get(database);
+        if (!tables) return;
+        const updated = tables.map((t) => (t.name === tableName ? { ...t, rowCount: count } : t));
+        const newConnMap = new Map(connMap);
+        newConnMap.set(database, updated);
+        schemaCache = new Map([...schemaCache, [connectionId, newConnMap]]);
+      },
+    ).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  });
   let expandedConnections = $state<Set<string>>(new Set());
   let expandedDatabases = $state<Set<string>>(new Set()); // key: `${connectionId}/${database}`
   let loadingKeys = $state<Set<string>>(new Set());

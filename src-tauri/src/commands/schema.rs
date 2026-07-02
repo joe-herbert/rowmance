@@ -1,10 +1,20 @@
 /// Tauri commands for schema introspection.
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::{AppError, RowmanceError};
+
+#[derive(Clone, Serialize)]
+struct TableCountPayload {
+    #[serde(rename = "connectionId")]
+    connection_id: String,
+    database: String,
+    #[serde(rename = "tableName")]
+    table_name: String,
+    count: i64,
+}
 
 #[derive(Debug, Serialize)]
 pub struct TableInfo {
@@ -53,8 +63,12 @@ pub async fn schema_list_databases(
 }
 
 /// List all tables in the given database/schema.
+/// Row counts are returned immediately using cheap estimates where available.
+/// Accurate counts for tables with a zero/null estimate are fetched in the
+/// background and pushed via the `table-count-updated` Tauri event.
 #[tauri::command]
 pub async fn schema_list_tables(
+    app: tauri::AppHandle,
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     database: String,
@@ -65,40 +79,118 @@ pub async fn schema_list_tables(
             let tables = crate::connections::mysql::list_tables(pool, &database)
                 .await
                 .map_err(AppError::from)?;
-            Ok(tables
-                .into_iter()
-                .map(|t| TableInfo {
-                    name: t.name,
-                    table_type: t.table_type,
-                    row_count: t.row_count,
-                })
-                .collect())
+            let result: Vec<TableInfo> = tables
+                .iter()
+                .map(|t| TableInfo { name: t.name.clone(), table_type: t.table_type.clone(), row_count: t.row_count })
+                .collect();
+            let names: Vec<String> = tables
+                .iter()
+                .filter(|t| t.table_type == "table" && matches!(t.row_count, Some(0) | None))
+                .map(|t| t.name.clone())
+                .collect();
+            if !names.is_empty() {
+                let pool = pool.clone();
+                let conn_id = connection_id.clone();
+                let db = database.clone();
+                tokio::spawn(async move {
+                    let mut set = tokio::task::JoinSet::new();
+                    for name in names {
+                        let pool = pool.clone();
+                        let app = app.clone();
+                        let conn_id = conn_id.clone();
+                        let db = db.clone();
+                        set.spawn(async move {
+                            if let Ok(count) = crate::connections::mysql::count_table(&pool, &db, &name).await {
+                                let _ = app.emit("table-count-updated", TableCountPayload {
+                                    connection_id: conn_id,
+                                    database: db,
+                                    table_name: name,
+                                    count,
+                                });
+                            }
+                        });
+                    }
+                    while set.join_next().await.is_some() {}
+                });
+            }
+            Ok(result)
         }
         RemotePool::Postgres(pool) => {
             let tables = crate::connections::postgres::list_tables(pool, &database)
                 .await
                 .map_err(AppError::from)?;
-            Ok(tables
-                .into_iter()
-                .map(|t| TableInfo {
-                    name: t.name,
-                    table_type: t.table_type,
-                    row_count: t.row_count,
-                })
-                .collect())
+            let result: Vec<TableInfo> = tables
+                .iter()
+                .map(|t| TableInfo { name: t.name.clone(), table_type: t.table_type.clone(), row_count: t.row_count })
+                .collect();
+            let names: Vec<String> = tables
+                .iter()
+                .filter(|t| t.table_type == "table" && matches!(t.row_count, Some(0) | None))
+                .map(|t| t.name.clone())
+                .collect();
+            if !names.is_empty() {
+                let pool = pool.clone();
+                let conn_id = connection_id.clone();
+                let db = database.clone();
+                tokio::spawn(async move {
+                    let mut set = tokio::task::JoinSet::new();
+                    for name in names {
+                        let pool = pool.clone();
+                        let app = app.clone();
+                        let conn_id = conn_id.clone();
+                        let db = db.clone();
+                        set.spawn(async move {
+                            if let Ok(count) = crate::connections::postgres::count_table(&pool, &db, &name).await {
+                                let _ = app.emit("table-count-updated", TableCountPayload {
+                                    connection_id: conn_id,
+                                    database: db,
+                                    table_name: name,
+                                    count,
+                                });
+                            }
+                        });
+                    }
+                    while set.join_next().await.is_some() {}
+                });
+            }
+            Ok(result)
         }
         RemotePool::Sqlite(pool) => {
             let tables = crate::connections::sqlite::list_tables(pool, &database)
                 .await
                 .map_err(AppError::from)?;
-            Ok(tables
-                .into_iter()
-                .map(|t| TableInfo {
-                    name: t.name,
-                    table_type: t.table_type,
-                    row_count: t.row_count,
-                })
-                .collect())
+            let result: Vec<TableInfo> = tables
+                .iter()
+                .map(|t| TableInfo { name: t.name.clone(), table_type: t.table_type.clone(), row_count: t.row_count })
+                .collect();
+            // SQLite tables always start with row_count: None — count them all.
+            let names: Vec<String> = tables.iter().filter(|t| t.table_type == "table").map(|t| t.name.clone()).collect();
+            if !names.is_empty() {
+                let pool = pool.clone();
+                let conn_id = connection_id.clone();
+                let db = database.clone();
+                tokio::spawn(async move {
+                    let mut set = tokio::task::JoinSet::new();
+                    for name in names {
+                        let pool = pool.clone();
+                        let app = app.clone();
+                        let conn_id = conn_id.clone();
+                        let db = db.clone();
+                        set.spawn(async move {
+                            if let Ok(count) = crate::connections::sqlite::count_table(&pool, &name).await {
+                                let _ = app.emit("table-count-updated", TableCountPayload {
+                                    connection_id: conn_id,
+                                    database: db,
+                                    table_name: name,
+                                    count,
+                                });
+                            }
+                        });
+                    }
+                    while set.join_next().await.is_some() {}
+                });
+            }
+            Ok(result)
         }
     }
 }

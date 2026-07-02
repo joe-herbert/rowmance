@@ -9,8 +9,8 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { focusTrap } from '$lib/utils/focus-trap';
-  import { listDatabases, listTables, listColumns } from '$lib/tauri/schema';
-  import type { ColumnInfo, DbType } from '$lib/types';
+  import { useGlobalSearchCache } from '$lib/stores/globalSearchCache.svelte';
+  import type { DbType } from '$lib/types';
 
   interface Props {
     onclose: () => void;
@@ -20,6 +20,7 @@
 
   const connections = useConnections();
   const panels = usePanels();
+  const searchCache = useGlobalSearchCache();
 
   let query = $state('');
   let selectedIndex = $state(0);
@@ -137,133 +138,19 @@
 
   // ── Schema data ────────────────────────────────────────────────────────────
 
-  type DbEntry = {
-    connectionId: string;
-    connectionName: string;
-    connectionColor: string | null;
-    connectionDbType: DbType;
-    connectionReadOnly: boolean;
-    connectionGroupId: string | null;
-    database: string;
-  };
+  type DbEntry = import('$lib/stores/globalSearchCache.svelte').DbEntry;
+  type TableEntry = import('$lib/stores/globalSearchCache.svelte').TableEntry;
+  type ColumnEntry = import('$lib/stores/globalSearchCache.svelte').ColumnEntry;
 
-  type TableEntry = {
-    connectionId: string;
-    connectionName: string;
-    connectionColor: string | null;
-    connectionDbType: DbType;
-    connectionReadOnly: boolean;
-    connectionGroupId: string | null;
-    database: string;
-    name: string;
-    tableType: 'table' | 'view';
-  };
+  const databaseEntries = $derived(searchCache.databaseEntries);
+  const tableEntries = $derived(searchCache.tableEntries);
+  const columnEntries = $derived(searchCache.columnEntries);
 
-  type ColumnEntry = {
-    connectionId: string;
-    connectionName: string;
-    connectionColor: string | null;
-    connectionDbType: DbType;
-    connectionReadOnly: boolean;
-    connectionGroupId: string | null;
-    database: string;
-    table: string;
-    name: string;
-    dataType: string;
-    isPrimaryKey: boolean;
-  };
-
-  let databaseEntries = $state<DbEntry[]>([]);
-  let tableEntries = $state<TableEntry[]>([]);
-  let columnEntries = $state<ColumnEntry[]>([]);
-  let loadingDatabases = $state(true);
-  let loadingTables = $state(false);
-
-  onMount(async () => {
-    const profiles = connections.profiles;
-    if (profiles.length === 0) {
-      loadingDatabases = false;
-      return;
+  onMount(() => {
+    const activeProfiles = connections.profiles.filter((p) => connections.activeIds.has(p.id));
+    if (activeProfiles.length > 0) {
+      searchCache.populate(activeProfiles);
     }
-
-    const dbResults = await Promise.allSettled(
-      profiles.map(async (profile) => {
-        const dbs = await listDatabases(profile.id);
-        return { profile, dbs };
-      }),
-    );
-
-    const newDbs: DbEntry[] = [];
-    for (const result of dbResults) {
-      if (result.status !== 'fulfilled') continue;
-      const { profile, dbs } = result.value;
-      for (const db of dbs) {
-        newDbs.push({
-          connectionId: profile.id,
-          connectionName: profile.name,
-          connectionColor: profile.color,
-          connectionDbType: profile.dbType,
-          connectionReadOnly: profile.readOnly,
-          connectionGroupId: profile.groupId,
-          database: db,
-        });
-      }
-    }
-    databaseEntries = newDbs;
-    loadingDatabases = false;
-
-    loadingTables = true;
-    const tableResults = await Promise.allSettled(
-      newDbs.map(async (entry) => {
-        const tables = await listTables(entry.connectionId, entry.database);
-        return { entry, tables };
-      }),
-    );
-
-    const newTables: TableEntry[] = [];
-    for (const result of tableResults) {
-      if (result.status !== 'fulfilled') continue;
-      const { entry, tables } = result.value;
-      for (const t of tables) {
-        newTables.push({
-          connectionId: entry.connectionId,
-          connectionName: entry.connectionName,
-          connectionColor: entry.connectionColor,
-          connectionDbType: entry.connectionDbType,
-          connectionReadOnly: entry.connectionReadOnly,
-          connectionGroupId: entry.connectionGroupId,
-          database: entry.database,
-          name: t.name,
-          tableType: t.tableType,
-        });
-      }
-    }
-    tableEntries = newTables;
-    loadingTables = false;
-
-    await Promise.allSettled(
-      newTables.map(async (entry) => {
-        try {
-          const cols = await listColumns(entry.connectionId, entry.database, entry.name);
-          const newCols: ColumnEntry[] = cols.map((c: ColumnInfo) => ({
-            connectionId: entry.connectionId,
-            connectionName: entry.connectionName,
-            connectionColor: entry.connectionColor,
-            connectionDbType: entry.connectionDbType,
-            connectionReadOnly: entry.connectionReadOnly,
-            connectionGroupId: entry.connectionGroupId,
-            database: entry.database,
-            table: entry.name,
-            name: c.name,
-            dataType: c.dataType,
-            isPrimaryKey: c.isPrimaryKey,
-          }));
-          columnEntries = [...columnEntries, ...newCols];
-        } catch {
-          // Silently ignore
-        }
-      }),
-    );
   });
 
   // ── Result types ───────────────────────────────────────────────────────────
@@ -498,7 +385,7 @@
     });
   });
 
-  const isLoading = $derived(loadingDatabases || loadingTables);
+  const isLoading = $derived(searchCache.isLoading);
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

@@ -21,6 +21,7 @@
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import { portal } from '$lib/actions/portal';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
+  import { listen } from '@tauri-apps/api/event';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
@@ -50,6 +51,26 @@
   let expandedConnections = $state<Set<string>>(new Set());
   let expandedDatabases = $state<Set<string>>(new Set());
   let loadingKeys = $state<Set<string>>(new Set());
+
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ connectionId: string; database: string; tableName: string; count: number }>(
+      'table-count-updated',
+      (event) => {
+        const { connectionId, database, tableName, count } = event.payload;
+        const connMap = schemaCache.get(connectionId);
+        const tables = connMap?.get(database);
+        if (!tables) return;
+        const updated = tables.map((t) => (t.name === tableName ? { ...t, rowCount: count } : t));
+        const newConnMap = new Map(connMap);
+        newConnMap.set(database, updated);
+        schemaCache = new Map([...schemaCache, [connectionId, newConnMap]]);
+      },
+    ).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  });
 
   // ── Group UI state ────────────────────────────────────────────────────────
 

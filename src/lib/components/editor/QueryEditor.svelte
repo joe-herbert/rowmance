@@ -34,6 +34,7 @@
   import { format as sqlFormat } from 'sql-formatter';
   import type { QueryResult } from '$lib/types';
   import { executeMultiQuery, explainQuery } from '$lib/tauri/query';
+  import { listen } from '@tauri-apps/api/event';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -613,6 +614,20 @@
   }
 
   let unlistenShortcut: (() => void) | null = null;
+  let unlistenQueryCount: (() => void) | null = null;
+
+  onMount(async () => {
+    unlistenQueryCount = await listen<{ queryId: string; totalRows: number }>(
+      'query-count-updated',
+      (event) => {
+        const { queryId, totalRows } = event.payload;
+        const idx = results.findIndex((r) => r.queryId === queryId);
+        if (idx !== -1) {
+          results = results.map((r, i) => (i === idx ? { ...r, totalRows } : r));
+        }
+      },
+    );
+  });
 
   onMount(() => {
     if (!editorContainer) return;
@@ -691,6 +706,7 @@
 
   onDestroy(() => {
     unlistenShortcut?.();
+    unlistenQueryCount?.();
   });
 </script>
 

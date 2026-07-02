@@ -81,21 +81,20 @@ pub async fn list_tables(pool: &PgPool, schema: &str) -> Result<Vec<TableInfo>, 
         })
         .collect();
 
-    for table in &mut tables {
-        if matches!(table.row_count, Some(0) | None) {
-            let schema_esc = schema.replace('"', "\"\"");
-            let tbl_esc = table.name.replace('"', "\"\"");
-            let count: i64 = sqlx::query_scalar(&format!(
-                "SELECT COUNT(*) FROM \"{}\".\"{}\"",
-                schema_esc, tbl_esc
-            ))
-            .fetch_one(pool)
-            .await?;
-            table.row_count = Some(count);
-        }
-    }
-
     Ok(tables)
+}
+
+/// Count all rows in a table. Used by the background count task.
+pub async fn count_table(pool: &PgPool, schema: &str, table: &str) -> Result<i64, RowmanceError> {
+    let schema_esc = schema.replace('"', "\"\"");
+    let tbl_esc = table.replace('"', "\"\"");
+    let count: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*) FROM \"{}\".\"{}\"",
+        schema_esc, tbl_esc
+    ))
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
 }
 
 /// List all columns for a given table in the given schema.
