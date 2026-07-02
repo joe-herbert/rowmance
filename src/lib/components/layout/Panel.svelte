@@ -59,7 +59,7 @@
       />
     {/key}
   {:else if panel.content.kind === 'table_browser'}
-    {#key panel.content}
+    {#key `${panel.content.connectionId}:${panel.content.database}:${panel.content.table}`}
       <TableBrowser
         connectionId={panel.content.connectionId}
         database={panel.content.database}

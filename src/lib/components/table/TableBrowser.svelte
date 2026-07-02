@@ -18,6 +18,12 @@
   };
   const tableSchemaCache = new Map<string, CachedSchema>();
 
+  type SavedFilterState = {
+    filterEditorState: import('$lib/components/table/FilterEditor.svelte').FilterEditorState;
+    searchTerm: string;
+  };
+  const tableBrowserFilterCache = new Map<string, SavedFilterState>();
+
   export function clearTablePendingState(key: string): void {
     tablePendingState.delete(key);
     tableScrollPositions.delete(key);
@@ -105,11 +111,13 @@
 
   let page = $state(1);
   let filterEditorState = $state<FilterEditorState>(
-    untrack(() =>
-      initialFilter?.trim()
+    untrack(() => {
+      const saved = tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`);
+      if (saved) return saved.filterEditorState;
+      return initialFilter?.trim()
         ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: initialFilter }
-        : emptyFilterState(),
-    ),
+        : emptyFilterState();
+    }),
   );
   let showFilterEditor = $state(false);
   let filterButtonEl = $state<HTMLButtonElement | null>(null);
@@ -716,10 +724,21 @@
     const _tbl = table;
     const _filter = initialFilter;
 
+    const cacheKey = `${_conn}:${_db}:${_tbl}`;
+    const saved = tableBrowserFilterCache.get(cacheKey);
+
     page = 1;
-    filterEditorState = initialFilter?.trim()
-      ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: initialFilter }
-      : emptyFilterState();
+    if (saved) {
+      filterEditorState = saved.filterEditorState;
+      localSearchTerm = saved.searchTerm;
+      showLocalSearch = !!saved.searchTerm;
+    } else {
+      filterEditorState = _filter?.trim()
+        ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: _filter }
+        : emptyFilterState();
+      localSearchTerm = '';
+      showLocalSearch = false;
+    }
     showFilterEditor = false;
     showColumnPicker = false;
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
@@ -766,12 +785,31 @@
 
   // ── Local search ──────────────────────────────────────────────────────────
 
-  let showLocalSearch = $state(false);
-  let localSearchTerm = $state('');
+  let showLocalSearch = $state(
+    untrack(() => !!(tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm)),
+  );
+  let localSearchTerm = $state(
+    untrack(() => tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm ?? ''),
+  );
   let localSearchInputEl = $state<HTMLInputElement | null>(null);
 
+  // Persist filter and search state so it survives tab switches (remounts).
+  $effect(() => {
+    const key = `${connectionId}:${database}:${table}`;
+    const snapshot = $state.snapshot({ filterEditorState, searchTerm: localSearchTerm });
+    untrack(() => {
+      tableBrowserFilterCache.set(key, {
+        filterEditorState: snapshot.filterEditorState,
+        searchTerm: snapshot.searchTerm,
+      });
+    });
+  });
+
   function buildSearchWhere(term: string): string {
-    const columns = result?.columns ?? [];
+    const columns =
+      result?.columns ??
+      tableSchemaCache.get(`${connectionId}:${database}:${table}`)?.columns ??
+      [];
     if (columns.length === 0) return '';
     const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
     const pattern = `'%${escaped}%'`;
