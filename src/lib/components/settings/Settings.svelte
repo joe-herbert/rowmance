@@ -23,7 +23,7 @@
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
 
-  type Section = 'general' | 'editor' | 'keyboard' | 'connections' | 'appearance';
+  type Section = 'general' | 'table-view' | 'editor' | 'keyboard' | 'connections' | 'appearance';
 
   let activeSection = $state<Section>(lastActiveSection as Section);
 
@@ -247,14 +247,14 @@
 <div class="settings-page">
   <!-- Sidebar nav -->
   <nav class="settings-nav" aria-label="Settings sections">
-    {#each ['general', 'editor', 'keyboard', 'connections', 'appearance'] as const as section}
+    {#each ['general', 'table-view', 'editor', 'keyboard', 'connections', 'appearance'] as const as section}
       <button
         class="nav-item"
         class:active={activeSection === section}
         onclick={() => (activeSection = section)}
         aria-current={activeSection === section ? 'page' : undefined}
       >
-        {section.charAt(0).toUpperCase() + section.slice(1)}
+        {section === 'table-view' ? 'Table View' : section.charAt(0).toUpperCase() + section.slice(1)}
       </button>
     {/each}
   </nav>
@@ -263,6 +263,64 @@
   <div class="settings-content">
     {#if activeSection === 'general'}
       <h2 class="section-title">General</h2>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">History Max Entries</span>
+            <span class="label-hint">Maximum number of query history entries</span>
+          </div>
+          <input
+            class="setting-input setting-input--sm"
+            type="number"
+            min="50"
+            max="5000"
+            value={settings.historyMaxEntries}
+            onchange={(e) =>
+              update(
+                'historyMaxEntries',
+                parseInt((e.currentTarget as HTMLInputElement).value, 10),
+              )}
+          />
+        </div>
+      </div>
+
+      <h3 class="subsection-title">Saved Queries</h3>
+
+      <div class="setting-group">
+        <div class="setting-row setting-row--block">
+          <div class="setting-label">
+            <span class="label-text">Queries Directory</span>
+            <span class="label-hint">
+              Where .sql query files are stored. Point this to a folder inside a git repo to share
+              queries with your team.
+            </span>
+          </div>
+          <div class="dir-setting">
+            <div class="dir-input-row">
+              <input
+                class="setting-input dir-input"
+                type="text"
+                placeholder={resolvedQueriesDir || 'Default location'}
+                value={settings.savedQueriesDirectory}
+                onchange={async (e) => {
+                  const val = (e.currentTarget as HTMLInputElement).value.trim();
+                  await update('savedQueriesDirectory', val);
+                  resolvedQueriesDir = val || await savedQueriesApi.fileGetDir();
+                }}
+                spellcheck={false}
+                aria-label="Queries directory path"
+              />
+              <button class="action-btn" onclick={browseQueriesDirectory}>Browse…</button>
+            </div>
+            {#if settings.savedQueriesDirectory}
+              <button class="action-btn" onclick={resetQueriesDirectory}>Reset to default</button>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {:else if activeSection === 'table-view'}
+      <h2 class="section-title">Table View</h2>
 
       <div class="setting-group">
         <div class="setting-row">
@@ -312,25 +370,6 @@
 
         <div class="setting-row">
           <div class="setting-label">
-            <span class="label-text">History Max Entries</span>
-            <span class="label-hint">Maximum number of query history entries</span>
-          </div>
-          <input
-            class="setting-input setting-input--sm"
-            type="number"
-            min="50"
-            max="5000"
-            value={settings.historyMaxEntries}
-            onchange={(e) =>
-              update(
-                'historyMaxEntries',
-                parseInt((e.currentTarget as HTMLInputElement).value, 10),
-              )}
-          />
-        </div>
-
-        <div class="setting-row">
-          <div class="setting-label">
             <span class="label-text">Boolean Display</span>
             <span class="label-hint">How boolean and tinyint(1) values are shown in the table</span>
           </div>
@@ -349,8 +388,7 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Click Outside Cell Edit</span>
-            <span class="label-hint">What happens when you click outside an active cell editor</span
-            >
+            <span class="label-hint">What happens when you click outside an active cell editor</span>
           </div>
           <Select
             value={settings.clickOutsideEdit}
@@ -393,41 +431,6 @@
             ]}
             onchange={(v) => update('newRowPosition', v as 'top' | 'bottom')}
           />
-        </div>
-      </div>
-
-      <h3 class="subsection-title">Saved Queries</h3>
-
-      <div class="setting-group">
-        <div class="setting-row setting-row--block">
-          <div class="setting-label">
-            <span class="label-text">Queries Directory</span>
-            <span class="label-hint">
-              Where .sql query files are stored. Point this to a folder inside a git repo to share
-              queries with your team.
-            </span>
-          </div>
-          <div class="dir-setting">
-            <div class="dir-input-row">
-              <input
-                class="setting-input dir-input"
-                type="text"
-                placeholder={resolvedQueriesDir || 'Default location'}
-                value={settings.savedQueriesDirectory}
-                onchange={async (e) => {
-                  const val = (e.currentTarget as HTMLInputElement).value.trim();
-                  await update('savedQueriesDirectory', val);
-                  resolvedQueriesDir = val || await savedQueriesApi.fileGetDir();
-                }}
-                spellcheck={false}
-                aria-label="Queries directory path"
-              />
-              <button class="action-btn" onclick={browseQueriesDirectory}>Browse…</button>
-            </div>
-            {#if settings.savedQueriesDirectory}
-              <button class="action-btn" onclick={resetQueriesDirectory}>Reset to default</button>
-            {/if}
-          </div>
         </div>
       </div>
     {:else if activeSection === 'editor'}
