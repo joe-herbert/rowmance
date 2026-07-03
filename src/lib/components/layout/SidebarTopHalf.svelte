@@ -368,7 +368,7 @@
                 onblur={() => commitRename(item)}
               />
             {:else}
-              <span class="panel-label">{panelLabel(item.content)}</span>
+              <span class="panel-label" title={panelLabel(item.content)}>{panelLabel(item.content)}</span>
             {/if}
             {#if itemIsDirty(item)}
               <span class="dirty-dot" title="Unsaved changes" aria-label="Has unsaved changes"
