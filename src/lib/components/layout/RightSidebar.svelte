@@ -170,6 +170,7 @@
   let savedFolders = $state<FileQueryFolder[]>([]);
   let savedQueries = $state<FileQuery[]>([]);
   let savedLoading = $state(false);
+  let savedLoaded = $state(false);
   let expandedFolders = $state<Set<string>>(new Set());
 
   // Inline new-folder input
@@ -224,6 +225,7 @@
       toast.addToast(errorMessage(err), 'error', 0);
     } finally {
       savedLoading = false;
+      savedLoaded = true;
     }
   }
 
@@ -334,8 +336,29 @@
 
   async function confirmDeleteQuery() {
     if (!confirmDeleteQueryId) return;
-    await savedQueriesApi.fileDeleteSavedQuery(confirmDeleteQueryId);
+    const deletingId = confirmDeleteQueryId;
+    const openTab = panelStore.openItems.find(
+      (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === deletingId,
+    );
+    if (openTab?.content.kind === 'query_editor' && openTab.content.editorId) {
+      panelStore.updateQueryEditorMeta(openTab.content.editorId, { savedQueryId: undefined });
+    }
+    await savedQueriesApi.fileDeleteSavedQuery(deletingId);
     confirmDeleteQueryId = null;
+    await loadSavedQueries();
+  }
+
+  let confirmDeleteFolderId = $state<string | null>(null);
+  let confirmDeleteFolderName = $state('');
+
+  async function confirmDeleteFolder() {
+    if (!confirmDeleteFolderId) return;
+    try {
+      await savedQueriesApi.fileDeleteFolder(confirmDeleteFolderId);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+    }
+    confirmDeleteFolderId = null;
     await loadSavedQueries();
   }
 
@@ -401,19 +424,15 @@
     await loadSavedQueries();
   }
 
-  async function handleSavedCtxDelete() {
+  function handleSavedCtxDelete() {
     if (!savedCtxMenu) return;
     if (savedCtxMenu.kind === 'query') {
       confirmDeleteQueryId = savedCtxMenu.id;
       savedCtxMenu = null;
     } else {
-      try {
-        await savedQueriesApi.fileDeleteFolder(savedCtxMenu.id);
-      } catch (err) {
-        toast.addToast(errorMessage(err), 'error', 0);
-      }
+      confirmDeleteFolderId = savedCtxMenu.id;
+      confirmDeleteFolderName = savedCtxMenu.name;
       savedCtxMenu = null;
-      await loadSavedQueries();
     }
   }
 
@@ -437,12 +456,7 @@
 
   // Load saved queries when the panel first opens.
   $effect(() => {
-    if (
-      activePanel === 'saved' &&
-      savedFolders.length === 0 &&
-      savedQueries.length === 0 &&
-      !savedLoading
-    ) {
+    if (activePanel === 'saved' && !savedLoaded && !savedLoading) {
       loadSavedQueries();
     }
   });
@@ -860,6 +874,8 @@
 
         {#if savedLoading}
           <div class="loading-row">Loading…</div>
+        {:else if savedFolders.length === 0 && savedQueries.length === 0}
+          <div class="empty-row">No saved queries yet.</div>
         {:else}
           <ul class="saved-list" role="tree" aria-label="Saved queries">
             <!-- Unfiled queries (also shown as a drop target while dragging a query) -->
@@ -1139,9 +1155,6 @@
               </li>
             {/each}
 
-            {#if savedFolders.length === 0 && savedQueries.length === 0}
-              <li><div class="empty-row">No saved queries yet.</div></li>
-            {/if}
           </ul>
         {/if}
       </div>
@@ -1302,6 +1315,20 @@
     onconfirm={confirmDeleteQuery}
     oncancel={() => {
       confirmDeleteQueryId = null;
+    }}
+  />
+{/if}
+
+{#if confirmDeleteFolderId !== null}
+  <ConfirmDialog
+    title="Delete folder"
+    message={`Delete the folder "${confirmDeleteFolderName}"? Any queries inside will become unfiled. This cannot be undone.`}
+    confirmText="Delete"
+    cancelText="Cancel"
+    danger={true}
+    onconfirm={confirmDeleteFolder}
+    oncancel={() => {
+      confirmDeleteFolderId = null;
     }}
   />
 {/if}

@@ -129,6 +129,13 @@
   $effect(() => {
     if (initialSavedQueryName !== undefined) currentSavedQueryName = initialSavedQueryName;
   });
+
+  $effect(() => {
+    if (initialSavedQueryId === undefined && currentSavedQueryId !== undefined) {
+      currentSavedQueryId = undefined;
+      savedSql = null;
+    }
+  });
   let saveDialogOpen = $state(false);
   let saveNameInput = $state('');
   let isSaving = $state(false);
@@ -230,7 +237,7 @@
       }
       return;
     }
-    saveNameInput = '';
+    saveNameInput = currentSavedQueryName ?? '';
     saveDialogOpen = true;
   }
 
