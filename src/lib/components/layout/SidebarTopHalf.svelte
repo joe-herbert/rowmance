@@ -13,7 +13,8 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
-  import { portal } from '$lib/actions/portal';
+  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+  import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
 
   const panelStore = usePanels();
@@ -118,19 +119,9 @@
   let contextMenuItemId = $state<string | null>(null);
   let contextMenuTop = $state(0);
   let contextMenuLeft = $state(0);
-  let contextMenuEl = $state<HTMLDivElement | undefined>(undefined);
   let renamingItemId = $state<string | null>(null);
   let renameValue = $state('');
   let renameInputEl = $state<HTMLInputElement | undefined>(undefined);
-
-  $effect(() => {
-    if (!contextMenuItemId) return;
-    function onMousedown(e: MouseEvent) {
-      if (!contextMenuEl?.contains(e.target as Node)) contextMenuItemId = null;
-    }
-    document.addEventListener('mousedown', onMousedown, true);
-    return () => document.removeEventListener('mousedown', onMousedown, true);
-  });
 
   $effect(() => {
     if (!renamingItemId) return;
@@ -424,41 +415,30 @@
 {#if contextMenuItemId !== null}
   {@const contextItem = panelStore.openItems.find((i) => i.id === contextMenuItemId)}
   {#if contextItem}
-    <div
-      bind:this={contextMenuEl}
-      class="context-menu"
-      role="menu"
-      style="top:{contextMenuTop}px;left:{contextMenuLeft}px"
-      use:portal
+    <ContextMenu
+      x={contextMenuLeft}
+      y={contextMenuTop}
+      open={true}
+      onclose={() => (contextMenuItemId = null)}
     >
       {#if contextItem.content.kind === 'query_editor' && contextItem.content.savedQueryId}
-        <button class="ctx-item" role="menuitem" onclick={() => startRename(contextItem)}
-          >Rename</button
-        >
+        <CtxItem onclick={() => startRename(contextItem)}>Rename</CtxItem>
       {/if}
       {#if panelStore.openItems.length > 1}
-        <button
-          class="ctx-item"
-          role="menuitem"
-          onclick={() => {
-            const id = contextItem.id;
-            contextMenuItemId = null;
-            panelStore.closeOtherItems(id);
-          }}>Close other tabs</button
-        >
+        <CtxItem onclick={() => {
+          const id = contextItem.id;
+          contextMenuItemId = null;
+          panelStore.closeOtherItems(id);
+        }}>Close other tabs</CtxItem>
       {/if}
       {#if 'connectionId' in contextItem.content}
-        <button
-          class="ctx-item"
-          role="menuitem"
-          onclick={() => {
-            const connId = (contextItem.content as { connectionId: string }).connectionId;
-            contextMenuItemId = null;
-            panelStore.closeItemsForConnection(connId);
-          }}>Close all tabs for this connection</button
-        >
+        <CtxItem onclick={() => {
+          const connId = (contextItem.content as { connectionId: string }).connectionId;
+          contextMenuItemId = null;
+          panelStore.closeItemsForConnection(connId);
+        }}>Close all tabs for this connection</CtxItem>
       {/if}
-    </div>
+    </ContextMenu>
   {/if}
 {/if}
 
@@ -652,34 +632,6 @@
     outline: none;
   }
 
-  .context-menu {
-    position: fixed;
-    z-index: 500;
-    min-width: 160px;
-    padding: var(--spacing-1) 0;
-    background: var(--color-bg-overlay);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
-  }
-
-  .ctx-item {
-    display: block;
-    width: 100%;
-    padding: var(--spacing-1) var(--spacing-3);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-    background: transparent;
-  }
-
-  .ctx-item:hover {
-    background: var(--color-bg-active);
-  }
 
   .close-btn {
     flex-shrink: 0;

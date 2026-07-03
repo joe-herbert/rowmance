@@ -21,7 +21,9 @@
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
-  import { portal } from '$lib/actions/portal';
+  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+  import CtxItem from '$lib/components/ui/CtxItem.svelte';
+  import CtxSep from '$lib/components/ui/CtxSep.svelte';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
   import { listen } from '@tauri-apps/api/event';
 
@@ -817,13 +819,8 @@
 
   function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      closeAllCtx();
       renamingGroupId = null;
     }
-  }
-
-  function handleWindowClick(e: MouseEvent) {
-    if (!(e.target as Element | null)?.closest('.ctx-menu')) closeAllCtx();
   }
 
   // ── System database / table detection ────────────────────────────────────
@@ -850,7 +847,7 @@
   });
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="connection-tree">
@@ -1171,336 +1168,140 @@
 {/snippet}
 
 <!-- Context menus -->
-{#if panelCtx}
-  <div class="ctx-menu" role="menu" style="top:{panelCtx.y}px;left:{panelCtx.x}px" use:portal>
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        panelCtx = null;
-        newConnectionGroupId = undefined;
-        showAddForm = true;
-      }}>New Connection</button
-    >
-    <button class="ctx-item" role="menuitem" onclick={startCreateGroup}>New Group</button>
-    <div class="ctx-sep" role="separator"></div>
-    <button class="ctx-item" role="menuitem" onclick={handleImportConnections}>Import Connections…</button>
-    {#if connectionStore.profiles.length > 0}
-      <button class="ctx-item" role="menuitem" onclick={handleExportConnections}>Export Connections…</button>
-    {/if}
-    {#if connectionStore.activeIds.size > 0}
-      <div class="ctx-sep" role="separator"></div>
-      <button class="ctx-item" role="menuitem" onclick={ctxDisconnectAll}>Disconnect All</button>
-    {/if}
-  </div>
-{/if}
+<ContextMenu
+  x={panelCtx?.x ?? 0}
+  y={panelCtx?.y ?? 0}
+  open={panelCtx !== null}
+  onclose={closeAllCtx}
+>
+  <CtxItem onclick={() => { panelCtx = null; newConnectionGroupId = undefined; showAddForm = true; }}>New Connection</CtxItem>
+  <CtxItem onclick={startCreateGroup}>New Group</CtxItem>
+  <CtxSep />
+  <CtxItem onclick={handleImportConnections}>Import Connections…</CtxItem>
+  {#if connectionStore.profiles.length > 0}
+    <CtxItem onclick={handleExportConnections}>Export Connections…</CtxItem>
+  {/if}
+  {#if connectionStore.activeIds.size > 0}
+    <CtxSep />
+    <CtxItem onclick={ctxDisconnectAll}>Disconnect All</CtxItem>
+  {/if}
+</ContextMenu>
 
 {#if tableCtx}
   {@const tableCtxProfile = connectionStore.getById(tableCtx.connectionId)}
-  <div class="ctx-menu" role="menu" style="top:{tableCtx.y}px;left:{tableCtx.x}px" use:portal>
-    <button class="ctx-item" role="menuitem" onclick={ctxOpenTable}>Open Table</button>
-    <button class="ctx-item" role="menuitem" onclick={ctxViewDdl}>View DDL</button>
-    <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
+  <ContextMenu
+    x={tableCtx.x}
+    y={tableCtx.y}
+    open={true}
+    onclose={closeAllCtx}
+  >
+    <CtxItem onclick={ctxOpenTable}>Open Table</CtxItem>
+    <CtxItem onclick={ctxViewDdl}>View DDL</CtxItem>
+    <CtxItem onclick={ctxCopyName}>Copy Name</CtxItem>
     {#if !tableCtxProfile?.readOnly}
-      <div class="ctx-sep" role="separator"></div>
-      <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDropTable}
-        >Drop Table</button
-      >
+      <CtxSep />
+      <CtxItem danger onclick={ctxDropTable}>Drop Table</CtxItem>
     {/if}
-  </div>
+  </ContextMenu>
 {/if}
 
 {#if dbCtx}
   {@const dbCtxProfile = connectionStore.getById(dbCtx.connectionId)}
-  <div class="ctx-menu" role="menu" style="top:{dbCtx.y}px;left:{dbCtx.x}px" use:portal>
+  <ContextMenu x={dbCtx.x} y={dbCtx.y} open={true} onclose={closeAllCtx}>
     {#if !dbCtxProfile?.readOnly}
-      <button class="ctx-item" role="menuitem" onclick={ctxNewTable}>New Table</button>
-      <div class="ctx-sep" role="separator"></div>
+      <CtxItem onclick={ctxNewTable}>New Table</CtxItem>
+      <CtxSep />
     {/if}
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (dbCtx) {
-          panelStore.openInFocused({
-            kind: 'query_editor',
-            connectionId: dbCtx.connectionId,
-            database: dbCtx.database,
-          });
-          dbCtx = null;
-        }
-      }}>New Query Editor</button
-    >
-    <div class="ctx-sep" role="separator"></div>
-    <button class="ctx-item" role="menuitem" onclick={ctxRefreshDatabase}>Refresh</button>
-    <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
-    <div class="ctx-sep" role="separator"></div>
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (dbCtx) {
-          navigator.clipboard.writeText(dbCtx.database);
-          dbCtx = null;
-        }
-      }}>Copy Name</button
-    >
+    <CtxItem onclick={() => { if (dbCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: dbCtx.connectionId, database: dbCtx.database }); dbCtx = null; } }}>New Query Editor</CtxItem>
+    <CtxSep />
+    <CtxItem onclick={ctxRefreshDatabase}>Refresh</CtxItem>
+    <CtxItem onclick={ctxOpenErd}>Open ERD</CtxItem>
+    <CtxSep />
+    <CtxItem onclick={() => { if (dbCtx) { navigator.clipboard.writeText(dbCtx.database); dbCtx = null; } }}>Copy Name</CtxItem>
     {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dbType !== 'sqlite'}
-      <div class="ctx-sep" role="separator"></div>
-      <button class="ctx-item ctx-item--danger" role="menuitem" onclick={ctxDropDatabase}>
+      <CtxSep />
+      <CtxItem danger onclick={ctxDropDatabase}>
         {dbCtxProfile?.dbType === 'postgres' ? 'Drop Schema' : 'Drop Database'}
-      </button>
+      </CtxItem>
     {/if}
-  </div>
+  </ContextMenu>
 {/if}
 
 {#if grpCtx}
-  <div class="ctx-menu" role="menu" style="top:{grpCtx.y}px;left:{grpCtx.x}px" use:portal>
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (grpCtx) {
-          newConnectionGroupId = grpCtx.group.id;
-          showAddForm = true;
-          grpCtx = null;
-        }
-      }}>New Connection in Group</button
-    >
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (grpCtx) {
-          renamingGroupId = grpCtx.group.id;
-          renameValue = grpCtx.group.name;
-          renameError = '';
-          grpCtx = null;
-        }
-      }}>Rename Group</button
-    >
+  <ContextMenu x={grpCtx.x} y={grpCtx.y} open={true} onclose={closeAllCtx}>
+    <CtxItem onclick={() => { if (grpCtx) { newConnectionGroupId = grpCtx.group.id; showAddForm = true; grpCtx = null; } }}>New Connection in Group</CtxItem>
+    <CtxItem onclick={() => { if (grpCtx) { renamingGroupId = grpCtx.group.id; renameValue = grpCtx.group.name; renameError = ''; grpCtx = null; } }}>Rename Group</CtxItem>
     {#if (grouped().byGroup.get(grpCtx.group.id) ?? []).length > 0}
-      <div class="ctx-sep" role="separator"></div>
-      <button
-        class="ctx-item"
-        role="menuitem"
-        onclick={() => {
-          if (grpCtx) {
-            const ids = (grouped().byGroup.get(grpCtx.group.id) ?? []).map((p) => p.id);
-            exportPreselectIds = ids;
-            grpCtx = null;
-            showExportDialog = true;
-          }
-        }}>Export Connections…</button
-      >
+      <CtxSep />
+      <CtxItem onclick={() => { if (grpCtx) { const ids = (grouped().byGroup.get(grpCtx.group.id) ?? []).map((p) => p.id); exportPreselectIds = ids; grpCtx = null; showExportDialog = true; } }}>Export Connections…</CtxItem>
     {/if}
-    <div class="ctx-sep" role="separator"></div>
-    <button
-      class="ctx-item ctx-item--danger"
-      role="menuitem"
-      onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</button
-    >
-  </div>
+    <CtxSep />
+    <CtxItem danger onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</CtxItem>
+  </ContextMenu>
 {/if}
 
 {#if connCtx}
   {@const connConnected = isConnected(connCtx.profile.id)}
-  <div class="ctx-menu" role="menu" style="top:{connCtx.y}px;left:{connCtx.x}px" use:portal>
-    <button class="ctx-item" role="menuitem" onclick={ctxNewQueryEditor}>New Query Editor</button>
+  <ContextMenu x={connCtx.x} y={connCtx.y} open={true} onclose={closeAllCtx}>
+    <CtxItem onclick={ctxNewQueryEditor}>New Query Editor</CtxItem>
     {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dbType !== 'sqlite'}
-      <button class="ctx-item" role="menuitem" onclick={ctxNewDatabase}
-        >New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</button
-      >
+      <CtxItem onclick={ctxNewDatabase}>New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</CtxItem>
     {/if}
-    <button class="ctx-item" role="menuitem" onclick={ctxManageUsers}>Manage Users</button>
-    <div class="ctx-sep" role="separator"></div>
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (connCtx) {
-          editingProfile = connCtx.profile;
-          connCtx = null;
-        }
-      }}>Edit</button
-    >
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={async () => {
-        if (connCtx) {
-          const id = connCtx.profile.id;
-          connCtx = null;
-          try {
-            await connectionsApi.duplicateConnection(id);
-            await connectionStore.load();
-          } catch (err) {
-            errorModal = { title: 'Duplicate Failed', message: errorMessage(err) };
-          }
-        }
-      }}>Duplicate</button
-    >
-    <button class="ctx-item" role="menuitem" onclick={ctxConnToggleReadOnly}
-      >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</button
-    >
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (connCtx) {
-          navigator.clipboard.writeText(connCtx.profile.name);
-          connCtx = null;
-        }
-      }}>Copy Name</button
-    >
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={async () => {
-        if (connCtx) {
-          const id = connCtx.profile.id;
-          connCtx = null;
-          try {
-            const url = await connectionsApi.getConnectionDbUrl(id);
-            await navigator.clipboard.writeText(url);
-          } catch (err) {
-            errorModal = { title: 'Copy Failed', message: errorMessage(err) };
-          }
-        }
-      }}>Copy as Database URL</button
-    >
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (connCtx) {
-          exportSingleId = connCtx.profile.id;
-          connCtx = null;
-          showExportDialog = true;
-        }
-      }}>Export Connection…</button
-    >
-    <div class="ctx-sep" role="separator"></div>
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
-        connCtx = null;
-      }}
-    >
+    <CtxItem onclick={ctxManageUsers}>Manage Users</CtxItem>
+    <CtxSep />
+    <CtxItem onclick={() => { if (connCtx) { editingProfile = connCtx.profile; connCtx = null; } }}>Edit</CtxItem>
+    <CtxItem onclick={async () => { if (connCtx) { const id = connCtx.profile.id; connCtx = null; try { await connectionsApi.duplicateConnection(id); await connectionStore.load(); } catch (err) { errorModal = { title: 'Duplicate Failed', message: errorMessage(err) }; } } }}>Duplicate</CtxItem>
+    <CtxItem onclick={ctxConnToggleReadOnly}>{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</CtxItem>
+    <CtxItem onclick={() => { if (connCtx) { navigator.clipboard.writeText(connCtx.profile.name); connCtx = null; } }}>Copy Name</CtxItem>
+    <CtxItem onclick={async () => { if (connCtx) { const id = connCtx.profile.id; connCtx = null; try { const url = await connectionsApi.getConnectionDbUrl(id); await navigator.clipboard.writeText(url); } catch (err) { errorModal = { title: 'Copy Failed', message: errorMessage(err) }; } } }}>Copy as Database URL</CtxItem>
+    <CtxItem onclick={() => { if (connCtx) { exportSingleId = connCtx.profile.id; connCtx = null; showExportDialog = true; } }}>Export Connection…</CtxItem>
+    <CtxSep />
+    <CtxItem onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); connCtx = null; }}>
       {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
-    </button>
-    <div class="ctx-sep" role="separator"></div>
+    </CtxItem>
+    <CtxSep />
     {#if connConnected}
-      <button class="ctx-item" role="menuitem" onclick={ctxRefreshConnection}>Refresh</button>
-      <button class="ctx-item" role="menuitem" onclick={ctxConnDisconnect}>Disconnect</button>
+      <CtxItem onclick={ctxRefreshConnection}>Refresh</CtxItem>
+      <CtxItem onclick={ctxConnDisconnect}>Disconnect</CtxItem>
     {:else}
-      <button
-        class="ctx-item"
-        role="menuitem"
-        onclick={() => {
-          if (connCtx) {
-            handleConnect(connCtx.profile);
-            connCtx = null;
-          }
-        }}>Connect</button
-      >
+      <CtxItem onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</CtxItem>
     {/if}
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        if (connCtx) {
-          panelStore.closeItemsForConnection(connCtx.profile.id);
-          connCtx = null;
-        }
-      }}>Close All Tabs</button
-    >
-    <div class="ctx-sep" role="separator"></div>
+    <CtxItem onclick={() => { if (connCtx) { panelStore.closeItemsForConnection(connCtx.profile.id); connCtx = null; } }}>Close All Tabs</CtxItem>
+    <CtxSep />
     {#if connectionStore.groups.length > 0}
       <div
-        class="ctx-item ctx-item--submenu"
+        class="ctx-item--submenu"
         role="menuitem"
         tabindex="0"
         aria-haspopup="true"
-        onmouseenter={() => {
-          if (moveToGroupSubmenuTimer) {
-            clearTimeout(moveToGroupSubmenuTimer);
-            moveToGroupSubmenuTimer = null;
-          }
-          moveToGroupSubmenuOpen = true;
-        }}
-        onmouseleave={() => {
-          moveToGroupSubmenuTimer = setTimeout(() => {
-            moveToGroupSubmenuOpen = false;
-          }, 150);
-        }}
+        onmouseenter={() => { if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; } moveToGroupSubmenuOpen = true; }}
+        onmouseleave={() => { moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150); }}
       >
         Move to Group
-        <svg
-          class="ctx-caret"
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
-        >
+        <svg class="ctx-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         {#if moveToGroupSubmenuOpen}
           <div
             class="ctx-submenu"
             role="menu"
             tabindex="0"
-            onmouseenter={() => {
-              if (moveToGroupSubmenuTimer) {
-                clearTimeout(moveToGroupSubmenuTimer);
-                moveToGroupSubmenuTimer = null;
-              }
-            }}
-            onmouseleave={() => {
-              moveToGroupSubmenuTimer = setTimeout(() => {
-                moveToGroupSubmenuOpen = false;
-              }, 150);
-            }}
+            onmouseenter={() => { if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; } }}
+            onmouseleave={() => { moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150); }}
           >
             {#each connectionStore.groups.filter((g) => g.id !== connCtx?.profile.groupId) as g (g.id)}
-              <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(g.id)}
-                >{g.name}</button
-              >
+              <CtxItem onclick={() => ctxMoveToGroup(g.id)}>{g.name}</CtxItem>
             {/each}
           </div>
         {/if}
       </div>
       {#if connCtx.profile.groupId !== null}
-        <button class="ctx-item" role="menuitem" onclick={() => ctxMoveToGroup(null)}
-          >Remove from Group</button
-        >
+        <CtxItem onclick={() => ctxMoveToGroup(null)}>Remove from Group</CtxItem>
       {/if}
-      <div class="ctx-sep" role="separator"></div>
+      <CtxSep />
     {/if}
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        connCtx = null;
-        startCreateGroup();
-      }}>New Group</button
-    >
-    <div class="ctx-sep" role="separator"></div>
-    <button
-      class="ctx-item ctx-item--danger"
-      role="menuitem"
-      onclick={() => {
-        if (connCtx) {
-          deleteConnection(connCtx.profile);
-          connCtx = null;
-        }
-      }}>Delete</button
-    >
-  </div>
+    <CtxItem onclick={() => { connCtx = null; startCreateGroup(); }}>New Group</CtxItem>
+    <CtxSep />
+    <CtxItem danger onclick={() => { if (connCtx) { deleteConnection(connCtx.profile); connCtx = null; } }}>Delete</CtxItem>
+  </ContextMenu>
 {/if}
 
 {#if createDbModal}
@@ -2330,46 +2131,20 @@
 
   /* ── Context menu ── */
 
-  .ctx-menu {
-    position: fixed;
-    z-index: 500;
-    min-width: 160px;
-    padding: var(--spacing-1) 0;
-    background: var(--color-bg-overlay);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
-  }
-
-  .ctx-item {
-    display: block;
-    width: 100%;
-    padding: var(--spacing-1) var(--spacing-3);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-    background: transparent;
-  }
-
-  .ctx-item:hover {
-    background: var(--color-bg-active);
-  }
-  .ctx-item--danger {
-    color: var(--color-danger);
-  }
-
   .ctx-item--submenu {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
+    padding: var(--spacing-1) var(--spacing-3);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    color: var(--color-text-primary);
     cursor: default;
     -webkit-user-select: none;
     user-select: none;
+    transition: background var(--transition-fast);
   }
   .ctx-item--submenu:hover {
     background: var(--color-bg-active);
@@ -2393,12 +2168,6 @@
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     z-index: 1;
-  }
-
-  .ctx-sep {
-    height: 1px;
-    margin: var(--spacing-1) 0;
-    background: var(--color-border);
   }
 
   /* ── Create modals ── */

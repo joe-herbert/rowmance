@@ -6,7 +6,9 @@
 <script lang="ts">
   import { untrack, onMount, tick } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
-  import { portal } from '$lib/actions/portal';
+  import CtxMenuContainer from '$lib/components/ui/ContextMenu.svelte';
+  import CtxItem from '$lib/components/ui/CtxItem.svelte';
+  import CtxSep from '$lib/components/ui/CtxSep.svelte';
   import CellEditor from './CellEditor.svelte';
   import CellEditorModal from './CellEditorModal.svelte';
   import CellViewModal from './CellViewModal.svelte';
@@ -1857,35 +1859,8 @@
   // ── Header context menu / rename ─────────────────────────────────────────
 
   let headerContextMenu = $state<{ x: number; y: number; colName: string } | null>(null);
-  let headerContextMenuEl = $state<HTMLElement | null>(null);
-  let hdrCtxMenuLeft = $state(0);
-  let hdrCtxMenuTop = $state(0);
   let renamingHeader = $state<{ colName: string; value: string } | null>(null);
   let renameHeaderInputEl = $state<HTMLInputElement | null>(null);
-
-  let hdrCtxMenuMaxHeight = $state<number | null>(null);
-
-  $effect(() => {
-    if (!headerContextMenu) return;
-    const { x, y } = headerContextMenu;
-    hdrCtxMenuLeft = x;
-    hdrCtxMenuTop = y;
-    hdrCtxMenuMaxHeight = null;
-    tick().then(() => {
-      if (!headerContextMenuEl || !headerContextMenu) return;
-      const { width, height } = headerContextMenuEl.getBoundingClientRect();
-      const margin = 8;
-      const maxH = window.innerHeight - margin * 2;
-      hdrCtxMenuLeft = Math.min(x, window.innerWidth - width - margin);
-      if (height > maxH) {
-        hdrCtxMenuTop = margin;
-        hdrCtxMenuMaxHeight = maxH;
-      } else {
-        hdrCtxMenuTop = Math.min(y, window.innerHeight - height - margin);
-        hdrCtxMenuMaxHeight = null;
-      }
-    });
-  });
 
   function openHeaderContextMenu(e: MouseEvent, colName: string): void {
     e.preventDefault();
@@ -1944,33 +1919,6 @@
   let contextMenuSnapshotIsMultiCell = $state(false);
   let contextMenuSnapshotIsMultiCol = $state(false);
   let contextMenuSnapshotIsRowSelection = $state(false);
-  let contextMenuEl = $state<HTMLElement | null>(null);
-  let ctxMenuLeft = $state(0);
-  let ctxMenuTop = $state(0);
-
-  let ctxMenuMaxHeight = $state<number | null>(null);
-
-  $effect(() => {
-    if (!contextMenu) return;
-    const { x, y } = contextMenu;
-    ctxMenuLeft = x;
-    ctxMenuTop = y;
-    ctxMenuMaxHeight = null;
-    tick().then(() => {
-      if (!contextMenuEl || !contextMenu) return;
-      const { width, height } = contextMenuEl.getBoundingClientRect();
-      const margin = 8;
-      const maxH = window.innerHeight - margin * 2;
-      ctxMenuLeft = Math.min(x, window.innerWidth - width - margin);
-      if (height > maxH) {
-        ctxMenuTop = margin;
-        ctxMenuMaxHeight = maxH;
-      } else {
-        ctxMenuTop = Math.min(y, window.innerHeight - height - margin);
-        ctxMenuMaxHeight = null;
-      }
-    });
-  });
 
   function handleRowContextMenu(
     e: MouseEvent,
@@ -2891,8 +2839,6 @@
   }
 
   function handleWindowClick(e: MouseEvent): void {
-    if (!(e.target as Element | null)?.closest('.context-menu')) dismissContextMenu();
-    if (!(e.target as Element | null)?.closest('.context-menu')) headerContextMenu = null;
     if (!(e.target as Element | null)?.closest('.data-table-wrapper')) {
       rowSelectionMode = false;
       rowAnchor = null;
@@ -3791,191 +3737,138 @@
   {/if}
 
   <!-- Context menu -->
-  {#if contextMenu !== null}
-    <div
-      class="context-menu"
-      role="menu"
-      tabindex="-1"
-      style="left: {ctxMenuLeft}px; top: {ctxMenuTop}px;{ctxMenuMaxHeight !== null
-        ? ` max-height: ${ctxMenuMaxHeight}px;`
-        : ''}"
-      bind:this={contextMenuEl}
-      onclick={(e) => e.stopPropagation()}
-      onmousedown={(e) => e.preventDefault()}
-      onkeydown={handleContextMenuKeydown}
-      use:portal
-    >
+  <CtxMenuContainer
+    x={contextMenu?.x ?? 0}
+    y={contextMenu?.y ?? 0}
+    open={contextMenu !== null}
+    onclose={dismissContextMenu}
+    minWidth={220}
+    zIndex={400}
+  >
+    {#if contextMenu !== null}
       {#if contextMenu.isNewRow}
         {#if contextMenu.colName !== null}
           {#if editable && !readOnly && !contextMenuSnapshotIsMultiCell}
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              onclick={() => openNewRowInlineEditFromContextMenu()}
-            >
+            <CtxItem onclick={() => openNewRowInlineEditFromContextMenu()}>
               Edit
-            </button>
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              onclick={() => openNewRowModalFromContextMenu()}
-            >
+            </CtxItem>
+            <CtxItem onclick={() => openNewRowModalFromContextMenu()}>
               Edit in modal
-            </button>
+            </CtxItem>
           {/if}
           {#if !contextMenuSnapshotIsMultiCell}
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              onclick={() => openNewRowViewModalFromContextMenu()}
-            >
+            <CtxItem onclick={() => openNewRowViewModalFromContextMenu()}>
               View in modal
-            </button>
+            </CtxItem>
           {/if}
-          <div class="context-menu-separator"></div>
+          <CtxSep />
           {#if editable && !readOnly}
-            <button class="context-menu-item" role="menuitem" onclick={() => setSelectionNull()}>
+ <CtxItem onclick={() => setSelectionNull()}>
               Set to NULL
-            </button>
+            </CtxItem>
             {#if !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
-              <button class="context-menu-item" role="menuitem" onclick={setNowFromContextMenu}>
+ <CtxItem onclick={setNowFromContextMenu}>
                 Set to NOW
-              </button>
+              </CtxItem>
             {/if}
-            <div class="context-menu-separator"></div>
+            <CtxSep />
           {/if}
           {#if contextMenuSnapshotHasFocus}
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              onclick={() => {
+            <CtxItem onclick={() => {
                 copySelection();
                 dismissContextMenu();
-              }}
-            >
+              }}>
               {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
-            </button>
+            </CtxItem>
             {#if editable && !readOnly}
-              <button
-                class="context-menu-item"
-                role="menuitem"
-                onclick={() => {
+              <CtxItem onclick={() => {
                   cutSelection();
                   dismissContextMenu();
-                }}
-              >
+                }}>
                 {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
-              </button>
-              <button
-                class="context-menu-item"
-                role="menuitem"
-                disabled={!contextMenuClipboardHasContent}
+              </CtxItem>
+              <CtxItem disabled={!contextMenuClipboardHasContent}
                 onclick={() => {
                   pasteFromClipboard();
                   dismissContextMenu();
-                }}
-              >
+                }}>
                 Paste
-              </button>
+              </CtxItem>
             {/if}
           {/if}
-          <div class="context-menu-separator"></div>
-          <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
+          <CtxSep />
+ <CtxItem onclick={() => copyAsJson()}>
             Copy cell as JSON
-          </button>
-          <button class="context-menu-item" role="menuitem" onclick={() => copyAsSql()}>
+          </CtxItem>
+ <CtxItem onclick={() => copyAsSql()}>
             Copy cell as SQL
-          </button>
-          <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
+          </CtxItem>
+ <CtxItem onclick={() => copyAsCsv()}>
             Copy cell as CSV
-          </button>
-          <div class="context-menu-separator"></div>
-          <button class="context-menu-item" role="menuitem" onclick={() => copyColumnNames()}>
+          </CtxItem>
+          <CtxSep />
+ <CtxItem onclick={() => copyColumnNames()}>
             {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
-          </button>
+          </CtxItem>
           {#if onConnectColumn && !contextMenuSnapshotIsMultiCell}
-            <div class="context-menu-separator"></div>
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              onclick={() => {
+            <CtxSep />
+            <CtxItem onclick={() => {
                 onConnectColumn!(contextMenu!.colName!);
                 dismissContextMenu();
-              }}
-            >
+              }}>
               Connect column…
-            </button>
+            </CtxItem>
           {/if}
-          <div class="context-menu-separator"></div>
+          <CtxSep />
         {/if}
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}
-        >
+        <CtxItem onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}>
           Copy row (tab-separated)
-        </button>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
+        </CtxItem>
+ <CtxItem onclick={() => copyAsJson()}>
           Copy row as JSON
-        </button>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
+        </CtxItem>
+ <CtxItem onclick={() => copyAsCsv()}>
           Copy row as CSV
-        </button>
+        </CtxItem>
         {#if editable && !readOnly}
-          <div class="context-menu-separator"></div>
-          <button class="context-menu-item" role="menuitem" onclick={() => cloneRow()}>
+          <CtxSep />
+ <CtxItem onclick={() => cloneRow()}>
             Clone row
-          </button>
+          </CtxItem>
         {/if}
-        <div class="context-menu-separator"></div>
-        <button
-          class="context-menu-item context-menu-item-danger"
-          role="menuitem"
-          onclick={() => deleteNewRow(contextMenu!.rowKey)}
-        >
+        <CtxSep />
+        <CtxItem danger onclick={() => deleteNewRow(contextMenu!.rowKey)}>
           Discard new row
-        </button>
+        </CtxItem>
       {:else if contextMenuSnapshotIsRowSelection || contextMenu.colName === null}
         {#if selectedRowKeys.size > 1}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => copySelectedRowsTabSeparated()}
-          >
+          <CtxItem onclick={() => copySelectedRowsTabSeparated()}>
             Copy {selectedRowKeys.size} rows (tab-separated)
-          </button>
+          </CtxItem>
         {:else}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => copyRowTabSeparated(contextMenu!.row)}
-          >
+          <CtxItem onclick={() => copyRowTabSeparated(contextMenu!.row)}>
             Copy row (tab-separated)
-          </button>
+          </CtxItem>
         {/if}
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
+ <CtxItem onclick={() => copyAsJson()}>
           {selectedRowKeys.size > 1
             ? `Copy ${selectedRowKeys.size} rows as JSON`
             : 'Copy row as JSON'}
-        </button>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
+        </CtxItem>
+ <CtxItem onclick={() => copyAsCsv()}>
           {selectedRowKeys.size > 1
             ? `Copy ${selectedRowKeys.size} rows as CSV`
             : 'Copy row as CSV'}
-        </button>
+        </CtxItem>
         {#if editable && !readOnly}
-          <div class="context-menu-separator"></div>
+          <CtxSep />
           {#if selectedRowKeys.size <= 1}
-            <button class="context-menu-item" role="menuitem" onclick={() => cloneRow()}>
+ <CtxItem onclick={() => cloneRow()}>
               Clone row
-            </button>
-            <div class="context-menu-separator"></div>
+            </CtxItem>
+            <CtxSep />
           {/if}
-          <button
-            class="context-menu-item context-menu-item-danger"
-            role="menuitem"
-            onclick={() => deleteRow()}
-          >
+          <CtxItem danger onclick={() => deleteRow()}>
             {selectedRowKeys.size > 1
               ? [...selectedRowKeys].every((k) => pendingDeletedRows.has(k))
                 ? `Undelete ${selectedRowKeys.size} rows`
@@ -3983,192 +3876,126 @@
               : pendingDeletedRows.has(contextMenu!.rowKey)
                 ? 'Undelete row'
                 : 'Delete row'}
-          </button>
+          </CtxItem>
         {/if}
       {:else}
         {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => openInlineEditFromContextMenu()}
-          >
+          <CtxItem onclick={() => openInlineEditFromContextMenu()}>
             Edit
-          </button>
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => openModalFromContextMenu()}
-          >
+          </CtxItem>
+          <CtxItem onclick={() => openModalFromContextMenu()}>
             Edit in modal
-          </button>
+          </CtxItem>
         {/if}
         {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => openViewModalFromContextMenu()}
-          >
+          <CtxItem onclick={() => openViewModalFromContextMenu()}>
             View in modal
-          </button>
+          </CtxItem>
         {/if}
-        <div class="context-menu-separator"></div>
+        <CtxSep />
         {#if editable && !readOnly}
-          <button class="context-menu-item" role="menuitem" onclick={() => setSelectionNull()}>
+ <CtxItem onclick={() => setSelectionNull()}>
             Set to NULL
-          </button>
+          </CtxItem>
         {/if}
         {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
-          <button class="context-menu-item" role="menuitem" onclick={setNowFromContextMenu}>
+ <CtxItem onclick={setNowFromContextMenu}>
             Set to NOW
-          </button>
+          </CtxItem>
         {/if}
         {#if editable && !readOnly}
-          <div class="context-menu-separator"></div>
+          <CtxSep />
         {/if}
         {#if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
-          <button
-            class="context-menu-item context-menu-item-danger"
-            role="menuitem"
-            onclick={() => discardCellEdit()}
-          >
+          <CtxItem danger onclick={() => discardCellEdit()}>
             Discard edit
-          </button>
-          <div class="context-menu-separator"></div>
+          </CtxItem>
+          <CtxSep />
         {/if}
         {#if contextMenuSnapshotHasFocus}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => {
+          <CtxItem onclick={() => {
               copySelection();
               dismissContextMenu();
-            }}
-          >
+            }}>
             {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
-          </button>
+          </CtxItem>
           {#if editable && !readOnly}
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              onclick={() => {
+            <CtxItem onclick={() => {
                 cutSelection();
                 dismissContextMenu();
-              }}
-            >
+              }}>
               {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
-            </button>
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              disabled={!contextMenuClipboardHasContent}
+            </CtxItem>
+            <CtxItem disabled={!contextMenuClipboardHasContent}
               onclick={() => {
                 pasteFromClipboard();
                 dismissContextMenu();
-              }}
-            >
+              }}>
               Paste
-            </button>
+            </CtxItem>
           {/if}
         {/if}
-        <div class="context-menu-separator"></div>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
+        <CtxSep />
+ <CtxItem onclick={() => copyAsJson()}>
           Copy cell as JSON
-        </button>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsSql()}>
+        </CtxItem>
+ <CtxItem onclick={() => copyAsSql()}>
           Copy cell as SQL
-        </button>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
+        </CtxItem>
+ <CtxItem onclick={() => copyAsCsv()}>
           Copy cell as CSV
-        </button>
-        <div class="context-menu-separator"></div>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyColumnNames()}>
+        </CtxItem>
+        <CtxSep />
+ <CtxItem onclick={() => copyColumnNames()}>
           {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
-        </button>
+        </CtxItem>
         {#if contextMenu.colName && onConnectColumn && !contextMenuSnapshotIsMultiCell}
-          <div class="context-menu-separator"></div>
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => {
+          <CtxSep />
+          <CtxItem onclick={() => {
               onConnectColumn!(contextMenu!.colName!);
               dismissContextMenu();
-            }}
-          >
+            }}>
             Connect column…
-          </button>
+          </CtxItem>
         {/if}
-        <div class="context-menu-separator"></div>
+        <CtxSep />
         {#if selectedRowKeys.size > 1}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => copySelectedRowsTabSeparated()}
-          >
+          <CtxItem onclick={() => copySelectedRowsTabSeparated()}>
             Copy {selectedRowKeys.size} selected rows (tab-separated)
-          </button>
+          </CtxItem>
         {:else}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => copyRowTabSeparated(contextMenu!.row)}
-          >
+          <CtxItem onclick={() => copyRowTabSeparated(contextMenu!.row)}>
             Copy row (tab-separated)
-          </button>
+          </CtxItem>
         {/if}
         {#if editable && !readOnly}
-          <div class="context-menu-separator"></div>
-          <button class="context-menu-item" role="menuitem" onclick={() => cloneRow()}>
+          <CtxSep />
+ <CtxItem onclick={() => cloneRow()}>
             Clone row
-          </button>
-          <div class="context-menu-separator"></div>
-          <button
-            class="context-menu-item context-menu-item-danger"
-            role="menuitem"
-            onclick={() => deleteRow()}
-          >
+          </CtxItem>
+          <CtxSep />
+          <CtxItem danger onclick={() => deleteRow()}>
             {pendingDeletedRows.has(contextMenu!.rowKey) ? 'Undelete row' : 'Delete row'}
-          </button>
+          </CtxItem>
         {/if}
       {/if}
-    </div>
-  {/if}
+    {/if}
+  </CtxMenuContainer>
 
   <!-- Header context menu -->
-  {#if headerContextMenu !== null}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div
-      class="context-menu"
-      role="menu"
-      tabindex="-1"
-      style="left: {hdrCtxMenuLeft}px; top: {hdrCtxMenuTop}px;{hdrCtxMenuMaxHeight !== null
-        ? ` max-height: ${hdrCtxMenuMaxHeight}px;`
-        : ''}"
-      bind:this={headerContextMenuEl}
-      onclick={(e) => e.stopPropagation()}
-      onmousedown={(e) => e.preventDefault()}
-      use:portal
-    >
-      <button
-        class="context-menu-item"
-        role="menuitem"
-        onclick={() => startHeaderRename(headerContextMenu!.colName)}
-      >
-        Rename column
-      </button>
-      {#if columnRenames[headerContextMenu.colName] !== undefined && columnRenames[headerContextMenu.colName] !== headerContextMenu.colName}
-        <button
-          class="context-menu-item"
-          role="menuitem"
-          onclick={() => {
-            onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName);
-            headerContextMenu = null;
-          }}
-        >
-          Reset name
-        </button>
-      {/if}
-    </div>
-  {/if}
+  <CtxMenuContainer
+    x={headerContextMenu?.x ?? 0}
+    y={headerContextMenu?.y ?? 0}
+    open={headerContextMenu !== null}
+    onclose={() => (headerContextMenu = null)}
+    minWidth={160}
+    zIndex={400}
+  >
+    <CtxItem onclick={() => startHeaderRename(headerContextMenu!.colName)}>Rename column</CtxItem>
+    {#if headerContextMenu !== null && columnRenames[headerContextMenu.colName] !== undefined && columnRenames[headerContextMenu.colName] !== headerContextMenu.colName}
+      <CtxItem onclick={() => { onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName); headerContextMenu = null; }}>Reset name</CtxItem>
+    {/if}
+  </CtxMenuContainer>
 
   <!-- Inline cell editor overlay -->
   {#if editTarget !== null}
@@ -4651,53 +4478,6 @@
     pointer-events: none;
   }
 
-  /* ── Context menu ───────────────────────────────────────────────────────── */
-
-  .context-menu {
-    position: fixed;
-    background: var(--color-bg-overlay);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-overlay);
-    z-index: 400;
-    min-width: 220px;
-    padding: var(--spacing-1) 0;
-    overflow-y: auto;
-  }
-
-  .context-menu-item {
-    display: block;
-    width: 100%;
-    padding: var(--spacing-2) var(--spacing-3);
-    background: transparent;
-    border: none;
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family-ui);
-    color: var(--color-text-primary);
-    cursor: pointer;
-    transition: background var(--transition-fast);
-  }
-
-  .context-menu-item:hover {
-    background: var(--color-bg-hover);
-  }
-
-  .context-menu-item-danger {
-    color: var(--color-danger);
-  }
-
-  .context-menu-item-danger:hover {
-    background: var(--color-danger-subtle);
-  }
-
-  .context-menu-separator {
-    height: 1px;
-    background: var(--color-border);
-    margin: var(--spacing-1) 0;
-  }
 
   /* ── New row (pending insert) ───────────────────────────────────────────── */
 

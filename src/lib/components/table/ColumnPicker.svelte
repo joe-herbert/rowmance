@@ -6,6 +6,8 @@
   import { onMount, tick } from 'svelte';
   import type { ColumnMeta } from '$lib/types';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
+  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+  import CtxItem from '$lib/components/ui/CtxItem.svelte';
 
   interface Props {
     columns: ColumnMeta[];
@@ -293,36 +295,22 @@
   </ul>
 </div>
 
-{#if colContextMenu !== null}
-  <!-- svelte-ignore a11y_interactive_supports_focus -->
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div
-    class="col-context-menu"
-    role="menu"
-    style="left: {colContextMenu.x}px; top: {colContextMenu.y}px;"
-    onclick={(e) => e.stopPropagation()}
-  >
-    <button
-      class="col-ctx-item"
-      role="menuitem"
-      onclick={() => startRename(colContextMenu!.colName)}
-    >
-      Rename column
-    </button>
-    {#if columnRenames[colContextMenu.colName] !== undefined && columnRenames[colContextMenu.colName] !== colContextMenu.colName}
-      <button
-        class="col-ctx-item"
-        role="menuitem"
-        onclick={() => {
-          onRename?.(colContextMenu!.colName, colContextMenu!.colName);
-          colContextMenu = null;
-        }}
-      >
-        Reset name
-      </button>
-    {/if}
-  </div>
-{/if}
+<ContextMenu
+  x={colContextMenu?.x ?? 0}
+  y={colContextMenu?.y ?? 0}
+  open={colContextMenu !== null}
+  onclose={() => (colContextMenu = null)}
+  minWidth={140}
+  zIndex={400}
+>
+  <CtxItem onclick={() => startRename(colContextMenu!.colName)}>Rename column</CtxItem>
+  {#if colContextMenu !== null && columnRenames[colContextMenu.colName] !== undefined && columnRenames[colContextMenu.colName] !== colContextMenu.colName}
+    <CtxItem onclick={() => {
+      onRename?.(colContextMenu!.colName, colContextMenu!.colName);
+      colContextMenu = null;
+    }}>Reset name</CtxItem>
+  {/if}
+</ContextMenu>
 
 <style>
   .column-picker {
@@ -572,37 +560,4 @@
     min-width: 0;
   }
 
-  .col-context-menu {
-    position: fixed;
-    z-index: 400;
-    background: var(--color-bg-overlay);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-overlay);
-    padding: var(--spacing-1) 0;
-    min-width: 140px;
-  }
-
-  .col-ctx-item {
-    display: block;
-    width: 100%;
-    padding: var(--spacing-1) var(--spacing-3);
-    background: transparent;
-    border: none;
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family-ui);
-    color: var(--color-text-secondary);
-    text-align: left;
-    cursor: pointer;
-    transition:
-      background var(--transition-fast),
-      color var(--transition-fast);
-  }
-
-  .col-ctx-item:hover {
-    background: var(--color-bg-hover);
-    color: var(--color-text-primary);
-  }
 </style>

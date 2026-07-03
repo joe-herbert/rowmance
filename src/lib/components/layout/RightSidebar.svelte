@@ -26,6 +26,9 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
   import { portal } from '$lib/actions/portal';
+  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+  import CtxItem from '$lib/components/ui/CtxItem.svelte';
+  import CtxSep from '$lib/components/ui/CtxSep.svelte';
 
   type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
 
@@ -191,29 +194,10 @@
     name: string;
   }
   let savedCtxMenu = $state<SavedCtxMenu | null>(null);
-  let savedCtxMenuEl = $state<HTMLDivElement | undefined>(undefined);
-  let ctxMenuLeft = $state(0);
-  let ctxMenuTop = $state(0);
 
   // Connection assignment dialog
   let assigningQuery = $state<FileQuery | null>(null);
   let assignConnectionId = $state('');
-
-  $effect(() => {
-    if (!savedCtxMenu) return;
-    ctxMenuLeft = savedCtxMenu.x;
-    ctxMenuTop = savedCtxMenu.y;
-    requestAnimationFrame(() => {
-      if (!savedCtxMenuEl) return;
-      const { width } = savedCtxMenuEl.getBoundingClientRect();
-      ctxMenuLeft = Math.min(savedCtxMenu!.x, window.innerWidth - width - 8);
-    });
-    function onMousedown(e: MouseEvent) {
-      if (!savedCtxMenuEl?.contains(e.target as Node)) savedCtxMenu = null;
-    }
-    document.addEventListener('mousedown', onMousedown, true);
-    return () => document.removeEventListener('mousedown', onMousedown, true);
-  });
 
   async function loadSavedQueries() {
     savedLoading = true;
@@ -1341,47 +1325,26 @@
 </div>
 
 <!-- Saved queries context menu -->
-{#if savedCtxMenu}
-  <div
-    bind:this={savedCtxMenuEl}
-    class="ctx-menu"
-    style="top: {ctxMenuTop}px; left: {ctxMenuLeft}px;"
-    role="menu"
-    aria-label="Actions for {savedCtxMenu.name}"
-    use:portal
-  >
-    {#if savedCtxMenu.kind === 'query'}
-      {@const ctxQuery = savedQueries.find((q) => q.id === savedCtxMenu?.id)}
-      <button
-        class="ctx-item"
-        role="menuitem"
-        onclick={() => {
-          if (ctxQuery) handleQueryClick(ctxQuery);
-          closeSavedCtxMenu();
-        }}
-      >
-        Open
-      </button>
-      <button class="ctx-item" role="menuitem" onclick={handleSavedCtxDuplicate}>
-        Duplicate
-      </button>
-      <button
-        class="ctx-item"
-        role="menuitem"
-        onclick={() => startRenameQuery(savedCtxMenu!.id, savedCtxMenu!.name)}
-      >
-        Rename
-      </button>
-      <div class="ctx-sep" role="separator"></div>
-    {:else}
-      <button class="ctx-item" role="menuitem" onclick={handleSavedCtxRenameFolder}>
-        Rename
-      </button>
-      <div class="ctx-sep" role="separator"></div>
-    {/if}
-    <button class="ctx-item danger" role="menuitem" onclick={handleSavedCtxDelete}> Delete </button>
-  </div>
-{/if}
+<ContextMenu
+  x={savedCtxMenu?.x ?? 0}
+  y={savedCtxMenu?.y ?? 0}
+  open={savedCtxMenu !== null}
+  onclose={closeSavedCtxMenu}
+  minWidth={140}
+  zIndex={1000}
+>
+  {#if savedCtxMenu?.kind === 'query'}
+    {@const ctxQuery = savedQueries.find((q) => q.id === savedCtxMenu?.id)}
+    <CtxItem onclick={() => { if (ctxQuery) handleQueryClick(ctxQuery); closeSavedCtxMenu(); }}>Open</CtxItem>
+    <CtxItem onclick={handleSavedCtxDuplicate}>Duplicate</CtxItem>
+    <CtxItem onclick={() => startRenameQuery(savedCtxMenu!.id, savedCtxMenu!.name)}>Rename</CtxItem>
+    <CtxSep />
+  {:else if savedCtxMenu?.kind === 'folder'}
+    <CtxItem onclick={handleSavedCtxRenameFolder}>Rename</CtxItem>
+    <CtxSep />
+  {/if}
+  <CtxItem danger onclick={handleSavedCtxDelete}>Delete</CtxItem>
+</ContextMenu>
 
 {#if confirmDeleteQueryId !== null}
   <ConfirmDialog
@@ -1858,47 +1821,6 @@
     opacity: 0.35;
   }
 
-  /* ── Context menu ──────────────────────────────────────────────────────── */
-
-  .ctx-menu {
-    position: fixed;
-    z-index: 1000;
-    background: var(--color-bg-overlay);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
-    padding: var(--spacing-1) 0;
-    min-width: 140px;
-  }
-
-  .ctx-item {
-    display: block;
-    width: 100%;
-    padding: var(--spacing-1) var(--spacing-3);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-  }
-
-  .ctx-item:hover {
-    background: var(--color-bg-hover);
-  }
-
-  .ctx-sep {
-    height: 1px;
-    margin: var(--spacing-1) 0;
-    background: var(--color-border);
-  }
-
-  .ctx-item.danger {
-    color: var(--color-danger);
-  }
-
-  .ctx-item.danger:hover {
-    background: var(--color-danger-subtle);
-  }
 
   /* ── Connection status ───────────────────────────────────────────────────── */
 

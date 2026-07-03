@@ -16,6 +16,9 @@
   import { errorMessage } from '$lib/utils/errors';
   import Fuse from 'fuse.js';
   import { listen } from '@tauri-apps/api/event';
+  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+  import CtxItem from '$lib/components/ui/CtxItem.svelte';
+  import CtxSep from '$lib/components/ui/CtxSep.svelte';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
@@ -236,22 +239,6 @@
     closeDbContextMenu();
   }
 
-  function handleWindowKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      if (contextMenu) closeContextMenu();
-      if (dbContextMenu) closeDbContextMenu();
-    }
-  }
-
-  function handleWindowClick(event: MouseEvent) {
-    const target = event.target as Element | null;
-    if (contextMenu && !target?.closest('.context-menu')) {
-      closeContextMenu();
-    }
-    if (dbContextMenu && !target?.closest('.context-menu')) {
-      closeDbContextMenu();
-    }
-  }
 
   const activeProfiles = $derived(
     connectionStore.profiles.filter((p) => connectionStore.isActive(p.id)),
@@ -268,7 +255,6 @@
   }
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
 <div class="schema-tree">
   <div class="tree-header no-select">
@@ -426,41 +412,31 @@
   {/if}
 </div>
 
-<!-- Context menu (portal-like, fixed positioning) -->
-{#if contextMenu}
-  <div
-    class="context-menu"
-    role="menu"
-    aria-label="Table options"
-    style="top: {contextMenu.y}px; left: {contextMenu.x}px;"
-  >
-    <button class="ctx-item" role="menuitem" onclick={ctxOpenTable}>Open Table</button>
-    <button class="ctx-item" role="menuitem" onclick={ctxViewDdl}>View DDL</button>
-    <button class="ctx-item" role="menuitem" onclick={ctxCopyName}>Copy Name</button>
-  </div>
-{/if}
+<ContextMenu
+  x={contextMenu?.x ?? 0}
+  y={contextMenu?.y ?? 0}
+  open={contextMenu !== null}
+  onclose={closeContextMenu}
+  minWidth={140}
+>
+  <CtxItem onclick={ctxOpenTable}>Open Table</CtxItem>
+  <CtxItem onclick={ctxViewDdl}>View DDL</CtxItem>
+  <CtxItem onclick={ctxCopyName}>Copy Name</CtxItem>
+</ContextMenu>
 
-{#if dbContextMenu}
-  <div
-    class="context-menu"
-    role="menu"
-    aria-label="Database options"
-    style="top: {dbContextMenu.y}px; left: {dbContextMenu.x}px;"
-  >
-    <button class="ctx-item" role="menuitem" onclick={ctxOpenErd}>Open ERD</button>
-    <div class="ctx-sep" role="separator"></div>
-    <button
-      class="ctx-item"
-      role="menuitem"
-      onclick={() => {
-        settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
-        closeDbContextMenu();
-      }}
-    >
-      {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
-    </button>
-  </div>
-{/if}
+<ContextMenu
+  x={dbContextMenu?.x ?? 0}
+  y={dbContextMenu?.y ?? 0}
+  open={dbContextMenu !== null}
+  onclose={closeDbContextMenu}
+  minWidth={140}
+>
+  <CtxItem onclick={ctxOpenErd}>Open ERD</CtxItem>
+  <CtxSep />
+  <CtxItem onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); closeDbContextMenu(); }}>
+    {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
+  </CtxItem>
+</ContextMenu>
 
 <style>
   .schema-tree {
@@ -701,39 +677,6 @@
     padding-left: calc(var(--spacing-3) * 2);
   }
 
-  /* ── Context menu ── */
-
-  .context-menu {
-    position: fixed;
-    z-index: 500;
-    min-width: 140px;
-    padding: var(--spacing-1) 0;
-    background: var(--color-bg-overlay);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
-  }
-
-  .ctx-item {
-    display: block;
-    width: 100%;
-    padding: var(--spacing-1) var(--spacing-3);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-  }
-
-  .ctx-item:hover {
-    background: var(--color-bg-active);
-  }
-
-  .ctx-sep {
-    height: 1px;
-    margin: var(--spacing-1) 0;
-    background: var(--color-border);
-  }
 
   @keyframes pulse {
     0%,
