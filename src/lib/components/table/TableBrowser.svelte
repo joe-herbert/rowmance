@@ -24,6 +24,13 @@
   };
   const tableBrowserFilterCache = new Map<string, SavedFilterState>();
 
+  type CachedData = {
+    result: import('$lib/types').QueryResult;
+    unfilteredTotal: number | null;
+    foreignKeys: import('$lib/types').ForeignKeyInfo[];
+  };
+  const tableDataCache = new Map<string, CachedData>();
+
   export function clearTablePendingState(key: string): void {
     tablePendingState.delete(key);
     tableScrollPositions.delete(key);
@@ -127,6 +134,7 @@
   let unfilteredTotal = $state<number | null>(null);
   let foreignKeys = $state<ForeignKeyInfo[]>([]);
   let isLoading = $state(false);
+  let isRefreshing = $state(false);
   let error = $state<string | null>(null);
 
   $effect(() => {
@@ -631,8 +639,12 @@
     };
   });
 
-  async function load(): Promise<void> {
-    isLoading = true;
+  async function load(background = false): Promise<void> {
+    if (background) {
+      isRefreshing = true;
+    } else {
+      isLoading = true;
+    }
     error = null;
     const t0 = performance.now();
     try {
@@ -703,17 +715,26 @@
         }
         result = queryResult;
         lastQueryMs = Math.round(performance.now() - t0);
+        tableDataCache.set(`${connectionId}:${database}:${table}`, {
+          result: queryResult,
+          unfilteredTotal,
+          foreignKeys,
+        });
       }
     } catch (err) {
-      error = errorMessage(err);
-      result = null;
+      if (!background) {
+        error = errorMessage(err);
+        result = null;
+      }
     } finally {
       isLoading = false;
+      isRefreshing = false;
     }
   }
 
   function handleRefresh(): void {
     tableSchemaCache.delete(`${connectionId}:${database}:${table}`);
+    tableDataCache.delete(`${connectionId}:${database}:${table}`);
     load();
   }
 
@@ -743,7 +764,15 @@
     showColumnPicker = false;
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
     untrack(() => {
-      load();
+      const cached = tableDataCache.get(cacheKey);
+      if (cached) {
+        result = cached.result;
+        unfilteredTotal = cached.unfilteredTotal;
+        foreignKeys = cached.foreignKeys;
+        load(true);
+      } else {
+        load();
+      }
     });
   });
 
@@ -1379,6 +1408,26 @@
         </button>
       {/if}
 
+      {#if isRefreshing}
+        <span class="refreshing-indicator" title="Refreshing data in background…">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="spin"
+            aria-hidden="true"
+          >
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          </svg>
+        </span>
+      {/if}
+
       <!-- Actions button (Columns / Export / Import / Refresh) -->
       <div class="export-dropdown">
         <button
@@ -1431,7 +1480,7 @@
                   showActionsMenu = false;
                   handleRefresh();
                 }}
-                disabled={isLoading}
+                disabled={isLoading || isRefreshing}
               >
                 <RefreshIcon />
                 <span>Refresh</span>
@@ -2460,6 +2509,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .refreshing-indicator {
+    display: flex;
+    align-items: center;
+    color: var(--color-text-muted);
+    opacity: 0.7;
+  }
+
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .loading-text {
