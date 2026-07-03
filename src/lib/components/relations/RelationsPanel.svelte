@@ -724,11 +724,14 @@
 
   .global-state {
     display: flex;
+    flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: var(--spacing-2);
     padding: var(--spacing-3) var(--spacing-3);
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
+    flex: 1;
   }
 
   /* ── Sections ── */
