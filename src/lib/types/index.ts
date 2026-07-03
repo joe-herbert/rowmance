@@ -213,6 +213,7 @@ export interface FileQueryFolder {
   id: string;
   parentId: string | null;
   name: string;
+  position: number;
 }
 
 export interface FileQueryListResult {

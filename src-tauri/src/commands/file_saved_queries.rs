@@ -16,6 +16,28 @@ use crate::error::AppError;
 const HEADER_PREFIX: &str = "-- rowmance:";
 const MAPPINGS_KEY: &str = "savedQueryConnectionMappings";
 const DIR_SETTING_KEY: &str = "savedQueriesDirectory";
+const ORDER_FILENAME: &str = "_order";
+
+fn read_order_file(dir: &Path) -> Vec<String> {
+    let path = dir.join(ORDER_FILENAME);
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| l.to_string())
+        .collect()
+}
+
+fn write_order_file(dir: &Path, items: &[String]) -> Result<(), AppError> {
+    let path = dir.join(ORDER_FILENAME);
+    if items.is_empty() {
+        let _ = std::fs::remove_file(&path);
+        return Ok(());
+    }
+    std::fs::write(&path, items.join("\n") + "\n")
+        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))
+}
 
 // ── Directory helpers ─────────────────────────────────────────────────────────
 
@@ -294,6 +316,7 @@ pub struct FileQueryFolder {
     #[serde(rename = "parentId")]
     pub parent_id: Option<String>,
     pub name: String,
+    pub position: i64,
 }
 
 #[derive(Serialize, Debug)]
@@ -319,25 +342,41 @@ fn scan_dir(
     folders: &mut Vec<FileQueryFolder>,
     queries: &mut Vec<FileQuery>,
 ) -> Result<(), AppError> {
-    let read = match std::fs::read_dir(dir) {
+    let entries = match std::fs::read_dir(dir) {
         Ok(r) => r,
         Err(_) => return Ok(()),
     };
-    for entry in read.flatten() {
+
+    let order = read_order_file(dir);
+    let order_pos = |name: &str| -> i64 {
+        order.iter().position(|o| o == name)
+            .map(|i| i as i64)
+            .unwrap_or(order.len() as i64)
+    };
+
+    let mut subdirs: Vec<PathBuf> = Vec::new();
+
+    for entry in entries.flatten() {
         let path = entry.path();
-        let Ok(meta) = path.metadata() else {
+        let Ok(meta) = path.metadata() else { continue };
+        let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+
+        if file_name == ORDER_FILENAME {
             continue;
-        };
+        }
+
         if meta.is_dir() {
+            let name = file_name.into_owned();
             let id = to_id(&path, base)?;
             let parent_id = path
                 .parent()
                 .and_then(|p| to_id(p, base).ok())
                 .filter(|s| !s.is_empty());
-            let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
-            folders.push(FileQueryFolder { id, parent_id, name });
-            scan_dir(&path, base, local, mappings, new_fp_mappings, folders, queries)?;
+            let position = order_pos(&name);
+            folders.push(FileQueryFolder { id, parent_id, name, position });
+            subdirs.push(path);
         } else if path.extension().and_then(|e| e.to_str()) == Some("sql") {
+            let filename = file_name.into_owned(); // e.g. "monthly.sql"
             let id = to_id(&path, base)?;
             let folder_id = path
                 .parent()
@@ -352,7 +391,6 @@ fn scan_dir(
             let (conn_id, conn_status) =
                 resolve_connection(&header.connection_id, &header.connection_fingerprint, local, mappings);
 
-            // Auto-save fingerprint matches so future loads skip the scan.
             if conn_status == "fingerprint_matched" {
                 if let (Some(fid), Some(lid)) = (&header.connection_id, &conn_id) {
                     new_fp_mappings.insert(fid.clone(), lid.clone());
@@ -366,6 +404,12 @@ fn scan_dir(
                 meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH),
             );
 
+            let position = if order.iter().any(|o| o == &filename) {
+                order_pos(&filename)
+            } else {
+                header.position.unwrap_or(order.len() as i64)
+            };
+
             queries.push(FileQuery {
                 id,
                 folder_id,
@@ -376,12 +420,17 @@ fn scan_dir(
                 file_connection_id: header.connection_id,
                 file_fingerprint: header.connection_fingerprint,
                 database: header.database,
-                position: header.position.unwrap_or(0),
+                position,
                 created_at,
                 updated_at,
             });
         }
     }
+
+    for subdir in subdirs {
+        scan_dir(&subdir, base, local, mappings, new_fp_mappings, folders, queries)?;
+    }
+
     Ok(())
 }
 
@@ -415,7 +464,7 @@ pub async fn file_saved_queries_list(
         save_mappings(sqlite.inner(), &mappings).await?;
     }
 
-    folders.sort_by(|a, b| a.name.cmp(&b.name));
+    folders.sort_by(|a, b| a.position.cmp(&b.position).then(a.name.cmp(&b.name)));
     queries.sort_by(|a, b| a.position.cmp(&b.position).then(a.name.cmp(&b.name)));
 
     Ok(FileQueryListResult { folders, queries })
@@ -626,6 +675,23 @@ pub async fn file_saved_queries_update_positions(
     Ok(())
 }
 
+/// Write the `_order` file for a directory, defining the sort order of all
+/// direct children (queries and folders). Items not listed fall to the end,
+/// sorted alphabetically.
+#[tauri::command]
+pub async fn file_saved_queries_update_order(
+    sqlite: State<'_, SqlitePool>,
+    parent_id: Option<String>,
+    items: Vec<String>,
+) -> Result<(), AppError> {
+    let dir = queries_dir(sqlite.inner()).await?;
+    let target_dir = match &parent_id {
+        Some(pid) => dir.join(pid),
+        None => dir.clone(),
+    };
+    write_order_file(&target_dir, &items)
+}
+
 #[tauri::command]
 pub async fn file_saved_queries_create_folder(
     sqlite: State<'_, SqlitePool>,
@@ -646,7 +712,7 @@ pub async fn file_saved_queries_create_folder(
     }
     std::fs::create_dir_all(&target).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
     let id = to_id(&target, &dir)?;
-    Ok(FileQueryFolder { id, parent_id, name: safe_name })
+    Ok(FileQueryFolder { id, parent_id, name: safe_name, position: 0 })
 }
 
 #[tauri::command]
@@ -691,7 +757,81 @@ pub async fn file_saved_queries_rename_folder(
         .and_then(|p| to_id(p, &dir).ok())
         .filter(|s| !s.is_empty());
 
-    Ok(FileQueryFolder { id: new_id, parent_id, name: safe_name })
+    Ok(FileQueryFolder { id: new_id, parent_id, name: safe_name, position: 0 })
+}
+
+#[tauri::command]
+pub async fn file_saved_queries_move_folder(
+    sqlite: State<'_, SqlitePool>,
+    id: String,
+    new_parent_id: Option<String>,
+) -> Result<FileQueryFolder, AppError> {
+    let dir = queries_dir(sqlite.inner()).await?;
+    let src_path = dir.join(&id);
+
+    // Prevent moving into itself or a descendant.
+    if let Some(ref np) = new_parent_id {
+        if np == &id || np.starts_with(&format!("{}/", id)) {
+            return Err(AppError::new(
+                "INVALID_INPUT",
+                "Cannot move a folder into itself or its descendant",
+            ));
+        }
+    }
+
+    let folder_name = src_path
+        .file_name()
+        .ok_or_else(|| AppError::new("IO_ERROR", "Invalid folder path"))?
+        .to_string_lossy()
+        .into_owned();
+
+    let dest_parent = match &new_parent_id {
+        Some(np) => dir.join(np),
+        None => dir.clone(),
+    };
+    let dest_path = dest_parent.join(&folder_name);
+
+    if dest_path == src_path {
+        let parent_id = src_path
+            .parent()
+            .and_then(|p| to_id(p, &dir).ok())
+            .filter(|s| !s.is_empty());
+        return Ok(FileQueryFolder { id, parent_id, name: folder_name, position: 0 });
+    }
+
+    if dest_path.exists() {
+        return Err(AppError::new(
+            "CONFLICT",
+            format!("A folder named '{folder_name}' already exists at the destination"),
+        ));
+    }
+
+    // Remove from old parent _order.
+    let old_parent = src_path
+        .parent()
+        .ok_or_else(|| AppError::new("IO_ERROR", "Cannot determine source parent"))?;
+    let mut old_order = read_order_file(old_parent);
+    old_order.retain(|e| e != &folder_name);
+    write_order_file(old_parent, &old_order)?;
+
+    // Move the directory.
+    std::fs::create_dir_all(&dest_parent).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+    std::fs::rename(&src_path, &dest_path).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+
+    // Append to new parent _order.
+    let mut new_order = read_order_file(&dest_parent);
+    if !new_order.contains(&folder_name) {
+        new_order.push(folder_name.clone());
+    }
+    write_order_file(&dest_parent, &new_order)?;
+
+    let new_id = to_id(&dest_path, &dir)?;
+    let parent_id = dest_path
+        .parent()
+        .and_then(|p| to_id(p, &dir).ok())
+        .filter(|s| !s.is_empty());
+
+    Ok(FileQueryFolder { id: new_id, parent_id, name: folder_name, position: 0 })
 }
 
 /// Persist a mapping from a foreign connection ID (seen in a cloned file) to

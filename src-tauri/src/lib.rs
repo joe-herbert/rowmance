@@ -318,9 +318,11 @@ pub fn run() {
             commands::file_saved_queries::file_saved_queries_update,
             commands::file_saved_queries::file_saved_queries_delete,
             commands::file_saved_queries::file_saved_queries_update_positions,
+            commands::file_saved_queries::file_saved_queries_update_order,
             commands::file_saved_queries::file_saved_queries_create_folder,
             commands::file_saved_queries::file_saved_queries_delete_folder,
             commands::file_saved_queries::file_saved_queries_rename_folder,
+            commands::file_saved_queries::file_saved_queries_move_folder,
             commands::file_saved_queries::file_saved_queries_assign_connection,
             // Settings
             commands::settings::settings_get_all,

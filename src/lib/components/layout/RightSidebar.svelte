@@ -481,6 +481,40 @@
     return map;
   });
 
+  type TopLevelItem = { kind: 'query'; item: FileQuery } | { kind: 'folder'; item: FileQueryFolder };
+
+  const foldersByParent = $derived.by<Map<string | null, FileQueryFolder[]>>(() => {
+    const map = new Map<string | null, FileQueryFolder[]>();
+    for (const f of savedFolders) {
+      const key = f.parentId;
+      const arr = map.get(key) ?? [];
+      arr.push(f);
+      map.set(key, arr);
+    }
+    return map;
+  });
+
+  function childItems(parentId: string | null): TopLevelItem[] {
+    const queries: TopLevelItem[] = (queriesByFolder.get(parentId) ?? []).map((q) => ({ kind: 'query', item: q }));
+    const folders: TopLevelItem[] = (foldersByParent.get(parentId) ?? []).map((f) => ({ kind: 'folder', item: f }));
+    return [...queries, ...folders].sort((a, b) =>
+      a.item.position !== b.item.position
+        ? a.item.position - b.item.position
+        : a.item.name.localeCompare(b.item.name, undefined, { sensitivity: 'base' }),
+    );
+  }
+
+  function baseName(id: string): string {
+    return id.split('/').pop() ?? id;
+  }
+
+  function isDescendantOf(folderId: string, ancestorId: string): boolean {
+    const folder = savedFolders.find((f) => f.id === folderId);
+    if (!folder || folder.parentId === null) return false;
+    if (folder.parentId === ancestorId) return true;
+    return isDescendantOf(folder.parentId, ancestorId);
+  }
+
   // ── Drag & Drop ───────────────────────────────────────────────────────────────
 
   interface DragState {
@@ -490,7 +524,6 @@
 
   type DropZone =
     | { type: 'into-folder'; folderId: string }
-    | { type: 'into-unfiled' }
     | { type: 'before-query'; queryId: string; folderId: string | null }
     | { type: 'after-query'; queryId: string; folderId: string | null }
     | { type: 'before-folder'; folderId: string }
@@ -501,6 +534,11 @@
   let dropZone = $state<DropZone | null>(null);
   let dragStartY = 0;
   let suppressNextClick = false;
+
+  $effect(() => {
+    document.body.classList.toggle('is-dragging', isDragging);
+    return () => document.body.classList.remove('is-dragging');
+  });
 
   $effect(() => {
     if (!dragging) return;
@@ -545,8 +583,13 @@
     const relY = (y - rect.top) / rect.height;
 
     if (dragging.kind === 'query') {
-      if (dropType === 'unfiled') return { type: 'into-unfiled' };
-      if (dropType === 'folder') return { type: 'into-folder', folderId: node.dataset.folderId! };
+      if (dropType === 'folder') {
+        const folderId = node.dataset.folderId!;
+        // Edge zones (top/bottom 25%) = before/after; middle = into folder.
+        if (relY < 0.25) return { type: 'before-folder', folderId };
+        if (relY > 0.75) return { type: 'after-folder', folderId };
+        return { type: 'into-folder', folderId };
+      }
       if (dropType === 'query') {
         const queryId = node.dataset.queryId!;
         if (queryId === dragging.id) return null;
@@ -561,9 +604,17 @@
       if (dropType === 'folder') {
         const folderId = node.dataset.folderId!;
         if (folderId === dragging.id) return null;
+        if (isDescendantOf(folderId, dragging.id)) return null;
+        if (relY < 0.25) return { type: 'before-folder', folderId };
+        if (relY > 0.75) return { type: 'after-folder', folderId };
+        return { type: 'into-folder', folderId };
+      }
+      if (dropType === 'query') {
+        const queryId = node.dataset.queryId!;
+        const queryFolderId = node.dataset.queryFolderId || null;
         return relY < 0.5
-          ? { type: 'before-folder', folderId }
-          : { type: 'after-folder', folderId };
+          ? { type: 'before-query', queryId, folderId: queryFolderId }
+          : { type: 'after-query', queryId, folderId: queryFolderId };
       }
     }
     return null;
@@ -575,51 +626,170 @@
     await loadSavedQueries();
   }
 
+  async function updateOpenPanelId(oldId: string, newId: string) {
+    if (newId === oldId) return;
+    const open = panelStore.openItems.find(
+      (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === oldId,
+    );
+    if (open?.content.kind === 'query_editor' && open.content.editorId) {
+      panelStore.updateQueryEditorMeta(open.content.editorId, { savedQueryId: newId });
+    }
+  }
+
   async function commitQueryDrop(queryId: string, zone: DropZone) {
     const query = savedQueries.find((q) => q.id === queryId);
     if (!query) return;
 
-    if (zone.type === 'into-folder' || zone.type === 'into-unfiled') {
-      const newFolderId = zone.type === 'into-folder' ? zone.folderId : null;
+    if (zone.type === 'into-folder') {
       try {
         const updated = await savedQueriesApi.fileUpdateSavedQuery(queryId, {
           name: query.name,
           sql: query.sql,
           connectionId: query.fileConnectionId,
-          folderId: newFolderId,
+          folderId: zone.folderId,
           database: query.database,
         });
-        // ID changes when moving to a different folder — update open panel.
-        if (updated.id !== queryId) {
-          const open = panelStore.openItems.find(
-            (item) => item.content.kind === 'query_editor' && item.content.savedQueryId === queryId,
-          );
-          if (open?.content.kind === 'query_editor' && open.content.editorId) {
-            panelStore.updateQueryEditorMeta(open.content.editorId, { savedQueryId: updated.id });
-          }
+        await updateOpenPanelId(queryId, updated.id);
+      } catch (err) {
+        toast.addToast(errorMessage(err), 'error', 0);
+      }
+    } else if (zone.type === 'before-folder' || zone.type === 'after-folder') {
+      const refFolder = savedFolders.find((f) => f.id === zone.folderId);
+      if (!refFolder) return;
+      const targetFolderId = refFolder.parentId;
+      let effectiveQueryId = queryId;
+      if (query.folderId !== targetFolderId) {
+        try {
+          const updated = await savedQueriesApi.fileUpdateSavedQuery(queryId, {
+            name: query.name,
+            sql: query.sql,
+            connectionId: query.fileConnectionId,
+            folderId: targetFolderId,
+            database: query.database,
+          });
+          effectiveQueryId = updated.id;
+          await updateOpenPanelId(queryId, updated.id);
+        } catch (err) {
+          toast.addToast(errorMessage(err), 'error', 0);
+          return;
         }
+        await loadSavedQueries();
+      }
+      const siblings = childItems(targetFolderId);
+      const draggedIdx = siblings.findIndex((i) => i.kind === 'query' && i.item.id === effectiveQueryId);
+      if (draggedIdx === -1) return;
+      const [dragged] = siblings.splice(draggedIdx, 1);
+      const refIdx = siblings.findIndex((i) => i.kind === 'folder' && i.item.id === zone.folderId);
+      if (refIdx === -1) return;
+      siblings.splice(zone.type === 'before-folder' ? refIdx : refIdx + 1, 0, dragged);
+      try {
+        await savedQueriesApi.fileUpdateOrder(targetFolderId, siblings.map((i) => baseName(i.item.id)));
       } catch (err) {
         toast.addToast(errorMessage(err), 'error', 0);
       }
     } else if (zone.type === 'before-query' || zone.type === 'after-query') {
       const targetFolderId = zone.folderId;
-      const folderQueries = savedQueries.filter((q) => q.folderId === targetFolderId);
-      const ordered = folderQueries.filter((q) => q.id !== queryId);
-      const refIdx = ordered.findIndex((q) => q.id === zone.queryId);
+      let effectiveQueryId = queryId;
+
+      if (query.folderId !== targetFolderId) {
+        try {
+          const updated = await savedQueriesApi.fileUpdateSavedQuery(queryId, {
+            name: query.name,
+            sql: query.sql,
+            connectionId: query.fileConnectionId,
+            folderId: targetFolderId,
+            database: query.database,
+          });
+          effectiveQueryId = updated.id;
+          await updateOpenPanelId(queryId, updated.id);
+        } catch (err) {
+          toast.addToast(errorMessage(err), 'error', 0);
+          return;
+        }
+        await loadSavedQueries();
+      }
+
+      const siblings = childItems(targetFolderId);
+      const draggedIdx = siblings.findIndex((i) => i.kind === 'query' && i.item.id === effectiveQueryId);
+      if (draggedIdx === -1) return;
+      const [dragged] = siblings.splice(draggedIdx, 1);
+      const refIdx = siblings.findIndex((i) => i.kind === 'query' && i.item.id === zone.queryId);
       if (refIdx === -1) return;
-      ordered.splice(zone.type === 'before-query' ? refIdx : refIdx + 1, 0, query);
+      siblings.splice(zone.type === 'before-query' ? refIdx : refIdx + 1, 0, dragged);
       try {
-        await savedQueriesApi.fileUpdatePositions(
-          ordered.map((q, i) => ({ id: q.id, position: i })),
-        );
+        await savedQueriesApi.fileUpdateOrder(targetFolderId, siblings.map((i) => baseName(i.item.id)));
       } catch (err) {
         toast.addToast(errorMessage(err), 'error', 0);
       }
     }
   }
 
-  // Folder reordering is alphabetical in the file system — no-op.
-  async function commitFolderDrop(_folderId: string, _zone: DropZone) {}
+  async function commitFolderDrop(folderId: string, zone: DropZone) {
+    if (zone.type === 'into-folder') {
+      if (zone.folderId === folderId || isDescendantOf(zone.folderId, folderId)) return;
+      try {
+        await savedQueriesApi.fileMoveFolder(folderId, zone.folderId);
+      } catch (err) {
+        toast.addToast(errorMessage(err), 'error', 0);
+      }
+      return;
+    }
+
+    if (
+      zone.type !== 'before-folder' &&
+      zone.type !== 'after-folder' &&
+      zone.type !== 'before-query' &&
+      zone.type !== 'after-query'
+    ) return;
+
+    // Determine the parent context of the reference item.
+    let parentFolderId: string | null;
+    if (zone.type === 'before-folder' || zone.type === 'after-folder') {
+      const refFolder = savedFolders.find((f) => f.id === zone.folderId);
+      if (!refFolder) return;
+      parentFolderId = refFolder.parentId;
+    } else {
+      const refQuery = savedQueries.find((q) => q.id === zone.queryId);
+      if (!refQuery) return;
+      parentFolderId = refQuery.folderId;
+    }
+
+    // If the folder needs to move to a different parent, do that first.
+    const folder = savedFolders.find((f) => f.id === folderId);
+    if (!folder) return;
+    let effectiveFolderId = folderId;
+    if (folder.parentId !== parentFolderId) {
+      try {
+        await savedQueriesApi.fileMoveFolder(folderId, parentFolderId);
+      } catch (err) {
+        toast.addToast(errorMessage(err), 'error', 0);
+        return;
+      }
+      await loadSavedQueries();
+      const folderBaseName = baseName(folderId);
+      effectiveFolderId = parentFolderId ? `${parentFolderId}/${folderBaseName}` : folderBaseName;
+    }
+
+    const siblings = childItems(parentFolderId);
+    const draggedIdx = siblings.findIndex((i) => i.kind === 'folder' && i.item.id === effectiveFolderId);
+    if (draggedIdx === -1) return;
+    const [dragged] = siblings.splice(draggedIdx, 1);
+    const refIdx =
+      zone.type === 'before-folder' || zone.type === 'after-folder'
+        ? siblings.findIndex((i) => i.kind === 'folder' && i.item.id === zone.folderId)
+        : siblings.findIndex((i) => i.kind === 'query' && i.item.id === zone.queryId);
+    if (refIdx === -1) return;
+    siblings.splice(
+      zone.type === 'before-folder' || zone.type === 'before-query' ? refIdx : refIdx + 1,
+      0,
+      dragged,
+    );
+    try {
+      await savedQueriesApi.fileUpdateOrder(parentFolderId, siblings.map((i) => baseName(i.item.id)));
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+    }
+  }
 
   function handleFolderToggle(folderId: string) {
     if (suppressNextClick) {
@@ -815,22 +985,31 @@
           <span class="panel-title">Saved Queries</span>
           <div class="toolbar-gap"></div>
           <button
-            class="action-btn"
+            class="icon-btn"
             onclick={() => {
               showNewFolder = !showNewFolder;
             }}
             title="New folder"
+            aria-label="New folder"
           >
-            + Folder
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              <line x1="12" y1="11" x2="12" y2="17"/>
+              <line x1="9" y1="14" x2="15" y2="14"/>
+            </svg>
           </button>
           <button
-            class="action-btn"
+            class="icon-btn"
             onclick={() => {
               showNewQuery = !showNewQuery;
             }}
             title="New query"
+            aria-label="New query"
           >
-            + Query
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
           </button>
         </div>
 
@@ -877,174 +1056,76 @@
         {:else if savedFolders.length === 0 && savedQueries.length === 0}
           <div class="empty-row">No saved queries yet.</div>
         {:else}
-          <ul class="saved-list" role="tree" aria-label="Saved queries">
-            <!-- Unfiled queries (also shown as a drop target while dragging a query) -->
-            {#if (queriesByFolder.get(null) ?? []).length > 0 || (isDragging && dragging?.kind === 'query')}
-              {@const unfiledQueries = queriesByFolder.get(null) ?? []}
-              <li
-                class="folder-node"
-                class:drop-into={isDragging &&
-                  dragging?.kind === 'query' &&
-                  dropZone?.type === 'into-unfiled'}
-                data-drop-type="unfiled"
-                role="treeitem"
-                aria-selected={false}
-              >
-                <span class="folder-label muted">Unfiled</span>
-                {#if unfiledQueries.length > 0}
-                  <ul class="folder-children" role="group">
-                    {#each unfiledQueries as query (query.id)}
-                      <li
-                        class="query-node"
-                        class:drop-before={dropZone?.type === 'before-query' &&
-                          dropZone.queryId === query.id}
-                        class:drop-after={dropZone?.type === 'after-query' &&
-                          dropZone.queryId === query.id}
-                        class:is-dragging={isDragging && dragging?.id === query.id}
-                        data-drop-type="query"
-                        data-query-id={query.id}
-                        data-query-folder-id=""
-                        role="treeitem"
-                        aria-selected={false}
-                      >
-                        {#if renamingQueryId === query.id}
-                          <input
-                            bind:this={renameQueryInputEl}
-                            bind:value={renameQueryValue}
-                            class="query-rename-input"
-                            type="text"
-                            maxlength="120"
-                            autocomplete="off"
-                            spellcheck={false}
-                            onclick={(e) => e.stopPropagation()}
-                            onkeydown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                commitRenameQuery(query);
-                              }
-                              if (e.key === 'Escape') {
-                                renamingQueryId = null;
-                              }
-                            }}
-                            onblur={() => commitRenameQuery(query)}
-                          />
-                        {:else}
-                          <button
-                            class="query-btn"
-                            class:unresolved={query.connectionStatus === 'unresolved'}
-                            onclick={() => handleQueryClick(query)}
-                            onpointerdown={(e) => startDrag(e, 'query', query.id)}
-                            oncontextmenu={(e) =>
-                              showSavedCtxMenu(e, 'query', query.id, query.name)}
-                            title={query.connectionStatus === 'unresolved'
-                              ? `${query.name} — connection not found, click to assign`
-                              : `Open ${query.name}`}
-                          >
-                            <span class="query-icon" aria-hidden="true"
-                              ><svg
-                                width="13"
-                                height="13"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.7"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                ><polyline points="8 7 4 12 8 17"></polyline><polyline
-                                  points="16 7 20 12 16 17"
-                                ></polyline></svg
-                              ></span
-                            >
-                            <span class="query-name">{query.name}</span>
-                            {#if query.connectionStatus === 'unresolved'}
-                              <span class="conn-warn" aria-label="Connection not assigned" title="Connection not assigned — click to assign">!</span>
-                            {/if}
-                            <span class="drag-handle" aria-hidden="true"
-                              ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
-                                ><circle cx="2" cy="2" r="1.2" /><circle
-                                  cx="6"
-                                  cy="2"
-                                  r="1.2"
-                                /><circle cx="2" cy="6" r="1.2" /><circle
-                                  cx="6"
-                                  cy="6"
-                                  r="1.2"
-                                /><circle cx="2" cy="10" r="1.2" /><circle
-                                  cx="6"
-                                  cy="10"
-                                  r="1.2"
-                                /></svg
-                              ></span
-                            >
-                          </button>
-                        {/if}
-                      </li>
-                    {/each}
-                  </ul>
-                {/if}
-              </li>
-            {/if}
-
-            <!-- Folders -->
-            {#each savedFolders as folder (folder.id)}
-              {@const folderQueries = queriesByFolder.get(folder.id) ?? []}
-              {@const isOpen = expandedFolders.has(folder.id)}
-              <li
-                class="folder-node"
-                class:drop-into={isDragging &&
-                  dragging?.kind === 'query' &&
-                  dropZone?.type === 'into-folder' &&
-                  dropZone.folderId === folder.id}
-                class:drop-before={dropZone?.type === 'before-folder' &&
-                  dropZone.folderId === folder.id}
-                class:drop-after={dropZone?.type === 'after-folder' &&
-                  dropZone.folderId === folder.id}
-                class:is-dragging={isDragging &&
-                  dragging?.kind === 'folder' &&
-                  dragging.id === folder.id}
-                data-drop-type="folder"
-                data-folder-id={folder.id}
-                role="treeitem"
-                aria-expanded={isOpen}
-                aria-selected={false}
-              >
+          {#snippet queryRow(query: FileQuery, folderId: string | null)}
+            <li
+              class="query-node"
+              class:drop-before={dropZone?.type === 'before-query' && dropZone.queryId === query.id}
+              class:drop-after={dropZone?.type === 'after-query' && dropZone.queryId === query.id}
+              class:is-dragging={isDragging && dragging?.id === query.id}
+              data-drop-type="query"
+              data-query-id={query.id}
+              data-query-folder-id={folderId ?? ''}
+              role="treeitem"
+              aria-selected={false}
+            >
+              {#if renamingQueryId === query.id}
+                <input
+                  bind:this={renameQueryInputEl}
+                  bind:value={renameQueryValue}
+                  class="query-rename-input"
+                  type="text"
+                  maxlength="120"
+                  autocomplete="off"
+                  spellcheck={false}
+                  onclick={(e) => e.stopPropagation()}
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitRenameQuery(query);
+                    }
+                    if (e.key === 'Escape') {
+                      renamingQueryId = null;
+                    }
+                  }}
+                  onblur={() => commitRenameQuery(query)}
+                />
+              {:else}
                 <button
-                  class="folder-btn"
-                  onclick={() => handleFolderToggle(folder.id)}
-                  onpointerdown={(e) => startDrag(e, 'folder', folder.id)}
-                  oncontextmenu={(e) => showSavedCtxMenu(e, 'folder', folder.id, folder.name)}
-                  aria-label="{isOpen ? 'Collapse' : 'Expand'} folder {folder.name}"
+                  class="query-btn"
+                  class:unresolved={query.connectionStatus === 'unresolved'}
+                  onclick={() => handleQueryClick(query)}
+                  onpointerdown={(e) => startDrag(e, 'query', query.id)}
+                  oncontextmenu={(e) => showSavedCtxMenu(e, 'query', query.id, query.name)}
+                  title={query.connectionStatus === 'unresolved'
+                    ? `${query.name} — connection not found, click to assign`
+                    : `Open ${query.name}`}
                 >
-                  <span class="chevron" class:open={isOpen} aria-hidden="true"
-                    ><svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 10 10"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"><polyline points="3 2 7 5 3 8" /></svg
-                    ></span
-                  >
-                  <span class="folder-icon" aria-hidden="true"
+                  <span class="query-icon" aria-hidden="true"
                     ><svg
                       width="13"
                       height="13"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
-                      stroke-width="1.8"
+                      stroke-width="1.7"
                       stroke-linecap="round"
                       stroke-linejoin="round"
-                      ><path
-                        d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-                      /></svg
+                      ><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="9.5 13 8 15 9.5 17"></polyline><polyline points="14.5 13 16 15 14.5 17"></polyline></svg
                     ></span
                   >
-                  <span class="folder-name">{folder.name}</span>
-                  {#if folderQueries.length > 0}
-                    <span class="count-badge">{folderQueries.length}</span>
+                  <span class="query-name">{query.name}</span>
+                  {#if query.connectionStatus === 'unresolved'}
+                    <span class="conn-warn" aria-label="Connection not assigned" title="Connection not assigned — click to assign">!</span>
+                  {:else if query.connectionStatus === 'resolved' && query.connectionId}
+                    {@const conn = connectionStore.getById(query.connectionId)}
+                    {#if conn}
+                      <span
+                        class="query-conn-dot"
+                        style="background: {conn.color ?? 'var(--color-accent)'}"
+                        title={conn.name}
+                        aria-hidden="true"
+                      ></span>
+                    {/if}
                   {/if}
                   <span class="drag-handle" aria-hidden="true"
                     ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
@@ -1060,101 +1141,98 @@
                     ></span
                   >
                 </button>
+              {/if}
+            </li>
+          {/snippet}
 
-                {#if isOpen && folderQueries.length > 0}
-                  <ul class="folder-children" role="group">
-                    {#each folderQueries as query (query.id)}
-                      <li
-                        class="query-node"
-                        class:drop-before={dropZone?.type === 'before-query' &&
-                          dropZone.queryId === query.id}
-                        class:drop-after={dropZone?.type === 'after-query' &&
-                          dropZone.queryId === query.id}
-                        class:is-dragging={isDragging && dragging?.id === query.id}
-                        data-drop-type="query"
-                        data-query-id={query.id}
-                        data-query-folder-id={folder.id}
-                        role="treeitem"
-                        aria-selected={false}
-                      >
-                        {#if renamingQueryId === query.id}
-                          <input
-                            bind:this={renameQueryInputEl}
-                            bind:value={renameQueryValue}
-                            class="query-rename-input"
-                            type="text"
-                            maxlength="120"
-                            autocomplete="off"
-                            spellcheck={false}
-                            onclick={(e) => e.stopPropagation()}
-                            onkeydown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                commitRenameQuery(query);
-                              }
-                              if (e.key === 'Escape') {
-                                renamingQueryId = null;
-                              }
-                            }}
-                            onblur={() => commitRenameQuery(query)}
-                          />
-                        {:else}
-                          <button
-                            class="query-btn"
-                            class:unresolved={query.connectionStatus === 'unresolved'}
-                            onclick={() => handleQueryClick(query)}
-                            onpointerdown={(e) => startDrag(e, 'query', query.id)}
-                            oncontextmenu={(e) =>
-                              showSavedCtxMenu(e, 'query', query.id, query.name)}
-                            title={query.connectionStatus === 'unresolved'
-                              ? `${query.name} — connection not found, click to assign`
-                              : `Open ${query.name}`}
-                          >
-                            <span class="query-icon" aria-hidden="true"
-                              ><svg
-                                width="13"
-                                height="13"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.7"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                ><polyline points="8 7 4 12 8 17"></polyline><polyline
-                                  points="16 7 20 12 16 17"
-                                ></polyline></svg
-                              ></span
-                            >
-                            <span class="query-name">{query.name}</span>
-                            {#if query.connectionStatus === 'unresolved'}
-                              <span class="conn-warn" aria-label="Connection not assigned" title="Connection not assigned — click to assign">!</span>
-                            {/if}
-                            <span class="drag-handle" aria-hidden="true"
-                              ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
-                                ><circle cx="2" cy="2" r="1.2" /><circle
-                                  cx="6"
-                                  cy="2"
-                                  r="1.2"
-                                /><circle cx="2" cy="6" r="1.2" /><circle
-                                  cx="6"
-                                  cy="6"
-                                  r="1.2"
-                                /><circle cx="2" cy="10" r="1.2" /><circle
-                                  cx="6"
-                                  cy="10"
-                                  r="1.2"
-                                /></svg
-                              ></span
-                            >
-                          </button>
-                        {/if}
-                      </li>
-                    {/each}
-                  </ul>
-                {/if}
-              </li>
+          {#snippet folderTree(items: TopLevelItem[], parentFolderId: string | null)}
+            {#each items as tlItem (tlItem.kind === 'query' ? tlItem.item.id : 'f:' + tlItem.item.id)}
+              {#if tlItem.kind === 'query'}
+                {@render queryRow(tlItem.item, parentFolderId)}
+              {:else}
+                {@const folder = tlItem.item}
+                {@const folderDirectQueries = queriesByFolder.get(folder.id) ?? []}
+                {@const isOpen = expandedFolders.has(folder.id)}
+                {@const folderChildItems = childItems(folder.id)}
+                <li
+                  class="folder-node"
+                  class:drop-into={dropZone?.type === 'into-folder' && dropZone.folderId === folder.id}
+                  class:drop-before={dropZone?.type === 'before-folder' &&
+                    dropZone.folderId === folder.id}
+                  class:drop-after={dropZone?.type === 'after-folder' &&
+                    dropZone.folderId === folder.id}
+                  class:is-dragging={isDragging &&
+                    dragging?.kind === 'folder' &&
+                    dragging.id === folder.id}
+                  data-drop-type="folder"
+                  data-folder-id={folder.id}
+                  role="treeitem"
+                  aria-expanded={isOpen}
+                  aria-selected={false}
+                >
+                  <button
+                    class="folder-btn"
+                    onclick={() => handleFolderToggle(folder.id)}
+                    onpointerdown={(e) => startDrag(e, 'folder', folder.id)}
+                    oncontextmenu={(e) => showSavedCtxMenu(e, 'folder', folder.id, folder.name)}
+                    aria-label="{isOpen ? 'Collapse' : 'Expand'} folder {folder.name}"
+                  >
+                    <span class="folder-icon" aria-hidden="true"
+                      ><svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        ><path
+                          d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                        /></svg
+                      ></span
+                    >
+                    <span class="folder-name">{folder.name}</span>
+                    <span class="count-badge">{folderDirectQueries.length}</span>
+                    <span class="chevron" class:open={isOpen} aria-hidden="true"
+                      ><svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg
+                      ></span
+                    >
+                    <span class="drag-handle" aria-hidden="true"
+                      ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
+                        ><circle cx="2" cy="2" r="1.2" /><circle cx="6" cy="2" r="1.2" /><circle
+                          cx="2"
+                          cy="6"
+                          r="1.2"
+                        /><circle cx="6" cy="6" r="1.2" /><circle cx="2" cy="10" r="1.2" /><circle
+                          cx="6"
+                          cy="10"
+                          r="1.2"
+                        /></svg
+                      ></span
+                    >
+                  </button>
+
+                  {#if isOpen && folderChildItems.length > 0}
+                    <ul class="folder-children" role="group">
+                      {@render folderTree(folderChildItems, folder.id)}
+                    </ul>
+                  {/if}
+                </li>
+              {/if}
             {/each}
+          {/snippet}
 
+          <ul class="saved-list" role="tree" aria-label="Saved queries">
+            {@render folderTree(childItems(null), null)}
           </ul>
         {/if}
       </div>
@@ -1382,19 +1460,20 @@
     align-items: center;
     gap: 2px;
     padding: var(--spacing-1) var(--spacing-2);
+    min-height: 34px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
 
   .tab-btn {
-    width: 32px;
+    width: 30px;
     height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     transition:
       background var(--transition-fast),
       color var(--transition-fast);
@@ -1432,17 +1511,38 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-1);
-    padding: var(--spacing-1) var(--spacing-2);
+    padding: 6px var(--spacing-2);
+    min-height: 34px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
 
   .panel-title {
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
+    font-size: 10.5px;
+    font-weight: 700;
     color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+  }
+
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .icon-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 
   .toolbar-gap {
@@ -1594,7 +1694,7 @@
   .saved-list {
     flex: 1;
     overflow-y: auto;
-    padding: var(--spacing-1) 0;
+    padding: var(--spacing-1) var(--spacing-1);
   }
 
   .folder-node {
@@ -1606,14 +1706,14 @@
   .query-btn {
     display: flex;
     align-items: center;
-    gap: var(--spacing-1);
+    gap: var(--spacing-2);
     width: 100%;
-    padding: 3px var(--spacing-2);
-    font-size: var(--font-size-sm);
+    padding: 6px var(--spacing-2);
+    font-size: 13px;
     color: var(--color-text-secondary);
     text-align: left;
     cursor: pointer;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     transition: background var(--transition-fast);
     -webkit-user-select: none;
     user-select: none;
@@ -1625,13 +1725,6 @@
     color: var(--color-text-primary);
   }
 
-  .folder-label {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-1);
-    padding: 3px var(--spacing-2);
-    font-size: var(--font-size-xs);
-  }
 
   .folder-icon,
   .query-icon {
@@ -1654,10 +1747,12 @@
 
   .count-badge {
     font-size: 10px;
-    color: var(--color-text-muted);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-disabled);
     background: var(--color-bg-tertiary);
-    border-radius: var(--radius-sm);
-    padding: 0 4px;
+    border-radius: 10px;
+    padding: 1px 6px;
+    flex-shrink: 0;
   }
 
   .chevron {
@@ -1665,15 +1760,18 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
+  }
+
+  .chevron svg {
     transition: transform var(--transition-fast);
   }
 
-  .chevron.open {
+  .chevron.open svg {
     transform: rotate(90deg);
   }
 
   .folder-children {
-    padding-left: var(--spacing-3);
+    padding-left: var(--spacing-6);
   }
 
   .query-node {
@@ -1705,6 +1803,7 @@
     display: flex;
     align-items: center;
     width: 14px;
+    cursor: grab;
     transition: opacity var(--transition-fast);
   }
 
@@ -1713,9 +1812,9 @@
     opacity: 0.5;
   }
 
-  .query-btn,
-  .folder-btn {
-    cursor: grab;
+  :global(body.is-dragging),
+  :global(body.is-dragging *) {
+    cursor: grabbing !important;
   }
 
   .query-node,
@@ -1749,8 +1848,7 @@
     z-index: 1;
   }
 
-  .folder-node.drop-into > .folder-btn,
-  .folder-node.drop-into > .folder-label {
+  .folder-node.drop-into > .folder-btn {
     background: var(--color-accent-subtle) !important;
     outline: 1px solid var(--color-accent);
     border-radius: var(--radius-sm);
@@ -1806,6 +1904,13 @@
 
   .query-btn.unresolved {
     color: var(--color-warning, #f59e0b);
+  }
+
+  .query-conn-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .conn-warn {

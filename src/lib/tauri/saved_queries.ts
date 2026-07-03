@@ -110,6 +110,13 @@ export async function fileUpdatePositions(
   return invoke<void>('file_saved_queries_update_positions', { updates });
 }
 
+export async function fileUpdateOrder(
+  parentId: string | null,
+  items: string[],
+): Promise<void> {
+  return invoke<void>('file_saved_queries_update_order', { parentId, items });
+}
+
 export async function fileCreateFolder(
   name: string,
   parentId?: string | null,
@@ -126,6 +133,16 @@ export async function fileDeleteFolder(id: string): Promise<void> {
 
 export async function fileRenameFolder(id: string, name: string): Promise<FileQueryFolder> {
   return invoke<FileQueryFolder>('file_saved_queries_rename_folder', { id, name });
+}
+
+export async function fileMoveFolder(
+  id: string,
+  newParentId: string | null,
+): Promise<FileQueryFolder> {
+  return invoke<FileQueryFolder>('file_saved_queries_move_folder', {
+    id,
+    newParentId: newParentId ?? null,
+  });
 }
 
 export async function fileAssignConnection(
