@@ -1026,12 +1026,16 @@
   }
 
   .table-scroll::-webkit-scrollbar {
-    height: 0;
+    height: 4px;
+  }
+
+  .table-scroll::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 2px;
   }
 
   .data-table {
     width: max-content;
-    min-width: 100%;
     border-collapse: collapse;
     font-size: var(--font-size-xs);
   }

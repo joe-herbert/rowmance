@@ -3416,11 +3416,8 @@
             <tr class="quick-view-row">
               <td class="quick-view-cell" colspan={visibleColumns.length + 2} tabindex="-1">
                 {#if quickViewState.loading}
-                  <div class="quick-view-panel">
-                    <div
-                      class="quick-view-header"
-                      style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))"
-                    >
+                  <div class="quick-view-panel" style="width:{tableScrollWidth}px">
+                    <div class="quick-view-header">
                       <span class="quick-view-title">Loading…</span>
                       <button
                         class="quick-view-close"
@@ -3447,11 +3444,8 @@
                   </div>
                 {:else if quickViewState.data !== null}
                   {@const qd = quickViewState.data}
-                  <div class="quick-view-panel">
-                    <div
-                      class="quick-view-header"
-                      style="width:calc({tableScrollWidth}px - 2 * var(--spacing-3))"
-                    >
+                  <div class="quick-view-panel" style="width:{tableScrollWidth}px">
+                    <div class="quick-view-header">
                       <span class="quick-view-title">
                         <span class="quick-view-table-name">{qd.tableName}</span>
                         <span class="quick-view-sep"> · </span>
@@ -4539,9 +4533,12 @@
   }
 
   .quick-view-panel {
-    padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
+    padding: var(--spacing-2) var(--spacing-2) var(--spacing-3);
     background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-primary));
     border-top: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+    position: sticky;
+    left: 0;
+    overflow: hidden;
   }
 
   .quick-view-header {
@@ -4550,9 +4547,6 @@
     justify-content: space-between;
     margin-bottom: var(--spacing-2);
     gap: var(--spacing-2);
-    position: sticky;
-    left: var(--spacing-3);
-    z-index: 2;
   }
 
   .quick-view-title {
@@ -4637,8 +4631,7 @@
     border-spacing: 0;
     font-size: 12px;
     white-space: nowrap;
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
   }
 
   .quick-view-th {
