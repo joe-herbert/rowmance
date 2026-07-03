@@ -896,13 +896,18 @@
     pendingChanges = updated;
     onChangePending?.(pendingChanges, originalRows);
     editTarget = null;
-    if (!isNewRow) refocusCell();
+    if (isNewRow) refocusNewRowCell();
+    else refocusCell();
   }
 
   function cancelEdit(): void {
     const wasEditing = editTarget !== null;
+    const wasNewRow = editTarget?.rowKey.startsWith('__new__') ?? false;
     editTarget = null;
-    if (wasEditing) refocusCell();
+    if (wasEditing) {
+      if (wasNewRow) refocusNewRowCell();
+      else refocusCell();
+    }
   }
 
   function handleTabFromEditor(shiftKey: boolean): void {
@@ -936,11 +941,74 @@
 
     // Find current visual position from editTarget
     const visColIndex = visibleColumns.findIndex((vc) => vc.originalIndex === editTarget!.colIndex);
+    const { rowKey, colName, originalValue } = editTarget;
+    const isNewRow = rowKey.startsWith('__new__');
+
+    if (isNewRow) {
+      if (visColIndex < 0) { confirmEdit(newValue); return; }
+      const colCount = visibleColumns.length;
+      const newRowIdx = pendingNewRows.findIndex((r) => r.key === rowKey);
+      if (newRowIdx < 0) { confirmEdit(newValue); return; }
+
+      let nextCol = visColIndex;
+      let nextNewRowIdx = newRowIdx;
+      if (shiftKey) {
+        nextCol -= 1;
+        if (nextCol < 0) {
+          nextCol = colCount - 1;
+          nextNewRowIdx = Math.max(nextNewRowIdx - 1, 0);
+        }
+      } else {
+        nextCol += 1;
+        if (nextCol >= colCount) {
+          nextCol = 0;
+          nextNewRowIdx = Math.min(nextNewRowIdx + 1, pendingNewRows.length - 1);
+        }
+      }
+
+      // Save current edit
+      const updated = new Map(pendingChanges);
+      if (!updated.has(rowKey)) updated.set(rowKey, new Map());
+      updated.get(rowKey)!.set(colName, newValue);
+      pendingChanges = updated;
+      onChangePending?.(pendingChanges, originalRows);
+      editTarget = null;
+
+      const nextRowKey = pendingNewRows[nextNewRowIdx].key;
+      newRowAnchorCell = { rowKey: nextRowKey, col: nextCol };
+      newRowFocusedCell = { rowKey: nextRowKey, col: nextCol };
+      skipNextFocusReset = true;
+
+      requestAnimationFrame(() => {
+        const el = getNewRowCellEl(nextRowKey, nextCol);
+        if (!el) return;
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        const { originalIndex } = visibleColumns[nextCol] ?? {};
+        const colDef = columns[originalIndex];
+        if (!colDef) return;
+        const currentValue = pendingChanges.get(nextRowKey)?.get(colDef.name) ?? null;
+        const tdRect = el.getBoundingClientRect();
+        editTarget = {
+          rowKey: nextRowKey,
+          colName: colDef.name,
+          colIndex: originalIndex,
+          value: currentValue,
+          originalValue: currentValue,
+          dataType: colDef.dataType,
+          nullable: colDef.nullable,
+          initialViewportTop: tdRect.top,
+          initialViewportLeft: tdRect.left,
+          width: Math.max(tdRect.width, 160),
+          height: tdRect.height,
+        };
+      });
+      return;
+    }
+
     const rowIndex = pageRows.findIndex(
-      (r, i) => buildRowKey(r, columns, pageOffset + i) === editTarget!.rowKey,
+      (r, i) => buildRowKey(r, columns, pageOffset + i) === rowKey,
     );
     if (visColIndex < 0 || rowIndex < 0) {
-      // Fallback: just confirm without tab navigation
       confirmEdit(newValue);
       return;
     }
@@ -965,8 +1033,6 @@
     }
 
     // Confirm current edit (without refocusCell — we'll open the next editor instead)
-    const { rowKey, colName, originalValue } = editTarget;
-    const isNewRow = rowKey.startsWith('__new__');
     const updated = new Map(pendingChanges);
     if (isNewRow) {
       if (!updated.has(rowKey)) updated.set(rowKey, new Map());
@@ -1073,6 +1139,17 @@
       focusedCell = cell;
       skipNextFocusReset = true;
       const el = getFocusedCellEl(cell.row, cell.col);
+      el?.focus();
+      el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+  }
+
+  function refocusNewRowCell(): void {
+    if (!newRowFocusedCell) return;
+    const { rowKey, col } = newRowFocusedCell;
+    requestAnimationFrame(() => {
+      skipNextFocusReset = true;
+      const el = getNewRowCellEl(rowKey, col);
       el?.focus();
       el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
@@ -1344,6 +1421,89 @@
       return;
     }
 
+    if (!focusedCell && newRowFocusedCell) {
+      const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+      if (!isArrowKey && e.key !== 'Enter' && e.key !== 'Escape') return;
+      e.preventDefault();
+      const colCount = visibleColumns.length;
+      let { rowKey, col } = newRowFocusedCell;
+      let rowIdx = newRowPositionIndex(rowKey);
+
+      if (e.key === 'Escape') {
+        getNewRowCellEl(rowKey, col)?.blur();
+        newRowFocusedCell = null;
+        newRowAnchorCell = null;
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (editable) {
+          const { originalIndex } = visibleColumns[col];
+          const colDef = columns[originalIndex];
+          const currentValue = pendingChanges.get(rowKey)?.get(colDef.name) ?? null;
+          const td = getNewRowCellEl(rowKey, col);
+          if (td && colDef)
+            handleNewRowCellDblClick(
+              { currentTarget: td } as unknown as MouseEvent,
+              rowKey,
+              currentValue,
+              colDef,
+              originalIndex,
+            );
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        col = Math.max(col - 1, 0);
+      } else if (e.key === 'ArrowRight') {
+        col = Math.min(col + 1, colCount - 1);
+      } else if (e.key === 'ArrowUp') {
+        if (rowIdx > 0) {
+          rowIdx--;
+          rowKey = pendingNewRows[rowIdx].key;
+        } else if (settings.newRowPosition !== 'top' && pageRows.length > 0 && !e.shiftKey) {
+          // new rows at bottom: cross up into last regular row
+          const targetRow = pageRows.length - 1;
+          newRowFocusedCell = null;
+          newRowAnchorCell = null;
+          anchorCell = { row: targetRow, col };
+          focusedCell = { row: targetRow, col };
+          skipNextFocusReset = true;
+          scrollFocusedCellIntoView({ row: targetRow, col });
+          return;
+        }
+      } else if (e.key === 'ArrowDown') {
+        if (rowIdx < pendingNewRows.length - 1) {
+          rowIdx++;
+          rowKey = pendingNewRows[rowIdx].key;
+        } else if (settings.newRowPosition === 'top' && pageRows.length > 0 && !e.shiftKey) {
+          // new rows at top: cross down into first regular row
+          newRowFocusedCell = null;
+          newRowAnchorCell = null;
+          anchorCell = { row: 0, col };
+          focusedCell = { row: 0, col };
+          skipNextFocusReset = true;
+          scrollFocusedCellIntoView({ row: 0, col });
+          return;
+        }
+      }
+
+      if (e.shiftKey) {
+        newRowFocusedCell = { rowKey, col };
+      } else {
+        newRowAnchorCell = { rowKey, col };
+        newRowFocusedCell = { rowKey, col };
+      }
+      skipNextFocusReset = true;
+      requestAnimationFrame(() => {
+        const el = getNewRowCellEl(rowKey, col);
+        el?.focus();
+        el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
+      return;
+    }
+
     if (!focusedCell) {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         const newCell = { row: 0, col: 0 };
@@ -1435,6 +1595,45 @@
       return;
     }
 
+    if (isArrow && !e.shiftKey && pendingNewRows.length > 0) {
+      const origRow = focusedCell!.row;
+      if (e.key === 'ArrowUp' && row === 0 && origRow === 0 && settings.newRowPosition === 'top') {
+        // Cross up into last new row at top
+        const targetKey = pendingNewRows[pendingNewRows.length - 1].key;
+        newRowAnchorCell = { rowKey: targetKey, col };
+        newRowFocusedCell = { rowKey: targetKey, col };
+        anchorCell = null;
+        focusedCell = null;
+        skipNextFocusReset = true;
+        requestAnimationFrame(() => {
+          const el = getNewRowCellEl(targetKey, col);
+          el?.focus();
+          el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        });
+        return;
+      }
+      if (
+        e.key === 'ArrowDown' &&
+        row === rowCount - 1 &&
+        origRow === rowCount - 1 &&
+        settings.newRowPosition !== 'top'
+      ) {
+        // Cross down into first new row at bottom
+        const targetKey = pendingNewRows[0].key;
+        newRowAnchorCell = { rowKey: targetKey, col };
+        newRowFocusedCell = { rowKey: targetKey, col };
+        anchorCell = null;
+        focusedCell = null;
+        skipNextFocusReset = true;
+        requestAnimationFrame(() => {
+          const el = getNewRowCellEl(targetKey, col);
+          el?.focus();
+          el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        });
+        return;
+      }
+    }
+
     if (isArrow) {
       additionalSelectedCells = new Set();
       if (e.shiftKey) {
@@ -1456,6 +1655,12 @@
     if (!tr) return null;
     // +2 to skip the row-number column
     return tr.querySelector<HTMLTableCellElement>(`td:nth-child(${col + 2})`);
+  }
+
+  function getNewRowCellEl(rowKey: string, colIndex: number): HTMLTableCellElement | null {
+    if (!tableContainerEl) return null;
+    const tr = tableContainerEl.querySelector<HTMLElement>(`[data-new-row-key="${rowKey}"]`);
+    return tr?.querySelectorAll<HTMLTableCellElement>('.data-cell')[colIndex] ?? null;
   }
 
   function scrollFocusedCellIntoView(cell: { row: number; col: number }): void {
