@@ -611,6 +611,53 @@
     untrack(() => (initialDeletedRows ? new Map(initialDeletedRows) : new Map())),
   );
 
+  // When rows reload, clear pending changes whose value now matches the DB value.
+  // This handles the case where the same edit was saved via another panel (e.g. query
+  // editor), making the table view's pending change redundant.
+  $effect(() => {
+    const currentProcessedRows = processedRows;
+    const currentColumns = columns;
+    untrack(() => {
+      if (pendingChanges.size === 0) return;
+
+      let changed = false;
+      const updatedChanges = new Map(pendingChanges);
+      const updatedOriginals = new Map(originalRows);
+
+      for (let j = 0; j < currentProcessedRows.length; j++) {
+        const row = currentProcessedRows[j];
+        const rowKey = buildRowKey(row, currentColumns, j);
+        const colMap = updatedChanges.get(rowKey);
+        if (!colMap) continue;
+
+        const colsToRemove: string[] = [];
+        for (const [colName, pendingVal] of colMap) {
+          const colIdx = currentColumns.findIndex((c) => c.name === colName);
+          if (colIdx < 0) continue;
+          const dbVal = row[colIdx];
+          if (cellValuesEqual(pendingVal, dbVal)) {
+            colsToRemove.push(colName);
+          }
+        }
+
+        for (const colName of colsToRemove) {
+          colMap.delete(colName);
+          changed = true;
+        }
+        if (colMap.size === 0) {
+          updatedChanges.delete(rowKey);
+          updatedOriginals.delete(rowKey);
+        }
+      }
+
+      if (changed) {
+        pendingChanges = updatedChanges;
+        originalRows = updatedOriginals;
+        onChangePending?.(pendingChanges, originalRows);
+      }
+    });
+  });
+
   $effect(() => {
     const trigger = addRowTrigger;
     if (trigger === 0) return;
