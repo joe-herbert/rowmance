@@ -3554,112 +3554,120 @@
       use:portal
     >
       {#if contextMenu.isNewRow}
-        {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => openNewRowInlineEditFromContextMenu()}
-          >
-            Edit
-          </button>
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => openNewRowModalFromContextMenu()}
-          >
-            Edit in modal
-          </button>
-        {/if}
-        {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => openNewRowViewModalFromContextMenu()}
-          >
-            View in modal
-          </button>
-        {/if}
-        <div class="context-menu-separator"></div>
-        {#if editable && !readOnly}
-          <button class="context-menu-item" role="menuitem" onclick={() => setSelectionNull()}>
-            Set to NULL
-          </button>
-          {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
-            <button class="context-menu-item" role="menuitem" onclick={setNowFromContextMenu}>
-              Set to NOW
+        {#if contextMenu.colName !== null}
+          {#if editable && !readOnly && !contextMenuSnapshotIsMultiCell}
+            <button
+              class="context-menu-item"
+              role="menuitem"
+              onclick={() => openNewRowInlineEditFromContextMenu()}
+            >
+              Edit
+            </button>
+            <button
+              class="context-menu-item"
+              role="menuitem"
+              onclick={() => openNewRowModalFromContextMenu()}
+            >
+              Edit in modal
+            </button>
+          {/if}
+          {#if !contextMenuSnapshotIsMultiCell}
+            <button
+              class="context-menu-item"
+              role="menuitem"
+              onclick={() => openNewRowViewModalFromContextMenu()}
+            >
+              View in modal
             </button>
           {/if}
           <div class="context-menu-separator"></div>
-        {/if}
-        {#if contextMenuSnapshotHasFocus}
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => {
-              copySelection();
-              dismissContextMenu();
-            }}
-          >
-            {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
-          </button>
           {#if editable && !readOnly}
-            <button
-              class="context-menu-item"
-              role="menuitem"
-              onclick={() => {
-                cutSelection();
-                dismissContextMenu();
-              }}
-            >
-              {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
+            <button class="context-menu-item" role="menuitem" onclick={() => setSelectionNull()}>
+              Set to NULL
             </button>
+            {#if !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
+              <button class="context-menu-item" role="menuitem" onclick={setNowFromContextMenu}>
+                Set to NOW
+              </button>
+            {/if}
+            <div class="context-menu-separator"></div>
+          {/if}
+          {#if contextMenuSnapshotHasFocus}
             <button
               class="context-menu-item"
               role="menuitem"
-              disabled={!contextMenuClipboardHasContent}
               onclick={() => {
-                pasteFromClipboard();
+                copySelection();
                 dismissContextMenu();
               }}
             >
-              Paste
+              {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
+            </button>
+            {#if editable && !readOnly}
+              <button
+                class="context-menu-item"
+                role="menuitem"
+                onclick={() => {
+                  cutSelection();
+                  dismissContextMenu();
+                }}
+              >
+                {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
+              </button>
+              <button
+                class="context-menu-item"
+                role="menuitem"
+                disabled={!contextMenuClipboardHasContent}
+                onclick={() => {
+                  pasteFromClipboard();
+                  dismissContextMenu();
+                }}
+              >
+                Paste
+              </button>
+            {/if}
+          {/if}
+          <div class="context-menu-separator"></div>
+          <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
+            Copy cell as JSON
+          </button>
+          <button class="context-menu-item" role="menuitem" onclick={() => copyAsSql()}>
+            Copy cell as SQL
+          </button>
+          <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
+            Copy cell as CSV
+          </button>
+          <div class="context-menu-separator"></div>
+          <button class="context-menu-item" role="menuitem" onclick={() => copyColumnNames()}>
+            {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
+          </button>
+          {#if onConnectColumn && !contextMenuSnapshotIsMultiCell}
+            <div class="context-menu-separator"></div>
+            <button
+              class="context-menu-item"
+              role="menuitem"
+              onclick={() => {
+                onConnectColumn!(contextMenu!.colName!);
+                dismissContextMenu();
+              }}
+            >
+              Connect column…
             </button>
           {/if}
-        {/if}
-        <div class="context-menu-separator"></div>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
-          Copy cell as JSON
-        </button>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsSql()}>
-          Copy cell as SQL
-        </button>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
-          Copy cell as CSV
-        </button>
-        <div class="context-menu-separator"></div>
-        <button class="context-menu-item" role="menuitem" onclick={() => copyColumnNames()}>
-          {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
-        </button>
-        {#if contextMenu.colName && onConnectColumn && !contextMenuSnapshotIsMultiCell}
           <div class="context-menu-separator"></div>
-          <button
-            class="context-menu-item"
-            role="menuitem"
-            onclick={() => {
-              onConnectColumn!(contextMenu!.colName!);
-              dismissContextMenu();
-            }}
-          >
-            Connect column…
-          </button>
         {/if}
-        <div class="context-menu-separator"></div>
         <button
           class="context-menu-item"
           role="menuitem"
           onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}
         >
           Copy row (tab-separated)
+        </button>
+        <button class="context-menu-item" role="menuitem" onclick={() => copyAsJson()}>
+          Copy row as JSON
+        </button>
+        <button class="context-menu-item" role="menuitem" onclick={() => copyAsCsv()}>
+          Copy row as CSV
         </button>
         {#if editable && !readOnly}
           <div class="context-menu-separator"></div>
@@ -3675,7 +3683,7 @@
         >
           Discard new row
         </button>
-      {:else if contextMenuSnapshotIsRowSelection}
+      {:else if contextMenuSnapshotIsRowSelection || contextMenu.colName === null}
         {#if selectedRowKeys.size > 1}
           <button
             class="context-menu-item"
@@ -3705,10 +3713,11 @@
         </button>
         {#if editable && !readOnly}
           <div class="context-menu-separator"></div>
-          {#if selectedRowKeys.size === 1}
+          {#if selectedRowKeys.size <= 1}
             <button class="context-menu-item" role="menuitem" onclick={() => cloneRow()}>
               Clone row
             </button>
+            <div class="context-menu-separator"></div>
           {/if}
           <button
             class="context-menu-item context-menu-item-danger"
@@ -3859,6 +3868,7 @@
           <button class="context-menu-item" role="menuitem" onclick={() => cloneRow()}>
             Clone row
           </button>
+          <div class="context-menu-separator"></div>
           <button
             class="context-menu-item context-menu-item-danger"
             role="menuitem"
