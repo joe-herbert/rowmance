@@ -1,5 +1,7 @@
 <script module>
   // Shared across all TableBrowser instances — persists across remounts.
+  import { tableBrowserFilterCache } from '$lib/stores/tableBrowserFilterCache';
+
   type CellValue = string | number | boolean | null;
   const tableScrollPositions = new Map<string, number>();
   const tablePendingState = new Map<
@@ -17,12 +19,6 @@
     foreignKeys: import('$lib/types').ForeignKeyInfo[];
   };
   const tableSchemaCache = new Map<string, CachedSchema>();
-
-  type SavedFilterState = {
-    filterEditorState: import('$lib/components/table/FilterEditor.svelte').FilterEditorState;
-    searchTerm: string;
-  };
-  const tableBrowserFilterCache = new Map<string, SavedFilterState>();
 
   type CachedData = {
     result: import('$lib/types').QueryResult;
@@ -1630,6 +1626,8 @@
         class="fsb-clear"
         onclick={() => {
           filterEditorState = emptyFilterState();
+          page = 1;
+          load();
         }}
         title="Clear filters"
         aria-label="Clear filters">×</button

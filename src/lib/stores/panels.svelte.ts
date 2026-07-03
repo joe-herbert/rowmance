@@ -9,6 +9,7 @@
 import { untrack } from 'svelte';
 import type { PanelState, PanelKind, SplitMode } from '$lib/types';
 import { queryEditorCache } from './queryEditorState';
+import { clearTableFilterCache } from '$lib/stores/tableBrowserFilterCache';
 
 export interface OpenItem {
   id: string;
@@ -150,10 +151,19 @@ export function usePanels() {
       if (content.kind === 'query_editor' && !content.editorId) {
         content = { ...content, editorId: createId() };
       }
+      // For explicit filter navigation (FK click, relations panel), clear the cached filter
+      // so the initialFilter prop takes effect instead of the stale cached state.
+      if (content.kind === 'table_browser' && content.initialFilter) {
+        clearTableFilterCache(`${content.connectionId}:${content.database}:${content.table}`);
+      }
       if (content.kind !== 'empty') {
         // If already visible in some panel, just focus it
         const existingPanelIdx = panels.findIndex((p) => sameContent(p.content, content));
         if (existingPanelIdx !== -1) {
+          // Update the panel content so the initialFilter prop propagates to the mounted component.
+          if (content.kind === 'table_browser' && content.initialFilter) {
+            panels = panels.map((p, i) => (i === existingPanelIdx ? { ...p, content } : p));
+          }
           focusedIndex = existingPanelIdx;
           return;
         }
