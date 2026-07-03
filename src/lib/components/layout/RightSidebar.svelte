@@ -140,10 +140,11 @@
     });
   }
 
-  function formatDuration(ms: number | null): string {
-    if (ms === null) return '';
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
+  function formatDuration(us: number | null): string {
+    if (us === null) return '';
+    if (us >= 1_000_000) return `${(us / 1_000_000).toFixed(1)}s`;
+    if (us >= 1_000) return `${(us / 1_000).toFixed(1)}ms`;
+    return `${us}µs`;
   }
 
   function timeAgo(isoString: string): string {
@@ -952,8 +953,8 @@
                     >
                       {entry.status}
                     </span>
-                    {#if entry.durationMs !== null}
-                      <span class="meta-item">{formatDuration(entry.durationMs)}</span>
+                    {#if entry.durationUs !== null}
+                      <span class="meta-item">{formatDuration(entry.durationUs)}</span>
                     {/if}
                     <span class="meta-item time-ago">{timeAgo(entry.executedAt)}</span>
                   </span>

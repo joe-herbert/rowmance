@@ -19,6 +19,49 @@ use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::AppError;
 use crate::transactions::{HeldConnection, TransactionManager};
 
+/// Records granular timing for every query to the local SQLite DB, keeping only
+/// the latest 100 entries. Only compiled and called in debug builds.
+#[cfg(debug_assertions)]
+async fn record_speed_analysis(
+    sqlite: &sqlx::SqlitePool,
+    connection_id: &str,
+    sql: &str,
+    total_us: u64,
+    pool_acquire_us: u64,
+    db_switch_us: u64,
+    execution_us: u64,
+    result_processing_us: u64,
+    row_count: Option<i64>,
+) {
+    let id = uuid::Uuid::new_v4().to_string();
+    let _ = sqlx::query(
+        r#"INSERT INTO query_speed_analysis
+           (id, connection_id, sql, total_us, pool_acquire_us, db_switch_us,
+            execution_us, result_processing_us, row_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(id)
+    .bind(connection_id)
+    .bind(sql)
+    .bind(total_us as i64)
+    .bind(pool_acquire_us as i64)
+    .bind(db_switch_us as i64)
+    .bind(execution_us as i64)
+    .bind(result_processing_us as i64)
+    .bind(row_count)
+    .execute(sqlite)
+    .await;
+    let _ = sqlx::query(
+        r#"DELETE FROM query_speed_analysis
+           WHERE id NOT IN (
+               SELECT id FROM query_speed_analysis
+               ORDER BY executed_at DESC LIMIT 100
+           )"#,
+    )
+    .execute(sqlite)
+    .await;
+}
+
 /// Column metadata included with every result set.
 #[derive(Debug, Serialize, Clone)]
 pub struct ColumnMeta {
@@ -42,8 +85,8 @@ pub struct QueryResult {
     pub rows: Vec<Vec<serde_json::Value>>,
     #[serde(rename = "totalRows")]
     pub total_rows: Option<i64>,
-    #[serde(rename = "durationMs")]
-    pub duration_ms: u64,
+    #[serde(rename = "durationUs")]
+    pub duration_us: u64,
     #[serde(rename = "affectedRows")]
     pub affected_rows: Option<u64>,
     pub error: Option<String>,
@@ -740,8 +783,8 @@ pub async fn query_execute_multi(
                 }
                 HeldConnection::Sqlite(conn) => execute_sqlite(&mut **conn, stmt, 10_000, 0).await,
             };
-            let duration_ms = start.elapsed().as_millis() as u64;
-            push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_ms, sqlite.inner()).await;
+            let duration_us = start.elapsed().as_micros() as u64;
+            push_result(&mut results, exec_result, query_id, &connection_id, stmt, duration_us, sqlite.inner()).await;
         }
         return Ok(results);
     }
@@ -753,20 +796,38 @@ pub async fn query_execute_multi(
         RemotePool::MySql(pool, read_only) => {
             let pool_clone = pool.clone();
             let read_only = *read_only;
+            let t = std::time::Instant::now();
             let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let pool_acquire_us = t.elapsed().as_micros() as u64;
+            let mut db_switch_us = 0u64;
             if let Some(db) = &database {
+                let t = std::time::Instant::now();
                 let db_esc = db.replace('`', "``");
                 let use_sql = format!("USE `{}`", db_esc);
                 if !mysql_switch_db(&mut *conn, &use_sql).await {
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database `{}`", db)));
                 }
+                db_switch_us = t.elapsed().as_micros() as u64;
             }
-            for stmt in &statements {
+            for (i, stmt) in statements.iter().enumerate() {
                 let query_id = uuid::Uuid::new_v4().to_string();
-                let start = std::time::Instant::now();
+                let t = std::time::Instant::now();
                 let exec_result = execute_mysql(&mut conn, stmt, 10_000, 0).await;
-                let duration_ms = start.elapsed().as_millis() as u64;
-                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                let execution_us = t.elapsed().as_micros() as u64;
+                let t = std::time::Instant::now();
+                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, execution_us, sqlite.inner()).await;
+                #[cfg(debug_assertions)]
+                {
+                    let result_processing_us = t.elapsed().as_micros() as u64;
+                    let this_pool = if i == 0 { pool_acquire_us } else { 0 };
+                    let this_switch = if i == 0 { db_switch_us } else { 0 };
+                    record_speed_analysis(
+                        sqlite.inner(), &connection_id, stmt,
+                        this_pool + this_switch + execution_us + result_processing_us,
+                        this_pool, this_switch, execution_us, result_processing_us,
+                        results.last().map(|r| r.rows.len() as i64),
+                    ).await;
+                }
                 if results.last().map(|r| r.error.is_none() && !r.columns.is_empty()).unwrap_or(false) {
                     spawn_query_count_mysql(app.clone(), pool_clone.clone(), read_only, stmt.to_string(), database.clone(), query_id);
                 }
@@ -774,20 +835,38 @@ pub async fn query_execute_multi(
         }
         RemotePool::Postgres(pool) => {
             let pool_clone = pool.clone();
+            let t = std::time::Instant::now();
             let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let pool_acquire_us = t.elapsed().as_micros() as u64;
+            let mut db_switch_us = 0u64;
             if let Some(schema) = &database {
+                let t = std::time::Instant::now();
                 let schema_esc = schema.replace('\'', "''");
                 let set_path_sql = format!("SET search_path = '{}'", schema_esc);
                 if !pg_switch_schema(&mut *conn, &set_path_sql).await {
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to schema '{}'", schema)));
                 }
+                db_switch_us = t.elapsed().as_micros() as u64;
             }
-            for stmt in &statements {
+            for (i, stmt) in statements.iter().enumerate() {
                 let query_id = uuid::Uuid::new_v4().to_string();
-                let start = std::time::Instant::now();
+                let t = std::time::Instant::now();
                 let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
-                let duration_ms = start.elapsed().as_millis() as u64;
-                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                let execution_us = t.elapsed().as_micros() as u64;
+                let t = std::time::Instant::now();
+                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, execution_us, sqlite.inner()).await;
+                #[cfg(debug_assertions)]
+                {
+                    let result_processing_us = t.elapsed().as_micros() as u64;
+                    let this_pool = if i == 0 { pool_acquire_us } else { 0 };
+                    let this_switch = if i == 0 { db_switch_us } else { 0 };
+                    record_speed_analysis(
+                        sqlite.inner(), &connection_id, stmt,
+                        this_pool + this_switch + execution_us + result_processing_us,
+                        this_pool, this_switch, execution_us, result_processing_us,
+                        results.last().map(|r| r.rows.len() as i64),
+                    ).await;
+                }
                 if results.last().map(|r| r.error.is_none() && !r.columns.is_empty()).unwrap_or(false) {
                     spawn_query_count_postgres(app.clone(), pool_clone.clone(), stmt.to_string(), database.clone(), query_id);
                 }
@@ -795,13 +874,27 @@ pub async fn query_execute_multi(
         }
         RemotePool::Sqlite(pool) => {
             let pool_clone = pool.clone();
+            let t = std::time::Instant::now();
             let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            for stmt in &statements {
+            let pool_acquire_us = t.elapsed().as_micros() as u64;
+            for (i, stmt) in statements.iter().enumerate() {
                 let query_id = uuid::Uuid::new_v4().to_string();
-                let start = std::time::Instant::now();
+                let t = std::time::Instant::now();
                 let exec_result = execute_sqlite(&mut conn, stmt, 10_000, 0).await;
-                let duration_ms = start.elapsed().as_millis() as u64;
-                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, duration_ms, sqlite.inner()).await;
+                let execution_us = t.elapsed().as_micros() as u64;
+                let t = std::time::Instant::now();
+                push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, execution_us, sqlite.inner()).await;
+                #[cfg(debug_assertions)]
+                {
+                    let result_processing_us = t.elapsed().as_micros() as u64;
+                    let this_pool = if i == 0 { pool_acquire_us } else { 0 };
+                    record_speed_analysis(
+                        sqlite.inner(), &connection_id, stmt,
+                        this_pool + execution_us + result_processing_us,
+                        this_pool, 0, execution_us, result_processing_us,
+                        results.last().map(|r| r.rows.len() as i64),
+                    ).await;
+                }
                 if results.last().map(|r| r.error.is_none() && !r.columns.is_empty()).unwrap_or(false) {
                     spawn_query_count_sqlite(app.clone(), pool_clone.clone(), stmt.to_string(), query_id);
                 }
@@ -818,18 +911,18 @@ async fn push_result(
     query_id: String,
     connection_id: &str,
     stmt: &str,
-    duration_ms: u64,
+    duration_us: u64,
     sqlite: &sqlx::SqlitePool,
 ) {
     match exec_result {
         Ok((columns, rows, total_rows, affected_rows)) => {
             let row_count = rows.len() as i64;
-            record_history(sqlite, &query_id, connection_id, stmt, duration_ms, Some(row_count), None, "success").await;
-            results.push(QueryResult { query_id, columns, rows, total_rows, duration_ms, affected_rows, error: None });
+            record_history(sqlite, &query_id, connection_id, stmt, duration_us, Some(row_count), None, "success").await;
+            results.push(QueryResult { query_id, columns, rows, total_rows, duration_us, affected_rows, error: None });
         }
         Err(err_msg) => {
-            record_history(sqlite, &query_id, connection_id, stmt, duration_ms, None, Some(&err_msg), "error").await;
-            results.push(QueryResult { query_id, columns: vec![], rows: vec![], total_rows: None, duration_ms, affected_rows: None, error: Some(err_msg) });
+            record_history(sqlite, &query_id, connection_id, stmt, duration_us, None, Some(&err_msg), "error").await;
+            results.push(QueryResult { query_id, columns: vec![], rows: vec![], total_rows: None, duration_us, affected_rows: None, error: Some(err_msg) });
         }
     }
 }
@@ -873,8 +966,8 @@ pub async fn query_execute(
             }
             HeldConnection::Sqlite(conn) => execute_sqlite(&mut **conn, &sql, page_size, offset).await,
         };
-        let duration_ms = start.elapsed().as_millis() as u64;
-        return Ok(build_query_result(result, query_id, &connection_id, &sql, duration_ms, sqlite.inner()).await);
+        let duration_us = start.elapsed().as_micros() as u64;
+        return Ok(build_query_result(result, query_id, &connection_id, &sql, duration_us, sqlite.inner()).await);
     }
 
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
@@ -885,48 +978,74 @@ pub async fn query_execute(
         Sqlite(sqlx::SqlitePool),
     }
 
+    let mut pool_acquire_us = 0u64;
+    let mut db_switch_us = 0u64;
+    let mut execution_us = 0u64;
+
     let (result, pool_kind) = match pool_ref.value() {
         RemotePool::MySql(pool, read_only) => {
             let read_only = *read_only;
+            let t = std::time::Instant::now();
             let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            pool_acquire_us = t.elapsed().as_micros() as u64;
             if let Some(db) = &database {
                 // Use the text protocol (COM_QUERY) via raw_sql so USE works —
                 // prepared statements (COM_STMT_PREPARE) reject USE with error 1295.
+                let t = std::time::Instant::now();
                 let db_esc = db.replace('`', "``");
                 let use_sql = format!("USE `{}`", db_esc);
                 if !mysql_switch_db(&mut *conn, &use_sql).await {
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database `{}`", db)));
                 }
+                db_switch_us = t.elapsed().as_micros() as u64;
             }
+            let t = std::time::Instant::now();
             let res = execute_mysql(&mut conn, &sql, page_size, offset).await;
+            execution_us = t.elapsed().as_micros() as u64;
             (res, PoolKind::MySql(pool.clone(), read_only))
         }
         RemotePool::Postgres(pool) => {
+            let t = std::time::Instant::now();
             let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            pool_acquire_us = t.elapsed().as_micros() as u64;
             if let Some(schema) = &database {
+                let t = std::time::Instant::now();
                 let schema_esc = schema.replace('\'', "''");
                 let set_path_sql = format!("SET search_path = '{}'", schema_esc);
                 if !pg_switch_schema(&mut *conn, &set_path_sql).await {
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to schema '{}'", schema)));
                 }
+                db_switch_us = t.elapsed().as_micros() as u64;
             }
+            let t = std::time::Instant::now();
             let res = execute_postgres(&mut conn, &sql, page_size, offset).await;
+            execution_us = t.elapsed().as_micros() as u64;
             (res, PoolKind::Postgres(pool.clone()))
         }
         RemotePool::Sqlite(pool) => {
-            let res = {
-                let mut conn = pool
-                    .acquire()
-                    .await
-                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-                execute_sqlite(&mut conn, &sql, page_size, offset).await
-            };
+            let t = std::time::Instant::now();
+            let mut conn = pool
+                .acquire()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            pool_acquire_us = t.elapsed().as_micros() as u64;
+            let t = std::time::Instant::now();
+            let res = execute_sqlite(&mut conn, &sql, page_size, offset).await;
+            execution_us = t.elapsed().as_micros() as u64;
             (res, PoolKind::Sqlite(pool.clone()))
         }
     };
 
-    let duration_ms = start.elapsed().as_millis() as u64;
-    let query_result = build_query_result(result, query_id, &connection_id, &sql, duration_ms, sqlite.inner()).await;
+    let duration_us = start.elapsed().as_micros() as u64;
+    let result_processing_us = duration_us.saturating_sub(pool_acquire_us + db_switch_us + execution_us);
+    let query_result = build_query_result(result, query_id, &connection_id, &sql, duration_us, sqlite.inner()).await;
+
+    #[cfg(debug_assertions)]
+    record_speed_analysis(
+        sqlite.inner(), &connection_id, &sql,
+        duration_us, pool_acquire_us, db_switch_us, execution_us, result_processing_us,
+        Some(query_result.rows.len() as i64),
+    ).await;
 
     // Spawn background count only for successful SELECT results.
     if query_result.error.is_none() && !query_result.columns.is_empty() {
@@ -952,18 +1071,18 @@ async fn build_query_result(
     query_id: String,
     connection_id: &str,
     sql: &str,
-    duration_ms: u64,
+    duration_us: u64,
     sqlite: &sqlx::SqlitePool,
 ) -> QueryResult {
     match result {
         Ok((columns, rows, total_rows, affected_rows)) => {
             let row_count = rows.len() as i64;
-            record_history(sqlite, &query_id, connection_id, sql, duration_ms, Some(row_count), None, "success").await;
-            QueryResult { query_id, columns, rows, total_rows, duration_ms, affected_rows, error: None }
+            record_history(sqlite, &query_id, connection_id, sql, duration_us, Some(row_count), None, "success").await;
+            QueryResult { query_id, columns, rows, total_rows, duration_us, affected_rows, error: None }
         }
         Err(err_msg) => {
-            record_history(sqlite, &query_id, connection_id, sql, duration_ms, None, Some(&err_msg), "error").await;
-            QueryResult { query_id, columns: vec![], rows: vec![], total_rows: None, duration_ms, affected_rows: None, error: Some(err_msg) }
+            record_history(sqlite, &query_id, connection_id, sql, duration_us, None, Some(&err_msg), "error").await;
+            QueryResult { query_id, columns: vec![], rows: vec![], total_rows: None, duration_us, affected_rows: None, error: Some(err_msg) }
         }
     }
 }
@@ -1709,27 +1828,27 @@ async fn record_history(
     query_id: &str,
     connection_id: &str,
     sql: &str,
-    duration_ms: u64,
+    duration_us: u64,
     row_count: Option<i64>,
     error: Option<&str>,
     status: &str,
 ) {
     let now = chrono::Utc::now().to_rfc3339();
-    let duration_ms_i64 = duration_ms as i64;
-    let _ = sqlx::query!(
+    let duration_us_i64 = duration_us as i64;
+    let _ = sqlx::query(
         r#"
-        INSERT INTO query_history (id, connection_id, sql, executed_at, duration_ms, row_count, error, status)
+        INSERT INTO query_history (id, connection_id, sql, executed_at, duration_us, row_count, error, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#,
-        query_id,
-        connection_id,
-        sql,
-        now,
-        duration_ms_i64,
-        row_count,
-        error,
-        status
     )
+    .bind(query_id)
+    .bind(connection_id)
+    .bind(sql)
+    .bind(now)
+    .bind(duration_us_i64)
+    .bind(row_count)
+    .bind(error)
+    .bind(status)
     .execute(pool)
     .await;
 }

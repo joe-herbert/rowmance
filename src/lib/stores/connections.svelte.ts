@@ -85,7 +85,6 @@ export function useConnections() {
         sslCaPath: profile.sslCaPath,
         sslCertPath: profile.sslCertPath,
         sslKeyPath: profile.sslKeyPath,
-        poolMin: profile.poolMin,
         poolMax: profile.poolMax,
       });
       profiles = profiles.map((p) => (p.id === id ? updated : p));

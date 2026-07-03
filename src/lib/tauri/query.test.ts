@@ -9,7 +9,7 @@ const stubResult = {
   columns: [],
   rows: [],
   totalRows: null,
-  durationMs: 10,
+  durationUs: 10,
   affectedRows: null,
   error: null,
 };

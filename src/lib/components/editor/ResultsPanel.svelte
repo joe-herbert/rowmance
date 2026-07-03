@@ -49,7 +49,12 @@
       : '',
   );
 
-  let durationLabel = $derived(result ? `${result.durationMs}ms` : '');
+  function formatDuration(us: number): string {
+    if (us >= 1_000_000) return `${(us / 1_000_000).toFixed(2)}s`;
+    if (us >= 1_000) return `${(us / 1_000).toFixed(1)}ms`;
+    return `${us}µs`;
+  }
+  let durationLabel = $derived(result ? formatDuration(result.durationUs) : '');
 
   let affectedLabel = $derived(
     result?.affectedRows != null ? `${result.affectedRows} affected` : '',

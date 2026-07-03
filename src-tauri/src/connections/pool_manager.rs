@@ -9,7 +9,7 @@ use sqlx::{
     mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
-    Executor,
+    ConnectOptions, Executor,
 };
 use std::path::Path;
 use std::sync::Arc;
@@ -73,7 +73,6 @@ impl ConnectionManager {
         database: &str,
         username: &str,
         password: &str,
-        pool_min: u32,
         pool_max: u32,
         ssl_enabled: bool,
         ssl_ca_path: Option<&str>,
@@ -110,8 +109,29 @@ impl ConnectionManager {
                     }
                 }
 
+                // Verify connectivity with a single test connection before creating
+                // the pool. Pool creation with min_connections > 1 fires multiple
+                // parallel connects; if credentials are wrong every one counts
+                // toward the server's max_connect_errors threshold. Testing with
+                // one connection first (up to 3 attempts) prevents that.
+                let mut connect_err: Option<sqlx::Error> = None;
+                for attempt in 0..3u32 {
+                    match opts.connect().await {
+                        Ok(_conn) => { connect_err = None; break; }
+                        Err(e) => {
+                            connect_err = Some(e);
+                            if attempt < 2 {
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            }
+                        }
+                    }
+                }
+                if let Some(e) = connect_err {
+                    return Err(e.into());
+                }
+
                 let mut pool_opts = MySqlPoolOptions::new()
-                    .min_connections(pool_min)
+                    .min_connections(1)
                     .max_connections(pool_max);
                 // SET SESSION TRANSACTION READ ONLY on every connection so the
                 // server enforces read-only regardless of what SQL is sent.
@@ -174,13 +194,30 @@ impl ConnectionManager {
                     opts = opts.options([("default_transaction_read_only", "on")]);
                 }
 
+                // Verify connectivity before creating the pool (see MySQL block above).
+                let mut connect_err: Option<sqlx::Error> = None;
+                for attempt in 0..3u32 {
+                    match opts.connect().await {
+                        Ok(_conn) => { connect_err = None; break; }
+                        Err(e) => {
+                            connect_err = Some(e);
+                            if attempt < 2 {
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            }
+                        }
+                    }
+                }
+                if let Some(e) = connect_err {
+                    return Err(e.into());
+                }
+
                 // Reset the search_path when a connection is released back to
                 // the pool, so other callers always start with the default schema.
                 // Leak the SQL string once to satisfy the `for<'c>` closure bound.
                 let schema_esc = database.replace('\'', "''");
                 let set_path_sql: &'static str = Box::leak(format!("SET search_path = '{}'", schema_esc).into_boxed_str());
                 let p = PgPoolOptions::new()
-                    .min_connections(pool_min)
+                    .min_connections(1)
                     .max_connections(pool_max)
                     .after_release(move |conn, _meta| {
                         Box::pin(async move { Ok(pg_reset_schema(conn, set_path_sql).await) })
@@ -199,7 +236,7 @@ impl ConnectionManager {
                     .read_only(read_only)
                     .create_if_missing(!read_only);
                 let p = SqlitePoolOptions::new()
-                    .min_connections(pool_min)
+                    .min_connections(1)
                     .max_connections(pool_max)
                     .connect_with(opts)
                     .await?;

@@ -38,7 +38,6 @@ function makeProfile(overrides: Partial<ConnectionProfile> = {}): ConnectionProf
     sslCaPath: null,
     sslCertPath: null,
     sslKeyPath: null,
-    poolMin: 1,
     poolMax: 5,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',

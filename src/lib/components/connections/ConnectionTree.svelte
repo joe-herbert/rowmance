@@ -506,7 +506,6 @@
       sslCaPath: profile.sslCaPath,
       sslCertPath: profile.sslCertPath,
       sslKeyPath: profile.sslKeyPath,
-      poolMin: profile.poolMin,
       poolMax: profile.poolMax,
     });
   }

@@ -28,7 +28,6 @@ export interface ConnectionProfile {
   sslCaPath: string | null;
   sslCertPath: string | null;
   sslKeyPath: string | null;
-  poolMin: number;
   poolMax: number;
   createdAt: string;
   updatedAt: string;
@@ -56,7 +55,6 @@ export interface ConnectionProfileInput {
   sslCaPath?: string | null;
   sslCertPath?: string | null;
   sslKeyPath?: string | null;
-  poolMin?: number;
   poolMax?: number;
 }
 
@@ -101,7 +99,7 @@ export interface QueryResult {
   rows: (string | number | boolean | null)[][];
   /** Total row count before pagination (from COUNT(*) sub-query). */
   totalRows: number | null;
-  durationMs: number;
+  durationUs: number;
   affectedRows: number | null;
   /** Error message, present when the query failed. */
   error: string | null;
@@ -155,7 +153,7 @@ export interface QueryHistoryEntry {
   connectionId: string;
   sql: string;
   executedAt: string;
-  durationMs: number | null;
+  durationUs: number | null;
   rowCount: number | null;
   error: string | null;
   status: 'success' | 'error' | 'cancelled';
@@ -329,6 +327,7 @@ export type PanelKind =
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'settings' }
   | { kind: 'user_manager'; connectionId: string }
+  | { kind: 'speed_analysis' }
   | { kind: 'empty' };
 
 export interface PanelState {

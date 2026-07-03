@@ -165,6 +165,24 @@ pub fn run() {
                 ],
             )?;
 
+            // ── Developer menu (debug builds only) ─────────────────────────
+            #[cfg(debug_assertions)]
+            let dev_speed_analysis_item = MenuItem::with_id(
+                app,
+                "dev-speed-analysis",
+                "Speed Analysis",
+                true,
+                None::<&str>,
+            )?;
+            #[cfg(debug_assertions)]
+            let dev_submenu = Submenu::with_items(
+                app,
+                "Developer",
+                true,
+                &[&dev_speed_analysis_item],
+            )?;
+
+            #[cfg(not(debug_assertions))]
             let menu = Menu::with_items(
                 app,
                 &[
@@ -174,6 +192,19 @@ pub fn run() {
                     &view_submenu,
                     &window_submenu,
                     &help_submenu,
+                ],
+            )?;
+            #[cfg(debug_assertions)]
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &app_submenu,
+                    &file_submenu,
+                    &edit_submenu,
+                    &view_submenu,
+                    &window_submenu,
+                    &help_submenu,
+                    &dev_submenu,
                 ],
             )?;
             app.set_menu(menu)?;
@@ -209,6 +240,10 @@ pub fn run() {
                     }
                     "command-palette" => {
                         let _ = app.emit("menu:command-palette", ());
+                    }
+                    #[cfg(debug_assertions)]
+                    "dev-speed-analysis" => {
+                        let _ = app.emit("menu:speed-analysis", ());
                     }
                     _ => {}
                 }
@@ -376,6 +411,11 @@ pub fn run() {
             commands::users::users_rename,
             commands::users::users_set_password,
             commands::users::users_execute_grant,
+            // Speed analysis (dev-only)
+            #[cfg(debug_assertions)]
+            commands::speed_analysis::speed_analysis_list,
+            #[cfg(debug_assertions)]
+            commands::speed_analysis::speed_analysis_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Rowmance");

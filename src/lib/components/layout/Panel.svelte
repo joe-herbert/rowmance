@@ -16,6 +16,7 @@
   import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
   import Settings from '$lib/components/settings/Settings.svelte';
   import UserManager from '$lib/components/users/UserManager.svelte';
+  import SpeedAnalysis from '$lib/components/speed/SpeedAnalysis.svelte';
 
   interface Props {
     index: number;
@@ -89,6 +90,8 @@
     <Settings />
   {:else if panel.content.kind === 'user_manager'}
     <UserManager connectionId={panel.content.connectionId} />
+  {:else if panel.content.kind === 'speed_analysis'}
+    <SpeedAnalysis />
   {:else}
     <!-- Empty panel placeholder -->
     <div class="empty-panel">

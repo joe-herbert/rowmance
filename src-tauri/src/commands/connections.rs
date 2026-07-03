@@ -49,8 +49,6 @@ pub struct ConnectionProfile {
     pub ssl_cert_path: Option<String>,
     #[serde(rename = "sslKeyPath")]
     pub ssl_key_path: Option<String>,
-    #[serde(rename = "poolMin")]
-    pub pool_min: i64,
     #[serde(rename = "poolMax")]
     pub pool_max: i64,
     #[serde(rename = "createdAt")]
@@ -82,7 +80,6 @@ impl From<ConnectionProfileRow> for ConnectionProfile {
             ssl_ca_path: r.ssl_ca_path,
             ssl_cert_path: r.ssl_cert_path,
             ssl_key_path: r.ssl_key_path,
-            pool_min: r.pool_min,
             pool_max: r.pool_max,
             created_at: r.created_at,
             updated_at: r.updated_at,
@@ -155,8 +152,6 @@ pub struct ConnectionProfileInput {
     pub ssl_cert_path: Option<String>,
     #[serde(rename = "sslKeyPath")]
     pub ssl_key_path: Option<String>,
-    #[serde(rename = "poolMin")]
-    pub pool_min: Option<i64>,
     #[serde(rename = "poolMax")]
     pub pool_max: Option<i64>,
 }
@@ -197,7 +192,6 @@ pub async fn connections_create(
 ) -> Result<ConnectionProfile, AppError> {
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
-    let pool_min = input.pool_min.unwrap_or(1);
     let pool_max = input.pool_max.unwrap_or(5);
 
     sqlx::query(
@@ -206,12 +200,12 @@ pub async fn connections_create(
             id, group_id, name, db_type, host, port, database, username, color,
             read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
             ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-            pool_min, pool_max, created_at, updated_at
+            pool_max, created_at, updated_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?, ?
+            ?, ?, ?
         )
         "#,
     )
@@ -235,7 +229,6 @@ pub async fn connections_create(
     .bind(&input.ssl_ca_path)
     .bind(&input.ssl_cert_path)
     .bind(&input.ssl_key_path)
-    .bind(pool_min)
     .bind(pool_max)
     .bind(&now)
     .bind(&now)
@@ -264,10 +257,9 @@ pub async fn connections_update(
     input: ConnectionProfileInput,
 ) -> Result<ConnectionProfile, AppError> {
     let now = chrono::Utc::now().to_rfc3339();
-    let pool_min = input.pool_min.unwrap_or(1);
     let pool_max = input.pool_max.unwrap_or(5);
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         UPDATE connection_profiles SET
             group_id = ?, name = ?, db_type = ?, host = ?, port = ?, database = ?,
@@ -275,33 +267,32 @@ pub async fn connections_update(
             ssh_enabled = ?, ssh_host = ?, ssh_port = ?, ssh_user = ?,
             ssh_auth_type = ?, ssh_key_path = ?,
             ssl_enabled = ?, ssl_ca_path = ?, ssl_cert_path = ?, ssl_key_path = ?,
-            pool_min = ?, pool_max = ?, updated_at = ?
+            pool_max = ?, updated_at = ?
         WHERE id = ?
         "#,
-        input.group_id,
-        input.name,
-        input.db_type,
-        input.host,
-        input.port,
-        input.database,
-        input.username,
-        input.color,
-        input.read_only,
-        input.ssh_enabled,
-        input.ssh_host,
-        input.ssh_port,
-        input.ssh_user,
-        input.ssh_auth_type,
-        input.ssh_key_path,
-        input.ssl_enabled,
-        input.ssl_ca_path,
-        input.ssl_cert_path,
-        input.ssl_key_path,
-        pool_min,
-        pool_max,
-        now,
-        id
     )
+    .bind(&input.group_id)
+    .bind(&input.name)
+    .bind(&input.db_type)
+    .bind(&input.host)
+    .bind(input.port)
+    .bind(&input.database)
+    .bind(&input.username)
+    .bind(&input.color)
+    .bind(input.read_only)
+    .bind(input.ssh_enabled)
+    .bind(&input.ssh_host)
+    .bind(input.ssh_port)
+    .bind(&input.ssh_user)
+    .bind(&input.ssh_auth_type)
+    .bind(&input.ssh_key_path)
+    .bind(input.ssl_enabled)
+    .bind(&input.ssl_ca_path)
+    .bind(&input.ssl_cert_path)
+    .bind(&input.ssl_key_path)
+    .bind(pool_max)
+    .bind(&now)
+    .bind(&id)
     .execute(sqlite.inner())
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
@@ -635,7 +626,6 @@ pub async fn connections_connect(
             &row.database,
             &row.username,
             &password,
-            row.pool_min as u32,
             row.pool_max as u32,
             row.ssl_enabled,
             row.ssl_ca_path.as_deref(),
@@ -819,12 +809,12 @@ pub async fn connections_duplicate(
             id, group_id, name, db_type, host, port, database, username, color,
             read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
             ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-            pool_min, pool_max, created_at, updated_at
+            pool_max, created_at, updated_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?, ?
+            ?, ?, ?
         )
         "#,
     )
@@ -848,7 +838,6 @@ pub async fn connections_duplicate(
     .bind(&row.ssl_ca_path)
     .bind(&row.ssl_cert_path)
     .bind(&row.ssl_key_path)
-    .bind(row.pool_min)
     .bind(row.pool_max)
     .bind(&now)
     .bind(&now)
@@ -921,8 +910,6 @@ pub struct ConnectionExportEntry {
     pub ssl_cert_path: Option<String>,
     #[serde(rename = "sslKeyPath")]
     pub ssl_key_path: Option<String>,
-    #[serde(rename = "poolMin")]
-    pub pool_min: i64,
     #[serde(rename = "poolMax")]
     pub pool_max: i64,
     /// Present only when exported with include_sensitive = true.
@@ -993,7 +980,6 @@ pub async fn connections_export(
                 ssl_ca_path: row.ssl_ca_path,
                 ssl_cert_path: row.ssl_cert_path,
                 ssl_key_path: row.ssl_key_path,
-                pool_min: row.pool_min,
                 pool_max: row.pool_max,
                 passwords,
             });
@@ -1081,12 +1067,12 @@ pub async fn connections_import(
                 id, group_id, name, db_type, host, port, database, username, color,
                 read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
                 ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-                pool_min, pool_max, created_at, updated_at
+                pool_max, created_at, updated_at
             ) VALUES (
                 ?, NULL, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?, ?
+                ?, ?, ?
             )
             "#,
         )
@@ -1109,7 +1095,6 @@ pub async fn connections_import(
         .bind(&entry.ssl_ca_path)
         .bind(&entry.ssl_cert_path)
         .bind(&entry.ssl_key_path)
-        .bind(entry.pool_min)
         .bind(entry.pool_max)
         .bind(&now)
         .bind(&now)
@@ -1158,9 +1143,9 @@ mod tests {
         sqlx::query(
             r#"INSERT INTO connection_profiles
                (id, name, db_type, host, port, database, username, read_only,
-                ssh_enabled, ssl_enabled, pool_min, pool_max, created_at, updated_at)
+                ssh_enabled, ssl_enabled, pool_max, created_at, updated_at)
                VALUES (?, ?, 'postgres', 'localhost', 5432, 'db', 'user', 0,
-                       0, 0, 1, 5, '2024-01-01', '2024-01-01')"#,
+                       0, 0, 5, '2024-01-01', '2024-01-01')"#,
         )
         .bind(id)
         .bind(name)
@@ -1219,7 +1204,6 @@ mod tests {
         assert!(!row.read_only);
         assert!(!row.ssh_enabled);
         assert!(!row.ssl_enabled);
-        assert_eq!(row.pool_min, 1);
         assert_eq!(row.pool_max, 5);
     }
 
@@ -1294,9 +1278,9 @@ mod tests {
         sqlx::query(
             r#"INSERT INTO connection_profiles
                (id, name, db_type, host, port, database, username, read_only,
-                ssh_enabled, ssl_enabled, pool_min, pool_max, created_at, updated_at)
+                ssh_enabled, ssl_enabled, pool_max, created_at, updated_at)
                VALUES ('ro-1', 'ReadOnly', 'mysql', 'localhost', 3306, 'db', 'root', 1,
-                       0, 0, 1, 5, '2024-01-01', '2024-01-01')"#,
+                       0, 0, 5, '2024-01-01', '2024-01-01')"#,
         )
         .execute(&pool)
         .await
@@ -1390,10 +1374,10 @@ mod tests {
         sqlx::query(
             r#"INSERT INTO connection_profiles
                (id, name, db_type, host, port, database, username, read_only,
-                ssh_enabled, ssl_enabled, pool_min, pool_max, created_at, updated_at,
+                ssh_enabled, ssl_enabled, pool_max, created_at, updated_at,
                 group_id)
                VALUES ('p-fk', 'FK Profile', 'postgres', 'localhost', 5432, 'db', 'user',
-                       0, 0, 0, 1, 5, '2024-01-01', '2024-01-01', 'g-fk')"#,
+                       0, 0, 0, 5, '2024-01-01', '2024-01-01', 'g-fk')"#,
         )
         .execute(&pool)
         .await
@@ -1425,7 +1409,6 @@ mod tests {
         assert_eq!(profile.read_only, row.read_only);
         assert_eq!(profile.ssh_enabled, row.ssh_enabled);
         assert_eq!(profile.ssl_enabled, row.ssl_enabled);
-        assert_eq!(profile.pool_min, row.pool_min);
         assert_eq!(profile.pool_max, row.pool_max);
     }
 

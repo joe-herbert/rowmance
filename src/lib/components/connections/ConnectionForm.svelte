@@ -73,7 +73,6 @@
 
   // ── Advanced fields ───────────────────────────────────────────────────────────
 
-  let poolMin = $state(untrack(() => profile?.poolMin ?? 1));
   let poolMax = $state(untrack(() => profile?.poolMax ?? 5));
 
   // ── URL import ────────────────────────────────────────────────────────────────
@@ -179,7 +178,6 @@
         sslCaPath: null,
         sslCertPath: null,
         sslKeyPath: null,
-        poolMin,
         poolMax,
       };
     }
@@ -203,7 +201,6 @@
       sslCaPath: sslEnabled ? sslCaPath.trim() || null : null,
       sslCertPath: sslEnabled ? sslCertPath.trim() || null : null,
       sslKeyPath: sslEnabled ? sslKeyPath.trim() || null : null,
-      poolMin,
       poolMax,
     };
   }
@@ -850,19 +847,6 @@
 
         <!-- Advanced tab -->
       {:else if activeTab === 'advanced'}
-        <div class="field">
-          <label for="pool-min" class="label">Minimum Pool Connections</label>
-          <input
-            id="pool-min"
-            class="input"
-            type="number"
-            bind:value={poolMin}
-            min="1"
-            max="50"
-            autocomplete="off"
-          />
-        </div>
-
         <div class="field">
           <label for="pool-max" class="label">Maximum Pool Connections</label>
           <input

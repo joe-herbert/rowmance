@@ -14,8 +14,8 @@ pub struct QueryHistoryEntry {
     pub sql: String,
     #[serde(rename = "executedAt")]
     pub executed_at: String,
-    #[serde(rename = "durationMs")]
-    pub duration_ms: Option<i64>,
+    #[serde(rename = "durationUs")]
+    pub duration_us: Option<i64>,
     #[serde(rename = "rowCount")]
     pub row_count: Option<i64>,
     pub error: Option<String>,
@@ -29,7 +29,7 @@ impl From<QueryHistoryRow> for QueryHistoryEntry {
             connection_id: r.connection_id,
             sql: r.sql,
             executed_at: r.executed_at,
-            duration_ms: r.duration_ms,
+            duration_us: r.duration_us,
             row_count: r.row_count,
             error: r.error,
             status: r.status,
@@ -102,9 +102,9 @@ mod tests {
         sqlx::query(
             r#"INSERT INTO connection_profiles
                (id, name, db_type, host, port, database, username, read_only,
-                ssh_enabled, ssl_enabled, pool_min, pool_max, created_at, updated_at)
+                ssh_enabled, ssl_enabled, pool_max, created_at, updated_at)
                VALUES (?, 'test', 'postgres', 'localhost', 5432, 'db', 'user', 0,
-                       0, 0, 1, 5, '2024-01-01', '2024-01-01')"#,
+                       0, 0, 5, '2024-01-01', '2024-01-01')"#,
         )
         .bind(id)
         .execute(pool)

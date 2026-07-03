@@ -196,6 +196,7 @@
       }),
       listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),
       listen('menu:import-sql', () => document.dispatchEvent(new CustomEvent('menu-import-sql'))),
+      listen('menu:speed-analysis', () => panelStore.openInFocused({ kind: 'speed_analysis' })),
     ]).then((unlisteners) => {
       unlistenFn = () => unlisteners.forEach((u) => u());
     });
