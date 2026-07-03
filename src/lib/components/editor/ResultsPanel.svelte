@@ -2,6 +2,7 @@
   import { tick, untrack } from 'svelte';
   import type { QueryResult } from '$lib/types';
   import type { ColumnMeta } from '$lib/types';
+  import Loader from '$lib/components/ui/Loader.svelte';
   import DataTable from '$lib/components/table/DataTable.svelte';
   import ColumnPicker from '$lib/components/table/ColumnPicker.svelte';
   import {
@@ -25,9 +26,10 @@
     statements?: string[];
     connectionId?: string;
     database?: string;
+    isRunning?: boolean;
   }
 
-  let { results, statements = [], connectionId, database }: Props = $props();
+  let { results, statements = [], connectionId, database, isRunning = false }: Props = $props();
 
   type CellValue = string | number | boolean | null;
 
@@ -401,7 +403,11 @@
 </script>
 
 <div class="results-panel">
-  {#if results.length === 0}
+  {#if isRunning}
+    <div class="placeholder">
+      <Loader />
+    </div>
+  {:else if results.length === 0}
     <div class="placeholder">
       <span class="placeholder-text">Run a query to see results</span>
     </div>

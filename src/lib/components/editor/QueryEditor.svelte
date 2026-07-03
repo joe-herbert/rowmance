@@ -732,7 +732,7 @@
       title="Run query (Cmd+Enter)"
       aria-label="Run query"
     >
-      {isRunning ? '⏳' : '▶'}
+      ▶
     </button>
 
     <span class="connection-badge" title={connectionName}>
@@ -933,6 +933,7 @@
       statements={executedStatements}
       {connectionId}
       database={selectedDatabase || undefined}
+      {isRunning}
     />
   </div>
 </div>
