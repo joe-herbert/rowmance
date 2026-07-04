@@ -130,6 +130,7 @@ pub async fn import_csv_preview_text(csv_text: String) -> Result<CsvPreview, App
 }
 
 async fn csv_execute_from_text(
+    sqlite: &sqlx::SqlitePool,
     connections: &Arc<ConnectionManager>,
     connection_id: String,
     csv_text: String,
@@ -137,6 +138,30 @@ async fn csv_execute_from_text(
     create_table: bool,
     column_overrides: Vec<ColumnOverride>,
 ) -> Result<u32, AppError> {
+    let profile_row = sqlx::query!(
+        "SELECT read_only FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite)
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    match profile_row {
+        None => {
+            return Err(AppError::new(
+                "CONNECTION_NOT_FOUND",
+                format!("No connection with id {connection_id}"),
+            ))
+        }
+        Some(row) if row.read_only != 0 => {
+            return Err(AppError::new(
+                "READ_ONLY_VIOLATION",
+                "This connection is in read-only mode — mutating statements are not allowed",
+            ))
+        }
+        _ => {}
+    }
+
     let content = csv_text;
     let mut reader = csv::Reader::from_reader(content.as_bytes());
     let headers: Vec<String> = reader
@@ -312,6 +337,7 @@ async fn csv_execute_from_text(
 /// Import a CSV file into a database table.
 #[tauri::command]
 pub async fn import_csv_execute(
+    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     file_path: String,
@@ -322,6 +348,7 @@ pub async fn import_csv_execute(
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
     csv_execute_from_text(
+        sqlite.inner(),
         connections.inner(),
         connection_id,
         content,
@@ -335,6 +362,7 @@ pub async fn import_csv_execute(
 /// Import CSV data from a raw text string (e.g. clipboard content).
 #[tauri::command]
 pub async fn import_csv_execute_text(
+    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     csv_text: String,
@@ -343,6 +371,7 @@ pub async fn import_csv_execute_text(
     column_overrides: Vec<ColumnOverride>,
 ) -> Result<u32, AppError> {
     csv_execute_from_text(
+        sqlite.inner(),
         connections.inner(),
         connection_id,
         csv_text,
@@ -355,12 +384,37 @@ pub async fn import_csv_execute_text(
 
 async fn sql_execute_from_text(
     app: tauri::AppHandle,
+    sqlite: &sqlx::SqlitePool,
     connections: &Arc<ConnectionManager>,
     connection_id: String,
     content: String,
     stop_on_error: bool,
 ) -> Result<u32, AppError> {
     use tauri::Emitter;
+
+    let profile_row = sqlx::query!(
+        "SELECT read_only FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite)
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    match profile_row {
+        None => {
+            return Err(AppError::new(
+                "CONNECTION_NOT_FOUND",
+                format!("No connection with id {connection_id}"),
+            ))
+        }
+        Some(row) if row.read_only != 0 => {
+            return Err(AppError::new(
+                "READ_ONLY_VIOLATION",
+                "This connection is in read-only mode — mutating statements are not allowed",
+            ))
+        }
+        _ => {}
+    }
 
     let statements = crate::lib_sql::split_sql_statements(&content);
     let total = statements.len() as u32;
@@ -410,6 +464,7 @@ async fn sql_execute_from_text(
 #[tauri::command]
 pub async fn import_sql_file(
     app: tauri::AppHandle,
+    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     file_path: String,
@@ -419,6 +474,7 @@ pub async fn import_sql_file(
         .map_err(|e| AppError::new("IO_ERROR", format!("Cannot read {file_path}: {e}")))?;
     sql_execute_from_text(
         app,
+        sqlite.inner(),
         connections.inner(),
         connection_id,
         content,
@@ -431,6 +487,7 @@ pub async fn import_sql_file(
 #[tauri::command]
 pub async fn import_sql_text(
     app: tauri::AppHandle,
+    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     sql_text: String,
@@ -438,6 +495,7 @@ pub async fn import_sql_text(
 ) -> Result<u32, AppError> {
     sql_execute_from_text(
         app,
+        sqlite.inner(),
         connections.inner(),
         connection_id,
         sql_text,

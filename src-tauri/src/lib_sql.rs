@@ -61,29 +61,37 @@ pub fn split_sql_statements(sql: &str) -> Vec<String> {
             continue;
         }
 
-        // Double-quoted identifier
+        // Double-quoted identifier — "" is an escaped double-quote inside the identifier
         if ch == '"' {
             let start = i;
             i += 1;
-            while i < len && chars[i] != '"' {
-                i += 1;
-            }
-            if i < len {
-                i += 1;
+            while i < len {
+                if chars[i] == '"' && chars.get(i + 1).copied() == Some('"') {
+                    i += 2; // step over escaped pair
+                } else if chars[i] == '"' {
+                    i += 1;
+                    break;
+                } else {
+                    i += 1;
+                }
             }
             current.extend(chars[start..i].iter());
             continue;
         }
 
-        // Backtick-quoted identifier
+        // Backtick-quoted identifier — `` is an escaped backtick inside the identifier
         if ch == '`' {
             let start = i;
             i += 1;
-            while i < len && chars[i] != '`' {
-                i += 1;
-            }
-            if i < len {
-                i += 1;
+            while i < len {
+                if chars[i] == '`' && chars.get(i + 1).copied() == Some('`') {
+                    i += 2; // step over escaped pair
+                } else if chars[i] == '`' {
+                    i += 1;
+                    break;
+                } else {
+                    i += 1;
+                }
             }
             current.extend(chars[start..i].iter());
             continue;
@@ -210,5 +218,24 @@ mod tests {
         let stmts = split_sql_statements("SELECT `col;name` FROM t; SELECT 1");
         assert_eq!(stmts.len(), 2);
         assert!(stmts[0].contains("`col;name`"));
+    }
+
+    #[test]
+    fn double_quoted_identifier_with_escaped_quote_not_split_early() {
+        // "col""name" is a valid double-quoted identifier containing an escaped ".
+        // A naive parser stops at the first " and treats the semicolon inside as a
+        // statement boundary, producing three fragments instead of two.
+        let stmts = split_sql_statements(r#"SELECT "col""name" FROM t; SELECT 1"#);
+        assert_eq!(stmts.len(), 2);
+        assert!(stmts[0].contains(r#""col""name""#));
+        assert_eq!(stmts[1], "SELECT 1");
+    }
+
+    #[test]
+    fn backtick_identifier_with_escaped_backtick_not_split_early() {
+        let stmts = split_sql_statements("SELECT `col``name` FROM t; SELECT 1");
+        assert_eq!(stmts.len(), 2);
+        assert!(stmts[0].contains("`col``name`"));
+        assert_eq!(stmts[1], "SELECT 1");
     }
 }

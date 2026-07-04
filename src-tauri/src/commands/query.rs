@@ -1136,7 +1136,10 @@ pub async fn query_execute_multi(
         return Ok(results);
     }
 
-    // No active transaction — acquire a single connection for the whole batch.
+    // No active transaction — wrap the whole batch in a DB-managed transaction so
+    // that a failure in any statement rolls back all prior statements in the batch.
+    // Single-statement batches skip the explicit BEGIN/COMMIT overhead.
+    let multi = statements.len() > 1;
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
 
     match pool_ref.value() {
@@ -1144,14 +1147,15 @@ pub async fn query_execute_multi(
             let pool_clone = pool.clone();
             let read_only = *read_only;
             let t = std::time::Instant::now();
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let mut tx = pool.begin().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             let pool_acquire_us = t.elapsed().as_micros() as u64;
             let mut db_switch_us = 0u64;
             if let Some(db) = &database {
                 let t = std::time::Instant::now();
                 let db_esc = db.replace('`', "``");
                 let use_sql = format!("USE `{}`", db_esc);
-                if !mysql_switch_db(&mut *conn, &use_sql).await {
+                if !mysql_switch_db(&mut *tx, &use_sql).await {
+                    let _ = tx.rollback().await;
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database `{}`", db)));
                 }
                 db_switch_us = t.elapsed().as_micros() as u64;
@@ -1159,7 +1163,7 @@ pub async fn query_execute_multi(
             for (i, stmt) in statements.iter().enumerate() {
                 let query_id = uuid::Uuid::new_v4().to_string();
                 let t = std::time::Instant::now();
-                let exec_result = execute_mysql(&mut conn, stmt, 10_000, 0).await;
+                let exec_result = execute_mysql(&mut *tx, stmt, 10_000, 0).await;
                 let execution_us = t.elapsed().as_micros() as u64;
                 let t = std::time::Instant::now();
                 push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, execution_us, sqlite.inner()).await;
@@ -1179,18 +1183,24 @@ pub async fn query_execute_multi(
                     spawn_query_count_mysql(app.clone(), pool_clone.clone(), read_only, stmt.to_string(), database.clone(), query_id);
                 }
             }
+            if multi && results.iter().any(|r| r.error.is_some()) {
+                let _ = tx.rollback().await;
+            } else {
+                tx.commit().await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
         }
         RemotePool::Postgres(pool) => {
             let pool_clone = pool.clone();
             let t = std::time::Instant::now();
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let mut tx = pool.begin().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             let pool_acquire_us = t.elapsed().as_micros() as u64;
             let mut db_switch_us = 0u64;
             if let Some(schema) = &database {
                 let t = std::time::Instant::now();
                 let schema_esc = schema.replace('\'', "''");
                 let set_path_sql = format!("SET search_path = '{}'", schema_esc);
-                if !pg_switch_schema(&mut *conn, &set_path_sql).await {
+                if !pg_switch_schema(&mut *tx, &set_path_sql).await {
+                    let _ = tx.rollback().await;
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to schema '{}'", schema)));
                 }
                 db_switch_us = t.elapsed().as_micros() as u64;
@@ -1198,7 +1208,7 @@ pub async fn query_execute_multi(
             for (i, stmt) in statements.iter().enumerate() {
                 let query_id = uuid::Uuid::new_v4().to_string();
                 let t = std::time::Instant::now();
-                let exec_result = execute_postgres(&mut conn, stmt, 10_000, 0).await;
+                let exec_result = execute_postgres(&mut *tx, stmt, 10_000, 0).await;
                 let execution_us = t.elapsed().as_micros() as u64;
                 let t = std::time::Instant::now();
                 push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, execution_us, sqlite.inner()).await;
@@ -1218,16 +1228,21 @@ pub async fn query_execute_multi(
                     spawn_query_count_postgres(app.clone(), pool_clone.clone(), stmt.to_string(), database.clone(), query_id);
                 }
             }
+            if multi && results.iter().any(|r| r.error.is_some()) {
+                let _ = tx.rollback().await;
+            } else {
+                tx.commit().await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
         }
         RemotePool::Sqlite(pool) => {
             let pool_clone = pool.clone();
             let t = std::time::Instant::now();
-            let mut conn = pool.acquire().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let mut tx = pool.begin().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             let pool_acquire_us = t.elapsed().as_micros() as u64;
             for (i, stmt) in statements.iter().enumerate() {
                 let query_id = uuid::Uuid::new_v4().to_string();
                 let t = std::time::Instant::now();
-                let exec_result = execute_sqlite(&mut conn, stmt, 10_000, 0).await;
+                let exec_result = execute_sqlite(&mut *tx, stmt, 10_000, 0).await;
                 let execution_us = t.elapsed().as_micros() as u64;
                 let t = std::time::Instant::now();
                 push_result(&mut results, exec_result, query_id.clone(), &connection_id, stmt, execution_us, sqlite.inner()).await;
@@ -1245,6 +1260,11 @@ pub async fn query_execute_multi(
                 if results.last().map(|r| r.error.is_none() && !r.columns.is_empty()).unwrap_or(false) {
                     spawn_query_count_sqlite(app.clone(), pool_clone.clone(), stmt.to_string(), query_id);
                 }
+            }
+            if multi && results.iter().any(|r| r.error.is_some()) {
+                let _ = tx.rollback().await;
+            } else {
+                tx.commit().await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
         }
     }
@@ -2134,7 +2154,8 @@ pub async fn query_explain(
                 .await
                 .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
-                if !pg_switch_schema(&mut conn, schema).await {
+                let set_path_sql = format!("SET search_path = '{}'", schema.replace('\'', "''"));
+                if !pg_switch_schema(&mut conn, &set_path_sql).await {
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch schema to {schema}")));
                 }
             }
