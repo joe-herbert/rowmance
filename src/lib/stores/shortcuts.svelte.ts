@@ -41,7 +41,9 @@ export type ShortcutAction =
   | 'TOGGLE_SYSTEM_ITEMS'
   | 'CLOSE_OTHER_TABS'
   | 'GLOBAL_SEARCH'
-  | 'TOGGLE_READ_ONLY';
+  | 'TOGGLE_READ_ONLY'
+  | 'TABLE_VIEW_RELATIONS'
+  | 'TABLE_QUICK_VIEW_RELATIONS';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 
@@ -281,6 +283,22 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     jetbrains: 'Mod+Shift+L',
     vim: 'Mod+Shift+L',
   },
+  {
+    action: 'TABLE_VIEW_RELATIONS',
+    label: 'View Relations',
+    group: 'Table View',
+    vscode: 'Mod+Enter',
+    jetbrains: 'Mod+Enter',
+    vim: 'Mod+Enter',
+  },
+  {
+    action: 'TABLE_QUICK_VIEW_RELATIONS',
+    label: 'Quick View Relations',
+    group: 'Table View',
+    vscode: 'Mod+Shift+Enter',
+    jetbrains: 'Mod+Shift+Enter',
+    vim: 'Mod+Shift+Enter',
+  },
 ];
 
 export const isMac =
@@ -312,7 +330,7 @@ function getEffectiveShortcuts(): Map<ShortcutAction, string> {
 const MODIFIER_KEYS = new Set(['Meta', 'Control', 'Alt', 'Shift']);
 const DOUBLE_TAP_MS = 400;
 
-function keyEventToString(e: KeyboardEvent): string {
+export function keyEventToString(e: KeyboardEvent): string {
   const parts: string[] = [];
   if (isMac ? e.metaKey : e.ctrlKey) parts.push('Mod');
   if (isMac ? e.ctrlKey : e.metaKey) parts.push('Ctrl');

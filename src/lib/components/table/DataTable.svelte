@@ -13,6 +13,7 @@
   import CellEditorModal from './CellEditorModal.svelte';
   import CellViewModal from './CellViewModal.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { useShortcuts, keyEventToString } from '$lib/stores/shortcuts.svelte';
   import { executeQuery } from '$lib/tauri/query';
 
   type CellValue = string | number | boolean | null;
@@ -1613,6 +1614,34 @@
       col = Math.min(col + 1, colCount - 1);
     } else if (e.key === 'ArrowLeft') {
       col = Math.max(col - 1, 0);
+    } else if (
+      keyEventToString(e) === shortcutsStore.getShortcut('TABLE_QUICK_VIEW_RELATIONS')
+    ) {
+      const { col: colMeta, originalIndex } = visibleColumns[col];
+      if (colMeta?.isForeignKey) {
+        const rowData = pageRows[row];
+        if (rowData) {
+          const rowKey = buildRowKey(rowData, columns, pageOffset + row);
+          const cellValue = getPendingValue(rowKey, colMeta.name, rowData[originalIndex]);
+          if (cellValue !== null) {
+            triggerQuickView(colMeta.name, cellValue, rowKey);
+          }
+        }
+      }
+      return;
+    } else if (keyEventToString(e) === shortcutsStore.getShortcut('TABLE_VIEW_RELATIONS')) {
+      const { col: colMeta, originalIndex } = visibleColumns[col];
+      if (colMeta?.isForeignKey) {
+        const rowData = pageRows[row];
+        if (rowData) {
+          const rowKey = buildRowKey(rowData, columns, pageOffset + row);
+          const cellValue = getPendingValue(rowKey, colMeta.name, rowData[originalIndex]);
+          if (cellValue !== null) {
+            onForeignKeyClick?.(colMeta.name, cellValue);
+          }
+        }
+      }
+      return;
     } else if (e.key === 'Enter') {
       if (editable) {
         const { originalIndex } = visibleColumns[col];
@@ -1959,6 +1988,7 @@
 
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
+  const shortcutsStore = useShortcuts();
 
   function formatCell(value: CellValue): string {
     if (value === null) return '';
