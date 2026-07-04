@@ -623,16 +623,24 @@
     }
   });
 
-  // Save scroll position on unmount
+  // Save scroll position continuously via a scroll listener (more reliable than save-on-unmount)
   $effect(() => {
-    return () => {
-      const scrollEl = tableBrowserEl?.querySelector('.table-scroll') as HTMLElement | null;
-      if (scrollEl && scrollEl.scrollTop > 0) {
-        tableScrollPositions.set(_dirtyKey, scrollEl.scrollTop);
-      } else if (scrollEl && scrollEl.scrollTop === 0) {
+    const el = tableBrowserEl;
+    if (!el || result === null) return;
+
+    const scrollEl = el.querySelector('.table-scroll') as HTMLElement | null;
+    if (!scrollEl) return;
+
+    function handleScroll() {
+      if (scrollEl!.scrollTop > 0) {
+        tableScrollPositions.set(_dirtyKey, scrollEl!.scrollTop);
+      } else {
         tableScrollPositions.delete(_dirtyKey);
       }
-    };
+    }
+
+    scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollEl.removeEventListener('scroll', handleScroll);
   });
 
   async function load(background = false): Promise<void> {

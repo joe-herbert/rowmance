@@ -4,10 +4,12 @@
 -->
 <script module>
   let lastActiveSection = 'general';
+  let lastScrollTop = 0;
+  let lastThemeEditorScrollTop = 0;
 </script>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import KeyboardShortcuts from '$lib/components/settings/KeyboardShortcuts.svelte';
   import ThemeEditor from '$lib/components/settings/ThemeEditor.svelte';
@@ -26,10 +28,19 @@
   type Section = 'general' | 'table-view' | 'editor' | 'keyboard' | 'connections' | 'appearance';
 
   let activeSection = $state<Section>(lastActiveSection as Section);
+  let settingsContentEl = $state<HTMLElement | null>(null);
+  let themeEditorWrapEl = $state<HTMLElement | null>(null);
 
   $effect(() => {
     lastActiveSection = activeSection;
   });
+
+  $effect(() => {
+    const el = settingsContentEl;
+    if (!el) return;
+    tick().then(() => { el.scrollTop = lastScrollTop; });
+  });
+
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
   const toast = useToast();
@@ -260,7 +271,11 @@
   </nav>
 
   <!-- Content -->
-  <div class="settings-content">
+  <div
+    class="settings-content"
+    bind:this={settingsContentEl}
+    onscroll={(e) => { lastScrollTop = (e.currentTarget as HTMLElement).scrollTop; }}
+  >
     {#if activeSection === 'general'}
       <h2 class="section-title">General</h2>
 
@@ -716,7 +731,12 @@
 
       {#if isCustomTheme}
         {#key settings.theme}
-          <div class="theme-editor-wrap" style="margin-top: var(--spacing-3);">
+          <div
+            class="theme-editor-wrap"
+            style="margin-top: var(--spacing-3);"
+            bind:this={themeEditorWrapEl}
+            onscroll={(e) => { lastThemeEditorScrollTop = (e.currentTarget as HTMLElement).scrollTop; }}
+          >
             <ThemeEditor
               themeName={settings.theme}
               onrename={renameTheme}
@@ -724,6 +744,9 @@
                 confirmingDelete = true;
               }}
               onexport={exportTheme}
+              onloaded={() => {
+                if (themeEditorWrapEl) themeEditorWrapEl.scrollTop = lastThemeEditorScrollTop;
+              }}
             />
           </div>
         {/key}

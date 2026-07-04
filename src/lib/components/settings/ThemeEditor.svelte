@@ -3,7 +3,7 @@
   Changes apply instantly to the document root and are saved with a 500ms debounce.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import * as themesApi from '$lib/tauri/themes';
   import { syncTrafficLightPosition } from '$lib/tauri/window';
   import type { ThemeData } from '$lib/types';
@@ -16,9 +16,10 @@
     onrename?: (_newName: string) => Promise<void>;
     ondelete?: () => void;
     onexport?: () => void;
+    onloaded?: () => void;
   }
 
-  const { themeName, onrename, ondelete, onexport }: Props = $props();
+  const { themeName, onrename, ondelete, onexport, onloaded }: Props = $props();
   const toast = useToast();
 
   let themeData = $state<ThemeData | null>(null);
@@ -42,6 +43,8 @@
         document.documentElement.style.setProperty(k, v);
       }
       localValues = { ...themeData.variables };
+      await tick();
+      onloaded?.();
     } catch (err) {
       loadError = errorMessage(err);
     }
