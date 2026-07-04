@@ -50,7 +50,13 @@
 
   function formatTime(iso: string): string {
     try {
-      return new Date(iso + 'Z').toLocaleTimeString();
+      return new Date(iso + 'Z').toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+    });
     } catch {
       return iso;
     }
@@ -388,20 +394,20 @@
   }
 
   /* Segment colours */
-  .pool { background-color: #f59e0b; }
-  .switch { background-color: #3b82f6; }
-  .exec { background-color: #ef4444; }
-  .proc { background-color: #10b981; }
+  .pool { background-color: var(--color-warning); }
+  .switch { background-color: var(--color-accent); }
+  .exec { background-color: var(--color-danger); }
+  .proc { background-color: var(--color-success); }
 
-  .legend-dot.pool { background-color: #f59e0b; }
-  .legend-dot.switch { background-color: #3b82f6; }
-  .legend-dot.exec { background-color: #ef4444; }
-  .legend-dot.proc { background-color: #10b981; }
+  .legend-dot.pool { background-color: var(--color-warning); }
+  .legend-dot.switch { background-color: var(--color-accent); }
+  .legend-dot.exec { background-color: var(--color-danger); }
+  .legend-dot.proc { background-color: var(--color-success); }
 
-  .phase.pool { color: #b45309; background: rgba(245, 158, 11, 0.15); }
-  .phase.switch { color: #1d4ed8; background: rgba(59, 130, 246, 0.15); }
-  .phase.exec { color: #b91c1c; background: rgba(239, 68, 68, 0.15); }
-  .phase.proc { color: #065f46; background: rgba(16, 185, 129, 0.15); }
+  .phase.pool { color: var(--color-warning); background: var(--color-warning-subtle); }
+  .phase.switch { color: var(--color-accent); background: var(--color-accent-subtle); }
+  .phase.exec { color: var(--color-danger); background: var(--color-danger-subtle); }
+  .phase.proc { color: var(--color-success); background: var(--color-success-subtle); }
 
   .state-message {
     padding: var(--spacing-6) var(--spacing-4);
