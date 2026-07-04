@@ -61,21 +61,39 @@ export function splitStatements(sql: string): string[] {
       continue;
     }
 
-    // Double-quoted identifiers: " ... "
+    // Double-quoted identifiers: " ... " (with "" escape)
     if (char === '"') {
       let j = i + 1;
-      while (j < sql.length && sql[j] !== '"') j++;
-      current += sql.slice(i, j + 1);
-      i = j + 1;
+      while (j < sql.length) {
+        if (sql[j] === '"' && sql[j + 1] === '"') {
+          j += 2;
+        } else if (sql[j] === '"') {
+          j++;
+          break;
+        } else {
+          j++;
+        }
+      }
+      current += sql.slice(i, j);
+      i = j;
       continue;
     }
 
-    // Backtick-quoted identifiers: ` ... `
+    // Backtick-quoted identifiers: ` ... ` (with `` escape)
     if (char === '`') {
       let j = i + 1;
-      while (j < sql.length && sql[j] !== '`') j++;
-      current += sql.slice(i, j + 1);
-      i = j + 1;
+      while (j < sql.length) {
+        if (sql[j] === '`' && sql[j + 1] === '`') {
+          j += 2;
+        } else if (sql[j] === '`') {
+          j++;
+          break;
+        } else {
+          j++;
+        }
+      }
+      current += sql.slice(i, j);
+      i = j;
       continue;
     }
 

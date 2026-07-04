@@ -15,7 +15,7 @@
   import { useToast } from '$lib/stores/toast.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
-  import { updateRows, insertRow, deleteRows } from '$lib/tauri/query';
+  import { saveTableChanges } from '$lib/tauri/query';
   import { portal } from '$lib/actions/portal';
 
   const toast = useToast();
@@ -244,13 +244,7 @@
         deleteChanges.push({ primaryKeys });
       }
 
-      await updateRows(connectionId, detectedDatabase, detectedTable, rowChanges);
-      for (const values of insertValues) {
-        await insertRow(connectionId, detectedDatabase, detectedTable, values);
-      }
-      if (deleteChanges.length > 0) {
-        await deleteRows(connectionId, detectedDatabase, detectedTable, deleteChanges);
-      }
+      await saveTableChanges(connectionId, detectedDatabase, detectedTable, rowChanges, insertValues, deleteChanges);
       pendingChanges = new Map();
       pendingDeletedRows = new Map();
       addRowTrigger = 0;

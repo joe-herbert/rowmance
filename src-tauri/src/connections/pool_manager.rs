@@ -107,6 +107,8 @@ impl ConnectionManager {
                                 .ssl_client_key(Path::new(key));
                         }
                     }
+                } else {
+                    opts = opts.ssl_mode(MySqlSslMode::Disabled);
                 }
 
                 // Verify connectivity with a single test connection before creating

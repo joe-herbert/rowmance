@@ -324,6 +324,7 @@ pub fn run() {
             commands::query::query_update_rows,
             commands::query::query_delete_rows,
             commands::query::query_insert_row,
+            commands::query::query_save_table_changes,
             commands::query::query_format,
             // Schema introspection & modification
             commands::schema::schema_list_databases,

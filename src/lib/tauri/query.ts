@@ -90,6 +90,30 @@ export async function insertRow(
   return invoke<void>('query_insert_row', { connectionId, database, table, values });
 }
 
+export interface SaveChangesResult {
+  updatedCount: number;
+  insertedCount: number;
+  deletedCount: number;
+}
+
+export async function saveTableChanges(
+  connectionId: string,
+  database: string,
+  table: string,
+  updates: RowChange[],
+  inserts: Record<string, unknown>[],
+  deletes: RowDelete[],
+): Promise<SaveChangesResult> {
+  return invoke<SaveChangesResult>('query_save_table_changes', {
+    connectionId,
+    database,
+    table,
+    updates,
+    inserts,
+    deletes,
+  });
+}
+
 export async function explainQuery(
   connectionId: string,
   sql: string,

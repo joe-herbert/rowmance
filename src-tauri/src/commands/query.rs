@@ -634,6 +634,353 @@ pub async fn query_insert_row(
     Ok(())
 }
 
+/// Result returned by `query_save_table_changes`.
+#[derive(Serialize, Debug)]
+pub struct SaveChangesResult {
+    #[serde(rename = "updatedCount")]
+    pub updated_count: u64,
+    #[serde(rename = "insertedCount")]
+    pub inserted_count: u64,
+    #[serde(rename = "deletedCount")]
+    pub deleted_count: u64,
+}
+
+/// Execute all pending table-browser edits (updates, inserts, deletes) atomically
+/// inside a single transaction. Rolls back automatically if any operation fails.
+/// If a user transaction is already active for this connection, the operations
+/// are routed through the held connection without an extra BEGIN/COMMIT.
+#[tauri::command]
+pub async fn query_save_table_changes(
+    sqlite: State<'_, sqlx::SqlitePool>,
+    connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<TransactionManager>>,
+    connection_id: String,
+    database: String,
+    table: String,
+    updates: Vec<RowChange>,
+    inserts: Vec<std::collections::HashMap<String, serde_json::Value>>,
+    deletes: Vec<RowDelete>,
+) -> Result<SaveChangesResult, AppError> {
+    let profile_row = sqlx::query!(
+        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    match &profile_row {
+        Some(row) if row.read_only != 0 => {
+            return Err(AppError::new(
+                "READ_ONLY_VIOLATION",
+                "This connection is in read-only mode — mutating statements are not allowed",
+            ));
+        }
+        None => {
+            return Err(AppError::new(
+                "CONNECTION_NOT_FOUND",
+                format!("No connection with id {connection_id}"),
+            ));
+        }
+        _ => {}
+    }
+
+    let mut updated_count = 0u64;
+    let mut inserted_count = 0u64;
+    let mut deleted_count = 0u64;
+
+    // If a user-managed transaction is active, route through its held connection
+    // (the user controls the transaction boundary).
+    if let Some(tx) = transactions.get(&connection_id) {
+        let mut guard = tx.lock().await;
+        match &mut *guard {
+            HeldConnection::MySql(conn) => {
+                updated_count += apply_updates_mysql(&mut *conn, &database, &table, &updates).await?;
+                inserted_count += apply_inserts_mysql(&mut *conn, &database, &table, &inserts).await?;
+                deleted_count += apply_deletes_mysql(&mut *conn, &database, &table, &deletes).await?;
+            }
+            HeldConnection::Postgres(conn) => {
+                updated_count += apply_updates_postgres(&mut **conn, &database, &table, &updates).await?;
+                inserted_count += apply_inserts_postgres(&mut **conn, &database, &table, &inserts).await?;
+                deleted_count += apply_deletes_postgres(&mut **conn, &database, &table, &deletes).await?;
+            }
+            HeldConnection::Sqlite(conn) => {
+                updated_count += apply_updates_sqlite(&mut **conn, &table, &updates).await?;
+                inserted_count += apply_inserts_sqlite(&mut **conn, &table, &inserts).await?;
+                deleted_count += apply_deletes_sqlite(&mut **conn, &table, &deletes).await?;
+            }
+        }
+        return Ok(SaveChangesResult { updated_count, inserted_count, deleted_count });
+    }
+
+    // No active user transaction — wrap everything in our own transaction.
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+    match pool_ref.value() {
+        RemotePool::MySql(pool, _) => {
+            let mut tx = pool.begin().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let r = async {
+                let u = apply_updates_mysql(&mut *tx, &database, &table, &updates).await?;
+                let i = apply_inserts_mysql(&mut *tx, &database, &table, &inserts).await?;
+                let d = apply_deletes_mysql(&mut *tx, &database, &table, &deletes).await?;
+                Ok::<_, AppError>((u, i, d))
+            }.await;
+            match r {
+                Ok((u, i, d)) => {
+                    tx.commit().await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    updated_count = u; inserted_count = i; deleted_count = d;
+                }
+                Err(e) => { let _ = tx.rollback().await; return Err(e); }
+            }
+        }
+        RemotePool::Postgres(pool) => {
+            let mut tx = pool.begin().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let r = async {
+                let u = apply_updates_postgres(&mut *tx, &database, &table, &updates).await?;
+                let i = apply_inserts_postgres(&mut *tx, &database, &table, &inserts).await?;
+                let d = apply_deletes_postgres(&mut *tx, &database, &table, &deletes).await?;
+                Ok::<_, AppError>((u, i, d))
+            }.await;
+            match r {
+                Ok((u, i, d)) => {
+                    tx.commit().await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    updated_count = u; inserted_count = i; deleted_count = d;
+                }
+                Err(e) => { let _ = tx.rollback().await; return Err(e); }
+            }
+        }
+        RemotePool::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let r = async {
+                let u = apply_updates_sqlite(&mut *tx, &table, &updates).await?;
+                let i = apply_inserts_sqlite(&mut *tx, &table, &inserts).await?;
+                let d = apply_deletes_sqlite(&mut *tx, &table, &deletes).await?;
+                Ok::<_, AppError>((u, i, d))
+            }.await;
+            match r {
+                Ok((u, i, d)) => {
+                    tx.commit().await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    updated_count = u; inserted_count = i; deleted_count = d;
+                }
+                Err(e) => { let _ = tx.rollback().await; return Err(e); }
+            }
+        }
+    }
+
+    Ok(SaveChangesResult { updated_count, inserted_count, deleted_count })
+}
+
+async fn apply_updates_mysql(
+    conn: &mut sqlx::mysql::MySqlConnection,
+    database: &str,
+    table: &str,
+    changes: &[RowChange],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for change in changes {
+        if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+        let set_clause: Vec<String> = change.changes.keys().map(|col| format!("{} = ?", quote_mysql(col))).collect();
+        let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() { where_parts.push(format!("{} IS NULL", quote_mysql(col))); }
+            else { where_parts.push(format!("{} = ?", quote_mysql(col))); where_bind.push(val); }
+        }
+        let sql = format!("UPDATE {}.{} SET {} WHERE {} LIMIT 1", quote_mysql(database), quote_mysql(table), set_clause.join(", "), where_parts.join(" AND "));
+        let mut q = sqlx::query(&sql);
+        for val in change.changes.values() { q = bind_mysql_value(q, val); }
+        for val in &where_bind { q = bind_mysql_value(q, val); }
+        count += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
+    }
+    Ok(count)
+}
+
+async fn apply_updates_postgres(
+    conn: &mut sqlx::postgres::PgConnection,
+    database: &str,
+    table: &str,
+    changes: &[RowChange],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for change in changes {
+        if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+        let mut param_idx: usize = 1;
+        let set_clause: Vec<String> = change.changes.keys().map(|col| { let s = format!("{} = ${}", quote_postgres(col), param_idx); param_idx += 1; s }).collect();
+        let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() { where_parts.push(format!("{} IS NULL", quote_postgres(col))); }
+            else { where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx)); param_idx += 1; where_bind.push(val); }
+        }
+        let sql = format!("UPDATE {}.{} SET {} WHERE {}", quote_postgres(database), quote_postgres(table), set_clause.join(", "), where_parts.join(" AND "));
+        let mut q = sqlx::query(&sql);
+        for val in change.changes.values() { q = bind_pg_value(q, val); }
+        for val in &where_bind { q = bind_pg_value(q, val); }
+        count += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
+    }
+    Ok(count)
+}
+
+async fn apply_updates_sqlite(
+    conn: &mut sqlx::sqlite::SqliteConnection,
+    table: &str,
+    changes: &[RowChange],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for change in changes {
+        if change.changes.is_empty() || change.primary_keys.is_empty() { continue; }
+        let set_clause: Vec<String> = change.changes.keys().map(|col| format!("{} = ?", quote_sqlite(col))).collect();
+        let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() { where_parts.push(format!("{} IS NULL", quote_sqlite(col))); }
+            else { where_parts.push(format!("{} = ?", quote_sqlite(col))); where_bind.push(val); }
+        }
+        let sql = format!("UPDATE {} SET {} WHERE {}", quote_sqlite(table), set_clause.join(", "), where_parts.join(" AND "));
+        let mut q = sqlx::query(&sql);
+        for val in change.changes.values() { q = bind_sqlite_value(q, val); }
+        for val in &where_bind { q = bind_sqlite_value(q, val); }
+        count += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
+    }
+    Ok(count)
+}
+
+async fn apply_inserts_mysql(
+    conn: &mut sqlx::mysql::MySqlConnection,
+    database: &str,
+    table: &str,
+    inserts: &[std::collections::HashMap<String, serde_json::Value>],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for values in inserts {
+        if values.is_empty() { continue; }
+        let cols: Vec<(&String, &serde_json::Value)> = values.iter().collect();
+        let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_mysql(c)).collect();
+        let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+        let sql = format!("INSERT INTO {}.{} ({}) VALUES ({})", quote_mysql(database), quote_mysql(table), col_list.join(", "), placeholders.join(", "));
+        let mut q = sqlx::query(&sql);
+        for (_, val) in &cols { q = bind_mysql_value(q, val); }
+        q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+async fn apply_inserts_postgres(
+    conn: &mut sqlx::postgres::PgConnection,
+    database: &str,
+    table: &str,
+    inserts: &[std::collections::HashMap<String, serde_json::Value>],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for values in inserts {
+        if values.is_empty() { continue; }
+        let cols: Vec<(&String, &serde_json::Value)> = values.iter().collect();
+        let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_postgres(c)).collect();
+        let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
+        let sql = format!("INSERT INTO {}.{} ({}) VALUES ({})", quote_postgres(database), quote_postgres(table), col_list.join(", "), placeholders.join(", "));
+        let mut q = sqlx::query(&sql);
+        for (_, val) in &cols { q = bind_pg_value(q, val); }
+        q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+async fn apply_inserts_sqlite(
+    conn: &mut sqlx::sqlite::SqliteConnection,
+    table: &str,
+    inserts: &[std::collections::HashMap<String, serde_json::Value>],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for values in inserts {
+        if values.is_empty() { continue; }
+        let cols: Vec<(&String, &serde_json::Value)> = values.iter().collect();
+        let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_sqlite(c)).collect();
+        let placeholders: Vec<&str> = cols.iter().map(|_| "?").collect();
+        let sql = format!("INSERT INTO {} ({}) VALUES ({})", quote_sqlite(table), col_list.join(", "), placeholders.join(", "));
+        let mut q = sqlx::query(&sql);
+        for (_, val) in &cols { q = bind_sqlite_value(q, val); }
+        q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+async fn apply_deletes_mysql(
+    conn: &mut sqlx::mysql::MySqlConnection,
+    database: &str,
+    table: &str,
+    deletes: &[RowDelete],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for row_del in deletes {
+        if row_del.primary_keys.is_empty() { continue; }
+        let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() { where_parts.push(format!("{} IS NULL", quote_mysql(col))); }
+            else { where_parts.push(format!("{} = ?", quote_mysql(col))); where_bind.push(val); }
+        }
+        let sql = format!("DELETE FROM {}.{} WHERE {} LIMIT 1", quote_mysql(database), quote_mysql(table), where_parts.join(" AND "));
+        let mut q = sqlx::query(&sql);
+        for val in &where_bind { q = bind_mysql_value(q, val); }
+        count += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
+    }
+    Ok(count)
+}
+
+async fn apply_deletes_postgres(
+    conn: &mut sqlx::postgres::PgConnection,
+    database: &str,
+    table: &str,
+    deletes: &[RowDelete],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for row_del in deletes {
+        if row_del.primary_keys.is_empty() { continue; }
+        let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+        let mut param_idx = 1usize;
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() { where_parts.push(format!("{} IS NULL", quote_postgres(col))); }
+            else { where_parts.push(format!("{} = ${}", quote_postgres(col), param_idx)); param_idx += 1; where_bind.push(val); }
+        }
+        let sql = format!("DELETE FROM {}.{} WHERE {}", quote_postgres(database), quote_postgres(table), where_parts.join(" AND "));
+        let mut q = sqlx::query(&sql);
+        for val in &where_bind { q = bind_pg_value(q, val); }
+        count += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
+    }
+    Ok(count)
+}
+
+async fn apply_deletes_sqlite(
+    conn: &mut sqlx::sqlite::SqliteConnection,
+    table: &str,
+    deletes: &[RowDelete],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for row_del in deletes {
+        if row_del.primary_keys.is_empty() { continue; }
+        let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() { where_parts.push(format!("{} IS NULL", quote_sqlite(col))); }
+            else { where_parts.push(format!("{} = ?", quote_sqlite(col))); where_bind.push(val); }
+        }
+        let sql = format!("DELETE FROM {} WHERE {}", quote_sqlite(table), where_parts.join(" AND "));
+        let mut q = sqlx::query(&sql);
+        for val in &where_bind { q = bind_sqlite_value(q, val); }
+        count += q.execute(&mut *conn).await.map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?.rows_affected();
+    }
+    Ok(count)
+}
+
 /// Split a SQL string into individual statements on `;`, respecting quoted strings and comments.
 fn split_statements(sql: &str) -> Vec<String> {
     let mut statements: Vec<String> = Vec::new();
@@ -1306,11 +1653,12 @@ async fn execute_mysql(
     page_size: u32,
     offset: u32,
 ) -> ExecuteResult {
-    let sql = sql.trim_end_matches(';');
-    let is_select = returns_rows_mysql(sql);
+    // Strip trailing ';' only for the driver — callers retain `sql` for history.
+    let exec_sql = sql.trim_end_matches(';');
+    let is_select = returns_rows_mysql(exec_sql);
 
     if is_select {
-        let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
+        let paginated = format!("{exec_sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
             .await
@@ -1356,7 +1704,7 @@ async fn execute_mysql(
 
         Ok((columns, data, None, None))
     } else {
-        let result = sqlx::query(sql)
+        let result = sqlx::query(exec_sql)
             .execute(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
@@ -1370,11 +1718,12 @@ async fn execute_postgres(
     page_size: u32,
     offset: u32,
 ) -> ExecuteResult {
-    let sql = sql.trim_end_matches(';');
-    let is_select = returns_rows_postgres(sql);
+    // Strip trailing ';' only for the driver — callers retain `sql` for history.
+    let exec_sql = sql.trim_end_matches(';');
+    let is_select = returns_rows_postgres(exec_sql);
 
     if is_select {
-        let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
+        let paginated = format!("{exec_sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
             .await
@@ -1416,7 +1765,7 @@ async fn execute_postgres(
 
         Ok((columns, data, None, None))
     } else {
-        let result = sqlx::query(sql)
+        let result = sqlx::query(exec_sql)
             .execute(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
@@ -1430,11 +1779,12 @@ async fn execute_sqlite(
     page_size: u32,
     offset: u32,
 ) -> ExecuteResult {
-    let sql = sql.trim_end_matches(';');
-    let is_select = returns_rows_sqlite(sql);
+    // Strip trailing ';' only for the driver — callers retain `sql` for history.
+    let exec_sql = sql.trim_end_matches(';');
+    let is_select = returns_rows_sqlite(exec_sql);
 
     if is_select {
-        let paginated = format!("{sql} LIMIT {page_size} OFFSET {offset}");
+        let paginated = format!("{exec_sql} LIMIT {page_size} OFFSET {offset}");
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
             .await
@@ -1480,7 +1830,7 @@ async fn execute_sqlite(
 
         Ok((columns, data, None, None))
     } else {
-        let result = sqlx::query(sql)
+        let result = sqlx::query(exec_sql)
             .execute(&mut *conn)
             .await
             .map_err(|e| e.to_string())?;
@@ -1728,14 +2078,22 @@ pub async fn query_explain(
 ) -> Result<ExplainResult, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool, _) => {
+        RemotePool::MySql(pool, read_only) => {
             let mut conn = pool
                 .acquire()
                 .await
                 .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            if *read_only {
+                sqlx::query("SET SESSION TRANSACTION READ ONLY")
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
             if let Some(db) = &database {
-                if !mysql_switch_db(&mut conn, db).await {
-                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database {db}")));
+                let db_esc = db.replace('`', "``");
+                let use_sql = format!("USE `{}`", db_esc);
+                if !mysql_switch_db(&mut conn, &use_sql).await {
+                    return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to database `{db}`")));
                 }
             }
             let explain_sql = format!("EXPLAIN FORMAT=JSON {sql}");

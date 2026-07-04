@@ -46,9 +46,7 @@
   import {
     executeQuery,
     executeSelection,
-    updateRows,
-    insertRow,
-    deleteRows,
+    saveTableChanges,
   } from '$lib/tauri/query';
   import Loader from '$lib/components/ui/Loader.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
@@ -384,13 +382,7 @@
         deleteChanges.push({ primaryKeys });
       }
 
-      await updateRows(connectionId, database, table, rowChanges);
-      for (const values of insertValues) {
-        await insertRow(connectionId, database, table, values);
-      }
-      if (deleteChanges.length > 0) {
-        await deleteRows(connectionId, database, table, deleteChanges);
-      }
+      await saveTableChanges(connectionId, database, table, rowChanges, insertValues, deleteChanges);
       tablePendingState.delete(_pendingKey);
       pendingChanges = new Map();
       pendingDeletedRows = new Map();
