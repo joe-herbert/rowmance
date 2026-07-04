@@ -1445,8 +1445,8 @@ pub async fn query_execute_selection(
     sql: String,
     database: Option<String>,
 ) -> Result<QueryResult, AppError> {
-    // Delegate to the main executor with page=1 and a large page size.
-    query_execute(app, sqlite, connections, transactions, connection_id, sql, 1, 10_000, database).await
+    // Execute without LIMIT/OFFSET so the user's highlighted text reaches the driver unchanged.
+    query_execute(app, sqlite, connections, transactions, connection_id, sql, 1, UNBOUNDED, database).await
 }
 
 // ── Type formatting helpers ───────────────────────────────────────────────────
@@ -1637,6 +1637,9 @@ fn spawn_query_count_sqlite(
 
 // ── Dialect-specific executors ────────────────────────────────────────────────
 
+/// Sentinel for `page_size` meaning "fetch all rows without a LIMIT clause".
+const UNBOUNDED: u32 = 0;
+
 type ExecuteResult = Result<
     (
         Vec<ColumnMeta>,
@@ -1658,7 +1661,11 @@ async fn execute_mysql(
     let is_select = returns_rows_mysql(exec_sql);
 
     if is_select {
-        let paginated = format!("{exec_sql} LIMIT {page_size} OFFSET {offset}");
+        let paginated = if page_size == UNBOUNDED {
+            exec_sql.to_string()
+        } else {
+            format!("{exec_sql} LIMIT {page_size} OFFSET {offset}")
+        };
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
             .await
@@ -1723,7 +1730,11 @@ async fn execute_postgres(
     let is_select = returns_rows_postgres(exec_sql);
 
     if is_select {
-        let paginated = format!("{exec_sql} LIMIT {page_size} OFFSET {offset}");
+        let paginated = if page_size == UNBOUNDED {
+            exec_sql.to_string()
+        } else {
+            format!("{exec_sql} LIMIT {page_size} OFFSET {offset}")
+        };
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
             .await
@@ -1784,7 +1795,11 @@ async fn execute_sqlite(
     let is_select = returns_rows_sqlite(exec_sql);
 
     if is_select {
-        let paginated = format!("{exec_sql} LIMIT {page_size} OFFSET {offset}");
+        let paginated = if page_size == UNBOUNDED {
+            exec_sql.to_string()
+        } else {
+            format!("{exec_sql} LIMIT {page_size} OFFSET {offset}")
+        };
         let rows = sqlx::query(&paginated)
             .fetch_all(&mut *conn)
             .await
@@ -2178,8 +2193,7 @@ pub async fn query_format(sql: String, _dialect: String) -> Result<String, AppEr
 }
 
 /// Write a query execution record to the local history table.
-/// This is fire-and-forget — failures are swallowed so they never
-/// interrupt the user's query flow.
+/// Failures are logged but never propagated — they must not interrupt the user's query flow.
 #[allow(clippy::too_many_arguments)]
 async fn record_history(
     pool: &sqlx::SqlitePool,
@@ -2193,7 +2207,7 @@ async fn record_history(
 ) {
     let now = chrono::Utc::now().to_rfc3339();
     let duration_us_i64 = duration_us as i64;
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         r#"
         INSERT INTO query_history (id, connection_id, sql, executed_at, duration_us, row_count, error, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -2208,7 +2222,10 @@ async fn record_history(
     .bind(error)
     .bind(status)
     .execute(pool)
-    .await;
+    .await
+    {
+        eprintln!("history write failed: {e}");
+    }
 }
 
 #[cfg(test)]
@@ -2372,5 +2389,15 @@ mod tests {
     #[test]
     fn returns_rows_pragma_sqlite() {
         assert!(returns_rows_sqlite("PRAGMA table_info(users)"));
+    }
+
+    #[test]
+    fn cte_starts_with_with_not_select() {
+        // The raw string does not start with SELECT — naive heuristic detection would
+        // misclassify this CTE as a non-SELECT and discard all rows. The AST-based
+        // returns_rows_* functions handle it correctly (see returns_rows_cte_select).
+        let sql = "WITH cte AS (SELECT 1 AS n) SELECT n FROM cte";
+        assert!(!sql.trim().to_uppercase().starts_with("SELECT"));
+        assert!(returns_rows_postgres(sql));
     }
 }

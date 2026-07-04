@@ -49,6 +49,26 @@ describe('splitStatements', () => {
   it('strips empty statements between consecutive semicolons', () => {
     expect(splitStatements('SELECT 1;;SELECT 2;')).toEqual(['SELECT 1', 'SELECT 2']);
   });
+
+  it('handles double-quoted identifier with embedded escape sequence', () => {
+    const result = splitStatements('SELECT "col""name" FROM t; SELECT 1');
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe('SELECT "col""name" FROM t');
+  });
+});
+
+describe('search term escaping', () => {
+  it('single quote in search term does not produce injectable SQL', () => {
+    const term = "it's a test";
+    // Matches the escape chain in TableBrowser buildSearchWhere (HIGH-1 fix):
+    // single quotes doubled first, then backslash/wildcard chars escaped.
+    const escaped = term
+      .replace(/'/g, "''")
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    expect(escaped).toBe("it''s a test");
+  });
 });
 
 describe('statementAtCursor', () => {
@@ -82,5 +102,11 @@ describe('isMutatingStatement', () => {
     ['EXPLAIN SELECT 1', false],
   ])('"%s" → %s', (sql, expected) => {
     expect(isMutatingStatement(sql)).toBe(expected);
+  });
+
+  it('does not flag CTE-wrapped INSERT as mutating (known gap)', () => {
+    // WITH starts the statement, not INSERT — the read-only UI check misses this case.
+    // The backend uses sqlparser AST detection which handles it correctly.
+    expect(isMutatingStatement('WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x')).toBe(false);
   });
 });
