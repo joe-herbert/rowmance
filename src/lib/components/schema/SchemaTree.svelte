@@ -239,7 +239,6 @@
     closeDbContextMenu();
   }
 
-
   const activeProfiles = $derived(
     connectionStore.profiles.filter((p) => connectionStore.isActive(p.id)),
   );
@@ -254,7 +253,6 @@
     return isSystemTable(name, settingsStore.settings.systemTablePatterns);
   }
 </script>
-
 
 <div class="schema-tree">
   <div class="tree-header no-select">
@@ -433,7 +431,12 @@
 >
   <CtxItem onclick={ctxOpenErd}>Open ERD</CtxItem>
   <CtxSep />
-  <CtxItem onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); closeDbContextMenu(); }}>
+  <CtxItem
+    onclick={() => {
+      settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
+      closeDbContextMenu();
+    }}
+  >
     {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
   </CtxItem>
 </ContextMenu>
@@ -676,7 +679,6 @@
   .table-node {
     padding-left: calc(var(--spacing-3) * 2);
   }
-
 
   @keyframes pulse {
     0%,

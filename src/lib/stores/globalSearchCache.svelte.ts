@@ -152,9 +152,7 @@ export function useGlobalSearchCache() {
       tableEntries = tableEntries.filter((e) => e.connectionId !== connectionId);
       columnEntries = columnEntries.filter((e) => e.connectionId !== connectionId);
       loadedConnectionIds = new Set([...loadedConnectionIds].filter((id) => id !== connectionId));
-      loadingConnectionIds = new Set(
-        [...loadingConnectionIds].filter((id) => id !== connectionId),
-      );
+      loadingConnectionIds = new Set([...loadingConnectionIds].filter((id) => id !== connectionId));
     },
   };
 }

@@ -67,7 +67,7 @@ pub async fn list_tables(
     .fetch_all(pool)
     .await?;
 
-    let mut tables: Vec<TableInfo> = rows
+    let tables: Vec<TableInfo> = rows
         .into_iter()
         .map(|r| TableInfo {
             name: r.name.unwrap_or_default(),
@@ -286,7 +286,11 @@ pub async fn list_foreign_keys(
 }
 
 /// Count all rows in a table. Used by the background count task.
-pub async fn count_table(pool: &MySqlPool, database: &str, table: &str) -> Result<i64, RowmanceError> {
+pub async fn count_table(
+    pool: &MySqlPool,
+    database: &str,
+    table: &str,
+) -> Result<i64, RowmanceError> {
     let db_esc = database.replace('`', "``");
     let tbl_esc = table.replace('`', "``");
     let count: i64 =

@@ -11,9 +11,9 @@ mod transactions;
 
 use connections::pool_manager::ConnectionManager;
 use connections::ssh_tunnel::SshTunnelManager;
-use transactions::TransactionManager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
+use transactions::TransactionManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -175,12 +175,8 @@ pub fn run() {
                 None::<&str>,
             )?;
             #[cfg(debug_assertions)]
-            let dev_submenu = Submenu::with_items(
-                app,
-                "Developer",
-                true,
-                &[&dev_speed_analysis_item],
-            )?;
+            let dev_submenu =
+                Submenu::with_items(app, "Developer", true, &[&dev_speed_analysis_item])?;
 
             #[cfg(not(debug_assertions))]
             let menu = Menu::with_items(
@@ -325,7 +321,6 @@ pub fn run() {
             commands::query::query_delete_rows,
             commands::query::query_insert_row,
             commands::query::query_save_table_changes,
-            commands::query::query_format,
             // Schema introspection & modification
             commands::schema::schema_list_databases,
             commands::schema::schema_list_tables,

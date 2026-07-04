@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
 
   interface Props {
-    onclick?: (e: MouseEvent) => void;
+    onclick?: (_e: MouseEvent) => void;
     disabled?: boolean;
     danger?: boolean;
     children: Snippet;
@@ -11,13 +11,7 @@
   let { onclick, disabled = false, danger = false, children }: Props = $props();
 </script>
 
-<button
-  class="ctx-item"
-  class:ctx-item--danger={danger}
-  role="menuitem"
-  {disabled}
-  {onclick}
->
+<button class="ctx-item" class:ctx-item--danger={danger} role="menuitem" {disabled} {onclick}>
   {@render children()}
 </button>
 

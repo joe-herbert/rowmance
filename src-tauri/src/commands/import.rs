@@ -71,6 +71,36 @@ fn infer_type(values: &[&str]) -> String {
     "text".to_owned()
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Check whether a connection profile exists and is not read-only.
+/// Returns `Ok(())` when the connection may be written to, otherwise returns
+/// `CONNECTION_NOT_FOUND` or `READ_ONLY_VIOLATION`.
+pub(crate) async fn check_read_only(
+    sqlite: &sqlx::SqlitePool,
+    connection_id: &str,
+) -> Result<(), AppError> {
+    let profile_row = sqlx::query!(
+        "SELECT read_only FROM connection_profiles WHERE id = ?",
+        connection_id
+    )
+    .fetch_optional(sqlite)
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    match profile_row {
+        None => Err(AppError::new(
+            "CONNECTION_NOT_FOUND",
+            format!("No connection with id {connection_id}"),
+        )),
+        Some(row) if row.read_only != 0 => Err(AppError::new(
+            "READ_ONLY_VIOLATION",
+            "This connection is in read-only mode — mutating statements are not allowed",
+        )),
+        _ => Ok(()),
+    }
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 fn csv_preview_from_text(content: &str) -> Result<CsvPreview, AppError> {
@@ -138,29 +168,7 @@ async fn csv_execute_from_text(
     create_table: bool,
     column_overrides: Vec<ColumnOverride>,
 ) -> Result<u32, AppError> {
-    let profile_row = sqlx::query!(
-        "SELECT read_only FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite)
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
-
-    match profile_row {
-        None => {
-            return Err(AppError::new(
-                "CONNECTION_NOT_FOUND",
-                format!("No connection with id {connection_id}"),
-            ))
-        }
-        Some(row) if row.read_only != 0 => {
-            return Err(AppError::new(
-                "READ_ONLY_VIOLATION",
-                "This connection is in read-only mode — mutating statements are not allowed",
-            ))
-        }
-        _ => {}
-    }
+    check_read_only(sqlite, &connection_id).await?;
 
     let content = csv_text;
     let mut reader = csv::Reader::from_reader(content.as_bytes());
@@ -392,29 +400,7 @@ async fn sql_execute_from_text(
 ) -> Result<u32, AppError> {
     use tauri::Emitter;
 
-    let profile_row = sqlx::query!(
-        "SELECT read_only FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite)
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
-
-    match profile_row {
-        None => {
-            return Err(AppError::new(
-                "CONNECTION_NOT_FOUND",
-                format!("No connection with id {connection_id}"),
-            ))
-        }
-        Some(row) if row.read_only != 0 => {
-            return Err(AppError::new(
-                "READ_ONLY_VIOLATION",
-                "This connection is in read-only mode — mutating statements are not allowed",
-            ))
-        }
-        _ => {}
-    }
+    check_read_only(sqlite, &connection_id).await?;
 
     let statements = crate::lib_sql::split_sql_statements(&content);
     let total = statements.len() as u32;
@@ -507,6 +493,64 @@ pub async fn import_sql_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::SqlitePool;
+
+    /// Spin up an in-memory SQLite pool with the minimal schema needed by
+    /// `check_read_only` (the `connection_profiles` table).
+    async fn make_test_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE connection_profiles (
+                id       TEXT PRIMARY KEY,
+                read_only INTEGER NOT NULL DEFAULT 0
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    // ── check_read_only ───────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn check_read_only_missing_profile_returns_not_found() {
+        let pool = make_test_pool().await;
+        let err = check_read_only(&pool, "no-such-id").await.unwrap_err();
+        assert_eq!(err.code, "CONNECTION_NOT_FOUND");
+    }
+
+    #[tokio::test]
+    async fn check_read_only_read_only_profile_returns_violation() {
+        let pool = make_test_pool().await;
+        sqlx::query("INSERT INTO connection_profiles (id, read_only) VALUES ('ro', 1)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let err = check_read_only(&pool, "ro").await.unwrap_err();
+        assert_eq!(err.code, "READ_ONLY_VIOLATION");
+    }
+
+    #[tokio::test]
+    async fn check_read_only_writable_profile_returns_ok() {
+        let pool = make_test_pool().await;
+        sqlx::query("INSERT INTO connection_profiles (id, read_only) VALUES ('rw', 0)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        check_read_only(&pool, "rw").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn check_read_only_default_is_writable() {
+        // DEFAULT 0 means writable; omitting read_only column should also pass.
+        let pool = make_test_pool().await;
+        sqlx::query("INSERT INTO connection_profiles (id) VALUES ('default')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        check_read_only(&pool, "default").await.unwrap();
+    }
 
     #[test]
     fn infer_type_integers() {

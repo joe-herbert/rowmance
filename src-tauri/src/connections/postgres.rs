@@ -68,7 +68,7 @@ pub async fn list_tables(pool: &PgPool, schema: &str) -> Result<Vec<TableInfo>, 
     .fetch_all(pool)
     .await?;
 
-    let mut tables: Vec<TableInfo> = rows
+    let tables: Vec<TableInfo> = rows
         .into_iter()
         .map(|r| TableInfo {
             name: r.table_name.unwrap_or_default(),

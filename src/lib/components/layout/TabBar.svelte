@@ -424,27 +424,34 @@
       minWidth={200}
     >
       {#if contextItem.content.kind === 'query_editor' && contextItem.content.savedQueryId}
-        <CtxItem onclick={() => {
-          contextMenuItemId = null;
-          renamingItemId = contextItem.id;
-          renameValue = contextItem.content.kind === 'query_editor'
-            ? (contextItem.content.savedQueryName ?? 'Query')
-            : '';
-        }}>Rename</CtxItem>
+        <CtxItem
+          onclick={() => {
+            contextMenuItemId = null;
+            renamingItemId = contextItem.id;
+            renameValue =
+              contextItem.content.kind === 'query_editor'
+                ? (contextItem.content.savedQueryName ?? 'Query')
+                : '';
+          }}>Rename</CtxItem
+        >
       {/if}
       {#if panelStore.openItems.length > 1}
-        <CtxItem onclick={() => {
-          const id = contextItem.id;
-          contextMenuItemId = null;
-          panelStore.closeOtherItems(id);
-        }}>Close other tabs</CtxItem>
+        <CtxItem
+          onclick={() => {
+            const id = contextItem.id;
+            contextMenuItemId = null;
+            panelStore.closeOtherItems(id);
+          }}>Close other tabs</CtxItem
+        >
       {/if}
       {#if 'connectionId' in contextItem.content}
-        <CtxItem onclick={() => {
-          const connId = (contextItem.content as { connectionId: string }).connectionId;
-          contextMenuItemId = null;
-          panelStore.closeItemsForConnection(connId);
-        }}>Close all tabs for this connection</CtxItem>
+        <CtxItem
+          onclick={() => {
+            const connId = (contextItem.content as { connectionId: string }).connectionId;
+            contextMenuItemId = null;
+            panelStore.closeItemsForConnection(connId);
+          }}>Close all tabs for this connection</CtxItem
+        >
       {/if}
     </ContextMenu>
   {/if}
@@ -637,5 +644,4 @@
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
   }
-
 </style>

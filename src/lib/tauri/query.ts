@@ -46,10 +46,6 @@ export async function cancelQuery(queryId: string): Promise<void> {
   return invoke<void>('query_cancel', { queryId });
 }
 
-export async function formatQuery(sql: string, dialect: string): Promise<string> {
-  return invoke<string>('query_format', { sql, dialect });
-}
-
 export interface RowChange {
   primaryKeys: Record<string, unknown>;
   changes: Record<string, unknown>;

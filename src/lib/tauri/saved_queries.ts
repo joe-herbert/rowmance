@@ -110,10 +110,7 @@ export async function fileUpdatePositions(
   return invoke<void>('file_saved_queries_update_positions', { updates });
 }
 
-export async function fileUpdateOrder(
-  parentId: string | null,
-  items: string[],
-): Promise<void> {
+export async function fileUpdateOrder(parentId: string | null, items: string[]): Promise<void> {
   return invoke<void>('file_saved_queries_update_order', { parentId, items });
 }
 

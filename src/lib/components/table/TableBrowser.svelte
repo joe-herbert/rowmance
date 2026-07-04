@@ -43,11 +43,7 @@
 
 <script lang="ts">
   import { untrack, tick } from 'svelte';
-  import {
-    executeQuery,
-    executeSelection,
-    saveTableChanges,
-  } from '$lib/tauri/query';
+  import { executeQuery, executeSelection, saveTableChanges } from '$lib/tauri/query';
   import Loader from '$lib/components/ui/Loader.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
@@ -388,7 +384,14 @@
         deleteChanges.push({ primaryKeys });
       }
 
-      await saveTableChanges(connectionId, database, table, rowChanges, insertValues, deleteChanges);
+      await saveTableChanges(
+        connectionId,
+        database,
+        table,
+        rowChanges,
+        insertValues,
+        deleteChanges,
+      );
       tablePendingState.delete(_pendingKey);
       pendingChanges = new Map();
       pendingDeletedRows = new Map();
@@ -460,8 +463,7 @@
   let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
 
   function quoteIdentifier(name: string): string {
-    if (dbType === 'postgres' || dbType === 'sqlite')
-      return `"${name.replace(/"/g, '""')}"`;
+    if (dbType === 'postgres' || dbType === 'sqlite') return `"${name.replace(/"/g, '""')}"`;
     return `\`${name.replace(/`/g, '``')}\``;
   }
 
@@ -657,18 +659,21 @@
 
       const schemaKey = `${connectionId}:${database}:${table}`;
       const cachedSchema = tableSchemaCache.get(schemaKey);
-      const schemaPromise: Promise<{ columns: ColumnInfo[]; indexes: IndexInfo[]; foreignKeys: ForeignKeyInfo[] }> =
-        cachedSchema
-          ? Promise.resolve(cachedSchema)
-          : Promise.all([
-              listColumns(connectionId, database, table).catch((): ColumnInfo[] => []),
-              listIndexes(connectionId, database, table).catch((): IndexInfo[] => []),
-              listForeignKeys(connectionId, database, table).catch((): ForeignKeyInfo[] => []),
-            ]).then(([columns, indexes, fks]) => {
-              const schema = { columns, indexes, foreignKeys: fks };
-              tableSchemaCache.set(schemaKey, schema);
-              return schema;
-            });
+      const schemaPromise: Promise<{
+        columns: ColumnInfo[];
+        indexes: IndexInfo[];
+        foreignKeys: ForeignKeyInfo[];
+      }> = cachedSchema
+        ? Promise.resolve(cachedSchema)
+        : Promise.all([
+            listColumns(connectionId, database, table).catch((): ColumnInfo[] => []),
+            listIndexes(connectionId, database, table).catch((): IndexInfo[] => []),
+            listForeignKeys(connectionId, database, table).catch((): ForeignKeyInfo[] => []),
+          ]).then(([columns, indexes, fks]) => {
+            const schema = { columns, indexes, foreignKeys: fks };
+            tableSchemaCache.set(schemaKey, schema);
+            return schema;
+          });
 
       const [queryResult, schema, countResult] = await Promise.all([
         executeQuery(
@@ -817,10 +822,14 @@
   // ── Local search ──────────────────────────────────────────────────────────
 
   let showLocalSearch = $state(
-    untrack(() => !!(tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm)),
+    untrack(
+      () => !!tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm,
+    ),
   );
   let localSearchTerm = $state(
-    untrack(() => tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm ?? ''),
+    untrack(
+      () => tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm ?? '',
+    ),
   );
   let localSearchInputEl = $state<HTMLInputElement | null>(null);
 
@@ -842,7 +851,11 @@
       tableSchemaCache.get(`${connectionId}:${database}:${table}`)?.columns ??
       [];
     if (columns.length === 0) return '';
-    const escaped = term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
+    const escaped = term
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_')
+      .replace(/'/g, "''");
     const pattern = `'%${escaped}%'`;
     if (dbType === 'postgres') {
       return (
@@ -2014,8 +2027,10 @@
       <div class="delete-confirm-title">Confirm deletion</div>
       <div class="delete-confirm-body">
         <p class="delete-confirm-message">
-          This save will permanently delete {pendingDeletedRows.size} row{pendingDeletedRows.size !== 1 ? 's' : ''}.
-          This cannot be undone.
+          This save will permanently delete {pendingDeletedRows.size} row{pendingDeletedRows.size !==
+          1
+            ? 's'
+            : ''}. This cannot be undone.
         </p>
         <label class="delete-confirm-dont-show">
           <input
@@ -2080,8 +2095,14 @@
   }
 
   @keyframes modal-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   .delete-confirm-title {
@@ -2397,26 +2418,6 @@
 
   /* ── Filter summary bar ─────────────────────────────────────────────────── */
 
-  .tx-banner {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: 5px var(--spacing-3);
-    font-size: 11px;
-    color: var(--color-warning, #b45309);
-    background: color-mix(in srgb, var(--color-warning, #b45309) 10%, var(--color-bg-secondary));
-    border-bottom: 1px solid color-mix(in srgb, var(--color-warning, #b45309) 30%, transparent);
-  }
-
-  .tx-banner-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--color-warning, #b45309);
-    flex-shrink: 0;
-  }
-
   .filter-summary-bar {
     flex-shrink: 0;
     display: flex;
@@ -2658,8 +2659,12 @@
   }
 
   @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .loading-text {

@@ -119,7 +119,10 @@ impl ConnectionManager {
                 let mut connect_err: Option<sqlx::Error> = None;
                 for attempt in 0..3u32 {
                     match opts.connect().await {
-                        Ok(_conn) => { connect_err = None; break; }
+                        Ok(_conn) => {
+                            connect_err = None;
+                            break;
+                        }
                         Err(e) => {
                             connect_err = Some(e);
                             if attempt < 2 {
@@ -200,7 +203,10 @@ impl ConnectionManager {
                 let mut connect_err: Option<sqlx::Error> = None;
                 for attempt in 0..3u32 {
                     match opts.connect().await {
-                        Ok(_conn) => { connect_err = None; break; }
+                        Ok(_conn) => {
+                            connect_err = None;
+                            break;
+                        }
                         Err(e) => {
                             connect_err = Some(e);
                             if attempt < 2 {
@@ -217,7 +223,8 @@ impl ConnectionManager {
                 // the pool, so other callers always start with the default schema.
                 // Leak the SQL string once to satisfy the `for<'c>` closure bound.
                 let schema_esc = database.replace('\'', "''");
-                let set_path_sql: &'static str = Box::leak(format!("SET search_path = '{}'", schema_esc).into_boxed_str());
+                let set_path_sql: &'static str =
+                    Box::leak(format!("SET search_path = '{}'", schema_esc).into_boxed_str());
                 let p = PgPoolOptions::new()
                     .min_connections(1)
                     .max_connections(pool_max)

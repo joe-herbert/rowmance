@@ -87,8 +87,6 @@
   let results = $state<QueryResult[]>(untrack(() => cached?.results ?? []));
   let executedStatements = $state<string[]>(untrack(() => cached?.executedStatements ?? []));
   let isRunning = $state(false);
-  let transactionActive = $derived(connections.isTransactionActive(connectionId));
-
   let databases = $state<string[]>([]);
   let selectedDatabase = $state<string>(
     untrack(
@@ -920,7 +918,6 @@
         Explain
       </button>
     {/if}
-
   </div>
 
   <div class="editor-wrapper">

@@ -16,8 +16,8 @@
     /** When set, only these connections are pre-selected. Null = select all. */
     preselectIds?: string[] | null;
     onclose: () => void;
-    onsuccess: (count: number) => void;
-    onerror: (msg: string) => void;
+    onsuccess: (_count: number) => void;
+    onerror: (_msg: string) => void;
   }
 
   let { profiles, preselectIds = null, onclose, onsuccess, onerror }: Props = $props();
@@ -105,7 +105,10 @@
     <!-- Sensitive data toggle -->
     <div class="sensitive-section">
       <label class="sensitive-row">
-        <Checkbox checked={includeSensitive} onchange={() => (includeSensitive = !includeSensitive)} />
+        <Checkbox
+          checked={includeSensitive}
+          onchange={() => (includeSensitive = !includeSensitive)}
+        />
         <span>Include passwords</span>
       </label>
       {#if includeSensitive}
@@ -121,7 +124,8 @@
             stroke-linejoin="round"
             aria-hidden="true"
           >
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            <path
+              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
             ></path>
             <line x1="12" y1="9" x2="12" y2="13"></line>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -140,7 +144,9 @@
         onclick={handleExport}
         disabled={selectedIds.size === 0 || exporting}
       >
-        {exporting ? 'Exporting…' : `Export ${selectedIds.size > 0 ? selectedIds.size : ''} Connection${selectedIds.size !== 1 ? 's' : ''}…`}
+        {exporting
+          ? 'Exporting…'
+          : `Export ${selectedIds.size > 0 ? selectedIds.size : ''} Connection${selectedIds.size !== 1 ? 's' : ''}…`}
       </button>
     </div>
   </div>

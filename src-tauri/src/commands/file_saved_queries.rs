@@ -50,12 +50,11 @@ fn default_queries_dir() -> Result<PathBuf, AppError> {
 }
 
 async fn queries_dir(sqlite: &SqlitePool) -> Result<PathBuf, AppError> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT value FROM settings WHERE key = ?")
-            .bind(DIR_SETTING_KEY)
-            .fetch_optional(sqlite)
-            .await
-            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = ?")
+        .bind(DIR_SETTING_KEY)
+        .fetch_optional(sqlite)
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     if let Some((json,)) = row {
         if let Ok(Some(dir)) = serde_json::from_str::<Option<String>>(&json) {
@@ -107,7 +106,11 @@ fn parse_header(content: &str) -> (FileHeader, String) {
     }
 
     // Drop leading blank lines that separate headers from SQL.
-    while sql_lines.first().map(|l| l.trim().is_empty()).unwrap_or(false) {
+    while sql_lines
+        .first()
+        .map(|l| l.trim().is_empty())
+        .unwrap_or(false)
+    {
         sql_lines.remove(0);
     }
 
@@ -220,12 +223,11 @@ async fn get_conn_fingerprint(
 }
 
 async fn load_mappings(sqlite: &SqlitePool) -> Result<HashMap<String, String>, AppError> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT value FROM settings WHERE key = ?")
-            .bind(MAPPINGS_KEY)
-            .fetch_optional(sqlite)
-            .await
-            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = ?")
+        .bind(MAPPINGS_KEY)
+        .fetch_optional(sqlite)
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
     match row {
         Some((v,)) => serde_json::from_str::<HashMap<String, String>>(&v)
             .map_err(|e| AppError::new("PARSE_ERROR", e.to_string())),
@@ -237,8 +239,8 @@ async fn save_mappings(
     sqlite: &SqlitePool,
     mappings: &HashMap<String, String>,
 ) -> Result<(), AppError> {
-    let json =
-        serde_json::to_string(mappings).map_err(|e| AppError::new("SERIALISE_ERROR", e.to_string()))?;
+    let json = serde_json::to_string(mappings)
+        .map_err(|e| AppError::new("SERIALISE_ERROR", e.to_string()))?;
     sqlx::query(
         "INSERT INTO settings (key, value) VALUES (?, ?) \
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -349,7 +351,9 @@ fn scan_dir(
 
     let order = read_order_file(dir);
     let order_pos = |name: &str| -> i64 {
-        order.iter().position(|o| o == name)
+        order
+            .iter()
+            .position(|o| o == name)
             .map(|i| i as i64)
             .unwrap_or(order.len() as i64)
     };
@@ -373,7 +377,12 @@ fn scan_dir(
                 .and_then(|p| to_id(p, base).ok())
                 .filter(|s| !s.is_empty());
             let position = order_pos(&name);
-            folders.push(FileQueryFolder { id, parent_id, name, position });
+            folders.push(FileQueryFolder {
+                id,
+                parent_id,
+                name,
+                position,
+            });
             subdirs.push(path);
         } else if path.extension().and_then(|e| e.to_str()) == Some("sql") {
             let filename = file_name.into_owned(); // e.g. "monthly.sql"
@@ -382,14 +391,22 @@ fn scan_dir(
                 .parent()
                 .and_then(|p| to_id(p, base).ok())
                 .filter(|s| !s.is_empty());
-            let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+            let name = path
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
             let content = match std::fs::read_to_string(&path) {
                 Ok(c) => c,
                 Err(_) => continue,
             };
             let (header, sql) = parse_header(&content);
-            let (conn_id, conn_status) =
-                resolve_connection(&header.connection_id, &header.connection_fingerprint, local, mappings);
+            let (conn_id, conn_status) = resolve_connection(
+                &header.connection_id,
+                &header.connection_fingerprint,
+                local,
+                mappings,
+            );
 
             if conn_status == "fingerprint_matched" {
                 if let (Some(fid), Some(lid)) = (&header.connection_id, &conn_id) {
@@ -397,9 +414,10 @@ fn scan_dir(
                 }
             }
 
-            let created_at = system_time_to_rfc3339(
-                meta.created().unwrap_or_else(|_| meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH)),
-            );
+            let created_at =
+                system_time_to_rfc3339(meta.created().unwrap_or_else(|_| {
+                    meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+                }));
             let updated_at = system_time_to_rfc3339(
                 meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH),
             );
@@ -428,7 +446,15 @@ fn scan_dir(
     }
 
     for subdir in subdirs {
-        scan_dir(&subdir, base, local, mappings, new_fp_mappings, folders, queries)?;
+        scan_dir(
+            &subdir,
+            base,
+            local,
+            mappings,
+            new_fp_mappings,
+            folders,
+            queries,
+        )?;
     }
 
     Ok(())
@@ -437,9 +463,7 @@ fn scan_dir(
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn file_saved_queries_get_dir(
-    sqlite: State<'_, SqlitePool>,
-) -> Result<String, AppError> {
+pub async fn file_saved_queries_get_dir(sqlite: State<'_, SqlitePool>) -> Result<String, AppError> {
     let dir = queries_dir(sqlite.inner()).await?;
     Ok(dir.to_string_lossy().into_owned())
 }
@@ -457,7 +481,15 @@ pub async fn file_saved_queries_list(
     let mut folders: Vec<FileQueryFolder> = Vec::new();
     let mut queries: Vec<FileQuery> = Vec::new();
 
-    scan_dir(&dir, &dir, &local, &mappings, &mut new_fp_mappings, &mut folders, &mut queries)?;
+    scan_dir(
+        &dir,
+        &dir,
+        &local,
+        &mappings,
+        &mut new_fp_mappings,
+        &mut folders,
+        &mut queries,
+    )?;
 
     if !new_fp_mappings.is_empty() {
         mappings.extend(new_fp_mappings);
@@ -502,15 +534,16 @@ pub async fn file_saved_queries_create(
         .map(|entries| {
             entries
                 .flatten()
-                .filter(|e| {
-                    e.path().extension().and_then(|x| x.to_str()) == Some("sql")
-                })
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("sql"))
                 .count() as i64
         })
         .unwrap_or(0);
 
     let fingerprint = if let Some(ref cid) = connection_id {
-        get_conn_fingerprint(sqlite.inner(), cid).await.ok().flatten()
+        get_conn_fingerprint(sqlite.inner(), cid)
+            .await
+            .ok()
+            .flatten()
     } else {
         None
     };
@@ -525,11 +558,18 @@ pub async fn file_saved_queries_create(
     std::fs::write(&file_path, write_file_content(&header, &sql))
         .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
 
-    let meta = file_path.metadata().map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+    let meta = file_path
+        .metadata()
+        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
     let id = to_id(&file_path, &dir)?;
     let ts = system_time_to_rfc3339(meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH));
 
-    let conn_status = if connection_id.is_some() { "resolved" } else { "none" }.to_string();
+    let conn_status = if connection_id.is_some() {
+        "resolved"
+    } else {
+        "none"
+    }
+    .to_string();
 
     Ok(FileQuery {
         id,
@@ -561,12 +601,15 @@ pub async fn file_saved_queries_update(
     let old_path = dir.join(&id);
 
     if !old_path.exists() {
-        return Err(AppError::new("NOT_FOUND", format!("Query '{id}' not found")));
+        return Err(AppError::new(
+            "NOT_FOUND",
+            format!("Query '{id}' not found"),
+        ));
     }
 
     // Preserve existing position.
-    let existing = std::fs::read_to_string(&old_path)
-        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+    let existing =
+        std::fs::read_to_string(&old_path).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
     let (old_header, _) = parse_header(&existing);
 
     let target_dir = match &folder_id {
@@ -586,7 +629,10 @@ pub async fn file_saved_queries_update(
     }
 
     let fingerprint = if let Some(ref cid) = connection_id {
-        get_conn_fingerprint(sqlite.inner(), cid).await.ok().flatten()
+        get_conn_fingerprint(sqlite.inner(), cid)
+            .await
+            .ok()
+            .flatten()
     } else {
         None
     };
@@ -607,7 +653,9 @@ pub async fn file_saved_queries_update(
         let _ = std::fs::remove_file(&old_path);
     }
 
-    let meta = new_path.metadata().map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+    let meta = new_path
+        .metadata()
+        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
     let new_id = to_id(&new_path, &dir)?;
     let actual_folder_id = new_path
         .parent()
@@ -631,7 +679,8 @@ pub async fn file_saved_queries_update(
         database,
         position: old_header.position.unwrap_or(0),
         created_at: system_time_to_rfc3339(
-            meta.created().unwrap_or_else(|_| meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH)),
+            meta.created()
+                .unwrap_or_else(|_| meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH)),
         ),
         updated_at: system_time_to_rfc3339(
             meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH),
@@ -665,8 +714,8 @@ pub async fn file_saved_queries_update_positions(
         if !path.exists() {
             continue;
         }
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+        let content =
+            std::fs::read_to_string(&path).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
         let (mut header, sql) = parse_header(&content);
         header.position = Some(u.position);
         std::fs::write(&path, write_file_content(&header, &sql))
@@ -712,7 +761,12 @@ pub async fn file_saved_queries_create_folder(
     }
     std::fs::create_dir_all(&target).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
     let id = to_id(&target, &dir)?;
-    Ok(FileQueryFolder { id, parent_id, name: safe_name, position: 0 })
+    Ok(FileQueryFolder {
+        id,
+        parent_id,
+        name: safe_name,
+        position: 0,
+    })
 }
 
 #[tauri::command]
@@ -748,8 +802,7 @@ pub async fn file_saved_queries_rename_folder(
             format!("A folder named '{name}' already exists"),
         ));
     }
-    std::fs::rename(&old_path, &new_path)
-        .map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
+    std::fs::rename(&old_path, &new_path).map_err(|e| AppError::new("IO_ERROR", e.to_string()))?;
 
     let new_id = to_id(&new_path, &dir)?;
     let parent_id = new_path
@@ -757,7 +810,12 @@ pub async fn file_saved_queries_rename_folder(
         .and_then(|p| to_id(p, &dir).ok())
         .filter(|s| !s.is_empty());
 
-    Ok(FileQueryFolder { id: new_id, parent_id, name: safe_name, position: 0 })
+    Ok(FileQueryFolder {
+        id: new_id,
+        parent_id,
+        name: safe_name,
+        position: 0,
+    })
 }
 
 #[tauri::command]
@@ -796,7 +854,12 @@ pub async fn file_saved_queries_move_folder(
             .parent()
             .and_then(|p| to_id(p, &dir).ok())
             .filter(|s| !s.is_empty());
-        return Ok(FileQueryFolder { id, parent_id, name: folder_name, position: 0 });
+        return Ok(FileQueryFolder {
+            id,
+            parent_id,
+            name: folder_name,
+            position: 0,
+        });
     }
 
     if dest_path.exists() {
@@ -831,7 +894,12 @@ pub async fn file_saved_queries_move_folder(
         .and_then(|p| to_id(p, &dir).ok())
         .filter(|s| !s.is_empty());
 
-    Ok(FileQueryFolder { id: new_id, parent_id, name: folder_name, position: 0 })
+    Ok(FileQueryFolder {
+        id: new_id,
+        parent_id,
+        name: folder_name,
+        position: 0,
+    })
 }
 
 /// Persist a mapping from a foreign connection ID (seen in a cloned file) to

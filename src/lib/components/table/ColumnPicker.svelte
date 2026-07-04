@@ -305,10 +305,12 @@
 >
   <CtxItem onclick={() => startRename(colContextMenu!.colName)}>Rename column</CtxItem>
   {#if colContextMenu !== null && columnRenames[colContextMenu.colName] !== undefined && columnRenames[colContextMenu.colName] !== colContextMenu.colName}
-    <CtxItem onclick={() => {
-      onRename?.(colContextMenu!.colName, colContextMenu!.colName);
-      colContextMenu = null;
-    }}>Reset name</CtxItem>
+    <CtxItem
+      onclick={() => {
+        onRename?.(colContextMenu!.colName, colContextMenu!.colName);
+        colContextMenu = null;
+      }}>Reset name</CtxItem
+    >
   {/if}
 </ContextMenu>
 
@@ -559,5 +561,4 @@
     outline: none;
     min-width: 0;
   }
-
 </style>

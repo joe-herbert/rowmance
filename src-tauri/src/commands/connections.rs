@@ -798,14 +798,18 @@ pub async fn connections_duplicate(
     connections: State<'_, Arc<ConnectionManager>>,
     id: String,
 ) -> Result<ConnectionProfile, AppError> {
-    let row = sqlx::query_as::<_, ConnectionProfileRow>(
-        "SELECT * FROM connection_profiles WHERE id = ?",
-    )
-    .bind(&id)
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
-    .ok_or_else(|| AppError::new("CONNECTION_NOT_FOUND", format!("No connection with id {id}")))?;
+    let row =
+        sqlx::query_as::<_, ConnectionProfileRow>("SELECT * FROM connection_profiles WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
+            .ok_or_else(|| {
+                AppError::new(
+                    "CONNECTION_NOT_FOUND",
+                    format!("No connection with id {id}"),
+                )
+            })?;
 
     let new_id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -857,7 +861,8 @@ pub async fn connections_duplicate(
         if let Some(secret) = retrieve_keychain_secret(&id, secret_type) {
             if !secret.is_empty() {
                 let account = format!("{new_id}:{secret_type}");
-                let _ = crate::commands::keychain::keychain_write_secret("rowmance", &account, &secret);
+                let _ =
+                    crate::commands::keychain::keychain_write_secret("rowmance", &account, &secret);
             }
         }
     }
@@ -1016,14 +1021,13 @@ pub async fn connections_get_db_url(
     sqlite: State<'_, SqlitePool>,
     id: String,
 ) -> Result<String, AppError> {
-    let row = sqlx::query_as::<_, ConnectionProfileRow>(
-        "SELECT * FROM connection_profiles WHERE id = ?",
-    )
-    .bind(&id)
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
-    .ok_or_else(|| AppError::new("NOT_FOUND", format!("Connection {id} not found")))?;
+    let row =
+        sqlx::query_as::<_, ConnectionProfileRow>("SELECT * FROM connection_profiles WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
+            .ok_or_else(|| AppError::new("NOT_FOUND", format!("Connection {id} not found")))?;
 
     let password = retrieve_keychain_password(&id);
 
@@ -1037,7 +1041,12 @@ pub async fn connections_get_db_url(
             row.username, password, row.host, row.port, row.database
         ),
         "sqlite" => format!("sqlite://{}", row.host),
-        other => return Err(AppError::new("UNSUPPORTED", format!("Unknown db_type: {other}"))),
+        other => {
+            return Err(AppError::new(
+                "UNSUPPORTED",
+                format!("Unknown db_type: {other}"),
+            ))
+        }
     };
 
     Ok(url)

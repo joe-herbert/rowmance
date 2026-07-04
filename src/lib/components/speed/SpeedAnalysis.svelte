@@ -51,12 +51,12 @@
   function formatTime(iso: string): string {
     try {
       return new Date(iso + 'Z').toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      });
     } catch {
       return iso;
     }
@@ -394,20 +394,48 @@
   }
 
   /* Segment colours */
-  .pool { background-color: var(--color-warning); }
-  .switch { background-color: var(--color-accent); }
-  .exec { background-color: var(--color-danger); }
-  .proc { background-color: var(--color-success); }
+  .pool {
+    background-color: var(--color-warning);
+  }
+  .switch {
+    background-color: var(--color-accent);
+  }
+  .exec {
+    background-color: var(--color-danger);
+  }
+  .proc {
+    background-color: var(--color-success);
+  }
 
-  .legend-dot.pool { background-color: var(--color-warning); }
-  .legend-dot.switch { background-color: var(--color-accent); }
-  .legend-dot.exec { background-color: var(--color-danger); }
-  .legend-dot.proc { background-color: var(--color-success); }
+  .legend-dot.pool {
+    background-color: var(--color-warning);
+  }
+  .legend-dot.switch {
+    background-color: var(--color-accent);
+  }
+  .legend-dot.exec {
+    background-color: var(--color-danger);
+  }
+  .legend-dot.proc {
+    background-color: var(--color-success);
+  }
 
-  .phase.pool { color: var(--color-warning); background: var(--color-warning-subtle); }
-  .phase.switch { color: var(--color-accent); background: var(--color-accent-subtle); }
-  .phase.exec { color: var(--color-danger); background: var(--color-danger-subtle); }
-  .phase.proc { color: var(--color-success); background: var(--color-success-subtle); }
+  .phase.pool {
+    color: var(--color-warning);
+    background: var(--color-warning-subtle);
+  }
+  .phase.switch {
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
+  .phase.exec {
+    color: var(--color-danger);
+    background: var(--color-danger-subtle);
+  }
+  .phase.proc {
+    color: var(--color-success);
+    background: var(--color-success-subtle);
+  }
 
   .state-message {
     padding: var(--spacing-6) var(--spacing-4);
@@ -435,12 +463,5 @@
     font-weight: var(--font-weight-medium);
     color: var(--color-text-secondary);
     margin: 0;
-  }
-
-  .empty-sub {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin: 0;
-    text-align: center;
   }
 </style>

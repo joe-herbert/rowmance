@@ -79,7 +79,7 @@ pub async fn list_tables(
     .fetch_all(pool)
     .await?;
 
-    let mut tables: Vec<TableInfo> = rows
+    let tables: Vec<TableInfo> = rows
         .into_iter()
         .map(|r| TableInfo {
             name: r.name,

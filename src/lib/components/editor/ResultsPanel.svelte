@@ -244,7 +244,14 @@
         deleteChanges.push({ primaryKeys });
       }
 
-      await saveTableChanges(connectionId, detectedDatabase, detectedTable, rowChanges, insertValues, deleteChanges);
+      await saveTableChanges(
+        connectionId,
+        detectedDatabase,
+        detectedTable,
+        rowChanges,
+        insertValues,
+        deleteChanges,
+      );
       pendingChanges = new Map();
       pendingDeletedRows = new Map();
       addRowTrigger = 0;

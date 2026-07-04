@@ -263,7 +263,9 @@
       await loadSavedQueries();
       // Open with the newly assigned connection.
       const updated = savedQueries.find((q) => q.id === query.id);
-      openFileQuery(updated ?? { ...query, connectionId: assignConnectionId, connectionStatus: 'resolved' });
+      openFileQuery(
+        updated ?? { ...query, connectionId: assignConnectionId, connectionStatus: 'resolved' },
+      );
     } catch (err) {
       toast.addToast(errorMessage(err), 'error', 0);
     } finally {
@@ -466,7 +468,9 @@
     return map;
   });
 
-  type TopLevelItem = { kind: 'query'; item: FileQuery } | { kind: 'folder'; item: FileQueryFolder };
+  type TopLevelItem =
+    | { kind: 'query'; item: FileQuery }
+    | { kind: 'folder'; item: FileQueryFolder };
 
   const foldersByParent = $derived.by<Map<string | null, FileQueryFolder[]>>(() => {
     const map = new Map<string | null, FileQueryFolder[]>();
@@ -480,8 +484,14 @@
   });
 
   function childItems(parentId: string | null): TopLevelItem[] {
-    const queries: TopLevelItem[] = (queriesByFolder.get(parentId) ?? []).map((q) => ({ kind: 'query', item: q }));
-    const folders: TopLevelItem[] = (foldersByParent.get(parentId) ?? []).map((f) => ({ kind: 'folder', item: f }));
+    const queries: TopLevelItem[] = (queriesByFolder.get(parentId) ?? []).map((q) => ({
+      kind: 'query',
+      item: q,
+    }));
+    const folders: TopLevelItem[] = (foldersByParent.get(parentId) ?? []).map((f) => ({
+      kind: 'folder',
+      item: f,
+    }));
     return [...queries, ...folders].sort((a, b) =>
       a.item.position !== b.item.position
         ? a.item.position - b.item.position
@@ -661,14 +671,19 @@
         await loadSavedQueries();
       }
       const siblings = childItems(targetFolderId);
-      const draggedIdx = siblings.findIndex((i) => i.kind === 'query' && i.item.id === effectiveQueryId);
+      const draggedIdx = siblings.findIndex(
+        (i) => i.kind === 'query' && i.item.id === effectiveQueryId,
+      );
       if (draggedIdx === -1) return;
       const [dragged] = siblings.splice(draggedIdx, 1);
       const refIdx = siblings.findIndex((i) => i.kind === 'folder' && i.item.id === zone.folderId);
       if (refIdx === -1) return;
       siblings.splice(zone.type === 'before-folder' ? refIdx : refIdx + 1, 0, dragged);
       try {
-        await savedQueriesApi.fileUpdateOrder(targetFolderId, siblings.map((i) => baseName(i.item.id)));
+        await savedQueriesApi.fileUpdateOrder(
+          targetFolderId,
+          siblings.map((i) => baseName(i.item.id)),
+        );
       } catch (err) {
         toast.addToast(errorMessage(err), 'error', 0);
       }
@@ -695,14 +710,19 @@
       }
 
       const siblings = childItems(targetFolderId);
-      const draggedIdx = siblings.findIndex((i) => i.kind === 'query' && i.item.id === effectiveQueryId);
+      const draggedIdx = siblings.findIndex(
+        (i) => i.kind === 'query' && i.item.id === effectiveQueryId,
+      );
       if (draggedIdx === -1) return;
       const [dragged] = siblings.splice(draggedIdx, 1);
       const refIdx = siblings.findIndex((i) => i.kind === 'query' && i.item.id === zone.queryId);
       if (refIdx === -1) return;
       siblings.splice(zone.type === 'before-query' ? refIdx : refIdx + 1, 0, dragged);
       try {
-        await savedQueriesApi.fileUpdateOrder(targetFolderId, siblings.map((i) => baseName(i.item.id)));
+        await savedQueriesApi.fileUpdateOrder(
+          targetFolderId,
+          siblings.map((i) => baseName(i.item.id)),
+        );
       } catch (err) {
         toast.addToast(errorMessage(err), 'error', 0);
       }
@@ -725,7 +745,8 @@
       zone.type !== 'after-folder' &&
       zone.type !== 'before-query' &&
       zone.type !== 'after-query'
-    ) return;
+    )
+      return;
 
     // Determine the parent context of the reference item.
     let parentFolderId: string | null;
@@ -756,7 +777,9 @@
     }
 
     const siblings = childItems(parentFolderId);
-    const draggedIdx = siblings.findIndex((i) => i.kind === 'folder' && i.item.id === effectiveFolderId);
+    const draggedIdx = siblings.findIndex(
+      (i) => i.kind === 'folder' && i.item.id === effectiveFolderId,
+    );
     if (draggedIdx === -1) return;
     const [dragged] = siblings.splice(draggedIdx, 1);
     const refIdx =
@@ -770,7 +793,10 @@
       dragged,
     );
     try {
-      await savedQueriesApi.fileUpdateOrder(parentFolderId, siblings.map((i) => baseName(i.item.id)));
+      await savedQueriesApi.fileUpdateOrder(
+        parentFolderId,
+        siblings.map((i) => baseName(i.item.id)),
+      );
     } catch (err) {
       toast.addToast(errorMessage(err), 'error', 0);
     }
@@ -977,10 +1003,22 @@
             title="New folder"
             aria-label="New folder"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-              <line x1="12" y1="11" x2="12" y2="17"/>
-              <line x1="9" y1="14" x2="15" y2="14"/>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+              />
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
             </svg>
           </button>
           <button
@@ -991,9 +1029,19 @@
             title="New query"
             aria-label="New query"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           </button>
         </div>
@@ -1095,12 +1143,19 @@
                       stroke-width="1.7"
                       stroke-linecap="round"
                       stroke-linejoin="round"
-                      ><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="9.5 13 8 15 9.5 17"></polyline><polyline points="14.5 13 16 15 14.5 17"></polyline></svg
+                      ><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                      ></path><polyline points="14 2 14 8 20 8"></polyline><polyline
+                        points="9.5 13 8 15 9.5 17"
+                      ></polyline><polyline points="14.5 13 16 15 14.5 17"></polyline></svg
                     ></span
                   >
                   <span class="query-name">{query.name}</span>
                   {#if query.connectionStatus === 'unresolved'}
-                    <span class="conn-warn" aria-label="Connection not assigned" title="Connection not assigned — click to assign">!</span>
+                    <span
+                      class="conn-warn"
+                      aria-label="Connection not assigned"
+                      title="Connection not assigned — click to assign">!</span
+                    >
                   {:else if query.connectionStatus === 'resolved' && query.connectionId}
                     {@const conn = connectionStore.getById(query.connectionId)}
                     {#if conn}
@@ -1141,7 +1196,8 @@
                 {@const folderChildItems = childItems(folder.id)}
                 <li
                   class="folder-node"
-                  class:drop-into={dropZone?.type === 'into-folder' && dropZone.folderId === folder.id}
+                  class:drop-into={dropZone?.type === 'into-folder' &&
+                    dropZone.folderId === folder.id}
                   class:drop-before={dropZone?.type === 'before-folder' &&
                     dropZone.folderId === folder.id}
                   class:drop-after={dropZone?.type === 'after-folder' &&
@@ -1336,7 +1392,12 @@
 >
   {#if savedCtxMenu?.kind === 'query'}
     {@const ctxQuery = savedQueries.find((q) => q.id === savedCtxMenu?.id)}
-    <CtxItem onclick={() => { if (ctxQuery) handleQueryClick(ctxQuery); closeSavedCtxMenu(); }}>Open</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (ctxQuery) handleQueryClick(ctxQuery);
+        closeSavedCtxMenu();
+      }}>Open</CtxItem
+    >
     <CtxItem onclick={handleSavedCtxDuplicate}>Duplicate</CtxItem>
     <CtxItem onclick={() => startRenameQuery(savedCtxMenu!.id, savedCtxMenu!.name)}>Rename</CtxItem>
     <CtxSep />
@@ -1394,7 +1455,9 @@
           <option value={p.id}>{p.name}</option>
         {/each}
       </select>
-      <p class="assign-note">This mapping is saved locally and applied to all files sharing the same original connection.</p>
+      <p class="assign-note">
+        This mapping is saved locally and applied to all files sharing the same original connection.
+      </p>
       <div class="assign-actions">
         <button class="assign-btn secondary" onclick={openQueryAnyway}>Open anyway</button>
         <button class="assign-btn secondary" onclick={() => (assigningQuery = null)}>Cancel</button>
@@ -1689,7 +1752,6 @@
     color: var(--color-text-primary);
   }
 
-
   .folder-icon,
   .query-icon {
     flex-shrink: 0;
@@ -1821,7 +1883,6 @@
   .is-dragging {
     opacity: 0.35;
   }
-
 
   /* ── Connection status ───────────────────────────────────────────────────── */
 

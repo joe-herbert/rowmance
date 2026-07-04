@@ -558,11 +558,7 @@
   // Use raw rows.length (server page size) to detect last page, not processedRows which
   // can be smaller due to client-side filtering even when more server pages exist.
   const totalCount = $derived<number | null>(
-    _totalRows !== null
-      ? _totalRows
-      : rows.length < pageSize
-        ? rowOffset + rows.length
-        : null,
+    _totalRows !== null ? _totalRows : rows.length < pageSize ? rowOffset + rows.length : null,
   );
   const pageCount = $derived<number | null>(
     totalCount !== null ? Math.max(1, Math.ceil(totalCount / pageSize)) : null,
@@ -995,10 +991,16 @@
     const isNewRow = rowKey.startsWith('__new__');
 
     if (isNewRow) {
-      if (visColIndex < 0) { confirmEdit(newValue); return; }
+      if (visColIndex < 0) {
+        confirmEdit(newValue);
+        return;
+      }
       const colCount = visibleColumns.length;
       const newRowIdx = pendingNewRows.findIndex((r) => r.key === rowKey);
-      if (newRowIdx < 0) { confirmEdit(newValue); return; }
+      if (newRowIdx < 0) {
+        confirmEdit(newValue);
+        return;
+      }
 
       let nextCol = visColIndex;
       let nextNewRowIdx = newRowIdx;
@@ -1614,9 +1616,7 @@
       col = Math.min(col + 1, colCount - 1);
     } else if (e.key === 'ArrowLeft') {
       col = Math.max(col - 1, 0);
-    } else if (
-      keyEventToString(e) === shortcutsStore.getShortcut('TABLE_QUICK_VIEW_RELATIONS')
-    ) {
+    } else if (keyEventToString(e) === shortcutsStore.getShortcut('TABLE_QUICK_VIEW_RELATIONS')) {
       const { col: colMeta, originalIndex } = visibleColumns[col];
       if (colMeta?.isForeignKey) {
         const rowData = pageRows[row];
@@ -2212,12 +2212,21 @@
     if (!contextMenu?.colName) return;
     const { rowKey, colName } = contextMenu;
     const originalColIndex = columns.findIndex((c) => c.name === colName);
-    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    if (originalColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const visColIndex = visibleColumns.findIndex((vc) => vc.originalIndex === originalColIndex);
-    if (visColIndex < 0) { dismissContextMenu(); return; }
+    if (visColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const newRowEl = tableContainerEl?.querySelector<HTMLElement>(`[data-new-row-key="${rowKey}"]`);
     const td = newRowEl?.querySelectorAll<HTMLTableCellElement>('.data-cell')[visColIndex];
-    if (!td) { dismissContextMenu(); return; }
+    if (!td) {
+      dismissContextMenu();
+      return;
+    }
     const currentValue = pendingChanges.get(rowKey)?.get(colName) ?? null;
     const col = columns[originalColIndex];
     dismissContextMenu();
@@ -2242,7 +2251,10 @@
     if (!contextMenu?.colName) return;
     const { rowKey, colName } = contextMenu;
     const originalColIndex = columns.findIndex((c) => c.name === colName);
-    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    if (originalColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const currentValue = pendingChanges.get(rowKey)?.get(colName) ?? null;
     const col = columns[originalColIndex];
     modalTarget = {
@@ -2265,7 +2277,10 @@
     if (!contextMenu?.colName) return;
     const { rowKey, colName } = contextMenu;
     const originalColIndex = columns.findIndex((c) => c.name === colName);
-    if (originalColIndex < 0) { dismissContextMenu(); return; }
+    if (originalColIndex < 0) {
+      dismissContextMenu();
+      return;
+    }
     const currentValue = pendingChanges.get(rowKey)?.get(colName) ?? null;
     const col = columns[originalColIndex];
     viewModalTarget = { colName, value: currentValue, dataType: col.dataType };
@@ -3059,7 +3074,10 @@
                   };
                   contextMenuSnapshotHasFocus = newRowFocusedCell !== null;
                   contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
-                  contextMenuSnapshotIsMultiCol = newRowSelectionIsMultiCell() && (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !== (newRowFocusedCell?.col ?? 0);
+                  contextMenuSnapshotIsMultiCol =
+                    newRowSelectionIsMultiCell() &&
+                    (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !==
+                      (newRowFocusedCell?.col ?? 0);
                   activeMenuDismiss = () => {
                     contextMenu = null;
                   };
@@ -3081,7 +3099,8 @@
                   class:cell-timestamp={typeCategory === 'timestamp'}
                   class:cell-editable={editable && !readOnly}
                   class:cell-selected={isNewRowCellInSelection(newRow.key, colIndex)}
-                  class:cell-focused={newRowFocusedCell?.rowKey === newRow.key && newRowFocusedCell?.col === colIndex}
+                  class:cell-focused={newRowFocusedCell?.rowKey === newRow.key &&
+                    newRowFocusedCell?.col === colIndex}
                   class:cell-required-empty={isRequiredEmpty}
                   style="width: {colWidths[originalIndex]}px; min-width: {colWidths[
                     originalIndex
@@ -3109,8 +3128,14 @@
                     };
                     contextMenuSnapshotHasFocus = true;
                     contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
-                    const _minCol = Math.min(newRowAnchorCell?.col ?? colIndex, newRowFocusedCell?.col ?? colIndex);
-                    const _maxCol = Math.max(newRowAnchorCell?.col ?? colIndex, newRowFocusedCell?.col ?? colIndex);
+                    const _minCol = Math.min(
+                      newRowAnchorCell?.col ?? colIndex,
+                      newRowFocusedCell?.col ?? colIndex,
+                    );
+                    const _maxCol = Math.max(
+                      newRowAnchorCell?.col ?? colIndex,
+                      newRowFocusedCell?.col ?? colIndex,
+                    );
                     contextMenuSnapshotIsMultiCol = _minCol !== _maxCol;
                     activeMenuDismiss = () => {
                       contextMenu = null;
@@ -3135,7 +3160,8 @@
                     }
                   }}
                   onmouseenter={() => {
-                    if (isDraggingNewRowSelection) newRowFocusedCell = { rowKey: newRow.key, col: colIndex };
+                    if (isDraggingNewRowSelection)
+                      newRowFocusedCell = { rowKey: newRow.key, col: colIndex };
                   }}
                   onfocus={() => {
                     focusedCell = null;
@@ -3610,7 +3636,10 @@
                   };
                   contextMenuSnapshotHasFocus = newRowFocusedCell !== null;
                   contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
-                  contextMenuSnapshotIsMultiCol = newRowSelectionIsMultiCell() && (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !== (newRowFocusedCell?.col ?? 0);
+                  contextMenuSnapshotIsMultiCol =
+                    newRowSelectionIsMultiCell() &&
+                    (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !==
+                      (newRowFocusedCell?.col ?? 0);
                   activeMenuDismiss = () => {
                     contextMenu = null;
                   };
@@ -3632,7 +3661,8 @@
                   class:cell-timestamp={typeCategory === 'timestamp'}
                   class:cell-editable={editable && !readOnly}
                   class:cell-selected={isNewRowCellInSelection(newRow.key, colIndex)}
-                  class:cell-focused={newRowFocusedCell?.rowKey === newRow.key && newRowFocusedCell?.col === colIndex}
+                  class:cell-focused={newRowFocusedCell?.rowKey === newRow.key &&
+                    newRowFocusedCell?.col === colIndex}
                   class:cell-required-empty={isRequiredEmpty}
                   style="width: {colWidths[originalIndex]}px; min-width: {colWidths[
                     originalIndex
@@ -3660,8 +3690,14 @@
                     };
                     contextMenuSnapshotHasFocus = true;
                     contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
-                    const _minCol = Math.min(newRowAnchorCell?.col ?? colIndex, newRowFocusedCell?.col ?? colIndex);
-                    const _maxCol = Math.max(newRowAnchorCell?.col ?? colIndex, newRowFocusedCell?.col ?? colIndex);
+                    const _minCol = Math.min(
+                      newRowAnchorCell?.col ?? colIndex,
+                      newRowFocusedCell?.col ?? colIndex,
+                    );
+                    const _maxCol = Math.max(
+                      newRowAnchorCell?.col ?? colIndex,
+                      newRowFocusedCell?.col ?? colIndex,
+                    );
                     contextMenuSnapshotIsMultiCol = _minCol !== _maxCol;
                     activeMenuDismiss = () => {
                       contextMenu = null;
@@ -3686,7 +3722,8 @@
                     }
                   }}
                   onmouseenter={() => {
-                    if (isDraggingNewRowSelection) newRowFocusedCell = { rowKey: newRow.key, col: colIndex };
+                    if (isDraggingNewRowSelection)
+                      newRowFocusedCell = { rowKey: newRow.key, col: colIndex };
                   }}
                   onfocus={() => {
                     focusedCell = null;
@@ -3749,7 +3786,6 @@
             </tr>
           {/each}
         {/if}
-
       </tbody>
     </table>
   </div>
@@ -3773,73 +3809,65 @@
       {#if contextMenu.isNewRow}
         {#if contextMenu.colName !== null}
           {#if editable && !readOnly && !contextMenuSnapshotIsMultiCell}
-            <CtxItem onclick={() => openNewRowInlineEditFromContextMenu()}>
-              Edit
-            </CtxItem>
-            <CtxItem onclick={() => openNewRowModalFromContextMenu()}>
-              Edit in modal
-            </CtxItem>
+            <CtxItem onclick={() => openNewRowInlineEditFromContextMenu()}>Edit</CtxItem>
+            <CtxItem onclick={() => openNewRowModalFromContextMenu()}>Edit in modal</CtxItem>
           {/if}
           {#if !contextMenuSnapshotIsMultiCell}
-            <CtxItem onclick={() => openNewRowViewModalFromContextMenu()}>
-              View in modal
-            </CtxItem>
+            <CtxItem onclick={() => openNewRowViewModalFromContextMenu()}>View in modal</CtxItem>
           {/if}
           <CtxSep />
           {#if editable && !readOnly}
- <CtxItem onclick={() => setSelectionNull()}>
-              Set to NULL
-            </CtxItem>
+            <CtxItem onclick={() => setSelectionNull()}>Set to NULL</CtxItem>
             {#if !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
- <CtxItem onclick={setNowFromContextMenu}>
-                Set to NOW
-              </CtxItem>
+              <CtxItem onclick={setNowFromContextMenu}>Set to NOW</CtxItem>
             {/if}
             <CtxSep />
           {/if}
           {#if contextMenuSnapshotHasFocus}
-            <CtxItem onclick={() => {
+            <CtxItem
+              onclick={() => {
                 copySelection();
                 dismissContextMenu();
-              }}>
+              }}
+            >
               {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
             </CtxItem>
             {#if editable && !readOnly}
-              <CtxItem onclick={() => {
+              <CtxItem
+                onclick={() => {
                   cutSelection();
                   dismissContextMenu();
-                }}>
+                }}
+              >
                 {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
               </CtxItem>
-              <CtxItem disabled={!contextMenuClipboardHasContent}
+              <CtxItem
+                disabled={!contextMenuClipboardHasContent}
                 onclick={() => {
                   pasteFromClipboard();
                   dismissContextMenu();
-                }}>
+                }}
+              >
                 Paste
               </CtxItem>
             {/if}
           {/if}
           <CtxSep />
- <CtxItem onclick={() => copyAsJson()}>
-            Copy cell as JSON
-          </CtxItem>
- <CtxItem onclick={() => copyAsSql()}>
-            Copy cell as SQL
-          </CtxItem>
- <CtxItem onclick={() => copyAsCsv()}>
-            Copy cell as CSV
-          </CtxItem>
+          <CtxItem onclick={() => copyAsJson()}>Copy cell as JSON</CtxItem>
+          <CtxItem onclick={() => copyAsSql()}>Copy cell as SQL</CtxItem>
+          <CtxItem onclick={() => copyAsCsv()}>Copy cell as CSV</CtxItem>
           <CtxSep />
- <CtxItem onclick={() => copyColumnNames()}>
+          <CtxItem onclick={() => copyColumnNames()}>
             {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
           </CtxItem>
           {#if onConnectColumn && !contextMenuSnapshotIsMultiCell}
             <CtxSep />
-            <CtxItem onclick={() => {
+            <CtxItem
+              onclick={() => {
                 onConnectColumn!(contextMenu!.colName!);
                 dismissContextMenu();
-              }}>
+              }}
+            >
               Connect column…
             </CtxItem>
           {/if}
@@ -3848,22 +3876,14 @@
         <CtxItem onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}>
           Copy row (tab-separated)
         </CtxItem>
- <CtxItem onclick={() => copyAsJson()}>
-          Copy row as JSON
-        </CtxItem>
- <CtxItem onclick={() => copyAsCsv()}>
-          Copy row as CSV
-        </CtxItem>
+        <CtxItem onclick={() => copyAsJson()}>Copy row as JSON</CtxItem>
+        <CtxItem onclick={() => copyAsCsv()}>Copy row as CSV</CtxItem>
         {#if editable && !readOnly}
           <CtxSep />
- <CtxItem onclick={() => cloneRow()}>
-            Clone row
-          </CtxItem>
+          <CtxItem onclick={() => cloneRow()}>Clone row</CtxItem>
         {/if}
         <CtxSep />
-        <CtxItem danger onclick={() => deleteNewRow(contextMenu!.rowKey)}>
-          Discard new row
-        </CtxItem>
+        <CtxItem danger onclick={() => deleteNewRow(contextMenu!.rowKey)}>Discard new row</CtxItem>
       {:else if contextMenuSnapshotIsRowSelection || contextMenu.colName === null}
         {#if selectedRowKeys.size > 1}
           <CtxItem onclick={() => copySelectedRowsTabSeparated()}>
@@ -3874,12 +3894,12 @@
             Copy row (tab-separated)
           </CtxItem>
         {/if}
- <CtxItem onclick={() => copyAsJson()}>
+        <CtxItem onclick={() => copyAsJson()}>
           {selectedRowKeys.size > 1
             ? `Copy ${selectedRowKeys.size} rows as JSON`
             : 'Copy row as JSON'}
         </CtxItem>
- <CtxItem onclick={() => copyAsCsv()}>
+        <CtxItem onclick={() => copyAsCsv()}>
           {selectedRowKeys.size > 1
             ? `Copy ${selectedRowKeys.size} rows as CSV`
             : 'Copy row as CSV'}
@@ -3887,9 +3907,7 @@
         {#if editable && !readOnly}
           <CtxSep />
           {#if selectedRowKeys.size <= 1}
- <CtxItem onclick={() => cloneRow()}>
-              Clone row
-            </CtxItem>
+            <CtxItem onclick={() => cloneRow()}>Clone row</CtxItem>
             <CtxSep />
           {/if}
           <CtxItem danger onclick={() => deleteRow()}>
@@ -3904,81 +3922,71 @@
         {/if}
       {:else}
         {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
-          <CtxItem onclick={() => openInlineEditFromContextMenu()}>
-            Edit
-          </CtxItem>
-          <CtxItem onclick={() => openModalFromContextMenu()}>
-            Edit in modal
-          </CtxItem>
+          <CtxItem onclick={() => openInlineEditFromContextMenu()}>Edit</CtxItem>
+          <CtxItem onclick={() => openModalFromContextMenu()}>Edit in modal</CtxItem>
         {/if}
         {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell}
-          <CtxItem onclick={() => openViewModalFromContextMenu()}>
-            View in modal
-          </CtxItem>
+          <CtxItem onclick={() => openViewModalFromContextMenu()}>View in modal</CtxItem>
         {/if}
         <CtxSep />
         {#if editable && !readOnly}
- <CtxItem onclick={() => setSelectionNull()}>
-            Set to NULL
-          </CtxItem>
+          <CtxItem onclick={() => setSelectionNull()}>Set to NULL</CtxItem>
         {/if}
         {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
- <CtxItem onclick={setNowFromContextMenu}>
-            Set to NOW
-          </CtxItem>
+          <CtxItem onclick={setNowFromContextMenu}>Set to NOW</CtxItem>
         {/if}
         {#if editable && !readOnly}
           <CtxSep />
         {/if}
         {#if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
-          <CtxItem danger onclick={() => discardCellEdit()}>
-            Discard edit
-          </CtxItem>
+          <CtxItem danger onclick={() => discardCellEdit()}>Discard edit</CtxItem>
           <CtxSep />
         {/if}
         {#if contextMenuSnapshotHasFocus}
-          <CtxItem onclick={() => {
+          <CtxItem
+            onclick={() => {
               copySelection();
               dismissContextMenu();
-            }}>
+            }}
+          >
             {contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'}
           </CtxItem>
           {#if editable && !readOnly}
-            <CtxItem onclick={() => {
+            <CtxItem
+              onclick={() => {
                 cutSelection();
                 dismissContextMenu();
-              }}>
+              }}
+            >
               {contextMenuSnapshotIsMultiCell ? 'Cut selection' : 'Cut cell'}
             </CtxItem>
-            <CtxItem disabled={!contextMenuClipboardHasContent}
+            <CtxItem
+              disabled={!contextMenuClipboardHasContent}
               onclick={() => {
                 pasteFromClipboard();
                 dismissContextMenu();
-              }}>
+              }}
+            >
               Paste
             </CtxItem>
           {/if}
         {/if}
         <CtxSep />
- <CtxItem onclick={() => copyAsJson()}>
-          Copy cell as JSON
-        </CtxItem>
- <CtxItem onclick={() => copyAsSql()}>
-          Copy cell as SQL
-        </CtxItem>
- <CtxItem onclick={() => copyAsCsv()}>
-          Copy cell as CSV
-        </CtxItem>
+        <CtxItem onclick={() => copyAsJson()}>Copy cell as JSON</CtxItem>
+        <CtxItem onclick={() => copyAsSql()}>Copy cell as SQL</CtxItem>
+        <CtxItem onclick={() => copyAsCsv()}>Copy cell as CSV</CtxItem>
         <CtxSep />
- <CtxItem onclick={() => copyColumnNames()}>
+        <CtxItem onclick={() => copyColumnNames()}>
           {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
         </CtxItem>
         {#if contextMenu.colName && onConnectColumn && !contextMenuSnapshotIsMultiCell}
           <CtxSep />
-          <CtxItem onclick={() => {
+          <CtxItem
+            onclick={() => {
               onConnectColumn!(contextMenu!.colName!);
               dismissContextMenu();
-            }}>
+            }}
+          >
             Connect column…
           </CtxItem>
         {/if}
@@ -3994,9 +4002,7 @@
         {/if}
         {#if editable && !readOnly}
           <CtxSep />
- <CtxItem onclick={() => cloneRow()}>
-            Clone row
-          </CtxItem>
+          <CtxItem onclick={() => cloneRow()}>Clone row</CtxItem>
           <CtxSep />
           <CtxItem danger onclick={() => deleteRow()}>
             {pendingDeletedRows.has(contextMenu!.rowKey) ? 'Undelete row' : 'Delete row'}
@@ -4017,7 +4023,12 @@
   >
     <CtxItem onclick={() => startHeaderRename(headerContextMenu!.colName)}>Rename column</CtxItem>
     {#if headerContextMenu !== null && columnRenames[headerContextMenu.colName] !== undefined && columnRenames[headerContextMenu.colName] !== headerContextMenu.colName}
-      <CtxItem onclick={() => { onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName); headerContextMenu = null; }}>Reset name</CtxItem>
+      <CtxItem
+        onclick={() => {
+          onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName);
+          headerContextMenu = null;
+        }}>Reset name</CtxItem
+      >
     {/if}
   </CtxMenuContainer>
 
@@ -4501,7 +4512,6 @@
     font-size: var(--font-size-sm);
     pointer-events: none;
   }
-
 
   /* ── New row (pending insert) ───────────────────────────────────────────── */
 

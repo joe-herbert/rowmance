@@ -403,8 +403,7 @@
     txBusy = true;
     try {
       const c = focusedContent;
-      const database =
-        'database' in c && typeof c.database === 'string' ? c.database : undefined;
+      const database = 'database' in c && typeof c.database === 'string' ? c.database : undefined;
       await txApi.beginTransaction(id, database);
       connectionsStore.setTransactionActive(id, true);
     } catch (err) {
@@ -815,17 +814,25 @@
               Begin
             </button>
           {:else}
-            <button class="tx-btn tx-btn--commit" onclick={handleCommitTransaction} disabled={txBusy}>
+            <button
+              class="tx-btn tx-btn--commit"
+              onclick={handleCommitTransaction}
+              disabled={txBusy}
+            >
               Commit
             </button>
-            <button class="tx-btn tx-btn--rollback" onclick={handleRollbackTransaction} disabled={txBusy}>
+            <button
+              class="tx-btn tx-btn--rollback"
+              onclick={handleRollbackTransaction}
+              disabled={txBusy}
+            >
               Rollback
             </button>
           {/if}
         </div>
       </div>
     {/if}
-    
+
     {#if isConnected}
       <button class="conn-popup-disconnect" onclick={handleDisconnect} disabled={disconnecting}>
         {disconnecting ? 'Disconnecting…' : 'Disconnect'}

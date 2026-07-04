@@ -1,7 +1,7 @@
 pub mod connections;
 pub mod erd;
-pub mod file_saved_queries;
 pub mod export;
+pub mod file_saved_queries;
 pub mod history;
 pub mod import;
 pub mod keychain;

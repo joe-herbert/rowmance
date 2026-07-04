@@ -1173,7 +1173,13 @@
   open={panelCtx !== null}
   onclose={closeAllCtx}
 >
-  <CtxItem onclick={() => { panelCtx = null; newConnectionGroupId = undefined; showAddForm = true; }}>New Connection</CtxItem>
+  <CtxItem
+    onclick={() => {
+      panelCtx = null;
+      newConnectionGroupId = undefined;
+      showAddForm = true;
+    }}>New Connection</CtxItem
+  >
   <CtxItem onclick={startCreateGroup}>New Group</CtxItem>
   <CtxSep />
   <CtxItem onclick={handleImportConnections}>Import Connections…</CtxItem>
@@ -1188,12 +1194,7 @@
 
 {#if tableCtx}
   {@const tableCtxProfile = connectionStore.getById(tableCtx.connectionId)}
-  <ContextMenu
-    x={tableCtx.x}
-    y={tableCtx.y}
-    open={true}
-    onclose={closeAllCtx}
-  >
+  <ContextMenu x={tableCtx.x} y={tableCtx.y} open={true} onclose={closeAllCtx}>
     <CtxItem onclick={ctxOpenTable}>Open Table</CtxItem>
     <CtxItem onclick={ctxViewDdl}>View DDL</CtxItem>
     <CtxItem onclick={ctxCopyName}>Copy Name</CtxItem>
@@ -1211,12 +1212,30 @@
       <CtxItem onclick={ctxNewTable}>New Table</CtxItem>
       <CtxSep />
     {/if}
-    <CtxItem onclick={() => { if (dbCtx) { panelStore.openInFocused({ kind: 'query_editor', connectionId: dbCtx.connectionId, database: dbCtx.database }); dbCtx = null; } }}>New Query Editor</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (dbCtx) {
+          panelStore.openInFocused({
+            kind: 'query_editor',
+            connectionId: dbCtx.connectionId,
+            database: dbCtx.database,
+          });
+          dbCtx = null;
+        }
+      }}>New Query Editor</CtxItem
+    >
     <CtxSep />
     <CtxItem onclick={ctxRefreshDatabase}>Refresh</CtxItem>
     <CtxItem onclick={ctxOpenErd}>Open ERD</CtxItem>
     <CtxSep />
-    <CtxItem onclick={() => { if (dbCtx) { navigator.clipboard.writeText(dbCtx.database); dbCtx = null; } }}>Copy Name</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (dbCtx) {
+          navigator.clipboard.writeText(dbCtx.database);
+          dbCtx = null;
+        }
+      }}>Copy Name</CtxItem
+    >
     {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dbType !== 'sqlite'}
       <CtxSep />
       <CtxItem danger onclick={ctxDropDatabase}>
@@ -1228,11 +1247,37 @@
 
 {#if grpCtx}
   <ContextMenu x={grpCtx.x} y={grpCtx.y} open={true} onclose={closeAllCtx}>
-    <CtxItem onclick={() => { if (grpCtx) { newConnectionGroupId = grpCtx.group.id; showAddForm = true; grpCtx = null; } }}>New Connection in Group</CtxItem>
-    <CtxItem onclick={() => { if (grpCtx) { renamingGroupId = grpCtx.group.id; renameValue = grpCtx.group.name; renameError = ''; grpCtx = null; } }}>Rename Group</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (grpCtx) {
+          newConnectionGroupId = grpCtx.group.id;
+          showAddForm = true;
+          grpCtx = null;
+        }
+      }}>New Connection in Group</CtxItem
+    >
+    <CtxItem
+      onclick={() => {
+        if (grpCtx) {
+          renamingGroupId = grpCtx.group.id;
+          renameValue = grpCtx.group.name;
+          renameError = '';
+          grpCtx = null;
+        }
+      }}>Rename Group</CtxItem
+    >
     {#if (grouped().byGroup.get(grpCtx.group.id) ?? []).length > 0}
       <CtxSep />
-      <CtxItem onclick={() => { if (grpCtx) { const ids = (grouped().byGroup.get(grpCtx.group.id) ?? []).map((p) => p.id); exportPreselectIds = ids; grpCtx = null; showExportDialog = true; } }}>Export Connections…</CtxItem>
+      <CtxItem
+        onclick={() => {
+          if (grpCtx) {
+            const ids = (grouped().byGroup.get(grpCtx.group.id) ?? []).map((p) => p.id);
+            exportPreselectIds = ids;
+            grpCtx = null;
+            showExportDialog = true;
+          }
+        }}>Export Connections…</CtxItem
+      >
     {/if}
     <CtxSep />
     <CtxItem danger onclick={() => grpCtx && deleteGroup(grpCtx.group)}>Delete Group</CtxItem>
@@ -1244,18 +1289,75 @@
   <ContextMenu x={connCtx.x} y={connCtx.y} open={true} onclose={closeAllCtx}>
     <CtxItem onclick={ctxNewQueryEditor}>New Query Editor</CtxItem>
     {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dbType !== 'sqlite'}
-      <CtxItem onclick={ctxNewDatabase}>New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</CtxItem>
+      <CtxItem onclick={ctxNewDatabase}
+        >New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</CtxItem
+      >
     {/if}
     <CtxItem onclick={ctxManageUsers}>Manage Users</CtxItem>
     <CtxSep />
-    <CtxItem onclick={() => { if (connCtx) { editingProfile = connCtx.profile; connCtx = null; } }}>Edit</CtxItem>
-    <CtxItem onclick={async () => { if (connCtx) { const id = connCtx.profile.id; connCtx = null; try { await connectionsApi.duplicateConnection(id); await connectionStore.load(); } catch (err) { errorModal = { title: 'Duplicate Failed', message: errorMessage(err) }; } } }}>Duplicate</CtxItem>
-    <CtxItem onclick={ctxConnToggleReadOnly}>{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</CtxItem>
-    <CtxItem onclick={() => { if (connCtx) { navigator.clipboard.writeText(connCtx.profile.name); connCtx = null; } }}>Copy Name</CtxItem>
-    <CtxItem onclick={async () => { if (connCtx) { const id = connCtx.profile.id; connCtx = null; try { const url = await connectionsApi.getConnectionDbUrl(id); await navigator.clipboard.writeText(url); } catch (err) { errorModal = { title: 'Copy Failed', message: errorMessage(err) }; } } }}>Copy as Database URL</CtxItem>
-    <CtxItem onclick={() => { if (connCtx) { exportSingleId = connCtx.profile.id; connCtx = null; showExportDialog = true; } }}>Export Connection…</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (connCtx) {
+          editingProfile = connCtx.profile;
+          connCtx = null;
+        }
+      }}>Edit</CtxItem
+    >
+    <CtxItem
+      onclick={async () => {
+        if (connCtx) {
+          const id = connCtx.profile.id;
+          connCtx = null;
+          try {
+            await connectionsApi.duplicateConnection(id);
+            await connectionStore.load();
+          } catch (err) {
+            errorModal = { title: 'Duplicate Failed', message: errorMessage(err) };
+          }
+        }
+      }}>Duplicate</CtxItem
+    >
+    <CtxItem onclick={ctxConnToggleReadOnly}
+      >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</CtxItem
+    >
+    <CtxItem
+      onclick={() => {
+        if (connCtx) {
+          navigator.clipboard.writeText(connCtx.profile.name);
+          connCtx = null;
+        }
+      }}>Copy Name</CtxItem
+    >
+    <CtxItem
+      onclick={async () => {
+        if (connCtx) {
+          const id = connCtx.profile.id;
+          connCtx = null;
+          try {
+            const url = await connectionsApi.getConnectionDbUrl(id);
+            await navigator.clipboard.writeText(url);
+          } catch (err) {
+            errorModal = { title: 'Copy Failed', message: errorMessage(err) };
+          }
+        }
+      }}>Copy as Database URL</CtxItem
+    >
+    <CtxItem
+      onclick={() => {
+        if (connCtx) {
+          exportSingleId = connCtx.profile.id;
+          connCtx = null;
+          showExportDialog = true;
+        }
+      }}>Export Connection…</CtxItem
+    >
     <CtxSep />
-    <CtxItem onclick={() => { settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems); connCtx = null; }}>
+    <CtxItem
+      onclick={() => {
+        settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems);
+        connCtx = null;
+      }}
+    >
       {settingsStore.settings.showSystemItems ? 'Hide System Items' : 'Show System Items'}
     </CtxItem>
     <CtxSep />
@@ -1263,9 +1365,23 @@
       <CtxItem onclick={ctxRefreshConnection}>Refresh</CtxItem>
       <CtxItem onclick={ctxConnDisconnect}>Disconnect</CtxItem>
     {:else}
-      <CtxItem onclick={() => { if (connCtx) { handleConnect(connCtx.profile); connCtx = null; } }}>Connect</CtxItem>
+      <CtxItem
+        onclick={() => {
+          if (connCtx) {
+            handleConnect(connCtx.profile);
+            connCtx = null;
+          }
+        }}>Connect</CtxItem
+      >
     {/if}
-    <CtxItem onclick={() => { if (connCtx) { panelStore.closeItemsForConnection(connCtx.profile.id); connCtx = null; } }}>Close All Tabs</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (connCtx) {
+          panelStore.closeItemsForConnection(connCtx.profile.id);
+          connCtx = null;
+        }
+      }}>Close All Tabs</CtxItem
+    >
     <CtxSep />
     {#if connectionStore.groups.length > 0}
       <div
@@ -1273,18 +1389,47 @@
         role="menuitem"
         tabindex="0"
         aria-haspopup="true"
-        onmouseenter={() => { if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; } moveToGroupSubmenuOpen = true; }}
-        onmouseleave={() => { moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150); }}
+        onmouseenter={() => {
+          if (moveToGroupSubmenuTimer) {
+            clearTimeout(moveToGroupSubmenuTimer);
+            moveToGroupSubmenuTimer = null;
+          }
+          moveToGroupSubmenuOpen = true;
+        }}
+        onmouseleave={() => {
+          moveToGroupSubmenuTimer = setTimeout(() => {
+            moveToGroupSubmenuOpen = false;
+          }, 150);
+        }}
       >
         Move to Group
-        <svg class="ctx-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        <svg
+          class="ctx-caret"
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
+        >
         {#if moveToGroupSubmenuOpen}
           <div
             class="ctx-submenu"
             role="menu"
             tabindex="0"
-            onmouseenter={() => { if (moveToGroupSubmenuTimer) { clearTimeout(moveToGroupSubmenuTimer); moveToGroupSubmenuTimer = null; } }}
-            onmouseleave={() => { moveToGroupSubmenuTimer = setTimeout(() => { moveToGroupSubmenuOpen = false; }, 150); }}
+            onmouseenter={() => {
+              if (moveToGroupSubmenuTimer) {
+                clearTimeout(moveToGroupSubmenuTimer);
+                moveToGroupSubmenuTimer = null;
+              }
+            }}
+            onmouseleave={() => {
+              moveToGroupSubmenuTimer = setTimeout(() => {
+                moveToGroupSubmenuOpen = false;
+              }, 150);
+            }}
           >
             {#each connectionStore.groups.filter((g) => g.id !== connCtx?.profile.groupId) as g (g.id)}
               <CtxItem onclick={() => ctxMoveToGroup(g.id)}>{g.name}</CtxItem>
@@ -1297,9 +1442,22 @@
       {/if}
       <CtxSep />
     {/if}
-    <CtxItem onclick={() => { connCtx = null; startCreateGroup(); }}>New Group</CtxItem>
+    <CtxItem
+      onclick={() => {
+        connCtx = null;
+        startCreateGroup();
+      }}>New Group</CtxItem
+    >
     <CtxSep />
-    <CtxItem danger onclick={() => { if (connCtx) { deleteConnection(connCtx.profile); connCtx = null; } }}>Delete</CtxItem>
+    <CtxItem
+      danger
+      onclick={() => {
+        if (connCtx) {
+          deleteConnection(connCtx.profile);
+          connCtx = null;
+        }
+      }}>Delete</CtxItem
+    >
   </ContextMenu>
 {/if}
 

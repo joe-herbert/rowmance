@@ -38,7 +38,9 @@
   $effect(() => {
     const el = settingsContentEl;
     if (!el) return;
-    tick().then(() => { el.scrollTop = lastScrollTop; });
+    tick().then(() => {
+      el.scrollTop = lastScrollTop;
+    });
   });
 
   const settingsStore = useSettings();
@@ -265,7 +267,9 @@
         onclick={() => (activeSection = section)}
         aria-current={activeSection === section ? 'page' : undefined}
       >
-        {section === 'table-view' ? 'Table View' : section.charAt(0).toUpperCase() + section.slice(1)}
+        {section === 'table-view'
+          ? 'Table View'
+          : section.charAt(0).toUpperCase() + section.slice(1)}
       </button>
     {/each}
   </nav>
@@ -274,7 +278,9 @@
   <div
     class="settings-content"
     bind:this={settingsContentEl}
-    onscroll={(e) => { lastScrollTop = (e.currentTarget as HTMLElement).scrollTop; }}
+    onscroll={(e) => {
+      lastScrollTop = (e.currentTarget as HTMLElement).scrollTop;
+    }}
   >
     {#if activeSection === 'general'}
       <h2 class="section-title">General</h2>
@@ -321,7 +327,7 @@
                 onchange={async (e) => {
                   const val = (e.currentTarget as HTMLInputElement).value.trim();
                   await update('savedQueriesDirectory', val);
-                  resolvedQueriesDir = val || await savedQueriesApi.fileGetDir();
+                  resolvedQueriesDir = val || (await savedQueriesApi.fileGetDir());
                 }}
                 spellcheck={false}
                 aria-label="Queries directory path"
@@ -373,13 +379,16 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Newline Replacement</span>
-            <span class="label-hint">Character shown in place of newlines in table cells (leave empty to hide)</span>
+            <span class="label-hint"
+              >Character shown in place of newlines in table cells (leave empty to hide)</span
+            >
           </div>
           <input
             class="setting-input setting-input--sm"
             type="text"
             value={settings.newlineReplacement}
-            onchange={(e) => update('newlineReplacement', (e.currentTarget as HTMLInputElement).value)}
+            onchange={(e) =>
+              update('newlineReplacement', (e.currentTarget as HTMLInputElement).value)}
           />
         </div>
 
@@ -396,14 +405,16 @@
               { value: '1-0', label: '1 / 0' },
               { value: 'as-saved', label: 'As saved in DB' },
             ]}
-            onchange={(v) => update('booleanDisplay', v as 'tick-cross' | 'true-false' | '1-0' | 'as-saved')}
+            onchange={(v) =>
+              update('booleanDisplay', v as 'tick-cross' | 'true-false' | '1-0' | 'as-saved')}
           />
         </div>
 
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Click Outside Cell Edit</span>
-            <span class="label-hint">What happens when you click outside an active cell editor</span>
+            <span class="label-hint">What happens when you click outside an active cell editor</span
+            >
           </div>
           <Select
             value={settings.clickOutsideEdit}
@@ -450,13 +461,16 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Confirm Before Deleting Rows</span>
-            <span class="label-hint">Show a confirmation dialog when saving changes that include row deletions</span>
+            <span class="label-hint"
+              >Show a confirmation dialog when saving changes that include row deletions</span
+            >
           </div>
           <input
             type="checkbox"
             class="setting-checkbox"
             checked={settings.confirmBeforeDelete}
-            onchange={(e) => update('confirmBeforeDelete', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(e) =>
+              update('confirmBeforeDelete', (e.currentTarget as HTMLInputElement).checked)}
           />
         </div>
       </div>
@@ -747,7 +761,9 @@
             class="theme-editor-wrap"
             style="margin-top: var(--spacing-3);"
             bind:this={themeEditorWrapEl}
-            onscroll={(e) => { lastThemeEditorScrollTop = (e.currentTarget as HTMLElement).scrollTop; }}
+            onscroll={(e) => {
+              lastThemeEditorScrollTop = (e.currentTarget as HTMLElement).scrollTop;
+            }}
           >
             <ThemeEditor
               themeName={settings.theme}

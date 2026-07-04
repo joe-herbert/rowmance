@@ -81,7 +81,11 @@ pub async fn schema_list_tables(
                 .map_err(AppError::from)?;
             let result: Vec<TableInfo> = tables
                 .iter()
-                .map(|t| TableInfo { name: t.name.clone(), table_type: t.table_type.clone(), row_count: t.row_count })
+                .map(|t| TableInfo {
+                    name: t.name.clone(),
+                    table_type: t.table_type.clone(),
+                    row_count: t.row_count,
+                })
                 .collect();
             let names: Vec<String> = tables
                 .iter()
@@ -100,13 +104,18 @@ pub async fn schema_list_tables(
                         let conn_id = conn_id.clone();
                         let db = db.clone();
                         set.spawn(async move {
-                            if let Ok(count) = crate::connections::mysql::count_table(&pool, &db, &name).await {
-                                let _ = app.emit("table-count-updated", TableCountPayload {
-                                    connection_id: conn_id,
-                                    database: db,
-                                    table_name: name,
-                                    count,
-                                });
+                            if let Ok(count) =
+                                crate::connections::mysql::count_table(&pool, &db, &name).await
+                            {
+                                let _ = app.emit(
+                                    "table-count-updated",
+                                    TableCountPayload {
+                                        connection_id: conn_id,
+                                        database: db,
+                                        table_name: name,
+                                        count,
+                                    },
+                                );
                             }
                         });
                     }
@@ -121,7 +130,11 @@ pub async fn schema_list_tables(
                 .map_err(AppError::from)?;
             let result: Vec<TableInfo> = tables
                 .iter()
-                .map(|t| TableInfo { name: t.name.clone(), table_type: t.table_type.clone(), row_count: t.row_count })
+                .map(|t| TableInfo {
+                    name: t.name.clone(),
+                    table_type: t.table_type.clone(),
+                    row_count: t.row_count,
+                })
                 .collect();
             let names: Vec<String> = tables
                 .iter()
@@ -140,13 +153,18 @@ pub async fn schema_list_tables(
                         let conn_id = conn_id.clone();
                         let db = db.clone();
                         set.spawn(async move {
-                            if let Ok(count) = crate::connections::postgres::count_table(&pool, &db, &name).await {
-                                let _ = app.emit("table-count-updated", TableCountPayload {
-                                    connection_id: conn_id,
-                                    database: db,
-                                    table_name: name,
-                                    count,
-                                });
+                            if let Ok(count) =
+                                crate::connections::postgres::count_table(&pool, &db, &name).await
+                            {
+                                let _ = app.emit(
+                                    "table-count-updated",
+                                    TableCountPayload {
+                                        connection_id: conn_id,
+                                        database: db,
+                                        table_name: name,
+                                        count,
+                                    },
+                                );
                             }
                         });
                     }
@@ -161,10 +179,18 @@ pub async fn schema_list_tables(
                 .map_err(AppError::from)?;
             let result: Vec<TableInfo> = tables
                 .iter()
-                .map(|t| TableInfo { name: t.name.clone(), table_type: t.table_type.clone(), row_count: t.row_count })
+                .map(|t| TableInfo {
+                    name: t.name.clone(),
+                    table_type: t.table_type.clone(),
+                    row_count: t.row_count,
+                })
                 .collect();
             // SQLite tables always start with row_count: None — count them all.
-            let names: Vec<String> = tables.iter().filter(|t| t.table_type == "table").map(|t| t.name.clone()).collect();
+            let names: Vec<String> = tables
+                .iter()
+                .filter(|t| t.table_type == "table")
+                .map(|t| t.name.clone())
+                .collect();
             if !names.is_empty() {
                 let pool = pool.clone();
                 let conn_id = connection_id.clone();
@@ -177,13 +203,18 @@ pub async fn schema_list_tables(
                         let conn_id = conn_id.clone();
                         let db = db.clone();
                         set.spawn(async move {
-                            if let Ok(count) = crate::connections::sqlite::count_table(&pool, &name).await {
-                                let _ = app.emit("table-count-updated", TableCountPayload {
-                                    connection_id: conn_id,
-                                    database: db,
-                                    table_name: name,
-                                    count,
-                                });
+                            if let Ok(count) =
+                                crate::connections::sqlite::count_table(&pool, &name).await
+                            {
+                                let _ = app.emit(
+                                    "table-count-updated",
+                                    TableCountPayload {
+                                        connection_id: conn_id,
+                                        database: db,
+                                        table_name: name,
+                                        count,
+                                    },
+                                );
                             }
                         });
                     }

@@ -879,7 +879,9 @@
           ? `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`
           : quoteIdentifier(tableName)}
         <div class="sql-preview-hint">
-          Executed as: <code class="sql-preview-code">SELECT * FROM {tableRef} WHERE {draft.sql.trim() || '…'}</code>
+          Executed as: <code class="sql-preview-code"
+            >SELECT * FROM {tableRef} WHERE {draft.sql.trim() || '…'}</code
+          >
         </div>
       {/if}
     </div>

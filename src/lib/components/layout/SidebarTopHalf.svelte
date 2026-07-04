@@ -385,7 +385,9 @@
                 onblur={() => commitRename(item)}
               />
             {:else}
-              <span class="panel-label" title={panelLabel(item.content)}>{panelLabel(item.content)}</span>
+              <span class="panel-label" title={panelLabel(item.content)}
+                >{panelLabel(item.content)}</span
+              >
             {/if}
             {#if itemIsDirty(item)}
               <span class="dirty-dot" title="Unsaved changes" aria-label="Has unsaved changes"
@@ -442,18 +444,22 @@
         <CtxItem onclick={() => startRename(contextItem)}>Rename</CtxItem>
       {/if}
       {#if panelStore.openItems.length > 1}
-        <CtxItem onclick={() => {
-          const id = contextItem.id;
-          contextMenuItemId = null;
-          panelStore.closeOtherItems(id);
-        }}>Close other tabs</CtxItem>
+        <CtxItem
+          onclick={() => {
+            const id = contextItem.id;
+            contextMenuItemId = null;
+            panelStore.closeOtherItems(id);
+          }}>Close other tabs</CtxItem
+        >
       {/if}
       {#if 'connectionId' in contextItem.content}
-        <CtxItem onclick={() => {
-          const connId = (contextItem.content as { connectionId: string }).connectionId;
-          contextMenuItemId = null;
-          panelStore.closeItemsForConnection(connId);
-        }}>Close all tabs for this connection</CtxItem>
+        <CtxItem
+          onclick={() => {
+            const connId = (contextItem.content as { connectionId: string }).connectionId;
+            contextMenuItemId = null;
+            panelStore.closeItemsForConnection(connId);
+          }}>Close all tabs for this connection</CtxItem
+        >
       {/if}
     </ContextMenu>
   {/if}
@@ -648,7 +654,6 @@
     font-family: var(--font-family-ui);
     outline: none;
   }
-
 
   .close-btn {
     flex-shrink: 0;
