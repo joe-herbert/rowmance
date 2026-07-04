@@ -161,8 +161,12 @@ export function statementAtCursor(sql: string, cursorPos: number): string {
     if (char === '"' || char === '`') {
       const close = char;
       let j = i + 1;
-      while (j < sql.length && sql[j] !== close) j++;
-      i = j + 1;
+      while (j < sql.length) {
+        if (sql[j] === close && sql[j + 1] === close) { j += 2; }
+        else if (sql[j] === close) { j++; break; }
+        else { j++; }
+      }
+      i = j;
       continue;
     }
     if (char === ';') {

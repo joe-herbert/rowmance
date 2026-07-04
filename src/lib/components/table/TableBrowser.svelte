@@ -76,6 +76,7 @@
   import CsvImportModal from '$lib/components/table/CsvImportModal.svelte';
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
   import SqlPreviewModal from '$lib/components/table/SqlPreviewModal.svelte';
+  import Modal from '$lib/components/Modal.svelte';
   import type { DbType } from '$lib/types';
   import {
     exportResultToFile,
@@ -162,6 +163,7 @@
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
   let showSqlPreview = $state(false);
+  let showDeleteConfirm = $state(false);
 
   function quoteIdent(name: string, dbType: DbType): string {
     if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
@@ -312,6 +314,10 @@
 
   async function saveChanges(): Promise<void> {
     if (!result) return;
+    if (pendingDeletedRows.size > 0 && settings.settings.confirmBeforeDelete) {
+      showDeleteConfirm = true;
+      return;
+    }
     isSaving = true;
     saveError = null;
 
@@ -1958,6 +1964,8 @@
         columns={currentColumns}
         value={filterEditorState}
         {dbType}
+        tableName={table}
+        schemaName={database}
         onApply={(newState) => {
           filterEditorState = newState;
           page = 1;
@@ -2000,6 +2008,43 @@
   />
 {/if}
 
+{#if showDeleteConfirm}
+  <Modal label="Confirm deletion" onbackdropclick={() => (showDeleteConfirm = false)}>
+    <div class="delete-confirm-card">
+      <div class="delete-confirm-title">Confirm deletion</div>
+      <div class="delete-confirm-body">
+        <p class="delete-confirm-message">
+          This save will permanently delete {pendingDeletedRows.size} row{pendingDeletedRows.size !== 1 ? 's' : ''}.
+          This cannot be undone.
+        </p>
+        <label class="delete-confirm-dont-show">
+          <input
+            type="checkbox"
+            onchange={async (e) => {
+              if ((e.currentTarget as HTMLInputElement).checked) {
+                await settings.set('confirmBeforeDelete', false);
+              }
+            }}
+          />
+          Don't show this again
+        </label>
+      </div>
+      <div class="delete-confirm-footer">
+        <button class="dc-btn" onclick={() => (showDeleteConfirm = false)}>Cancel</button>
+        <button
+          class="dc-btn dc-btn--danger"
+          onclick={() => {
+            showDeleteConfirm = false;
+            saveChanges();
+          }}
+        >
+          Delete {pendingDeletedRows.size} row{pendingDeletedRows.size !== 1 ? 's' : ''}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
 {#if showSqlPreview}
   <SqlPreviewModal
     statements={buildPreviewStatements()}
@@ -2023,6 +2068,98 @@
 {/if}
 
 <style>
+  .delete-confirm-card {
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    width: 380px;
+    max-width: 92vw;
+    overflow: hidden;
+    animation: modal-in 140ms ease both;
+  }
+
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .delete-confirm-title {
+    padding: var(--spacing-4) var(--spacing-4) var(--spacing-3);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .delete-confirm-body {
+    padding: var(--spacing-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+  }
+
+  .delete-confirm-message {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-normal);
+  }
+
+  .delete-confirm-dont-show {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .delete-confirm-footer {
+    padding: var(--spacing-3) var(--spacing-4);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    justify-content: flex-end;
+  }
+
+  .dc-btn {
+    height: 28px;
+    padding: 0 14px;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+    font-family: var(--font-family-ui);
+  }
+
+  .dc-btn:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .dc-btn--danger {
+    background: var(--color-danger, #ef4444);
+    border-color: var(--color-danger, #ef4444);
+    color: white;
+  }
+
+  .dc-btn--danger:hover {
+    opacity: 0.88;
+    border-color: var(--color-danger, #ef4444);
+    background: var(--color-danger, #ef4444);
+    color: white;
+  }
+
   .table-browser {
     position: relative;
     display: flex;

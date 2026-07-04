@@ -447,6 +447,18 @@
             onchange={(v) => update('newRowPosition', v as 'top' | 'bottom')}
           />
         </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Confirm Before Deleting Rows</span>
+            <span class="label-hint">Show a confirmation dialog when saving changes that include row deletions</span>
+          </div>
+          <input
+            type="checkbox"
+            class="setting-checkbox"
+            checked={settings.confirmBeforeDelete}
+            onchange={(e) => update('confirmBeforeDelete', (e.currentTarget as HTMLInputElement).checked)}
+          />
+        </div>
       </div>
     {:else if activeSection === 'editor'}
       <h2 class="section-title">Editor</h2>

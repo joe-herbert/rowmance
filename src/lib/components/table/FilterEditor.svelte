@@ -319,11 +319,13 @@
     columns: ColumnMeta[];
     value: FilterEditorState;
     dbType: string;
+    tableName?: string;
+    schemaName?: string;
     onApply: (_state: FilterEditorState) => void;
     onClose: () => void;
   }
 
-  let { columns, value, dbType, onApply, onClose }: Props = $props();
+  let { columns, value, dbType, tableName, schemaName, onApply, onClose }: Props = $props();
 
   const settings = useSettings();
 
@@ -872,6 +874,14 @@
           }
         }}
       ></textarea>
+      {#if tableName}
+        {@const tableRef = schemaName
+          ? `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`
+          : quoteIdentifier(tableName)}
+        <div class="sql-preview-hint">
+          Executed as: <code class="sql-preview-code">SELECT * FROM {tableRef} WHERE {draft.sql.trim() || '…'}</code>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1314,6 +1324,19 @@
   .sql-textarea::placeholder {
     color: var(--color-text-muted);
     font-family: var(--font-family-ui);
+  }
+
+  .sql-preview-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-family: var(--font-family-ui);
+    line-height: var(--line-height-normal);
+    word-break: break-all;
+  }
+
+  .sql-preview-code {
+    font-family: var(--font-family-mono);
+    color: var(--color-text-secondary);
   }
 
   /* ── Footer ─────────────────────────────────────────────────────────────── */

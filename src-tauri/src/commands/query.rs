@@ -1197,8 +1197,7 @@ pub async fn query_execute_multi(
             let mut db_switch_us = 0u64;
             if let Some(schema) = &database {
                 let t = std::time::Instant::now();
-                let schema_esc = schema.replace('\'', "''");
-                let set_path_sql = format!("SET search_path = '{}'", schema_esc);
+                let set_path_sql = format!("SET search_path = {}", quote_postgres(schema));
                 if !pg_switch_schema(&mut *tx, &set_path_sql).await {
                     let _ = tx.rollback().await;
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to schema '{}'", schema)));
@@ -1377,8 +1376,7 @@ pub async fn query_execute(
             pool_acquire_us = t.elapsed().as_micros() as u64;
             if let Some(schema) = &database {
                 let t = std::time::Instant::now();
-                let schema_esc = schema.replace('\'', "''");
-                let set_path_sql = format!("SET search_path = '{}'", schema_esc);
+                let set_path_sql = format!("SET search_path = {}", quote_postgres(schema));
                 if !pg_switch_schema(&mut *conn, &set_path_sql).await {
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch to schema '{}'", schema)));
                 }
@@ -1624,8 +1622,7 @@ fn spawn_query_count_postgres(
             Err(_) => return,
         };
         if let Some(schema) = &database {
-            let schema_esc = schema.replace('\'', "''");
-            let set_path_sql = format!("SET search_path = '{}'", schema_esc);
+            let set_path_sql = format!("SET search_path = {}", quote_postgres(schema));
             if !pg_switch_schema(&mut *conn, &set_path_sql).await {
                 return;
             }
@@ -2154,7 +2151,7 @@ pub async fn query_explain(
                 .await
                 .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             if let Some(schema) = &database {
-                let set_path_sql = format!("SET search_path = '{}'", schema.replace('\'', "''"));
+                let set_path_sql = format!("SET search_path = {}", quote_postgres(schema));
                 if !pg_switch_schema(&mut conn, &set_path_sql).await {
                     return Err(AppError::new("QUERY_ERROR", format!("Failed to switch schema to {schema}")));
                 }

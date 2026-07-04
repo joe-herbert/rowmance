@@ -389,24 +389,28 @@ pub async fn connections_test(
 
     let result = match row.db_type.as_str() {
         "mysql" | "mariadb" => {
-            let url = format!(
-                "mysql://{}:{}@{}:{}/{}",
-                row.username, password, connect_host, connect_port, row.database
-            );
+            let opts = sqlx::mysql::MySqlConnectOptions::new()
+                .host(&connect_host)
+                .port(connect_port)
+                .username(&row.username)
+                .password(&password)
+                .database(&row.database);
             sqlx::mysql::MySqlPoolOptions::new()
                 .max_connections(1)
-                .connect(&url)
+                .connect_with(opts)
                 .await
                 .map(|_| ())
         }
         "postgres" => {
-            let url = format!(
-                "postgres://{}:{}@{}:{}/{}",
-                row.username, password, connect_host, connect_port, row.database
-            );
+            let opts = sqlx::postgres::PgConnectOptions::new()
+                .host(&connect_host)
+                .port(connect_port)
+                .username(&row.username)
+                .password(&password)
+                .database(&row.database);
             sqlx::postgres::PgPoolOptions::new()
                 .max_connections(1)
-                .connect(&url)
+                .connect_with(opts)
                 .await
                 .map(|_| ())
         }
@@ -495,24 +499,28 @@ pub async fn connections_test_unsaved(
 
     let result = match input.db_type.as_str() {
         "mysql" | "mariadb" => {
-            let url = format!(
-                "mysql://{}:{}@{}:{}/{}",
-                input.username, password, connect_host, connect_port, input.database
-            );
+            let opts = sqlx::mysql::MySqlConnectOptions::new()
+                .host(&connect_host)
+                .port(connect_port)
+                .username(&input.username)
+                .password(&password)
+                .database(&input.database);
             sqlx::mysql::MySqlPoolOptions::new()
                 .max_connections(1)
-                .connect(&url)
+                .connect_with(opts)
                 .await
                 .map(|_| ())
         }
         "postgres" => {
-            let url = format!(
-                "postgres://{}:{}@{}:{}/{}",
-                input.username, password, connect_host, connect_port, input.database
-            );
+            let opts = sqlx::postgres::PgConnectOptions::new()
+                .host(&connect_host)
+                .port(connect_port)
+                .username(&input.username)
+                .password(&password)
+                .database(&input.database);
             sqlx::postgres::PgPoolOptions::new()
                 .max_connections(1)
-                .connect(&url)
+                .connect_with(opts)
                 .await
                 .map(|_| ())
         }

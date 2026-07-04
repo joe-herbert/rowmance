@@ -369,6 +369,7 @@ export interface AppSettings {
   cellMaxLines: number;
   newlineReplacement: string;
   newRowPosition: 'top' | 'bottom';
+  confirmBeforeDelete: boolean;
   /** Absolute path to the saved queries directory. Empty string = use default. */
   savedQueriesDirectory: string;
 }
@@ -403,6 +404,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cellMaxLines: 1,
   newlineReplacement: '↵',
   newRowPosition: 'bottom',
+  confirmBeforeDelete: true,
   savedQueriesDirectory: '',
 };
 
