@@ -1169,7 +1169,9 @@
         tableBrowserEl?.querySelector<HTMLElement>('input, button')?.focus();
         break;
       case 'FOCUS_RESULTS':
-        tableBrowserEl?.querySelector<HTMLElement>('[role="grid"], [role="table"], .table-scroll')?.focus();
+        tableBrowserEl
+          ?.querySelector<HTMLElement>('[role="grid"], [role="table"], .table-scroll')
+          ?.focus();
         break;
     }
   }

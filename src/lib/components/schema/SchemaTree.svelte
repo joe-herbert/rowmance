@@ -307,7 +307,9 @@
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
             const btns = Array.from(
-              (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('.search-result-row'),
+              (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
+                '.search-result-row',
+              ),
             );
             const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
             if (e.key === 'ArrowDown') {

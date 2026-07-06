@@ -214,9 +214,7 @@
           if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
             e.preventDefault();
             const container = (e.currentTarget as HTMLElement).closest('.tabs-scroll');
-            const tabs = Array.from(
-              container?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [],
-            );
+            const tabs = Array.from(container?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []);
             const idx = tabs.indexOf(e.currentTarget as HTMLElement);
             const next = e.key === 'ArrowRight' ? idx + 1 : idx - 1;
             tabs[next]?.focus();

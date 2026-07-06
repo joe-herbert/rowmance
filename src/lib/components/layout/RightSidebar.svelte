@@ -810,7 +810,8 @@
     if (idx === -1) return;
     let next = -1;
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (idx + 1) % tabs.length;
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft')
+      next = (idx - 1 + tabs.length) % tabs.length;
     if (next !== -1) {
       e.preventDefault();
       tabs[next].focus();
@@ -831,7 +832,9 @@
       const activeTab = document.querySelector<HTMLButtonElement>(
         '.right-sidebar [role="tab"][aria-selected="true"], .right-sidebar [role="tab"].active',
       );
-      (activeTab ?? document.querySelector<HTMLButtonElement>('.right-sidebar [role="tab"]'))?.focus();
+      (
+        activeTab ?? document.querySelector<HTMLButtonElement>('.right-sidebar [role="tab"]')
+      )?.focus();
     }
     document.addEventListener('focus-right-sidebar', onFocusRightSidebar);
     return () => document.removeEventListener('focus-right-sidebar', onFocusRightSidebar);
@@ -841,7 +844,12 @@
 <div class="right-sidebar">
   <!-- Icon tab strip -->
   <!-- svelte-ignore a11y_interactive_supports_focus -->
-  <div class="tab-strip" role="tablist" aria-label="Right sidebar panels" onkeydown={handleTabStripKeydown}>
+  <div
+    class="tab-strip"
+    role="tablist"
+    aria-label="Right sidebar panels"
+    onkeydown={handleTabStripKeydown}
+  >
     <div class="spacer"></div>
     <button
       class="tab-btn"

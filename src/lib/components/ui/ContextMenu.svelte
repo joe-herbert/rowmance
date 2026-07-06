@@ -61,8 +61,12 @@
         const idx = items.indexOf(document.activeElement as HTMLElement);
         const next =
           e.key === 'ArrowDown'
-            ? idx === -1 ? 0 : (idx + 1) % items.length
-            : idx === -1 ? items.length - 1 : (idx - 1 + items.length) % items.length;
+            ? idx === -1
+              ? 0
+              : (idx + 1) % items.length
+            : idx === -1
+              ? items.length - 1
+              : (idx - 1 + items.length) % items.length;
         items[next]?.focus();
       }
     }

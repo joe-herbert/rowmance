@@ -272,14 +272,24 @@
 
   function onLeftResizeKeydown(e: KeyboardEvent) {
     const step = e.shiftKey ? 20 : 5;
-    if (e.key === 'ArrowRight') { e.preventDefault(); leftWidth = Math.min(500, leftWidth + step); }
-    else if (e.key === 'ArrowLeft') { e.preventDefault(); leftWidth = Math.max(160, leftWidth - step); }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      leftWidth = Math.min(500, leftWidth + step);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      leftWidth = Math.max(160, leftWidth - step);
+    }
   }
 
   function onRightResizeKeydown(e: KeyboardEvent) {
     const step = e.shiftKey ? 20 : 5;
-    if (e.key === 'ArrowLeft') { e.preventDefault(); rightWidth = Math.min(480, rightWidth + step); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); rightWidth = Math.max(200, rightWidth - step); }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      rightWidth = Math.min(480, rightWidth + step);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      rightWidth = Math.max(200, rightWidth - step);
+    }
   }
 
   function toggleLeftSidebar() {
@@ -331,8 +341,7 @@
     if (action.startsWith('TAB_')) {
       const n = parseInt(action.slice(4), 10);
       const items = panelStore.openItems;
-      const target =
-        n === 9 ? items[items.length - 1] : items[n - 1];
+      const target = n === 9 ? items[items.length - 1] : items[n - 1];
       if (target) panelStore.showItem(target);
     }
     if (action === 'FOCUS_SCHEMA_TREE') {

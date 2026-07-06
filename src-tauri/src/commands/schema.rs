@@ -318,21 +318,21 @@ pub async fn schema_list_all_columns(
         };
     }
     let rows = match pool_ref.value() {
-        RemotePool::MySql(pool, _) => to_bulk!(
-            crate::connections::mysql::list_all_columns(pool, &database)
+        RemotePool::MySql(pool, _) => {
+            to_bulk!(crate::connections::mysql::list_all_columns(pool, &database)
                 .await
-                .map_err(AppError::from)?
-        ),
-        RemotePool::Postgres(pool) => to_bulk!(
-            crate::connections::postgres::list_all_columns(pool, &database)
-                .await
-                .map_err(AppError::from)?
-        ),
-        RemotePool::Sqlite(pool) => to_bulk!(
-            crate::connections::sqlite::list_all_columns(pool, &database)
-                .await
-                .map_err(AppError::from)?
-        ),
+                .map_err(AppError::from)?)
+        }
+        RemotePool::Postgres(pool) => to_bulk!(crate::connections::postgres::list_all_columns(
+            pool, &database
+        )
+        .await
+        .map_err(AppError::from)?),
+        RemotePool::Sqlite(pool) => to_bulk!(crate::connections::sqlite::list_all_columns(
+            pool, &database
+        )
+        .await
+        .map_err(AppError::from)?),
     };
     Ok(rows)
 }

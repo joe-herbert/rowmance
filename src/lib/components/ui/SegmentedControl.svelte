@@ -24,7 +24,8 @@
     if (idx === -1) return;
     let next = -1;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % btns.length;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + btns.length) % btns.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')
+      next = (idx - 1 + btns.length) % btns.length;
     else if (e.key === 'Home') next = 0;
     else if (e.key === 'End') next = btns.length - 1;
     if (next !== -1) {
