@@ -96,30 +96,24 @@ pub async fn schema_list_tables(
                 let pool = pool.clone();
                 let conn_id = connection_id.clone();
                 let db = database.clone();
+                // Sequential: at most one pool connection used for background counts,
+                // leaving the rest available for user-initiated queries.
                 tokio::spawn(async move {
-                    let mut set = tokio::task::JoinSet::new();
                     for name in names {
-                        let pool = pool.clone();
-                        let app = app.clone();
-                        let conn_id = conn_id.clone();
-                        let db = db.clone();
-                        set.spawn(async move {
-                            if let Ok(count) =
-                                crate::connections::mysql::count_table(&pool, &db, &name).await
-                            {
-                                let _ = app.emit(
-                                    "table-count-updated",
-                                    TableCountPayload {
-                                        connection_id: conn_id,
-                                        database: db,
-                                        table_name: name,
-                                        count,
-                                    },
-                                );
-                            }
-                        });
+                        if let Ok(count) =
+                            crate::connections::mysql::count_table(&pool, &db, &name).await
+                        {
+                            let _ = app.emit(
+                                "table-count-updated",
+                                TableCountPayload {
+                                    connection_id: conn_id.clone(),
+                                    database: db.clone(),
+                                    table_name: name,
+                                    count,
+                                },
+                            );
+                        }
                     }
-                    while set.join_next().await.is_some() {}
                 });
             }
             Ok(result)
@@ -146,29 +140,21 @@ pub async fn schema_list_tables(
                 let conn_id = connection_id.clone();
                 let db = database.clone();
                 tokio::spawn(async move {
-                    let mut set = tokio::task::JoinSet::new();
                     for name in names {
-                        let pool = pool.clone();
-                        let app = app.clone();
-                        let conn_id = conn_id.clone();
-                        let db = db.clone();
-                        set.spawn(async move {
-                            if let Ok(count) =
-                                crate::connections::postgres::count_table(&pool, &db, &name).await
-                            {
-                                let _ = app.emit(
-                                    "table-count-updated",
-                                    TableCountPayload {
-                                        connection_id: conn_id,
-                                        database: db,
-                                        table_name: name,
-                                        count,
-                                    },
-                                );
-                            }
-                        });
+                        if let Ok(count) =
+                            crate::connections::postgres::count_table(&pool, &db, &name).await
+                        {
+                            let _ = app.emit(
+                                "table-count-updated",
+                                TableCountPayload {
+                                    connection_id: conn_id.clone(),
+                                    database: db.clone(),
+                                    table_name: name,
+                                    count,
+                                },
+                            );
+                        }
                     }
-                    while set.join_next().await.is_some() {}
                 });
             }
             Ok(result)
@@ -196,29 +182,21 @@ pub async fn schema_list_tables(
                 let conn_id = connection_id.clone();
                 let db = database.clone();
                 tokio::spawn(async move {
-                    let mut set = tokio::task::JoinSet::new();
                     for name in names {
-                        let pool = pool.clone();
-                        let app = app.clone();
-                        let conn_id = conn_id.clone();
-                        let db = db.clone();
-                        set.spawn(async move {
-                            if let Ok(count) =
-                                crate::connections::sqlite::count_table(&pool, &name).await
-                            {
-                                let _ = app.emit(
-                                    "table-count-updated",
-                                    TableCountPayload {
-                                        connection_id: conn_id,
-                                        database: db,
-                                        table_name: name,
-                                        count,
-                                    },
-                                );
-                            }
-                        });
+                        if let Ok(count) =
+                            crate::connections::sqlite::count_table(&pool, &name).await
+                        {
+                            let _ = app.emit(
+                                "table-count-updated",
+                                TableCountPayload {
+                                    connection_id: conn_id.clone(),
+                                    database: db.clone(),
+                                    table_name: name,
+                                    count,
+                                },
+                            );
+                        }
                     }
-                    while set.join_next().await.is_some() {}
                 });
             }
             Ok(result)
@@ -291,6 +269,72 @@ pub async fn schema_list_columns(
                 .collect())
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct BulkColumnRow {
+    #[serde(rename = "tableName")]
+    pub table_name: String,
+    pub name: String,
+    #[serde(rename = "dataType")]
+    pub data_type: String,
+    pub nullable: bool,
+    #[serde(rename = "defaultValue")]
+    pub default_value: Option<String>,
+    #[serde(rename = "isPrimaryKey")]
+    pub is_primary_key: bool,
+    #[serde(rename = "isAutoIncrement")]
+    pub is_auto_increment: bool,
+    #[serde(rename = "isForeignKey")]
+    pub is_foreign_key: bool,
+    pub comment: Option<String>,
+}
+
+/// List all columns for every table and view in a database in one round-trip.
+/// Used by global search to populate column data without N separate IPC calls.
+#[tauri::command]
+pub async fn schema_list_all_columns(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+) -> Result<Vec<BulkColumnRow>, AppError> {
+    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+    macro_rules! to_bulk {
+        ($pairs:expr) => {
+            $pairs
+                .into_iter()
+                .map(|(table_name, col)| BulkColumnRow {
+                    table_name,
+                    name: col.name,
+                    data_type: col.data_type,
+                    nullable: col.nullable,
+                    default_value: col.default_value,
+                    is_primary_key: col.is_primary_key,
+                    is_auto_increment: col.is_auto_increment,
+                    is_foreign_key: col.is_foreign_key,
+                    comment: col.comment,
+                })
+                .collect::<Vec<_>>()
+        };
+    }
+    let rows = match pool_ref.value() {
+        RemotePool::MySql(pool, _) => to_bulk!(
+            crate::connections::mysql::list_all_columns(pool, &database)
+                .await
+                .map_err(AppError::from)?
+        ),
+        RemotePool::Postgres(pool) => to_bulk!(
+            crate::connections::postgres::list_all_columns(pool, &database)
+                .await
+                .map_err(AppError::from)?
+        ),
+        RemotePool::Sqlite(pool) => to_bulk!(
+            crate::connections::sqlite::list_all_columns(pool, &database)
+                .await
+                .map_err(AppError::from)?
+        ),
+    };
+    Ok(rows)
 }
 
 #[derive(Debug, Serialize)]

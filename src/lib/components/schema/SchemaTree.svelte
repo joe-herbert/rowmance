@@ -267,6 +267,15 @@
       placeholder="Search tables…"
       bind:value={searchQuery}
       aria-label="Search tables"
+      onkeydown={(e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement)
+            .closest('.schema-tree')
+            ?.querySelector<HTMLElement>('.search-result-row')
+            ?.focus();
+        }
+      }}
     />
     {#if searchQuery}
       <button class="search-clear" onclick={() => (searchQuery = '')} aria-label="Clear search"
@@ -290,7 +299,35 @@
     {#if searchResults.length === 0}
       <div class="empty-hint">No tables match "{searchQuery}".</div>
     {:else}
-      <ul class="search-results" role="listbox" aria-label="Search results">
+      <ul
+        class="search-results"
+        role="listbox"
+        aria-label="Search results"
+        onkeydown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const btns = Array.from(
+              (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('.search-result-row'),
+            );
+            const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+            if (e.key === 'ArrowDown') {
+              btns[idx === -1 ? 0 : Math.min(idx + 1, btns.length - 1)]?.focus();
+            } else if (idx <= 0) {
+              (e.currentTarget as HTMLElement)
+                .closest('.schema-tree')
+                ?.querySelector<HTMLElement>('.search-input')
+                ?.focus();
+            } else {
+              btns[idx - 1]?.focus();
+            }
+          } else if (e.key === 'Escape') {
+            (e.currentTarget as HTMLElement)
+              .closest('.schema-tree')
+              ?.querySelector<HTMLElement>('.search-input')
+              ?.focus();
+          }
+        }}
+      >
         {#each searchResults as item (item.label)}
           <li role="option" aria-selected={false}>
             <button

@@ -124,6 +124,10 @@ export interface ColumnInfo {
   comment: string | null;
 }
 
+export interface BulkColumnInfo extends ColumnInfo {
+  tableName: string;
+}
+
 export interface IndexInfo {
   name: string;
   columns: string[];

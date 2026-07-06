@@ -1165,6 +1165,12 @@
       case 'PAGE_PREV':
         prevTablePage();
         break;
+      case 'FOCUS_EDITOR':
+        tableBrowserEl?.querySelector<HTMLElement>('input, button')?.focus();
+        break;
+      case 'FOCUS_RESULTS':
+        tableBrowserEl?.querySelector<HTMLElement>('[role="grid"], [role="table"], .table-scroll')?.focus();
+        break;
     }
   }
 

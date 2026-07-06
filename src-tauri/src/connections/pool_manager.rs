@@ -9,7 +9,7 @@ use sqlx::{
     mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
-    ConnectOptions, Executor,
+    Executor,
 };
 use std::path::Path;
 use std::sync::Arc;
@@ -111,30 +111,6 @@ impl ConnectionManager {
                     opts = opts.ssl_mode(MySqlSslMode::Disabled);
                 }
 
-                // Verify connectivity with a single test connection before creating
-                // the pool. Pool creation with min_connections > 1 fires multiple
-                // parallel connects; if credentials are wrong every one counts
-                // toward the server's max_connect_errors threshold. Testing with
-                // one connection first (up to 3 attempts) prevents that.
-                let mut connect_err: Option<sqlx::Error> = None;
-                for attempt in 0..3u32 {
-                    match opts.connect().await {
-                        Ok(_conn) => {
-                            connect_err = None;
-                            break;
-                        }
-                        Err(e) => {
-                            connect_err = Some(e);
-                            if attempt < 2 {
-                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            }
-                        }
-                    }
-                }
-                if let Some(e) = connect_err {
-                    return Err(e.into());
-                }
-
                 let mut pool_opts = MySqlPoolOptions::new()
                     .min_connections(1)
                     .max_connections(pool_max);
@@ -197,26 +173,6 @@ impl ConnectionManager {
                 // writes at the session level, including CTEs and procedures.
                 if read_only {
                     opts = opts.options([("default_transaction_read_only", "on")]);
-                }
-
-                // Verify connectivity before creating the pool (see MySQL block above).
-                let mut connect_err: Option<sqlx::Error> = None;
-                for attempt in 0..3u32 {
-                    match opts.connect().await {
-                        Ok(_conn) => {
-                            connect_err = None;
-                            break;
-                        }
-                        Err(e) => {
-                            connect_err = Some(e);
-                            if attempt < 2 {
-                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            }
-                        }
-                    }
-                }
-                if let Some(e) = connect_err {
-                    return Err(e.into());
                 }
 
                 // Reset the search_path when a connection is released back to

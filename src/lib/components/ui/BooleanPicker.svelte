@@ -8,6 +8,19 @@
 
   let { value, displayFormat, nullable = true, onselect }: Props = $props();
 
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const picker = (e.currentTarget as HTMLElement);
+    const btns = Array.from(picker.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      e.key === 'ArrowDown'
+        ? (idx + 1) % btns.length
+        : (idx - 1 + btns.length) % btns.length;
+    btns[next]?.focus();
+  }
+
   function trueLabel(): string {
     if (displayFormat === 'true-false') return 'True';
     if (displayFormat === '1-0') return '1';
@@ -23,7 +36,8 @@
   }
 </script>
 
-<div class="boolean-picker" role="listbox" aria-label="Choose boolean value">
+<!-- svelte-ignore a11y_interactive_supports_focus -->
+<div class="boolean-picker" role="listbox" aria-label="Choose boolean value" onkeydown={handleKeydown}>
   <button
     class="bool-option"
     class:bool-option--selected={value === true}

@@ -248,14 +248,30 @@
     dragging = null;
   }
 
+  function onLeftResizeKeydown(e: KeyboardEvent) {
+    const step = e.shiftKey ? 20 : 5;
+    if (e.key === 'ArrowRight') { e.preventDefault(); leftWidth = Math.min(500, leftWidth + step); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); leftWidth = Math.max(160, leftWidth - step); }
+  }
+
+  function onRightResizeKeydown(e: KeyboardEvent) {
+    const step = e.shiftKey ? 20 : 5;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); rightWidth = Math.min(480, rightWidth + step); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); rightWidth = Math.max(200, rightWidth - step); }
+  }
+
   function toggleLeftSidebar() {
     leftVisible = !leftVisible;
     settingsStore.set('leftSidebarVisible', leftVisible);
   }
 
   function toggleRightSidebar() {
+    const wasHidden = !rightVisible;
     rightVisible = !rightVisible;
     settingsStore.set('rightSidebarVisible', rightVisible);
+    if (wasHidden) {
+      requestAnimationFrame(() => document.dispatchEvent(new CustomEvent('focus-right-sidebar')));
+    }
   }
 
   function handleShortcutAction(e: Event) {
@@ -290,8 +306,22 @@
       if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
     }
     if (action === 'GLOBAL_SEARCH') openGlobalSearch();
-    if (action === 'FOCUS_SCHEMA_TREE')
-      document.dispatchEvent(new CustomEvent('focus-schema-tree'));
+    if (action.startsWith('TAB_')) {
+      const n = parseInt(action.slice(4), 10);
+      const items = panelStore.openItems;
+      const target =
+        n === 9 ? items[items.length - 1] : items[n - 1];
+      if (target) panelStore.showItem(target);
+    }
+    if (action === 'FOCUS_SCHEMA_TREE') {
+      if (!leftVisible) {
+        leftVisible = true;
+        settingsStore.set('leftSidebarVisible', true);
+        requestAnimationFrame(() => document.dispatchEvent(new CustomEvent('focus-schema-tree')));
+      } else {
+        document.dispatchEvent(new CustomEvent('focus-schema-tree'));
+      }
+    }
     if (action === 'TOGGLE_READ_ONLY' && activeConnection)
       connectionsStore.toggleReadOnly(activeConnection.id).catch(() => {});
   }
@@ -678,13 +708,17 @@
 
     <!-- Resize handle: left sidebar ↔ main area -->
     {#if leftVisible && !settings.sidebarFloating}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
         class="resize-handle resize-handle--horizontal left-resize"
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize left sidebar"
+        tabindex="0"
         style="left: {leftWidth}px;"
         onpointerdown={(e) => onResizePointerDown('left', e)}
+        onkeydown={onLeftResizeKeydown}
         class:dragging={dragging === 'left'}
       ></div>
     {/if}
@@ -701,13 +735,17 @@
 
     <!-- Resize handle: main area ↔ right sidebar -->
     {#if rightVisible && !settings.sidebarFloating}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
         class="resize-handle resize-handle--horizontal right-resize"
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize right sidebar"
+        tabindex="0"
         style="right: {rightWidth}px;"
         onpointerdown={(e) => onResizePointerDown('right', e)}
+        onkeydown={onRightResizeKeydown}
         class:dragging={dragging === 'right'}
       ></div>
     {/if}

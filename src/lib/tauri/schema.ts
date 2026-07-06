@@ -1,6 +1,6 @@
 /** Typed wrappers around the Tauri `schema::*` commands. */
 import { invoke } from '@tauri-apps/api/core';
-import type { TableInfo, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
+import type { TableInfo, ColumnInfo, BulkColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
 
 export async function listDatabases(connectionId: string): Promise<string[]> {
   return invoke<string[]>('schema_list_databases', { connectionId });
@@ -16,6 +16,13 @@ export async function listColumns(
   table: string,
 ): Promise<ColumnInfo[]> {
   return invoke<ColumnInfo[]>('schema_list_columns', { connectionId, database, table });
+}
+
+export async function listAllColumns(
+  connectionId: string,
+  database: string,
+): Promise<BulkColumnInfo[]> {
+  return invoke<BulkColumnInfo[]>('schema_list_all_columns', { connectionId, database });
 }
 
 export async function listIndexes(

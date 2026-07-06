@@ -84,6 +84,7 @@ pub async fn list_tables(
 }
 
 /// List all columns for a given table.
+/// Uses EXISTS for FK detection to avoid GROUP BY on information_schema.
 pub async fn list_columns(
     pool: &MySqlPool,
     database: &str,
@@ -98,7 +99,7 @@ pub async fn list_columns(
         column_key: Option<String>,
         extra: Option<String>,
         comment: Option<String>,
-        is_foreign_key: Option<i64>,
+        is_foreign_key: Option<bool>,
     }
 
     let rows = sqlx::query_as::<_, Row>(
@@ -111,15 +112,15 @@ pub async fn list_columns(
             CAST(c.COLUMN_KEY     AS CHAR) AS column_key,
             CAST(c.EXTRA          AS CHAR) AS extra,
             CAST(c.COLUMN_COMMENT AS CHAR) AS comment,
-            COUNT(kcu.COLUMN_NAME) AS is_foreign_key
+            EXISTS (
+                SELECT 1 FROM information_schema.KEY_COLUMN_USAGE kcu
+                WHERE kcu.TABLE_SCHEMA           = c.TABLE_SCHEMA
+                  AND kcu.TABLE_NAME             = c.TABLE_NAME
+                  AND kcu.COLUMN_NAME            = c.COLUMN_NAME
+                  AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+            ) AS is_foreign_key
         FROM information_schema.COLUMNS c
-        LEFT JOIN information_schema.KEY_COLUMN_USAGE kcu
-          ON kcu.TABLE_SCHEMA = c.TABLE_SCHEMA
-         AND kcu.TABLE_NAME   = c.TABLE_NAME
-         AND kcu.COLUMN_NAME  = c.COLUMN_NAME
-         AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
         WHERE c.TABLE_SCHEMA = ? AND c.TABLE_NAME = ?
-        GROUP BY c.COLUMN_NAME, c.COLUMN_TYPE, c.IS_NULLABLE, c.COLUMN_DEFAULT, c.COLUMN_KEY, c.EXTRA, c.COLUMN_COMMENT, c.ORDINAL_POSITION
         ORDER BY c.ORDINAL_POSITION
         "#,
     )
@@ -144,13 +145,93 @@ pub async fn list_columns(
                 default_value: r.default_value,
                 is_primary_key: is_pk,
                 is_auto_increment: is_auto,
-                is_foreign_key: r.is_foreign_key.unwrap_or(0) > 0,
+                is_foreign_key: r.is_foreign_key.unwrap_or(false),
                 comment: if r.comment.as_deref() == Some("") {
                     None
                 } else {
                     r.comment
                 },
             }
+        })
+        .collect())
+}
+
+/// List all columns for every table and view in the given database in one query.
+/// Scans KEY_COLUMN_USAGE once into a derived table to avoid GROUP BY.
+/// Returns (table_name, ColumnInfo) pairs ordered by table then ordinal position.
+pub async fn list_all_columns(
+    pool: &MySqlPool,
+    database: &str,
+) -> Result<Vec<(String, ColumnInfo)>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        table_name: Option<String>,
+        name: Option<String>,
+        data_type: Option<String>,
+        nullable: Option<String>,
+        default_value: Option<String>,
+        column_key: Option<String>,
+        extra: Option<String>,
+        comment: Option<String>,
+        is_foreign_key: Option<bool>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            CAST(c.TABLE_NAME     AS CHAR) AS table_name,
+            CAST(c.COLUMN_NAME    AS CHAR) AS name,
+            CAST(c.COLUMN_TYPE    AS CHAR) AS data_type,
+            CAST(c.IS_NULLABLE    AS CHAR) AS nullable,
+            CAST(c.COLUMN_DEFAULT AS CHAR) AS default_value,
+            CAST(c.COLUMN_KEY     AS CHAR) AS column_key,
+            CAST(c.EXTRA          AS CHAR) AS extra,
+            CAST(c.COLUMN_COMMENT AS CHAR) AS comment,
+            (fk.COLUMN_NAME IS NOT NULL)   AS is_foreign_key
+        FROM information_schema.COLUMNS c
+        LEFT JOIN (
+            SELECT DISTINCT TABLE_NAME, COLUMN_NAME
+            FROM information_schema.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA            = ?
+              AND REFERENCED_TABLE_NAME IS NOT NULL
+        ) fk
+          ON fk.TABLE_NAME  = c.TABLE_NAME
+         AND fk.COLUMN_NAME = c.COLUMN_NAME
+        WHERE c.TABLE_SCHEMA = ?
+        ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
+        "#,
+    )
+    .bind(database)
+    .bind(database)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let is_pk = r.column_key.as_deref() == Some("PRI");
+            let is_auto = r
+                .extra
+                .as_deref()
+                .map(|e| e.contains("auto_increment"))
+                .unwrap_or(false);
+            (
+                r.table_name.unwrap_or_default(),
+                ColumnInfo {
+                    name: r.name.unwrap_or_default(),
+                    data_type: r.data_type.unwrap_or_default(),
+                    nullable: r.nullable.as_deref() == Some("YES"),
+                    default_value: r.default_value,
+                    is_primary_key: is_pk,
+                    is_auto_increment: is_auto,
+                    is_foreign_key: r.is_foreign_key.unwrap_or(false),
+                    comment: if r.comment.as_deref() == Some("") {
+                        None
+                    } else {
+                        r.comment
+                    },
+                },
+            )
         })
         .collect())
 }

@@ -43,11 +43,22 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
   'CLOSE_OTHER_TABS',
   'GLOBAL_SEARCH',
   'TOGGLE_READ_ONLY',
+  'TABLE_VIEW_RELATIONS',
+  'TABLE_QUICK_VIEW_RELATIONS',
+  'TAB_1',
+  'TAB_2',
+  'TAB_3',
+  'TAB_4',
+  'TAB_5',
+  'TAB_6',
+  'TAB_7',
+  'TAB_8',
+  'TAB_9',
 ];
 
 describe('SHORTCUT_DEFINITIONS', () => {
-  it('contains exactly 28 action definitions', () => {
-    expect(SHORTCUT_DEFINITIONS).toHaveLength(28);
+  it('contains exactly 39 action definitions', () => {
+    expect(SHORTCUT_DEFINITIONS).toHaveLength(39);
   });
 
   it('contains all expected action IDs', () => {

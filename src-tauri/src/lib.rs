@@ -325,6 +325,7 @@ pub fn run() {
             commands::schema::schema_list_databases,
             commands::schema::schema_list_tables,
             commands::schema::schema_list_columns,
+            commands::schema::schema_list_all_columns,
             commands::schema::schema_list_indexes,
             commands::schema::schema_list_foreign_keys,
             commands::schema::schema_get_ddl,

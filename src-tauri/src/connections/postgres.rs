@@ -41,27 +41,29 @@ pub async fn list_databases(pool: &PgPool) -> Result<Vec<String>, RowmanceError>
 }
 
 /// List all user tables and views in the given schema (defaults to 'public').
+/// Uses pg_catalog directly — faster than information_schema.tables.
 pub async fn list_tables(pool: &PgPool, schema: &str) -> Result<Vec<TableInfo>, RowmanceError> {
     #[derive(sqlx::FromRow)]
     struct Row {
         table_name: Option<String>,
-        table_type: Option<String>,
+        relkind: Option<i8>,
         row_count: Option<i64>,
     }
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            t.table_name,
-            t.table_type,
-            s.n_live_tup::bigint AS row_count
-        FROM information_schema.tables t
+            cl.relname              AS table_name,
+            cl.relkind              AS relkind,
+            s.n_live_tup::bigint    AS row_count
+        FROM pg_catalog.pg_class cl
+        JOIN pg_catalog.pg_namespace n ON n.oid = cl.relnamespace
         LEFT JOIN pg_stat_user_tables s
-               ON s.schemaname = t.table_schema
-              AND s.relname = t.table_name
-        WHERE t.table_schema = $1
-          AND t.table_type IN ('BASE TABLE', 'VIEW')
-        ORDER BY t.table_name
+               ON s.schemaname = n.nspname
+              AND s.relname    = cl.relname
+        WHERE n.nspname = $1
+          AND cl.relkind IN ('r', 'v', 'm', 'p')
+        ORDER BY cl.relname
         "#,
     )
     .bind(schema)
@@ -70,14 +72,17 @@ pub async fn list_tables(pool: &PgPool, schema: &str) -> Result<Vec<TableInfo>, 
 
     let tables: Vec<TableInfo> = rows
         .into_iter()
-        .map(|r| TableInfo {
-            name: r.table_name.unwrap_or_default(),
-            table_type: if r.table_type.as_deref() == Some("VIEW") {
-                "view".to_owned()
-            } else {
-                "table".to_owned()
-            },
-            row_count: r.row_count,
+        .map(|r| {
+            let kind = r.relkind.unwrap_or(b'r' as i8) as u8 as char;
+            TableInfo {
+                name: r.table_name.unwrap_or_default(),
+                table_type: if kind == 'v' || kind == 'm' {
+                    "view".to_owned()
+                } else {
+                    "table".to_owned()
+                },
+                row_count: r.row_count,
+            }
         })
         .collect();
 
@@ -98,6 +103,7 @@ pub async fn count_table(pool: &PgPool, schema: &str, table: &str) -> Result<i64
 }
 
 /// List all columns for a given table in the given schema.
+/// Uses pg_catalog directly — avoids the slow information_schema views.
 pub async fn list_columns(
     pool: &PgPool,
     schema: &str,
@@ -114,43 +120,38 @@ pub async fn list_columns(
         comment: Option<String>,
     }
 
-    // Join with pg_constraint to determine primary key and foreign key status.
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            c.column_name,
-            c.udt_name AS data_type,
-            (c.is_nullable = 'YES') AS nullable,
-            c.column_default,
+            a.attname                                   AS column_name,
+            pt.typname                                  AS data_type,
+            NOT a.attnotnull                            AS nullable,
+            pg_get_expr(d.adbin, d.adrelid)            AS column_default,
             EXISTS (
-                SELECT 1
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu
-                  ON kcu.constraint_name = tc.constraint_name
-                 AND kcu.table_schema = tc.table_schema
-                WHERE tc.constraint_type = 'PRIMARY KEY'
-                  AND kcu.table_schema = $1
-                  AND kcu.table_name   = $2
-                  AND kcu.column_name  = c.column_name
-            ) AS is_primary_key,
+                SELECT 1 FROM pg_index i
+                WHERE i.indrelid = a.attrelid
+                  AND a.attnum   = ANY(i.indkey)
+                  AND i.indisprimary
+            )                                           AS is_primary_key,
             EXISTS (
-                SELECT 1
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu
-                  ON kcu.constraint_name = tc.constraint_name
-                 AND kcu.table_schema = tc.table_schema
-                WHERE tc.constraint_type = 'FOREIGN KEY'
-                  AND kcu.table_schema = $1
-                  AND kcu.table_name   = $2
-                  AND kcu.column_name  = c.column_name
-            ) AS is_foreign_key,
-            col_description(
-                (quote_ident($1) || '.' || quote_ident($2))::regclass::oid,
-                c.ordinal_position
-            ) AS comment
-        FROM information_schema.columns c
-        WHERE c.table_schema = $1 AND c.table_name = $2
-        ORDER BY c.ordinal_position
+                SELECT 1 FROM pg_constraint con
+                WHERE con.conrelid = a.attrelid
+                  AND a.attnum     = ANY(con.conkey)
+                  AND con.contype  = 'f'
+            )                                           AS is_foreign_key,
+            col_description(a.attrelid, a.attnum)       AS comment
+        FROM pg_catalog.pg_class cl
+        JOIN pg_catalog.pg_namespace n    ON n.oid  = cl.relnamespace
+        JOIN pg_catalog.pg_attribute a    ON a.attrelid = cl.oid
+                                         AND a.attnum  > 0
+                                         AND NOT a.attisdropped
+        JOIN pg_catalog.pg_type pt        ON pt.oid = a.atttypid
+        LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid
+                                         AND d.adnum   = a.attnum
+        WHERE n.nspname  = $1
+          AND cl.relname = $2
+          AND cl.relkind IN ('r', 'v', 'm', 'p')
+        ORDER BY a.attnum
         "#,
     )
     .bind(schema)
@@ -176,6 +177,88 @@ pub async fn list_columns(
                 is_foreign_key: r.is_foreign_key.unwrap_or(false),
                 comment: r.comment,
             }
+        })
+        .collect())
+}
+
+/// List all columns for every user table and view in the given schema in one query.
+/// Uses pg_catalog directly — avoids the slow information_schema views.
+/// Returns (table_name, ColumnInfo) pairs ordered by table then ordinal position.
+pub async fn list_all_columns(
+    pool: &PgPool,
+    schema: &str,
+) -> Result<Vec<(String, ColumnInfo)>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        table_name: Option<String>,
+        column_name: Option<String>,
+        data_type: Option<String>,
+        nullable: Option<bool>,
+        column_default: Option<String>,
+        is_primary_key: Option<bool>,
+        is_foreign_key: Option<bool>,
+        comment: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            cl.relname                                  AS table_name,
+            a.attname                                   AS column_name,
+            pt.typname                                  AS data_type,
+            NOT a.attnotnull                            AS nullable,
+            pg_get_expr(d.adbin, d.adrelid)            AS column_default,
+            EXISTS (
+                SELECT 1 FROM pg_index i
+                WHERE i.indrelid = a.attrelid
+                  AND a.attnum   = ANY(i.indkey)
+                  AND i.indisprimary
+            )                                           AS is_primary_key,
+            EXISTS (
+                SELECT 1 FROM pg_constraint con
+                WHERE con.conrelid = a.attrelid
+                  AND a.attnum     = ANY(con.conkey)
+                  AND con.contype  = 'f'
+            )                                           AS is_foreign_key,
+            col_description(a.attrelid, a.attnum)       AS comment
+        FROM pg_catalog.pg_class cl
+        JOIN pg_catalog.pg_namespace n    ON n.oid  = cl.relnamespace
+        JOIN pg_catalog.pg_attribute a    ON a.attrelid = cl.oid
+                                         AND a.attnum  > 0
+                                         AND NOT a.attisdropped
+        JOIN pg_catalog.pg_type pt        ON pt.oid = a.atttypid
+        LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid
+                                         AND d.adnum   = a.attnum
+        WHERE n.nspname  = $1
+          AND cl.relkind IN ('r', 'v', 'm', 'p')
+        ORDER BY cl.relname, a.attnum
+        "#,
+    )
+    .bind(schema)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let is_serial = r
+                .column_default
+                .as_deref()
+                .map(|d| d.starts_with("nextval("))
+                .unwrap_or(false);
+            (
+                r.table_name.unwrap_or_default(),
+                ColumnInfo {
+                    name: r.column_name.unwrap_or_default(),
+                    data_type: r.data_type.unwrap_or_default(),
+                    nullable: r.nullable.unwrap_or(true),
+                    default_value: r.column_default,
+                    is_primary_key: r.is_primary_key.unwrap_or(false),
+                    is_auto_increment: is_serial,
+                    is_foreign_key: r.is_foreign_key.unwrap_or(false),
+                    comment: r.comment,
+                },
+            )
         })
         .collect())
 }

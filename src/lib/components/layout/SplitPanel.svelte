@@ -54,6 +54,28 @@
     resizing = null;
   }
 
+  function onColDividerKeydown(e: KeyboardEvent) {
+    const step = e.shiftKey ? 5 : 1;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      colSplitPct = Math.max(20, colSplitPct - step);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      colSplitPct = Math.min(80, colSplitPct + step);
+    }
+  }
+
+  function onRowDividerKeydown(e: KeyboardEvent) {
+    const step = e.shiftKey ? 5 : 1;
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      rowSplitPct = Math.max(20, rowSplitPct - step);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      rowSplitPct = Math.min(80, rowSplitPct + step);
+    }
+  }
+
   // ── CSS grid template derived from split mode ─────────────────────────────
 
   const gridTemplateColumns = $derived(() => {
@@ -90,48 +112,68 @@
   {:else if panelStore.splitMode === 'horizontal'}
     <!-- Two columns -->
     <Panel index={0} panel={panelStore.panels[0]} isFocused={panelStore.focusedIndex === 0} />
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="divider divider--col"
       class:dragging={resizing === 'col'}
       role="separator"
       aria-orientation="vertical"
+      aria-label="Resize panels left or right"
+      tabindex="0"
       onpointerdown={onColDividerPointerDown}
+      onkeydown={onColDividerKeydown}
     ></div>
     <Panel index={1} panel={panelStore.panels[1]} isFocused={panelStore.focusedIndex === 1} />
   {:else if panelStore.splitMode === 'vertical'}
     <!-- Two rows -->
     <Panel index={0} panel={panelStore.panels[0]} isFocused={panelStore.focusedIndex === 0} />
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="divider divider--row"
       class:dragging={resizing === 'row'}
       role="separator"
       aria-orientation="horizontal"
+      aria-label="Resize panels up or down"
+      tabindex="0"
       onpointerdown={onRowDividerPointerDown}
+      onkeydown={onRowDividerKeydown}
     ></div>
     <Panel index={1} panel={panelStore.panels[1]} isFocused={panelStore.focusedIndex === 1} />
   {:else if panelStore.splitMode === 'quad'}
     <!-- 2×2 grid — panels: TL, TR, BL, BR -->
     <Panel index={0} panel={panelStore.panels[0]} isFocused={panelStore.focusedIndex === 0} />
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="divider divider--col"
       class:dragging={resizing === 'col'}
       role="separator"
       aria-orientation="vertical"
+      aria-label="Resize panels left or right"
+      tabindex="0"
       style="grid-row: 1 / 4;"
       onpointerdown={onColDividerPointerDown}
+      onkeydown={onColDividerKeydown}
     ></div>
     <Panel
       index={1}
       panel={panelStore.panels[1] ?? panelStore.panels[0]}
       isFocused={panelStore.focusedIndex === 1}
     />
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="divider divider--row"
       class:dragging={resizing === 'row'}
       role="separator"
       aria-orientation="horizontal"
+      aria-label="Resize panels up or down"
+      tabindex="0"
       style="grid-column: 1 / 4;"
       onpointerdown={onRowDividerPointerDown}
+      onkeydown={onRowDividerKeydown}
     ></div>
     <Panel
       index={2}

@@ -203,7 +203,32 @@
         aria-selected={isFocused}
         data-drag-id={item.id}
         onclick={() => panelStore.showItem(item)}
-        onkeydown={(e) => e.key === 'Enter' && panelStore.showItem(item)}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            panelStore.showItem(item);
+            return;
+          }
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const container = (e.currentTarget as HTMLElement).closest('.tabs-scroll');
+            const tabs = Array.from(
+              container?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [],
+            );
+            const idx = tabs.indexOf(e.currentTarget as HTMLElement);
+            const next = e.key === 'ArrowRight' ? idx + 1 : idx - 1;
+            tabs[next]?.focus();
+            return;
+          }
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            if (itemIsDirty(item)) {
+              confirmCloseItemId = item.id;
+            } else {
+              panelStore.closeOpenItem(item.id);
+            }
+          }
+        }}
         onpointerdown={(e) => onPointerDown(e, item.id)}
         oncontextmenu={(e) => onContextMenu(e, item)}
         ondblclick={() => {

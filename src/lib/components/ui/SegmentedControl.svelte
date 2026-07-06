@@ -15,15 +15,35 @@
   }
 
   const { options, value, onchange }: Props = $props();
+
+  function handleKeydown(e: KeyboardEvent) {
+    const btns = Array.from(
+      (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    );
+    const idx = btns.indexOf(document.activeElement as HTMLButtonElement);
+    if (idx === -1) return;
+    let next = -1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % btns.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + btns.length) % btns.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = btns.length - 1;
+    if (next !== -1) {
+      e.preventDefault();
+      btns[next].focus();
+      onchange?.(options[next].value);
+    }
+  }
 </script>
 
-<div class="segmented" role="tablist">
+<!-- svelte-ignore a11y_interactive_supports_focus -->
+<div class="segmented" role="tablist" onkeydown={handleKeydown}>
   {#each options as opt (opt.value)}
     <button
       class="seg-btn"
       class:seg-btn--active={value === opt.value}
       role="tab"
       aria-selected={value === opt.value}
+      tabindex={value === opt.value ? 0 : -1}
       onclick={() => value !== opt.value && onchange?.(opt.value)}>{opt.label}</button
     >
   {/each}

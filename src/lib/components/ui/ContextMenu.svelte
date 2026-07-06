@@ -40,13 +40,31 @@
         top = Math.max(margin, Math.min(cy, window.innerHeight - height - margin));
         maxHeight = null;
       }
+      menuEl.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
     });
 
     function onMousedown(e: MouseEvent) {
       if (!menuEl?.contains(e.target as Node)) onclose();
     }
     function onKeydown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onclose();
+      if (e.key === 'Escape') {
+        onclose();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!menuEl) return;
+        const items = Array.from(
+          menuEl.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)'),
+        );
+        if (!items.length) return;
+        const idx = items.indexOf(document.activeElement as HTMLElement);
+        const next =
+          e.key === 'ArrowDown'
+            ? idx === -1 ? 0 : (idx + 1) % items.length
+            : idx === -1 ? items.length - 1 : (idx - 1 + items.length) % items.length;
+        items[next]?.focus();
+      }
     }
     document.addEventListener('mousedown', onMousedown, true);
     document.addEventListener('keydown', onKeydown, true);

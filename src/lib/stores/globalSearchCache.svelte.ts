@@ -1,5 +1,5 @@
-import type { ConnectionProfile, ColumnInfo, DbType } from '$lib/types';
-import { listDatabases, listTables, listColumns } from '$lib/tauri/schema';
+import type { ConnectionProfile, DbType } from '$lib/types';
+import { listDatabases, listTables, listAllColumns } from '$lib/tauri/schema';
 
 export type DbEntry = {
   connectionId: string;
@@ -66,19 +66,18 @@ export function useGlobalSearchCache() {
 
       loadingConnectionIds = new Set([...loadingConnectionIds, ...toLoad.map((p) => p.id)]);
 
-      const dbResults = await Promise.allSettled(
+      // Each profile is pipelined independently: databases → tables+columns per db.
+      // This avoids waiting for a slow connection before starting faster ones.
+      await Promise.allSettled(
         toLoad.map(async (profile) => {
-          const dbs = await listDatabases(profile.id);
-          return { profile, dbs };
-        }),
-      );
+          let dbs: string[];
+          try {
+            dbs = await listDatabases(profile.id);
+          } catch {
+            return;
+          }
 
-      const newDbs: DbEntry[] = [];
-      for (const result of dbResults) {
-        if (result.status !== 'fulfilled') continue;
-        const { profile, dbs } = result.value;
-        for (const db of dbs) {
-          newDbs.push({
+          const newDbs: DbEntry[] = dbs.map((db) => ({
             connectionId: profile.id,
             connectionName: profile.name,
             connectionColor: profile.color,
@@ -86,59 +85,51 @@ export function useGlobalSearchCache() {
             connectionReadOnly: profile.readOnly,
             connectionGroupId: profile.groupId,
             database: db,
-          });
-        }
-      }
-      databaseEntries = [...databaseEntries, ...newDbs];
+          }));
+          databaseEntries = [...databaseEntries, ...newDbs];
 
-      const tableResults = await Promise.allSettled(
-        newDbs.map(async (entry) => {
-          const tables = await listTables(entry.connectionId, entry.database);
-          return { entry, tables };
-        }),
-      );
+          // For each database, fetch tables and columns in parallel.
+          // Tables appear immediately; columns follow in the same round-trip pair.
+          await Promise.allSettled(
+            newDbs.map(async (dbEntry) => {
+              const [tableResult, colResult] = await Promise.allSettled([
+                listTables(dbEntry.connectionId, dbEntry.database),
+                listAllColumns(dbEntry.connectionId, dbEntry.database),
+              ]);
 
-      const newTables: TableEntry[] = [];
-      for (const result of tableResults) {
-        if (result.status !== 'fulfilled') continue;
-        const { entry, tables } = result.value;
-        for (const t of tables) {
-          newTables.push({
-            connectionId: entry.connectionId,
-            connectionName: entry.connectionName,
-            connectionColor: entry.connectionColor,
-            connectionDbType: entry.connectionDbType,
-            connectionReadOnly: entry.connectionReadOnly,
-            connectionGroupId: entry.connectionGroupId,
-            database: entry.database,
-            name: t.name,
-            tableType: t.tableType,
-          });
-        }
-      }
-      tableEntries = [...tableEntries, ...newTables];
+              if (tableResult.status === 'fulfilled') {
+                const newTables: TableEntry[] = tableResult.value.map((t) => ({
+                  connectionId: dbEntry.connectionId,
+                  connectionName: dbEntry.connectionName,
+                  connectionColor: dbEntry.connectionColor,
+                  connectionDbType: dbEntry.connectionDbType,
+                  connectionReadOnly: dbEntry.connectionReadOnly,
+                  connectionGroupId: dbEntry.connectionGroupId,
+                  database: dbEntry.database,
+                  name: t.name,
+                  tableType: t.tableType,
+                }));
+                tableEntries = [...tableEntries, ...newTables];
+              }
 
-      await Promise.allSettled(
-        newTables.map(async (entry) => {
-          try {
-            const cols = await listColumns(entry.connectionId, entry.database, entry.name);
-            const newCols: ColumnEntry[] = cols.map((c: ColumnInfo) => ({
-              connectionId: entry.connectionId,
-              connectionName: entry.connectionName,
-              connectionColor: entry.connectionColor,
-              connectionDbType: entry.connectionDbType,
-              connectionReadOnly: entry.connectionReadOnly,
-              connectionGroupId: entry.connectionGroupId,
-              database: entry.database,
-              table: entry.name,
-              name: c.name,
-              dataType: c.dataType,
-              isPrimaryKey: c.isPrimaryKey,
-            }));
-            columnEntries = [...columnEntries, ...newCols];
-          } catch {
-            // ignore
-          }
+              if (colResult.status === 'fulfilled') {
+                const newCols: ColumnEntry[] = colResult.value.map((c) => ({
+                  connectionId: dbEntry.connectionId,
+                  connectionName: dbEntry.connectionName,
+                  connectionColor: dbEntry.connectionColor,
+                  connectionDbType: dbEntry.connectionDbType,
+                  connectionReadOnly: dbEntry.connectionReadOnly,
+                  connectionGroupId: dbEntry.connectionGroupId,
+                  database: dbEntry.database,
+                  table: c.tableName,
+                  name: c.name,
+                  dataType: c.dataType,
+                  isPrimaryKey: c.isPrimaryKey,
+                }));
+                columnEntries = [...columnEntries, ...newCols];
+              }
+            }),
+          );
         }),
       );
 

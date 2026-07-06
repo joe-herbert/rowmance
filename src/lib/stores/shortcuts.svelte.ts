@@ -43,7 +43,16 @@ export type ShortcutAction =
   | 'GLOBAL_SEARCH'
   | 'TOGGLE_READ_ONLY'
   | 'TABLE_VIEW_RELATIONS'
-  | 'TABLE_QUICK_VIEW_RELATIONS';
+  | 'TABLE_QUICK_VIEW_RELATIONS'
+  | 'TAB_1'
+  | 'TAB_2'
+  | 'TAB_3'
+  | 'TAB_4'
+  | 'TAB_5'
+  | 'TAB_6'
+  | 'TAB_7'
+  | 'TAB_8'
+  | 'TAB_9';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 
@@ -112,7 +121,7 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     label: 'Focus Schema Tree',
     group: 'Navigation',
     vscode: 'Mod+Shift+E',
-    jetbrains: 'Alt+1',
+    jetbrains: 'Mod+Shift+E',
     vim: 'g s',
   },
   {
@@ -299,6 +308,78 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     jetbrains: 'Mod+Shift+Enter',
     vim: 'Mod+Shift+Enter',
   },
+  {
+    action: 'TAB_1',
+    label: 'Go to Tab 1',
+    group: 'Navigation',
+    vscode: 'Alt+1',
+    jetbrains: 'Alt+1',
+    vim: 'Alt+1',
+  },
+  {
+    action: 'TAB_2',
+    label: 'Go to Tab 2',
+    group: 'Navigation',
+    vscode: 'Alt+2',
+    jetbrains: 'Alt+2',
+    vim: 'Alt+2',
+  },
+  {
+    action: 'TAB_3',
+    label: 'Go to Tab 3',
+    group: 'Navigation',
+    vscode: 'Alt+3',
+    jetbrains: 'Alt+3',
+    vim: 'Alt+3',
+  },
+  {
+    action: 'TAB_4',
+    label: 'Go to Tab 4',
+    group: 'Navigation',
+    vscode: 'Alt+4',
+    jetbrains: 'Alt+4',
+    vim: 'Alt+4',
+  },
+  {
+    action: 'TAB_5',
+    label: 'Go to Tab 5',
+    group: 'Navigation',
+    vscode: 'Alt+5',
+    jetbrains: 'Alt+5',
+    vim: 'Alt+5',
+  },
+  {
+    action: 'TAB_6',
+    label: 'Go to Tab 6',
+    group: 'Navigation',
+    vscode: 'Alt+6',
+    jetbrains: 'Alt+6',
+    vim: 'Alt+6',
+  },
+  {
+    action: 'TAB_7',
+    label: 'Go to Tab 7',
+    group: 'Navigation',
+    vscode: 'Alt+7',
+    jetbrains: 'Alt+7',
+    vim: 'Alt+7',
+  },
+  {
+    action: 'TAB_8',
+    label: 'Go to Tab 8',
+    group: 'Navigation',
+    vscode: 'Alt+8',
+    jetbrains: 'Alt+8',
+    vim: 'Alt+8',
+  },
+  {
+    action: 'TAB_9',
+    label: 'Go to Tab 9 (or Last)',
+    group: 'Navigation',
+    vscode: 'Alt+9',
+    jetbrains: 'Alt+9',
+    vim: 'Alt+9',
+  },
 ];
 
 export const isMac =
@@ -337,7 +418,16 @@ export function keyEventToString(e: KeyboardEvent): string {
   if (e.altKey) parts.push('Alt');
   if (e.shiftKey) parts.push('Shift');
 
-  const key = e.key;
+  // On Mac, Alt/Option remaps keys to special characters (Option+1 → ¡).
+  // Use the physical key code instead so Alt+1 always means the digit 1.
+  let key: string;
+  if (e.altKey && e.code) {
+    if (e.code.startsWith('Digit')) key = e.code.slice(5);
+    else if (e.code.startsWith('Key')) key = e.code.slice(3);
+    else key = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  } else {
+    key = e.key;
+  }
   if (!MODIFIER_KEYS.has(key)) {
     parts.push(key.length === 1 ? key.toUpperCase() : key);
   }

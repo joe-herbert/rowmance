@@ -143,6 +143,68 @@ pub async fn list_columns(
         .collect())
 }
 
+/// List all columns for every user table and view in one Rust call.
+/// SQLite has no cross-table column query, so we fetch table names first
+/// and then issue PRAGMA calls — but this still uses only one IPC round-trip.
+pub async fn list_all_columns(
+    pool: &SqlitePool,
+    _database: &str,
+) -> Result<Vec<(String, ColumnInfo)>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct TableRow {
+        name: String,
+    }
+
+    let tables = sqlx::query_as::<_, TableRow>(
+        "SELECT name FROM sqlite_master \
+         WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' \
+         ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut result: Vec<(String, ColumnInfo)> = Vec::new();
+
+    for t in tables {
+        let fk_cols = foreign_key_columns(pool, &t.name).await;
+
+        #[derive(sqlx::FromRow)]
+        struct ColRow {
+            name: String,
+            #[sqlx(rename = "type")]
+            data_type: String,
+            notnull: i64,
+            dflt_value: Option<String>,
+            pk: i64,
+        }
+
+        let sql = format!("PRAGMA table_info(\"{}\")", t.name.replace('"', "\"\""));
+        let cols = sqlx::query_as::<_, ColRow>(&sql)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+
+        for col in cols {
+            let is_fk = fk_cols.contains(&col.name);
+            result.push((
+                t.name.clone(),
+                ColumnInfo {
+                    name: col.name,
+                    data_type: col.data_type,
+                    nullable: col.notnull == 0,
+                    default_value: col.dflt_value,
+                    is_primary_key: col.pk != 0,
+                    is_auto_increment: false,
+                    is_foreign_key: is_fk,
+                    comment: None,
+                },
+            ));
+        }
+    }
+
+    Ok(result)
+}
+
 async fn foreign_key_columns(pool: &SqlitePool, table: &str) -> std::collections::HashSet<String> {
     #[derive(sqlx::FromRow)]
     struct Row {

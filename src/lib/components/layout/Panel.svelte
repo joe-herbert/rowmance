@@ -39,7 +39,6 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="panel"
@@ -47,6 +46,12 @@
   role="region"
   aria-label="Panel {index + 1}"
   onclick={() => !isFocused && panelStore.focus(index)}
+  onkeydown={(e) => {
+    if (!isFocused && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      panelStore.focus(index);
+    }
+  }}
 >
   {#if panel.content.kind === 'query_editor'}
     {#key panel.content.editorId}
