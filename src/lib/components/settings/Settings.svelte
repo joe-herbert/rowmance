@@ -22,6 +22,7 @@
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
+  import { getVersion } from '@tauri-apps/api/app';
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
 
@@ -55,6 +56,7 @@
   let newThemeName = $state('');
   let newThemeBase = $state('light');
   let confirmingDelete = $state(false);
+  let appVersion = $state<string | null>(null);
 
   const isCustomTheme = $derived(!BUILTIN_THEMES.includes(settings.theme));
 
@@ -99,6 +101,11 @@
       resolvedQueriesDir = await savedQueriesApi.fileGetDir();
     } catch {
       resolvedQueriesDir = '';
+    }
+    try {
+      appVersion = await getVersion();
+    } catch {
+      appVersion = null;
     }
   });
 
@@ -337,6 +344,28 @@
             {#if settings.savedQueriesDirectory}
               <button class="action-btn" onclick={resetQueriesDirectory}>Reset to default</button>
             {/if}
+          </div>
+        </div>
+      </div>
+
+      <h3 class="subsection-title">Updates</h3>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Check for Updates Automatically</span>
+            <span class="label-hint">Check for new versions at startup</span>
+          </div>
+          <Checkbox
+            checked={settings.autoUpdateCheck}
+            onchange={(c) => update('autoUpdateCheck', c)}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Version</span>
+            <span class="label-hint">{appVersion ?? '—'}</span>
           </div>
         </div>
       </div>

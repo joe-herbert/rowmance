@@ -155,6 +155,19 @@
   onMount(() => {
     shortcutsStore.load(settings.shortcutPreset);
 
+    const stored = localStorage.getItem('rowmance:pending-release-notes');
+    if (stored) {
+      localStorage.removeItem('rowmance:pending-release-notes');
+      try {
+        const { version, notes } = JSON.parse(stored) as { version: string; notes: string };
+        if (version && notes) {
+          panelStore.openInFocused({ kind: 'release_notes', version, notes });
+        }
+      } catch {
+        /* ignore malformed entry */
+      }
+    }
+
     if (settings.autoUpdateCheck) {
       updaterApi
         .updaterCheck()
@@ -189,9 +202,11 @@
           if (result.available && result.version) {
             pendingUpdate = { version: result.version, notes: result.notes };
             updateDismissed = false;
+          } else {
+            toast.addToast('Rowmance is up to date.', 'success');
           }
         } catch {
-          /* silently ignore */
+          toast.addToast('Update check failed. Please try again later.', 'error');
         }
       }),
       listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),
@@ -212,8 +227,15 @@
   async function installUpdate() {
     installing = true;
     try {
+      if (pendingUpdate) {
+        localStorage.setItem(
+          'rowmance:pending-release-notes',
+          JSON.stringify({ version: pendingUpdate.version, notes: pendingUpdate.notes ?? '' }),
+        );
+      }
       await updaterApi.updaterInstall();
     } catch {
+      localStorage.removeItem('rowmance:pending-release-notes');
       installing = false;
     }
   }

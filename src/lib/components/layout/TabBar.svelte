@@ -41,6 +41,8 @@
         return 'Users';
       case 'speed_analysis':
         return 'Speed Analysis';
+      case 'release_notes':
+        return `What's New in ${content.version}`;
       case 'empty':
         return 'Empty';
     }
@@ -341,6 +343,19 @@
               <line x1="18" y1="20" x2="18" y2="10"></line>
               <line x1="12" y1="20" x2="12" y2="4"></line>
               <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+          {:else if item.content.kind === 'release_notes'}
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
             </svg>
           {:else}
             <svg

@@ -332,6 +332,7 @@ export type PanelKind =
   | { kind: 'settings' }
   | { kind: 'user_manager'; connectionId: string }
   | { kind: 'speed_analysis' }
+  | { kind: 'release_notes'; version: string; notes: string }
   | { kind: 'empty' };
 
 export interface PanelState {

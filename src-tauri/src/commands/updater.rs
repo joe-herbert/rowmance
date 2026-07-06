@@ -15,20 +15,27 @@ pub struct UpdateCheckResult {
 #[tauri::command]
 pub async fn updater_check(app: tauri::AppHandle) -> Result<UpdateCheckResult, AppError> {
     use tauri_plugin_updater::UpdaterExt;
-    match app.updater() {
-        Ok(updater) => match updater.check().await {
-            Ok(Some(update)) => Ok(UpdateCheckResult {
-                available: true,
-                version: Some(update.version.clone()),
-                notes: update.body.clone(),
-            }),
-            Ok(None) => Ok(UpdateCheckResult {
+    let updater = match app.updater() {
+        Ok(u) => u,
+        Err(_) => {
+            return Ok(UpdateCheckResult {
                 available: false,
                 version: None,
                 notes: None,
-            }),
-            Err(e) => Err(AppError::new("UPDATER_ERROR", e.to_string())),
-        },
+            })
+        }
+    };
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateCheckResult {
+            available: true,
+            version: Some(update.version.clone()),
+            notes: update.body.clone(),
+        }),
+        Ok(None) => Ok(UpdateCheckResult {
+            available: false,
+            version: None,
+            notes: None,
+        }),
         Err(e) => Err(AppError::new("UPDATER_ERROR", e.to_string())),
     }
 }
