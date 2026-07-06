@@ -1,6 +1,6 @@
 # Rowmance
 
-A native desktop database client for MySQL, MariaDB, and PostgreSQL — built with [Tauri v2](https://tauri.app/) (Rust backend) and [Svelte 5](https://svelte.dev/) (frontend).
+A native desktop database client for MySQL, MariaDB, PostgreSQL and SQLite — built with [Tauri v2](https://tauri.app/) (Rust backend) and [Svelte 5](https://svelte.dev/) (frontend).
 
 Rowmance provides a split-panel workspace with a query editor, table browser, schema explorer, ERD viewer, and rich inline data editing — all in a single, keyboard-navigable interface with no Electron overhead.
 
@@ -84,6 +84,7 @@ Credentials (passwords, SSH passphrases) are never written to disk — they are 
 | MySQL | 5.7+ |
 | MariaDB | 10.5+ |
 | PostgreSQL | 13+ |
+| SQLite | 3+ |
 
 ---
 
