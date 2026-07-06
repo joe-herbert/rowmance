@@ -19,6 +19,10 @@ jobs:
       - name: Install Rust targets
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install frontend dependencies
         run: bun install
 
@@ -35,3 +39,4 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --target universal-apple-darwin
+          updaterJsonKeepUniversal: true
