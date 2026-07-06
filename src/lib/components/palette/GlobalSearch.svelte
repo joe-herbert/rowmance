@@ -48,6 +48,10 @@
   let filterAccess = $state<AccessFilter>((saved.filterAccess as AccessFilter) ?? null);
   let filterGroup = $state<GroupFilter>((saved.filterGroup as GroupFilter) ?? null);
   let filtersExpanded = $state<boolean>((saved.filtersExpanded as boolean) ?? true);
+  let excludedDbs = $state<string[]>((saved.excludedDbs as string[]) ?? []);
+  let excludedTables = $state<string[]>((saved.excludedTables as string[]) ?? []);
+  let excludeDbInput = $state('');
+  let excludeTableInput = $state('');
 
   $effect(() => {
     localStorage.setItem(
@@ -59,6 +63,8 @@
         filterAccess,
         filterGroup,
         filtersExpanded,
+        excludedDbs,
+        excludedTables,
       }),
     );
   });
@@ -68,7 +74,9 @@
       matchMode !== 'normal' ||
       filterDbType !== null ||
       filterAccess !== null ||
-      filterGroup !== null,
+      filterGroup !== null ||
+      excludedDbs.length > 0 ||
+      excludedTables.length > 0,
   );
 
   function clearFilters() {
@@ -77,6 +85,49 @@
     filterDbType = null;
     filterAccess = null;
     filterGroup = null;
+    excludedDbs = [];
+    excludedTables = [];
+    inputEl?.focus();
+  }
+
+  function matchesExcludePattern(value: string, patterns: string[]): boolean {
+    const v = value.toLowerCase();
+    return patterns.some((p) => {
+      const pat = p.toLowerCase();
+      if (pat.startsWith('*') && pat.endsWith('*') && pat.length > 2) {
+        return v.includes(pat.slice(1, -1));
+      } else if (pat.startsWith('*')) {
+        return v.endsWith(pat.slice(1));
+      } else if (pat.endsWith('*')) {
+        return v.startsWith(pat.slice(0, -1));
+      }
+      return v === pat;
+    });
+  }
+
+  function addExcludeDb() {
+    const val = excludeDbInput.trim();
+    if (val && !excludedDbs.includes(val)) {
+      excludedDbs = [...excludedDbs, val];
+    }
+    excludeDbInput = '';
+  }
+
+  function addExcludeTable() {
+    const val = excludeTableInput.trim();
+    if (val && !excludedTables.includes(val)) {
+      excludedTables = [...excludedTables, val];
+    }
+    excludeTableInput = '';
+  }
+
+  function removeExcludeDb(pattern: string) {
+    excludedDbs = excludedDbs.filter((p) => p !== pattern);
+    inputEl?.focus();
+  }
+
+  function removeExcludeTable(pattern: string) {
+    excludedTables = excludedTables.filter((p) => p !== pattern);
     inputEl?.focus();
   }
 
@@ -196,8 +247,10 @@
 
   const fuseDatabases = $derived(
     new Fuse(
-      databaseEntries.filter((e) =>
-        matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId),
+      databaseEntries.filter(
+        (e) =>
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          !matchesExcludePattern(e.database, excludedDbs),
       ),
       { keys: ['database', 'connectionName'], includeScore: true, ...fuseOptions },
     ),
@@ -205,8 +258,11 @@
 
   const fuseTables = $derived(
     new Fuse(
-      tableEntries.filter((e) =>
-        matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId),
+      tableEntries.filter(
+        (e) =>
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          !matchesExcludePattern(e.database, excludedDbs) &&
+          !matchesExcludePattern(e.name, excludedTables),
       ),
       { keys: ['name', 'database', 'connectionName'], includeScore: true, ...fuseOptions },
     ),
@@ -214,8 +270,11 @@
 
   const fuseColumns = $derived(
     new Fuse(
-      columnEntries.filter((e) =>
-        matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId),
+      columnEntries.filter(
+        (e) =>
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          !matchesExcludePattern(e.database, excludedDbs) &&
+          !matchesExcludePattern(e.table, excludedTables),
       ),
       { keys: ['name', 'dataType', 'table'], includeScore: true, ...fuseOptions },
     ),
@@ -592,6 +651,67 @@
           </div>
         </div>
       {/if}
+
+      <div class="filter-row filter-row--exclude">
+        <div class="exclude-group">
+          <span class="filter-label">Exclude DBs</span>
+          <div class="exclude-chips">
+            {#each excludedDbs as pattern}
+              <span class="exclude-chip">
+                {pattern}<button
+                  class="exclude-chip-remove"
+                  onclick={() => removeExcludeDb(pattern)}
+                  type="button"
+                  aria-label="Remove {pattern}">×</button
+                >
+              </span>
+            {/each}
+            <input
+              class="exclude-input"
+              type="text"
+              placeholder="e.g. sys, tmp_*"
+              bind:value={excludeDbInput}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addExcludeDb();
+                }
+              }}
+              onblur={addExcludeDb}
+              aria-label="Add database exclusion pattern"
+            />
+          </div>
+        </div>
+        <div class="exclude-group exclude-group--right">
+          <span class="filter-label">Exclude Tables</span>
+          <div class="exclude-chips">
+            {#each excludedTables as pattern}
+              <span class="exclude-chip">
+                {pattern}<button
+                  class="exclude-chip-remove"
+                  onclick={() => removeExcludeTable(pattern)}
+                  type="button"
+                  aria-label="Remove {pattern}">×</button
+                >
+              </span>
+            {/each}
+            <input
+              class="exclude-input"
+              type="text"
+              placeholder="e.g. _*, tmp_*"
+              bind:value={excludeTableInput}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addExcludeTable();
+                }
+              }}
+              onblur={addExcludeTable}
+              aria-label="Add table exclusion pattern"
+            />
+          </div>
+        </div>
+      </div>
     {/if}
 
     <ul id="global-search-list" class="results-list" role="listbox">
@@ -980,5 +1100,84 @@
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
     font-style: italic;
+  }
+
+  .filter-row--exclude {
+    align-items: flex-start;
+    gap: var(--spacing-3);
+  }
+
+  .exclude-group {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-1);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .exclude-group--right {
+    border-left: 1px solid var(--color-border);
+    padding-left: var(--spacing-3);
+  }
+
+  .exclude-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .exclude-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 4px 1px 6px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+    color: var(--color-accent);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    white-space: nowrap;
+  }
+
+  .exclude-chip-remove {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    padding: 0 1px;
+    opacity: 0.7;
+    display: flex;
+    align-items: center;
+  }
+
+  .exclude-chip-remove:hover {
+    opacity: 1;
+  }
+
+  .exclude-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    outline: none;
+    padding: 1px 2px;
+    min-width: 80px;
+    max-width: 120px;
+  }
+
+  .exclude-input::placeholder {
+    color: var(--color-text-disabled);
+  }
+
+  .exclude-input:focus {
+    border-bottom-color: var(--color-accent);
   }
 </style>
