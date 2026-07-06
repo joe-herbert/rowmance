@@ -9,16 +9,7 @@ jobs:
   release:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest     # Apple Silicon (M-series)
-            args: --target aarch64-apple-darwin
-          - os: macos-13         # Intel
-            args: --target x86_64-apple-darwin
-
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -26,8 +17,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: Install Rust targets
-        run: |
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install frontend dependencies
         run: bun install
@@ -44,6 +34,4 @@ jobs:
             See the assets below to download this version of Rowmance.
           releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
-          updaterJsonPreferNsis: false
-          updaterJsonKeepUniversal: false
+          args: --target universal-apple-darwin
