@@ -34,17 +34,29 @@
   const DOUBLE_TAP_MS = 400;
 
   const conflictedActions = $derived.by(() => {
-    const counts = new Map<string, ShortcutAction[]>();
+    // Group definitions by their effective binding.
+    const byBinding = new Map<string, typeof SHORTCUT_DEFINITIONS>();
     for (const def of SHORTCUT_DEFINITIONS) {
       const binding = shortcuts.getShortcut(def.action);
       if (!binding) continue;
-      const list = counts.get(binding) ?? [];
-      list.push(def.action);
-      counts.set(binding, list);
+      const list = byBinding.get(binding) ?? [];
+      list.push(def);
+      byBinding.set(binding, list);
     }
+
     const conflicted = new Set<ShortcutAction>();
-    for (const actions of counts.values()) {
-      if (actions.length > 1) actions.forEach((a) => conflicted.add(a));
+    for (const defs of byBinding.values()) {
+      if (defs.length < 2) continue;
+      // Two shortcuts clash if at least one is global, or they share the same location.
+      for (let i = 0; i < defs.length; i++) {
+        for (let j = i + 1; j < defs.length; j++) {
+          const a = defs[i], b = defs[j];
+          if (a.global || b.global || a.location === b.location) {
+            conflicted.add(a.action);
+            conflicted.add(b.action);
+          }
+        }
+      }
     }
     return conflicted;
   });
