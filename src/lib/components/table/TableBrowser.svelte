@@ -916,9 +916,10 @@
   }
 
   // Re-load with debounce when search term changes while the bar is open.
+  // showLocalSearch is untracked so opening the bar doesn't trigger a spurious load.
   $effect(() => {
-    if (!showLocalSearch) return;
     const _term = localSearchTerm;
+    if (!untrack(() => showLocalSearch)) return;
     const timer = setTimeout(() => {
       page = 1;
       untrack(() => load());
