@@ -6,6 +6,7 @@
     radial-gradient(130% 130% at 8% -10%, #d9c6ff 0%, transparent 46%),
     radial-gradient(120% 120% at 108% 6%, #c2ddff 0%, transparent 50%),
     radial-gradient(120% 130% at 74% 116%, #c4f3e4 0%, transparent 55%),
+    radial-gradient(90% 90% at -5% 65%, color-mix(in srgb, var(--color-connection) 25%, transparent) 0%, transparent 60%),
     linear-gradient(155deg, #f2eefb, #eaf0fb);
   --glass-blur: blur(22px) saturate(160%);
 
@@ -67,6 +68,7 @@
       radial-gradient(130% 130% at 8% -10%, #d9c6ff 0%, transparent 46%),
       radial-gradient(120% 120% at 108% 6%, #c2ddff 0%, transparent 50%),
       radial-gradient(120% 130% at 74% 116%, #c4f3e4 0%, transparent 55%),
+      radial-gradient(90% 90% at -5% 65%, color-mix(in srgb, var(--color-connection) 25%, transparent) 0%, transparent 60%),
       linear-gradient(155deg, #f2eefb, #eaf0fb);
     --glass-blur: blur(22px) saturate(160%);
 
