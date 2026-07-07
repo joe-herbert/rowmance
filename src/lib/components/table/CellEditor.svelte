@@ -29,6 +29,7 @@
     onCancel: () => void;
     onTab?: (_shiftKey: boolean) => void;
     onTabConfirm?: (_newValue: CellValue, _shiftKey: boolean) => void;
+    onOpenModal?: (_currentValue: CellValue) => void;
     connectionId?: string;
     database?: string | null;
   }
@@ -48,6 +49,7 @@
     onCancel,
     onTab,
     onTabConfirm,
+    onOpenModal,
     connectionId,
     database,
   }: Props = $props();
@@ -471,6 +473,31 @@
       aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
     ></button
   >
+  {#if onOpenModal}
+    <button
+      class="action-btn open-modal-btn"
+      onclick={() => onOpenModal!(getConfirmedValue())}
+      title="Open in modal"
+      aria-label="Open in modal"
+      ><svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        ><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line
+          x1="21"
+          y1="3"
+          x2="14"
+          y2="10"
+        /><line x1="3" y1="21" x2="10" y2="14" /></svg
+      ></button
+    >
+  {/if}
   {#if inputType !== 'boolean' && showPicker}
     <button
       class="action-btn now-btn"

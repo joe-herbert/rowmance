@@ -956,6 +956,25 @@
     }
   }
 
+  function openInlineAsModal(currentValue: CellValue): void {
+    if (!editTarget) return;
+    const target = editTarget;
+    editTarget = null;
+    modalTarget = {
+      rowKey: target.rowKey,
+      colName: target.colName,
+      colIndex: target.colIndex,
+      value: currentValue,
+      originalValue: target.originalValue,
+      dataType: target.dataType,
+      nullable: target.nullable,
+      initialViewportTop: 0,
+      initialViewportLeft: 0,
+      width: 0,
+      height: 0,
+    };
+  }
+
   function handleTabFromEditor(shiftKey: boolean): void {
     if (!focusedCell) return;
     const rowCount = pageRows.length;
@@ -4050,6 +4069,7 @@
       onCancel={cancelEdit}
       onTab={handleTabFromEditor}
       onTabConfirm={handleTabConfirm}
+      onOpenModal={openInlineAsModal}
       {connectionId}
       {database}
     />
