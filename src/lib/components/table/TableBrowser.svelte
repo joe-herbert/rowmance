@@ -1232,6 +1232,20 @@
     }
   }
 
+  function firstTablePage(): void {
+    if (page !== 1) {
+      page = 1;
+      load();
+    }
+  }
+
+  function lastTablePage(): void {
+    if (dtPageInfo?.pageCount && page !== dtPageInfo.pageCount) {
+      page = dtPageInfo.pageCount;
+      load();
+    }
+  }
+
   $effect(() => {
     window.addEventListener('shortcut-action', handleShortcutAction);
     return () => window.removeEventListener('shortcut-action', handleShortcutAction);
@@ -1364,6 +1378,26 @@
         <div class="page-nav-group">
           <button
             class="page-nav-btn"
+            onclick={firstTablePage}
+            disabled={page === 1}
+            aria-label="First page"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="11 18 5 12 11 6"></polyline>
+              <polyline points="19 18 13 12 19 6"></polyline>
+            </svg>
+          </button>
+          <button
+            class="page-nav-btn page-nav-btn--bordered"
             onclick={prevTablePage}
             disabled={page === 1}
             aria-label="Previous page"
@@ -1382,7 +1416,7 @@
             </svg>
           </button>
           <button
-            class="page-nav-btn page-nav-btn--next"
+            class="page-nav-btn page-nav-btn--bordered"
             onclick={nextTablePage}
             disabled={dtPageInfo.pageCount !== null && page >= dtPageInfo.pageCount}
             aria-label="Next page"
@@ -1398,6 +1432,26 @@
               stroke-linejoin="round"
             >
               <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+          <button
+            class="page-nav-btn page-nav-btn--bordered"
+            onclick={lastTablePage}
+            disabled={dtPageInfo.pageCount === null || page >= dtPageInfo.pageCount}
+            aria-label="Last page"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="5 18 11 12 5 6"></polyline>
+              <polyline points="13 18 19 12 13 6"></polyline>
             </svg>
           </button>
         </div>
@@ -2362,7 +2416,7 @@
       color var(--transition-fast);
   }
 
-  .page-nav-btn--next {
+  .page-nav-btn--bordered {
     border-left: 1px solid var(--color-border);
   }
 
