@@ -222,11 +222,16 @@ impl ConnectionManager {
     /// Close and remove the pool for the given connection id.
     pub async fn disconnect(&self, id: &str) {
         if let Some((_, pool)) = self.pools.remove(id) {
-            match pool {
-                RemotePool::MySql(p, _) => p.close().await,
-                RemotePool::Postgres(p) => p.close().await,
-                RemotePool::Sqlite(p) => p.close().await,
-            }
+            let close = async {
+                match pool {
+                    RemotePool::MySql(p, _) => p.close().await,
+                    RemotePool::Postgres(p) => p.close().await,
+                    RemotePool::Sqlite(p) => p.close().await,
+                }
+            };
+            // If the graceful close hangs (e.g. in-flight query or unreachable server),
+            // drop the pool after 3s — connections are forcibly closed on drop anyway.
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), close).await;
         }
     }
 
