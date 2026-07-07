@@ -5,6 +5,7 @@ export type SavedQueryEditorState = {
   results: QueryResult[];
   executedStatements: string[];
   selectedDatabase: string;
+  activeResultTab?: number;
 };
 
 const cache = new Map<string, SavedQueryEditorState>();

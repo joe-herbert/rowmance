@@ -134,6 +134,11 @@
       const { queryId, totalRows } = event.payload;
       if (result?.queryId === queryId) {
         result = { ...result, totalRows };
+        const cacheKey = `${connectionId}:${database}:${table}`;
+        const cached = tableDataCache.get(cacheKey);
+        if (cached && cached.result.queryId === queryId) {
+          tableDataCache.set(cacheKey, { ...cached, result: { ...cached.result, totalRows } });
+        }
       }
     }).then((fn) => {
       unlisten = fn;
@@ -720,10 +725,16 @@
             };
           });
         }
-        result = queryResult;
+        // While the real count is still pending, carry forward the cached value so
+        // the pagination display isn't blank during a background refresh.
+        const displayResult =
+          queryResult.totalRows === null && result !== null
+            ? { ...queryResult, totalRows: result.totalRows }
+            : queryResult;
+        result = displayResult;
         lastQueryMs = Math.round(performance.now() - t0);
         tableDataCache.set(`${connectionId}:${database}:${table}`, {
-          result: queryResult,
+          result: displayResult,
           unfilteredTotal,
           foreignKeys,
         });
@@ -755,12 +766,13 @@
     const cacheKey = `${_conn}:${_db}:${_tbl}`;
     const saved = tableBrowserFilterCache.get(cacheKey);
 
-    page = 1;
     if (saved) {
       filterEditorState = saved.filterEditorState;
       localSearchTerm = saved.searchTerm;
       showLocalSearch = !!saved.searchTerm;
+      page = saved.page ?? 1;
     } else {
+      page = 1;
       filterEditorState = _filter?.trim()
         ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: _filter }
         : emptyFilterState();
@@ -812,6 +824,35 @@
   let actionsMenuTop = $state(0);
   let actionsMenuLeft = $state(0);
 
+  let isFetchingCount = $state(false);
+
+  async function fetchTotalRowCount(): Promise<void> {
+    if (!result || isFetchingCount) return;
+    isFetchingCount = true;
+    try {
+      const quotedDb = quoteIdentifier(database);
+      const quotedTable = quoteIdentifier(table);
+      const countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
+      const countResult = await executeSelection(connectionId, countSql, database);
+      if (countResult && !countResult.error) {
+        const raw = countResult.rows[0]?.[0];
+        const totalRows = raw !== null && raw !== undefined ? Number(raw) : null;
+        if (totalRows !== null) {
+          result = { ...result, totalRows };
+          const cacheKey = `${connectionId}:${database}:${table}`;
+          const cached = tableDataCache.get(cacheKey);
+          if (cached) {
+            tableDataCache.set(cacheKey, { ...cached, result: { ...cached.result, totalRows } });
+          }
+        }
+      }
+    } catch {
+      // silently ignore — user can retry via the menu
+    } finally {
+      isFetchingCount = false;
+    }
+  }
+
   // ── Import modal state ─────────────────────────────────────────────────────
 
   let showCsvImport = $state(false);
@@ -833,14 +874,15 @@
   );
   let localSearchInputEl = $state<HTMLInputElement | null>(null);
 
-  // Persist filter and search state so it survives tab switches (remounts).
+  // Persist filter, search, and page state so it survives tab switches (remounts).
   $effect(() => {
     const key = `${connectionId}:${database}:${table}`;
-    const snapshot = $state.snapshot({ filterEditorState, searchTerm: localSearchTerm });
+    const snapshot = $state.snapshot({ filterEditorState, searchTerm: localSearchTerm, page });
     untrack(() => {
       tableBrowserFilterCache.set(key, {
         filterEditorState: snapshot.filterEditorState,
         searchTerm: snapshot.searchTerm,
+        page: snapshot.page,
       });
     });
   });
@@ -1314,9 +1356,9 @@
               : pageOffset + dtPageInfo.pageRowsLength
             ).toLocaleString()}
           {/if}
-          of {dtPageInfo.processedRowsLength !== null
-            ? dtPageInfo.processedRowsLength.toLocaleString()
-            : '…'}
+          {#if dtPageInfo.processedRowsLength !== null}
+            of {dtPageInfo.processedRowsLength.toLocaleString()}
+          {/if}
         </span>
 
         <div class="page-nav-group">
@@ -1508,6 +1550,39 @@
                 <RefreshIcon />
                 <span>Refresh</span>
               </button>
+
+              <!-- Fetch row count -->
+              {#if result !== null && result.totalRows === null && !isLoading && !isRefreshing}
+                <button
+                  class="export-menu-row"
+                  role="menuitem"
+                  onclick={() => {
+                    showActionsMenu = false;
+                    fetchTotalRowCount();
+                  }}
+                  disabled={isFetchingCount}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  ><line x1="4" y1="9" x2="20" y2="9" /><line x1="4" y1="15" x2="20" y2="15" /><line
+                      x1="10"
+                      y1="3"
+                      x2="8"
+                      y2="21"
+                    /><line x1="16" y1="3" x2="14" y2="21" /></svg
+                  >
+                  <span>Fetch total row count</span>
+                </button>
+              {/if}
 
               <!-- Columns -->
               {#if currentColumns.length > 0}

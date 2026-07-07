@@ -27,18 +27,35 @@
     connectionId?: string;
     database?: string;
     isRunning?: boolean;
+    initialActiveTab?: number;
+    onActiveTabChange?: (tab: number) => void;
   }
 
-  let { results, statements = [], connectionId, database, isRunning = false }: Props = $props();
+  let {
+    results,
+    statements = [],
+    connectionId,
+    database,
+    isRunning = false,
+    initialActiveTab = 0,
+    onActiveTabChange,
+  }: Props = $props();
 
   type CellValue = string | number | boolean | null;
 
-  let activeTab = $state(0);
+  let activeTab = $state(untrack(() => initialActiveTab));
 
   $effect(() => {
-    // Reset to first tab whenever results change.
+    // Reset to first tab whenever results change (new execution).
     results;
-    activeTab = 0;
+    untrack(() => {
+      activeTab = 0;
+    });
+  });
+
+  $effect(() => {
+    const tab = activeTab;
+    untrack(() => onActiveTabChange?.(tab));
   });
 
   let result = $derived(results[activeTab] ?? null);

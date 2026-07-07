@@ -36,6 +36,7 @@ export type FilterEditorState = {
 type SavedFilterState = {
   filterEditorState: FilterEditorState;
   searchTerm: string;
+  page?: number;
 };
 
 export const tableBrowserFilterCache = new Map<string, SavedFilterState>();

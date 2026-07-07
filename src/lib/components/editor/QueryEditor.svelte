@@ -97,6 +97,7 @@
         '',
     ),
   );
+  let activeResultTab = $state(untrack(() => cached?.activeResultTab ?? 0));
 
   $effect(() => {
     if (!editorId) return;
@@ -105,6 +106,7 @@
       results,
       executedStatements,
       selectedDatabase,
+      activeResultTab,
     });
   });
 
@@ -931,6 +933,10 @@
       {connectionId}
       database={selectedDatabase || undefined}
       {isRunning}
+      initialActiveTab={activeResultTab}
+      onActiveTabChange={(tab) => {
+        activeResultTab = tab;
+      }}
     />
   </div>
 </div>
