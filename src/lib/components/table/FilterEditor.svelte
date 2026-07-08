@@ -363,7 +363,7 @@
   );
   let panelEl = $state<HTMLDivElement | null>(null);
   let openPickerRuleId = $state<string | null>(null);
-  let pickerTriggerEl = $state<HTMLButtonElement | null>(null);
+  let pickerTriggerEl = $state<HTMLElement | null>(null);
   let pickerPopupEl = $state<HTMLDivElement | null>(null);
   let pickerTop = $state(0);
   let pickerLeft = $state(0);
@@ -408,7 +408,7 @@
     pickerLeft = rect.left;
   }
 
-  function openPicker(ruleId: string, triggerEl: HTMLButtonElement): void {
+  function openPicker(ruleId: string, triggerEl: HTMLElement): void {
     openPickerRuleId = ruleId;
     pickerTriggerEl = triggerEl;
     requestAnimationFrame(() => {
@@ -758,14 +758,53 @@
                       {:else}
                         {@const dateCategory = getDateCategory(rule.column)}
                         {#if dateCategory !== null}
-                          <button
-                            class="fe-date-trigger"
-                            class:fe-date-trigger--empty={!rule.value}
-                            type="button"
-                            aria-label="Filter value"
-                            onclick={(e) => openPicker(rule.id, e.currentTarget)}
-                            >{formatDateDisplay(rule.value, dateCategory)}</button
-                          >
+                          <div class="fe-date-input-wrap">
+                            <input
+                              class="fe-value-input fe-date-input"
+                              type="text"
+                              value={rule.value}
+                              placeholder={dateCategory === 'datetime'
+                                ? 'YYYY-MM-DD HH:MM:SS'
+                                : dateCategory === 'time'
+                                  ? 'HH:MM:SS'
+                                  : 'YYYY-MM-DD'}
+                              oninput={(e) =>
+                                updateRuleValue(
+                                  group.id,
+                                  rule.id,
+                                  (e.target as HTMLInputElement).value,
+                                )}
+                              aria-label="Filter value"
+                              autocomplete="off"
+                              autocapitalize="off"
+                              autocorrect="off"
+                              spellcheck="false"
+                            />
+                            <button
+                              class="fe-date-picker-btn"
+                              type="button"
+                              aria-label="Open date picker"
+                              onclick={(e) => openPicker(rule.id, e.currentTarget.closest('.fe-date-input-wrap') as HTMLElement)}
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                              >
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                <line x1="16" y1="2" x2="16" y2="6" />
+                                <line x1="8" y1="2" x2="8" y2="6" />
+                                <line x1="3" y1="10" x2="21" y2="10" />
+                              </svg>
+                            </button>
+                          </div>
                         {:else}
                           <input
                             class="fe-value-input"
@@ -1203,27 +1242,42 @@
     border-color: var(--color-danger);
   }
 
-  .fe-date-trigger {
-    flex: 0 1 auto;
-    padding: 3px var(--spacing-1);
-    background: var(--color-bg-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-family: var(--font-family-mono);
-    color: var(--color-text-primary);
-    cursor: pointer;
-    text-align: left;
-    transition: border-color var(--transition-fast);
-    white-space: nowrap;
+  .fe-date-input-wrap {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
   }
 
-  .fe-date-trigger:hover {
-    border-color: var(--color-border-strong);
-    background: var(--color-bg-hover);
+  .fe-date-input {
+    padding-right: calc(var(--spacing-1) + 18px);
   }
-  .fe-date-trigger--empty {
+
+  .fe-date-picker-btn {
+    position: absolute;
+    right: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
     color: var(--color-text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .fe-date-picker-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 
   .raw-sql-tag {
