@@ -1430,86 +1430,92 @@
           {/if}
         </span>
 
-        <div class="page-nav-group">
-          <button
-            class="page-nav-btn"
-            onclick={firstTablePage}
-            disabled={page === 1}
-            aria-label="First page"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+        {#if dtPageInfo.pageCount === null || dtPageInfo.pageCount > 1}
+          <div class="page-nav-group">
+            {#if dtPageInfo.pageCount === null || dtPageInfo.pageCount > 2}
+              <button
+                class="page-nav-btn"
+                onclick={firstTablePage}
+                disabled={page === 1}
+                aria-label="First page"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="11 18 5 12 11 6"></polyline>
+                  <polyline points="19 18 13 12 19 6"></polyline>
+                </svg>
+              </button>
+            {/if}
+            <button
+              class="page-nav-btn page-nav-btn--bordered"
+              onclick={prevTablePage}
+              disabled={page === 1}
+              aria-label="Previous page"
             >
-              <polyline points="11 18 5 12 11 6"></polyline>
-              <polyline points="19 18 13 12 19 6"></polyline>
-            </svg>
-          </button>
-          <button
-            class="page-nav-btn page-nav-btn--bordered"
-            onclick={prevTablePage}
-            disabled={page === 1}
-            aria-label="Previous page"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            <button
+              class="page-nav-btn page-nav-btn--bordered"
+              onclick={nextTablePage}
+              disabled={dtPageInfo.pageCount !== null && page >= dtPageInfo.pageCount}
+              aria-label="Next page"
             >
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-          </button>
-          <button
-            class="page-nav-btn page-nav-btn--bordered"
-            onclick={nextTablePage}
-            disabled={dtPageInfo.pageCount !== null && page >= dtPageInfo.pageCount}
-            aria-label="Next page"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
-          <button
-            class="page-nav-btn page-nav-btn--bordered"
-            onclick={lastTablePage}
-            disabled={dtPageInfo.pageCount === null || page >= dtPageInfo.pageCount}
-            aria-label="Last page"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="5 18 11 12 5 6"></polyline>
-              <polyline points="13 18 19 12 13 6"></polyline>
-            </svg>
-          </button>
-        </div>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+            {#if dtPageInfo.pageCount === null || dtPageInfo.pageCount > 2}
+              <button
+                class="page-nav-btn page-nav-btn--bordered"
+                onclick={lastTablePage}
+                disabled={dtPageInfo.pageCount === null || page >= dtPageInfo.pageCount}
+                aria-label="Last page"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="5 18 11 12 5 6"></polyline>
+                  <polyline points="13 18 19 12 13 6"></polyline>
+                </svg>
+              </button>
+            {/if}
+          </div>
+        {/if}
       {/if}
 
       {#if pendingRowCount > 0}
