@@ -354,7 +354,7 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Check for Updates Automatically</span>
-            <span class="label-hint">Check for new versions at startup</span>
+            <span class="label-hint">Check for new versions at startup and periodically when open</span>
           </div>
           <Checkbox
             checked={settings.autoUpdateCheck}

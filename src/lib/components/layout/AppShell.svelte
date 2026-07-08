@@ -167,7 +167,7 @@
       }
     }
 
-    if (settings.autoUpdateCheck) {
+    function runUpdateCheck() {
       updaterApi
         .updaterCheck()
         .then((result) => {
@@ -175,9 +175,13 @@
             pendingUpdate = { version: result.version, notes: result.notes };
           }
         })
-        .catch(() => {
-          // Update check failures are silently swallowed to avoid disrupting startup.
-        });
+        .catch(() => {});
+    }
+
+    let updateIntervalId: ReturnType<typeof setInterval> | undefined;
+    if (settings.autoUpdateCheck) {
+      runUpdateCheck();
+      updateIntervalId = setInterval(runUpdateCheck, 60 * 60 * 1000);
     }
 
     let unlistenFn: (() => void) | undefined;
@@ -227,6 +231,7 @@
     return () => {
       unlistenFn?.();
       window.removeEventListener('resize', syncTrafficLightPosition);
+      clearInterval(updateIntervalId);
     };
   });
 
