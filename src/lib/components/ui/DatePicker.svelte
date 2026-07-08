@@ -16,6 +16,7 @@
   }
 
   import { untrack } from 'svelte';
+  import Select from './Select.svelte';
 
   const parsed = $derived(parseValue(value));
   const today = new Date();
@@ -38,6 +39,17 @@
     'December',
   ];
   const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  const monthOptions = $derived(MONTHS.map((m, i) => ({ value: String(i), label: m })));
+  const yearOptions = $derived.by(() => {
+    const base = parseValue(value)?.year ?? today.getFullYear();
+    const start = Math.min(base - 100, today.getFullYear() - 50);
+    const end = Math.max(base + 100, today.getFullYear() + 50);
+    return Array.from({ length: end - start + 1 }, (_, i) => {
+      const y = start + i;
+      return { value: String(y), label: String(y) };
+    });
+  });
 
   type Cell = { day: number; offset: -1 | 0 | 1 };
 
@@ -119,7 +131,22 @@
         aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg
       >
     </button>
-    <span class="dp-month-year">{MONTHS[viewMonth]} {viewYear}</span>
+    <div class="dp-dropdowns">
+      <Select
+        value={String(viewMonth)}
+        options={monthOptions}
+        size="xs"
+        aria-label="Month"
+        onchange={(v) => (viewMonth = +v)}
+      />
+      <Select
+        value={String(viewYear)}
+        options={yearOptions}
+        size="xs"
+        aria-label="Year"
+        onchange={(v) => (viewYear = +v)}
+      />
+    </div>
     <button class="dp-nav" onclick={nextMonth} aria-label="Next month">
       <svg
         width="14"
@@ -170,13 +197,13 @@
     margin-bottom: var(--spacing-2);
   }
 
-  .dp-month-year {
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
+  .dp-dropdowns {
+    display: flex;
+    gap: var(--spacing-1);
     flex: 1;
-    text-align: center;
+    justify-content: center;
   }
+
 
   .dp-nav {
     width: 24px;

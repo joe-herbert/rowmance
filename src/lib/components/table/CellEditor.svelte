@@ -241,7 +241,8 @@
       if (
         (cellEditorEl && cellEditorEl.contains(target)) ||
         (actionsEl && actionsEl.contains(target)) ||
-        (pickerEl && pickerEl.contains(target))
+        (pickerEl && pickerEl.contains(target)) ||
+        (target as Element).closest?.('[role="listbox"]')
       )
         return;
       if (settings.clickOutsideEdit === 'confirm') {
