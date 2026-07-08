@@ -20,12 +20,13 @@
   import ReleaseNotes from '$lib/components/release/ReleaseNotes.svelte';
 
   interface Props {
-    index: number;
     panel: PanelState;
     isFocused: boolean;
+    splitId: string;
+    itemId: string;
   }
 
-  const { index, panel, isFocused }: Props = $props();
+  const { panel, isFocused, splitId, itemId }: Props = $props();
   const panelStore = usePanels();
   const connectionStore = useConnections();
   const statusBar = useStatusBar();
@@ -40,19 +41,11 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="panel"
   class:focused={isFocused}
   role="region"
-  aria-label="Panel {index + 1}"
-  onclick={() => !isFocused && panelStore.focus(index)}
-  onkeydown={(e) => {
-    if (!isFocused && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      panelStore.focus(index);
-    }
-  }}
+  aria-label={panelStore.getSplitLabel(splitId)}
 >
   {#if panel.content.kind === 'query_editor'}
     {#key panel.content.editorId}
@@ -73,6 +66,8 @@
         table={panel.content.table}
         initialFilter={panel.content.initialFilter}
         {isFocused}
+        {itemId}
+        {splitId}
       />
     {/key}
   {:else if panel.content.kind === 'table_structure'}
@@ -80,6 +75,8 @@
       connectionId={panel.content.connectionId}
       database={panel.content.database}
       table={panel.content.table}
+      {itemId}
+      {splitId}
     />
   {:else if panel.content.kind === 'ddl_viewer'}
     <DdlViewer
@@ -87,6 +84,8 @@
       database={panel.content.database}
       objectName={panel.content.objectName}
       objectType={panel.content.objectType}
+      {itemId}
+      {splitId}
     />
   {:else if panel.content.kind === 'erd'}
     <ErdCanvas connectionId={panel.content.connectionId} database={panel.content.database} />

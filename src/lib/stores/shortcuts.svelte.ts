@@ -52,7 +52,12 @@ export type ShortcutAction =
   | 'TAB_6'
   | 'TAB_7'
   | 'TAB_8'
-  | 'TAB_9';
+  | 'TAB_9'
+  | 'SPLIT_RIGHT'
+  | 'SPLIT_DOWN'
+  | 'SPLIT_CLOSE'
+  | 'SPLIT_FOCUS_NEXT'
+  | 'SPLIT_FOCUS_PREV';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 export type ShortcutLocation = 'global' | 'query-editor' | 'table-view';
@@ -307,6 +312,57 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Alt+9',
     jetbrains: 'Alt+9',
     vim: 'Alt+9',
+  },
+  // ── Split View ───────────────────────────────────────────────────────────────
+  {
+    action: 'SPLIT_RIGHT',
+    label: 'Split Right',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+\\',
+    jetbrains: 'Mod+\\',
+    vim: 'Mod+\\',
+  },
+  {
+    action: 'SPLIT_DOWN',
+    label: 'Split Down',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Shift+\\',
+    jetbrains: 'Mod+Shift+\\',
+    vim: 'Mod+Shift+\\',
+  },
+  {
+    action: 'SPLIT_CLOSE',
+    label: 'Close Split',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Shift+K',
+    jetbrains: 'Mod+Shift+K',
+    vim: 'Mod+Shift+K',
+  },
+  {
+    action: 'SPLIT_FOCUS_NEXT',
+    label: 'Focus Next Split',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Alt+]',
+    jetbrains: 'Mod+Alt+]',
+    vim: 'Mod+Alt+]',
+  },
+  {
+    action: 'SPLIT_FOCUS_PREV',
+    label: 'Focus Previous Split',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Alt+[',
+    jetbrains: 'Mod+Alt+[',
+    vim: 'Mod+Alt+[',
   },
   // ── Table View ───────────────────────────────────────────────────────────────
   // Context-specific: only active when the table browser panel is focused.

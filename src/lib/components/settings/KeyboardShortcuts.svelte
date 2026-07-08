@@ -50,7 +50,8 @@
       // Two shortcuts clash if at least one is global, or they share the same location.
       for (let i = 0; i < defs.length; i++) {
         for (let j = i + 1; j < defs.length; j++) {
-          const a = defs[i], b = defs[j];
+          const a = defs[i],
+            b = defs[j];
           if (a.global || b.global || a.location === b.location) {
             conflicted.add(a.action);
             conflicted.add(b.action);

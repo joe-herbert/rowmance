@@ -1,254 +1,109 @@
 <!--
-  SplitPanel — renders the main area as a grid of up to 2×2 panels.
-  The layout reacts to the SplitMode from the panels store.
-  Drag dividers to resize; panels route their content type to the Panel component.
+  SplitPanel — root of the split layout.
+  Renders the recursive SplitNodeRenderer for layout/dividers, then overlays
+  each SplitLeaf as a position:absolute portal so leaves never unmount when
+  the tree structure changes (splits added/removed).
 -->
 <script lang="ts">
-  import Panel from './Panel.svelte';
+  import SplitNodeRenderer from './SplitNodeRenderer.svelte';
+  import SplitLeaf from './SplitLeaf.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useLeafSlots } from '$lib/stores/splitLeafSlots.svelte';
 
   const panelStore = usePanels();
-
-  // ── Resize state ──────────────────────────────────────────────────────────
-
-  /** Column split position as a percentage (only used in horizontal/quad modes). */
-  let colSplitPct = $state(50);
-  /** Row split position as a percentage (only used in vertical/quad modes). */
-  let rowSplitPct = $state(50);
-
-  type ResizeDimension = 'col' | 'row';
-  let resizing = $state<ResizeDimension | null>(null);
-  let resizeStartPos = $state(0);
-  let resizeStartPct = $state(0);
+  const leafSlots = useLeafSlots();
 
   let containerEl = $state<HTMLElement | null>(null);
 
-  function onColDividerPointerDown(event: PointerEvent) {
-    resizing = 'col';
-    resizeStartPos = event.clientX;
-    resizeStartPct = colSplitPct;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-  }
+  // Map from splitId → pixel rect relative to containerEl
+  let leafPositions = $state(
+    new Map<string, { left: number; top: number; width: number; height: number }>(),
+  );
 
-  function onRowDividerPointerDown(event: PointerEvent) {
-    resizing = 'row';
-    resizeStartPos = event.clientY;
-    resizeStartPct = rowSplitPct;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-  }
-
-  function onPointerMove(event: PointerEvent) {
-    if (!resizing || !containerEl) return;
-    const rect = containerEl.getBoundingClientRect();
-
-    if (resizing === 'col') {
-      const delta = ((event.clientX - resizeStartPos) / rect.width) * 100;
-      colSplitPct = Math.max(20, Math.min(80, resizeStartPct + delta));
-    } else {
-      const delta = ((event.clientY - resizeStartPos) / rect.height) * 100;
-      rowSplitPct = Math.max(20, Math.min(80, resizeStartPct + delta));
+  function syncPositions() {
+    if (!containerEl) return;
+    const containerRect = containerEl.getBoundingClientRect();
+    // Start from existing positions so splits whose slots are mid-transition
+    // (destroyed but not yet re-mounted) stay visible at their last known position.
+    const next = new Map(leafPositions);
+    for (const [splitId, slotEl] of leafSlots.slots) {
+      const rect = slotEl.getBoundingClientRect();
+      next.set(splitId, {
+        left: rect.left - containerRect.left,
+        top: rect.top - containerRect.top,
+        width: rect.width,
+        height: rect.height,
+      });
     }
-  }
-
-  function onPointerUp() {
-    resizing = null;
-  }
-
-  function onColDividerKeydown(e: KeyboardEvent) {
-    const step = e.shiftKey ? 5 : 1;
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      colSplitPct = Math.max(20, colSplitPct - step);
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      colSplitPct = Math.min(80, colSplitPct + step);
+    // Remove positions only for splits that are gone from the layout entirely.
+    const currentIds = new Set(panelStore.getAllLeafIds());
+    for (const key of next.keys()) {
+      if (!currentIds.has(key)) next.delete(key);
     }
+    leafPositions = next;
   }
 
-  function onRowDividerKeydown(e: KeyboardEvent) {
-    const step = e.shiftKey ? 5 : 1;
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      rowSplitPct = Math.max(20, rowSplitPct - step);
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      rowSplitPct = Math.min(80, rowSplitPct + step);
-    }
-  }
+  // ResizeObserver on each slot element — fires on window resize and during
+  // divider drags (each child's flex size changes even though the container
+  // total size stays the same).
+  let ro: ResizeObserver | null = null;
 
-  // ── CSS grid template derived from split mode ─────────────────────────────
+  $effect(() => {
+    ro = new ResizeObserver(() => {
+      syncPositions();
+    });
 
-  const gridTemplateColumns = $derived(() => {
-    const { splitMode } = panelStore;
-    if (splitMode === 'horizontal' || splitMode === 'quad') {
-      return `${colSplitPct}% 8px calc(${100 - colSplitPct}% - 8px)`;
-    }
-    return '1fr';
+    return () => {
+      ro?.disconnect();
+      ro = null;
+    };
   });
 
-  const gridTemplateRows = $derived(() => {
-    const { splitMode } = panelStore;
-    if (splitMode === 'vertical' || splitMode === 'quad') {
-      return `${rowSplitPct}% 8px calc(${100 - rowSplitPct}% - 8px)`;
+  // Re-observe whenever the slot map changes (slots added/removed).
+  $effect(() => {
+    if (!ro) return;
+    ro.disconnect();
+    for (const slotEl of leafSlots.slots.values()) {
+      ro.observe(slotEl);
     }
-    return '1fr';
+    // Sync positions immediately after slot map changes (new leaf mounted).
+    requestAnimationFrame(() => syncPositions());
+  });
+
+  // Sync positions when the layout tree changes structurally.
+  $effect(() => {
+    // Track layout reactively.
+    panelStore.layout;
+    requestAnimationFrame(() => syncPositions());
   });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="split-panel"
-  bind:this={containerEl}
-  onpointermove={onPointerMove}
-  onpointerup={onPointerUp}
-  style="
-    grid-template-columns: {gridTemplateColumns()};
-    grid-template-rows: {gridTemplateRows()};
-  "
->
-  {#if panelStore.splitMode === 'none'}
-    <!-- Single panel -->
-    <Panel index={0} panel={panelStore.panels[0]} isFocused={panelStore.focusedIndex === 0} />
-  {:else if panelStore.splitMode === 'horizontal'}
-    <!-- Two columns -->
-    <Panel index={0} panel={panelStore.panels[0]} isFocused={panelStore.focusedIndex === 0} />
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="split-panel" bind:this={containerEl}>
+  <SplitNodeRenderer node={panelStore.layout} />
+
+  {#each panelStore.getAllLeafIds() as splitId (splitId)}
+    {@const pos = leafPositions.get(splitId)}
     <div
-      class="divider divider--col"
-      class:dragging={resizing === 'col'}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panels left or right"
-      tabindex="0"
-      onpointerdown={onColDividerPointerDown}
-      onkeydown={onColDividerKeydown}
-    ></div>
-    <Panel index={1} panel={panelStore.panels[1]} isFocused={panelStore.focusedIndex === 1} />
-  {:else if panelStore.splitMode === 'vertical'}
-    <!-- Two rows -->
-    <Panel index={0} panel={panelStore.panels[0]} isFocused={panelStore.focusedIndex === 0} />
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      class="divider divider--row"
-      class:dragging={resizing === 'row'}
-      role="separator"
-      aria-orientation="horizontal"
-      aria-label="Resize panels up or down"
-      tabindex="0"
-      onpointerdown={onRowDividerPointerDown}
-      onkeydown={onRowDividerKeydown}
-    ></div>
-    <Panel index={1} panel={panelStore.panels[1]} isFocused={panelStore.focusedIndex === 1} />
-  {:else if panelStore.splitMode === 'quad'}
-    <!-- 2×2 grid — panels: TL, TR, BL, BR -->
-    <Panel index={0} panel={panelStore.panels[0]} isFocused={panelStore.focusedIndex === 0} />
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      class="divider divider--col"
-      class:dragging={resizing === 'col'}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panels left or right"
-      tabindex="0"
-      style="grid-row: 1 / 4;"
-      onpointerdown={onColDividerPointerDown}
-      onkeydown={onColDividerKeydown}
-    ></div>
-    <Panel
-      index={1}
-      panel={panelStore.panels[1] ?? panelStore.panels[0]}
-      isFocused={panelStore.focusedIndex === 1}
-    />
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      class="divider divider--row"
-      class:dragging={resizing === 'row'}
-      role="separator"
-      aria-orientation="horizontal"
-      aria-label="Resize panels up or down"
-      tabindex="0"
-      style="grid-column: 1 / 4;"
-      onpointerdown={onRowDividerPointerDown}
-      onkeydown={onRowDividerKeydown}
-    ></div>
-    <Panel
-      index={2}
-      panel={panelStore.panels[2] ?? panelStore.panels[0]}
-      isFocused={panelStore.focusedIndex === 2}
-    />
-    <div class="divider-spacer"></div>
-    <Panel
-      index={3}
-      panel={panelStore.panels[3] ?? panelStore.panels[0]}
-      isFocused={panelStore.focusedIndex === 3}
-    />
-  {/if}
+      class="leaf-portal"
+      style={pos
+        ? `left:${pos.left}px;top:${pos.top}px;width:${pos.width}px;height:${pos.height}px`
+        : 'display:none'}
+    >
+      <SplitLeaf {splitId} />
+    </div>
+  {/each}
 </div>
 
 <style>
   .split-panel {
-    display: grid;
     width: 100%;
     height: 100%;
     overflow: hidden;
-  }
-
-  .divider--col {
-    cursor: col-resize;
-    background: transparent;
-    z-index: 5;
-    width: 8px;
     position: relative;
   }
 
-  .divider--row {
-    cursor: row-resize;
-    background: transparent;
-    z-index: 5;
-    height: 8px;
-    position: relative;
-  }
-
-  .divider--col::after,
-  .divider--row::after {
-    content: '';
+  .leaf-portal {
     position: absolute;
-    background: var(--color-border);
-    transition:
-      background var(--transition-fast),
-      opacity var(--transition-fast);
-    border-radius: 1px;
-  }
-
-  .divider--col::after {
-    top: 0;
-    bottom: 0;
-    left: 50%;
-    width: 1px;
-    transform: translateX(-50%);
-  }
-
-  .divider--row::after {
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 1px;
-    transform: translateY(-50%);
-  }
-
-  .divider--col:hover::after,
-  .divider--col.dragging::after,
-  .divider--row:hover::after,
-  .divider--row.dragging::after {
-    background: var(--color-accent);
-    opacity: 0.6;
-  }
-
-  .divider-spacer {
-    background: var(--color-border);
+    overflow: hidden;
   }
 </style>

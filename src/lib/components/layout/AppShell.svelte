@@ -28,7 +28,6 @@
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import TabBar from './TabBar.svelte';
 
   // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -212,6 +211,13 @@
       listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),
       listen('menu:import-sql', () => document.dispatchEvent(new CustomEvent('menu-import-sql'))),
       listen('menu:speed-analysis', () => panelStore.openInFocused({ kind: 'speed_analysis' })),
+      listen('menu:split-right', () =>
+        panelStore.splitFocused('right', settings.maxHorizontalSplits, settings.maxVerticalSplits),
+      ),
+      listen('menu:split-down', () =>
+        panelStore.splitFocused('down', settings.maxHorizontalSplits, settings.maxVerticalSplits),
+      ),
+      listen('menu:split-close', () => panelStore.closeSplit(panelStore.focusedSplitId)),
     ]).then((unlisteners) => {
       unlistenFn = () => unlisteners.forEach((u) => u());
     });
@@ -325,11 +331,21 @@
         panelStore.closeFocusedItem();
       }
     }
-    if (action === 'PANEL_NEXT') panelStore.focusNext();
-    if (action === 'PANEL_PREV') panelStore.focusPrev();
+    if (action === 'PANEL_NEXT' || action === 'SPLIT_FOCUS_NEXT') panelStore.focusNext();
+    if (action === 'PANEL_PREV' || action === 'SPLIT_FOCUS_PREV') panelStore.focusPrev();
+    if (action === 'SPLIT_RIGHT') {
+      panelStore.splitFocused('right', settings.maxHorizontalSplits, settings.maxVerticalSplits);
+    }
+    if (action === 'SPLIT_DOWN') {
+      panelStore.splitFocused('down', settings.maxHorizontalSplits, settings.maxVerticalSplits);
+    }
+    if (action === 'SPLIT_CLOSE') {
+      panelStore.closeSplit(panelStore.focusedSplitId);
+    }
     if (action === 'CLOSE_OTHER_TABS') {
       const focusedContent = panelStore.focusedPanel.content;
-      const focusedItem = panelStore.openItems.find((i) => sameContent(i.content, focusedContent));
+      const splitItems = panelStore.getSplitItems(panelStore.focusedSplitId);
+      const focusedItem = splitItems.find((i) => sameContent(i.content, focusedContent));
       if (focusedItem) panelStore.closeOtherItems(focusedItem.id);
     }
     if (action === 'NEW_QUERY_EDITOR') {
@@ -340,7 +356,7 @@
     if (action === 'GLOBAL_SEARCH') openGlobalSearch();
     if (action.startsWith('TAB_')) {
       const n = parseInt(action.slice(4), 10);
-      const items = panelStore.openItems;
+      const items = panelStore.getSplitItems(panelStore.focusedSplitId);
       const target = n === 9 ? items[items.length - 1] : items[n - 1];
       if (target) panelStore.showItem(target);
     }
@@ -756,9 +772,6 @@
 
     <!-- Main split-panel area -->
     <main id="main-content" class="main-area">
-      {#if settings.openItemsLocation === 'top'}
-        <TabBar />
-      {/if}
       <div class="split-panel-wrapper">
         <SplitPanel />
       </div>
@@ -1522,12 +1535,6 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: var(--color-bg-primary);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--color-border);
-    border-radius: var(--panel-radius);
-    opacity: var(--panel-opacity);
   }
 
   .split-panel-wrapper {

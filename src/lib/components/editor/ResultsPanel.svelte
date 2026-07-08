@@ -28,7 +28,7 @@
     database?: string;
     isRunning?: boolean;
     initialActiveTab?: number;
-    onActiveTabChange?: (tab: number) => void;
+    onActiveTabChange?: (_tab: number) => void;
   }
 
   let {

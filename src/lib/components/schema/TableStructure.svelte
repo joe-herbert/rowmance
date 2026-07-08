@@ -19,17 +19,59 @@
   import Select from '$lib/components/ui/Select.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
+  import { useTabDrag } from '$lib/stores/tabDragState.svelte';
 
   interface Props {
     connectionId: string;
     database: string;
     table: string;
+    itemId?: string;
+    splitId?: string;
   }
 
-  const { connectionId, database, table }: Props = $props();
+  const { connectionId, database, table, itemId = '', splitId = '' }: Props = $props();
 
   const connections = useConnections();
   const vrStore = useVirtualRelations();
+  const tabDrag = useTabDrag();
+
+  let labelDragActive = $state(false);
+  let labelDragStartX = 0;
+  let labelDragStartY = 0;
+
+  $effect(() => {
+    if (!labelDragActive) return;
+    function onMove(e: PointerEvent) {
+      if (
+        !tabDrag.isDragging &&
+        (Math.abs(e.clientX - labelDragStartX) > 4 || Math.abs(e.clientY - labelDragStartY) > 4)
+      ) {
+        if (itemId && splitId) {
+          tabDrag.start(itemId, splitId);
+        } else {
+          tabDrag.startContent({ kind: 'table_structure', connectionId, database, table });
+        }
+      }
+    }
+    function onUp() {
+      labelDragActive = false;
+      if (tabDrag.isDragging) tabDrag.end();
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  });
+
+  function onLabelPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    labelDragStartX = e.clientX;
+    labelDragStartY = e.clientY;
+    labelDragActive = true;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  }
   const profile = $derived(connections.getById(connectionId));
   const dbType = $derived(profile?.dbType ?? 'mysql');
   const isReadOnly = $derived(profile?.readOnly ?? false);
@@ -445,7 +487,11 @@
 <div class="structure-viewer">
   <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
   <div class="toolbar">
-    <span class="object-label">
+    <span
+      class="object-label"
+      title="Drag to open in another split"
+      onpointerdown={onLabelPointerDown}
+    >
       <span class="object-type">table</span>
       <span class="object-type-sep">/</span>
       <span class="object-path">{database}.{table}</span>
@@ -1272,6 +1318,9 @@
     gap: 6px;
     overflow: hidden;
     min-width: 0;
+    cursor: grab;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .object-type {

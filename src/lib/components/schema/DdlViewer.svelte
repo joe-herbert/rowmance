@@ -11,15 +11,58 @@
   import { getDdl } from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
   import Loader from '$lib/components/ui/Loader.svelte';
+  import { useTabDrag } from '$lib/stores/tabDragState.svelte';
 
   interface Props {
     connectionId: string;
     database: string;
     objectName: string;
     objectType: 'table' | 'view';
+    itemId?: string;
+    splitId?: string;
   }
 
-  const { connectionId, database, objectName, objectType }: Props = $props();
+  const { connectionId, database, objectName, objectType, itemId = '', splitId = '' }: Props = $props();
+
+  const tabDrag = useTabDrag();
+
+  let labelDragActive = $state(false);
+  let labelDragStartX = 0;
+  let labelDragStartY = 0;
+
+  $effect(() => {
+    if (!labelDragActive) return;
+    function onMove(e: PointerEvent) {
+      if (
+        !tabDrag.isDragging &&
+        (Math.abs(e.clientX - labelDragStartX) > 4 || Math.abs(e.clientY - labelDragStartY) > 4)
+      ) {
+        if (itemId && splitId) {
+          tabDrag.start(itemId, splitId);
+        } else {
+          tabDrag.startContent({ kind: 'ddl_viewer', connectionId, database, objectName, objectType });
+        }
+      }
+    }
+    function onUp() {
+      labelDragActive = false;
+      if (tabDrag.isDragging) tabDrag.end();
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  });
+
+  function onLabelPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    labelDragStartX = e.clientX;
+    labelDragStartY = e.clientY;
+    labelDragActive = true;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  }
 
   let editorContainer = $state<HTMLDivElement | undefined>(undefined);
   let editorView = $state<EditorView | undefined>(undefined);
@@ -112,8 +155,13 @@
 
 <div class="ddl-viewer">
   <div class="toolbar">
-    <span class="object-label">
+    <span
+      class="object-label"
+      title="Drag to open in another split"
+      onpointerdown={onLabelPointerDown}
+    >
       <span class="object-type">{objectType}</span>
+      <span class="object-type-sep">/</span>
       <span class="object-path">{database}.{objectName}</span>
     </span>
     <div class="toolbar-spacer"></div>
@@ -181,26 +229,37 @@
   .object-label {
     display: flex;
     align-items: center;
-    gap: var(--spacing-1);
+    gap: 6px;
     overflow: hidden;
+    min-width: 0;
+    cursor: grab;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .object-type {
-    font-size: var(--font-size-xs);
+    font-size: 10px;
     font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
+    color: var(--color-text-disabled);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     flex-shrink: 0;
+  }
+
+  .object-type-sep {
+    color: var(--color-border-strong);
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
   }
 
   .object-path {
     font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
+    color: var(--color-text-primary);
     font-family: var(--font-family-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
   }
 
   .toolbar-spacer {

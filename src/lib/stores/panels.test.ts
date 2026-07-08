@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 // Re-import the module fresh for each test so state doesn't bleed between tests.
-// We do this by using vi.resetModules() in beforeEach.
 let usePanels: typeof import('./panels.svelte').usePanels;
 
 describe('usePanels', () => {
@@ -10,65 +9,62 @@ describe('usePanels', () => {
     ({ usePanels } = await import('./panels.svelte'));
   });
 
-  it('starts with one empty panel and mode=none', () => {
+  it('starts with one empty panel', () => {
     const store = usePanels();
     expect(store.panels).toHaveLength(1);
     expect(store.panels[0].content.kind).toBe('empty');
-    expect(store.splitMode).toBe('none');
+    expect(store.splitCount).toBe(1);
     expect(store.focusedIndex).toBe(0);
   });
 
-  it('splits right into horizontal mode', () => {
+  it('splitFocused right creates a second split', () => {
     const store = usePanels();
-    store.split('right');
-    expect(store.panels).toHaveLength(2);
-    expect(store.splitMode).toBe('horizontal');
+    store.splitFocused('right', 4, 4);
+    expect(store.splitCount).toBe(2);
     expect(store.focusedIndex).toBe(1);
   });
 
-  it('splits down into vertical mode', () => {
+  it('splitFocused down creates a second split', () => {
     const store = usePanels();
-    store.split('down');
-    expect(store.panels).toHaveLength(2);
-    expect(store.splitMode).toBe('vertical');
+    store.splitFocused('down', 4, 4);
+    expect(store.splitCount).toBe(2);
   });
 
-  it('splits horizontal then down into quad mode', () => {
+  it('multiple splitFocused calls stack correctly', () => {
     const store = usePanels();
-    store.split('right');
-    store.split('down');
-    expect(store.splitMode).toBe('quad');
-    expect(store.panels).toHaveLength(3);
+    store.splitFocused('right', 4, 4);
+    store.splitFocused('down', 4, 4);
+    expect(store.splitCount).toBe(3);
   });
 
-  it('does not split beyond four panels', () => {
+  it('splitFocused respects maxH × maxV limit', () => {
     const store = usePanels();
-    store.split('right');
-    store.split('down');
-    store.split('right');
-    store.split('down'); // 5th attempt — should be ignored
-    expect(store.panels).toHaveLength(4);
+    store.splitFocused('right', 2, 2); // 2 splits
+    store.splitFocused('down', 2, 2); // 3 splits
+    store.splitFocused('right', 2, 2); // 4 splits (2×2 = max)
+    store.splitFocused('down', 2, 2); // 5th — should be blocked
+    expect(store.splitCount).toBe(4);
   });
 
-  it('closing the only panel resets to empty/none', () => {
+  it('closeSplit on the last split resets to empty', () => {
     const store = usePanels();
-    store.closePanel(0);
-    expect(store.panels).toHaveLength(1);
+    const splitId = store.focusedSplitId;
+    store.closeSplit(splitId);
+    expect(store.splitCount).toBe(1);
     expect(store.panels[0].content.kind).toBe('empty');
-    expect(store.splitMode).toBe('none');
   });
 
-  it('closing a panel in horizontal mode returns to none', () => {
+  it('closeSplit with two splits reduces to one', () => {
     const store = usePanels();
-    store.split('right');
-    store.closePanel(1);
-    expect(store.panels).toHaveLength(1);
-    expect(store.splitMode).toBe('none');
+    store.splitFocused('right', 4, 4);
+    const splitId = store.focusedSplitId;
+    store.closeSplit(splitId);
+    expect(store.splitCount).toBe(1);
   });
 
   it('focusNext wraps around', () => {
     const store = usePanels();
-    store.split('right');
+    store.splitFocused('right', 4, 4);
     store.focus(1);
     store.focusNext();
     expect(store.focusedIndex).toBe(0);
@@ -76,7 +72,7 @@ describe('usePanels', () => {
 
   it('focusPrev wraps around', () => {
     const store = usePanels();
-    store.split('right');
+    store.splitFocused('right', 4, 4);
     store.focus(0);
     store.focusPrev();
     expect(store.focusedIndex).toBe(1);
@@ -119,9 +115,9 @@ describe('usePanels', () => {
     }
   });
 
-  it('erd panel opened in second panel after split', () => {
+  it('erd panel opened in second split after splitFocused', () => {
     const store = usePanels();
-    store.split('right');
+    store.splitFocused('right', 4, 4);
     store.focus(1);
     store.openInFocused({ kind: 'erd', connectionId: 'conn-2', database: 'analytics' });
     expect(store.panels[1]?.content).toEqual({
@@ -144,7 +140,7 @@ describe('usePanels', () => {
     expect(store.openItems[0].content).toMatchObject({ kind: 'table_browser', table: 'users' });
   });
 
-  it('openInFocused deduplicates table_browser items', () => {
+  it('openInFocused deduplicates table_browser items in same split', () => {
     const store = usePanels();
     store.openInFocused({
       kind: 'table_browser',
@@ -152,7 +148,6 @@ describe('usePanels', () => {
       database: 'db',
       table: 'users',
     });
-    store.split('right');
     store.openInFocused({
       kind: 'table_browser',
       connectionId: 'c',
@@ -194,7 +189,7 @@ describe('usePanels', () => {
     expect(store.panels[0].content.kind).toBe('empty');
   });
 
-  it('closePanel does not remove item from openItems', () => {
+  it('openInFocused focuses existing split when content is already shown', () => {
     const store = usePanels();
     store.openInFocused({
       kind: 'table_browser',
@@ -202,20 +197,7 @@ describe('usePanels', () => {
       database: 'db',
       table: 'users',
     });
-    store.split('right');
-    store.closePanel(0);
-    expect(store.openItems).toHaveLength(1);
-  });
-
-  it('openInFocused focuses existing panel when content is already shown', () => {
-    const store = usePanels();
-    store.openInFocused({
-      kind: 'table_browser',
-      connectionId: 'c',
-      database: 'db',
-      table: 'users',
-    });
-    store.split('right');
+    store.splitFocused('right', 4, 4);
     store.focus(1);
     store.openInFocused({
       kind: 'table_browser',
@@ -224,5 +206,41 @@ describe('usePanels', () => {
       table: 'users',
     });
     expect(store.focusedIndex).toBe(0);
+  });
+
+  it('moveItemToSplit moves an item between splits', () => {
+    const store = usePanels();
+    store.openInFocused({
+      kind: 'table_browser',
+      connectionId: 'c',
+      database: 'db',
+      table: 'users',
+    });
+    const itemId = store.openItems[0].id;
+    const sourceSplitId = store.focusedSplitId;
+    store.splitFocused('right', 4, 4);
+    const targetSplitId = store.focusedSplitId;
+
+    store.moveItemToSplit(itemId, targetSplitId);
+
+    expect(store.getSplitItems(sourceSplitId)).toHaveLength(0);
+    expect(store.getSplitItems(targetSplitId)).toHaveLength(1);
+  });
+
+  it('moveItemToSplit auto-closes empty source split', () => {
+    const store = usePanels();
+    store.openInFocused({
+      kind: 'table_browser',
+      connectionId: 'c',
+      database: 'db',
+      table: 'users',
+    });
+    const itemId = store.openItems[0].id;
+    store.splitFocused('right', 4, 4);
+    const targetSplitId = store.focusedSplitId;
+
+    store.moveItemToSplit(itemId, targetSplitId);
+    // Source split was empty and not the last — it should have been auto-closed
+    expect(store.splitCount).toBe(1);
   });
 });

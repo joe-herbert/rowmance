@@ -782,6 +782,41 @@
             onchange={(v) => update('openItemsLocation', v as 'sidebar' | 'top')}
           />
         </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Maximum Horizontal Splits</span>
+            <span class="label-hint">Maximum number of side-by-side splits</span>
+          </div>
+          <input
+            type="number"
+            class="setting-input setting-input--sm"
+            min="1"
+            value={settings.maxHorizontalSplits}
+            onchange={(e) =>
+              update(
+                'maxHorizontalSplits',
+                Math.max(1, parseInt((e.currentTarget as HTMLInputElement).value, 10)),
+              )}
+          />
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Maximum Vertical Splits</span>
+            <span class="label-hint">Maximum number of stacked splits</span>
+          </div>
+          <input
+            type="number"
+            class="setting-input setting-input--sm"
+            min="1"
+            value={settings.maxVerticalSplits}
+            onchange={(e) =>
+              update(
+                'maxVerticalSplits',
+                Math.max(1, parseInt((e.currentTarget as HTMLInputElement).value, 10)),
+              )}
+          />
+        </div>
       </div>
 
       {#if isCustomTheme}

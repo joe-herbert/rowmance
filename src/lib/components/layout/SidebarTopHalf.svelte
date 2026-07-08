@@ -1,10 +1,11 @@
 <!--
   SidebarTopHalf — open panels list.
-  Header: OPEN label + count + new-window button + collapse button.
-  Each row: connection color dot + type SVG icon + name + connection short name + × close.
+  Single split: flat list of all items (existing behaviour).
+  Multiple splits: group headers per split with items beneath.
 -->
 <script lang="ts">
   import { usePanels, sameContent, dirtyKeyForContent } from '$lib/stores/panels.svelte';
+  import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
@@ -18,6 +19,7 @@
   import { queryEditorCache } from '$lib/stores/queryEditorState';
 
   const panelStore = usePanels();
+  const tabDrag = useTabDrag();
   const connectionStore = useConnections();
   const settingsStore = useSettings();
 
@@ -56,10 +58,14 @@
     return { color: conn.color, shortName };
   }
 
-  const focusedContent = $derived(panelStore.panels[panelStore.focusedIndex]?.content);
+  // For global header: show total items and new query button
+  const allOpenItems = $derived(panelStore.openItems);
+  const focusedContent = $derived(panelStore.focusedPanel.content);
   const hasFocusedConnection = $derived(
     focusedContent !== undefined && 'connectionId' in focusedContent,
   );
+
+  const isMultiSplit = $derived(panelStore.splitCount > 1);
 
   // ── Drag state ────────────────────────────────────────────────────────────────
 
@@ -67,6 +73,7 @@
   let isDragging = $state(false);
   let dropTarget = $state<{ id: string; position: 'before' | 'after' } | null>(null);
   let pointerStartY = 0;
+  let dragSourceSplitId = $state<string | null>(null);
 
   $effect(() => {
     if (!dragId) return;
@@ -74,6 +81,7 @@
     function onMove(e: PointerEvent) {
       if (!isDragging && Math.abs(e.clientY - pointerStartY) > 4) {
         isDragging = true;
+        if (dragSourceSplitId) tabDrag.start(dragId!, dragSourceSplitId);
       }
       if (!isDragging) return;
 
@@ -92,12 +100,26 @@
     }
 
     function onUp() {
-      if (isDragging && dropTarget) {
-        panelStore.reorderOpenItems(dragId!, dropTarget.id, dropTarget.position);
+      if (isDragging) {
+        if (dropTarget) {
+          // Check if target is in a different split group
+          const targetEl = document.querySelector<HTMLElement>(`[data-drag-id="${dropTarget.id}"]`);
+          const targetSplitId = targetEl?.dataset.itemSplitId;
+
+          if (targetSplitId && dragSourceSplitId && targetSplitId !== dragSourceSplitId) {
+            // Cross-split move
+            panelStore.moveItemToSplit(dragId!, targetSplitId);
+          } else {
+            // Same-split reorder
+            panelStore.reorderOpenItems(dragId!, dropTarget.id, dropTarget.position);
+          }
+        }
+        if (tabDrag.isDragging) tabDrag.end();
       }
       dragId = null;
       isDragging = false;
       dropTarget = null;
+      dragSourceSplitId = null;
     }
 
     window.addEventListener('pointermove', onMove);
@@ -109,11 +131,12 @@
     };
   });
 
-  function onPointerDown(e: PointerEvent, id: string) {
+  function onPointerDown(e: PointerEvent, id: string, srcSplitId: string) {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest('.close-btn')) return;
     pointerStartY = e.clientY;
     dragId = id;
+    dragSourceSplitId = srcSplitId;
   }
 
   let confirmCloseItemId = $state<string | null>(null);
@@ -121,6 +144,7 @@
   // ── Context menu + rename ─────────────────────────────────────────────────────
 
   let contextMenuItemId = $state<string | null>(null);
+  let contextMenuItemSplitId = $state<string | null>(null);
   let contextMenuTop = $state(0);
   let contextMenuLeft = $state(0);
   let renamingItemId = $state<string | null>(null);
@@ -135,13 +159,19 @@
     });
   });
 
-  function onContextMenu(e: MouseEvent, item: import('$lib/stores/panels.svelte').OpenItem) {
+  function onContextMenu(
+    e: MouseEvent,
+    item: import('$lib/stores/panels.svelte').OpenItem,
+    itemSplitId: string,
+  ) {
     const hasSavedQuery = item.content.kind === 'query_editor' && !!item.content.savedQueryId;
     const hasConnection = 'connectionId' in item.content;
-    const hasOtherTabs = panelStore.openItems.length > 1;
-    if (!hasSavedQuery && !hasConnection && !hasOtherTabs) return;
+    const hasOtherTabs = panelStore.getSplitItems(itemSplitId).length > 1;
+    const hasOtherSplits = panelStore.splitCount > 1;
+    if (!hasSavedQuery && !hasConnection && !hasOtherTabs && !hasOtherSplits) return;
     e.preventDefault();
     contextMenuItemId = item.id;
+    contextMenuItemSplitId = itemSplitId;
     contextMenuTop = e.clientY;
     contextMenuLeft = e.clientX;
   }
@@ -190,15 +220,24 @@
     const connectionId = 'connectionId' in focused ? focused.connectionId : null;
     if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
   }
+
+  function openNewQueryEditorInSplit(sid: string) {
+    const items = panelStore.getSplitItems(sid);
+    const focId = panelStore.getSplitFocusedItemId(sid);
+    const activeContent = items.find((i) => i.id === focId)?.content;
+    const connectionId =
+      activeContent && 'connectionId' in activeContent ? activeContent.connectionId : null;
+    if (connectionId) panelStore.openInSplit({ kind: 'query_editor', connectionId }, sid);
+  }
 </script>
 
 {#if settingsStore.settings.openItemsLocation !== 'top'}
   <div class="section">
     <div class="section-header no-select">
       <span class="header-label">OPEN</span>
-      <span class="header-count">{panelStore.openItems.length}</span>
+      <span class="header-count">{allOpenItems.length}</span>
       <div class="spacer"></div>
-      {#if hasFocusedConnection}
+      {#if hasFocusedConnection && !isMultiSplit}
         <button
           class="icon-btn"
           onclick={openNewQueryEditor}
@@ -221,234 +260,539 @@
       {/if}
     </div>
 
-    {#if panelStore.openItems.length === 0}
-      <div class="empty-hint">No open editors</div>
-    {:else}
-      <ul class="panel-list" class:is-dragging={isDragging} role="listbox" aria-label="Open panels">
-        {#each panelStore.openItems as item (item.id)}
-          {@const isFocused =
-            focusedContent !== undefined && sameContent(focusedContent, item.content)}
-          {@const connInfo = panelConnInfo(item.content)}
-          {#if dropTarget?.id === item.id && dropTarget.position === 'before'}
-            <div class="drop-indicator" aria-hidden="true"></div>
-          {/if}
-          <li
-            class="panel-item"
-            class:focused={isFocused}
-            class:dragging={isDragging && dragId === item.id}
-            role="option"
-            aria-selected={isFocused}
-            data-drag-id={item.id}
-            onclick={() => panelStore.showItem(item)}
-            onkeydown={(e) => e.key === 'Enter' && panelStore.showItem(item)}
-            onpointerdown={(e) => onPointerDown(e, item.id)}
-            oncontextmenu={(e) => onContextMenu(e, item)}
-            tabindex="0"
-          >
-            <span
-              class="conn-dot"
-              style={connInfo
-                ? `background:${connInfo.color ?? 'var(--color-accent)'}`
-                : 'background:transparent'}
-              aria-hidden="true"
-            ></span>
-            <span class="panel-icon" aria-hidden="true">
-              {#if item.content.kind === 'table_browser'}
-                <TableIcon
-                  system={isSystemDatabase(
-                    item.content.database,
-                    settingsStore.settings.systemDatabases,
-                  ) ||
-                    isSystemTable(item.content.table, settingsStore.settings.systemTablePatterns)}
+    {#if !isMultiSplit}
+      <!-- Single split: flat list (existing behaviour) -->
+      {#if allOpenItems.length === 0}
+        <div class="empty-hint">No open editors</div>
+      {:else}
+        <ul
+          class="panel-list"
+          class:is-dragging={isDragging}
+          role="listbox"
+          aria-label="Open panels"
+        >
+          {#each allOpenItems as item (item.id)}
+            {@const isFocused =
+              focusedContent !== undefined && sameContent(focusedContent, item.content)}
+            {@const connInfo = panelConnInfo(item.content)}
+            {#if dropTarget?.id === item.id && dropTarget.position === 'before'}
+              <div class="drop-indicator" aria-hidden="true"></div>
+            {/if}
+            <li
+              class="panel-item"
+              class:focused={isFocused}
+              class:dragging={isDragging && dragId === item.id}
+              role="option"
+              aria-selected={isFocused}
+              data-drag-id={item.id}
+              data-item-split-id={panelStore.getAllLeafIds()[0]}
+              onclick={() => panelStore.showItem(item)}
+              onkeydown={(e) => e.key === 'Enter' && panelStore.showItem(item)}
+              onpointerdown={(e) => onPointerDown(e, item.id, panelStore.getAllLeafIds()[0])}
+              oncontextmenu={(e) => onContextMenu(e, item, panelStore.getAllLeafIds()[0])}
+              tabindex="0"
+            >
+              <span
+                class="conn-dot"
+                style={connInfo
+                  ? `background:${connInfo.color ?? 'var(--color-accent)'}`
+                  : 'background:transparent'}
+                aria-hidden="true"
+              ></span>
+              <span class="panel-icon" aria-hidden="true">
+                {#if item.content.kind === 'table_browser'}
+                  <TableIcon
+                    system={isSystemDatabase(
+                      item.content.database,
+                      settingsStore.settings.systemDatabases,
+                    ) ||
+                      isSystemTable(item.content.table, settingsStore.settings.systemTablePatterns)}
+                  />
+                {:else if item.content.kind === 'table_structure'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                    <line x1="9" y1="4" x2="9" y2="20"></line>
+                    <line x1="15" y1="4" x2="15" y2="20"></line>
+                  </svg>
+                {:else if item.content.kind === 'query_editor'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="8 7 4 12 8 17"></polyline>
+                    <polyline points="16 7 20 12 16 17"></polyline>
+                  </svg>
+                {:else if item.content.kind === 'ddl_viewer'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="8" y1="13" x2="16" y2="13"></line>
+                    <line x1="8" y1="17" x2="13" y2="17"></line>
+                  </svg>
+                {:else if item.content.kind === 'settings'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path
+                      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+                    ></path>
+                  </svg>
+                {:else if item.content.kind === 'user_manager'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="12" cy="8" r="4"></circle>
+                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
+                  </svg>
+                {:else if item.content.kind === 'speed_analysis'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                  </svg>
+                {:else if item.content.kind === 'release_notes'}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                  </svg>
+                {:else}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  </svg>
+                {/if}
+              </span>
+              {#if renamingItemId === item.id}
+                <input
+                  bind:this={renameInputEl}
+                  bind:value={renameValue}
+                  class="rename-input"
+                  type="text"
+                  maxlength="120"
+                  autocomplete="off"
+                  spellcheck={false}
+                  onclick={(e) => e.stopPropagation()}
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitRename(item);
+                    }
+                    if (e.key === 'Escape') {
+                      renamingItemId = null;
+                    }
+                  }}
+                  onblur={() => commitRename(item)}
                 />
-              {:else if item.content.kind === 'table_structure'}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                  <line x1="9" y1="4" x2="9" y2="20"></line>
-                  <line x1="15" y1="4" x2="15" y2="20"></line>
-                </svg>
-              {:else if item.content.kind === 'query_editor'}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="8 7 4 12 8 17"></polyline>
-                  <polyline points="16 7 20 12 16 17"></polyline>
-                </svg>
-              {:else if item.content.kind === 'ddl_viewer'}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="8" y1="13" x2="16" y2="13"></line>
-                  <line x1="8" y1="17" x2="13" y2="17"></line>
-                </svg>
-              {:else if item.content.kind === 'settings'}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path
-                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-                  ></path>
-                </svg>
-              {:else if item.content.kind === 'user_manager'}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="12" cy="8" r="4"></circle>
-                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
-                </svg>
-              {:else if item.content.kind === 'speed_analysis'}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <line x1="18" y1="20" x2="18" y2="10"></line>
-                  <line x1="12" y1="20" x2="12" y2="4"></line>
-                  <line x1="6" y1="20" x2="6" y2="14"></line>
-                </svg>
-              {:else if item.content.kind === 'release_notes'}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
               {:else}
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
+                <span class="panel-label" title={panelLabel(item.content)}
+                  >{panelLabel(item.content)}</span
                 >
-                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                </svg>
               {/if}
-            </span>
-            {#if renamingItemId === item.id}
-              <input
-                bind:this={renameInputEl}
-                bind:value={renameValue}
-                class="rename-input"
-                type="text"
-                maxlength="120"
-                autocomplete="off"
-                spellcheck={false}
-                onclick={(e) => e.stopPropagation()}
-                onkeydown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    commitRename(item);
-                  }
-                  if (e.key === 'Escape') {
-                    renamingItemId = null;
+              {#if itemIsDirty(item)}
+                <span class="dirty-dot" title="Unsaved changes" aria-label="Has unsaved changes"
+                ></span>
+              {/if}
+              {#if connInfo}
+                <span class="conn-short">{connInfo.shortName}</span>
+              {/if}
+              <button
+                class="close-btn"
+                aria-label="Close panel"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  if (itemIsDirty(item)) {
+                    confirmCloseItemId = item.id;
+                  } else {
+                    panelStore.closeOpenItem(item.id);
                   }
                 }}
-                onblur={() => commitRename(item)}
-              />
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                >
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                </svg>
+              </button>
+            </li>
+            {#if dropTarget?.id === item.id && dropTarget.position === 'after'}
+              <div class="drop-indicator" aria-hidden="true"></div>
+            {/if}
+          {/each}
+        </ul>
+      {/if}
+    {:else}
+      <!-- Multi-split: group by split -->
+      <div class="split-groups" class:is-dragging={isDragging}>
+        {#each panelStore.getAllLeafIds() as sid}
+          {@const splitItems = panelStore.getSplitItems(sid)}
+          {@const splitFocId = panelStore.getSplitFocusedItemId(sid)}
+          {@const splitLabel = panelStore.getSplitLabel(sid)}
+          {@const splitActiveContent = splitItems.find((i) => i.id === splitFocId)?.content}
+          <div class="split-group">
+            <div class="split-group-header">
+              <span class="split-group-label">{splitLabel}</span>
+              <div class="spacer"></div>
+              {#if splitActiveContent && 'connectionId' in splitActiveContent}
+                <button
+                  class="icon-btn icon-btn--sm"
+                  onclick={() => openNewQueryEditorInSplit(sid)}
+                  title="New Query Editor in {splitLabel}"
+                  aria-label="New query editor in {splitLabel}"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+              {/if}
+              <button
+                class="icon-btn icon-btn--sm close-split-btn"
+                onclick={() => panelStore.closeSplit(sid)}
+                title="Close {splitLabel}"
+                aria-label="Close {splitLabel}"
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                >
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            {#if splitItems.length === 0}
+              <div class="empty-hint empty-hint--group">Empty split</div>
             {:else}
-              <span class="panel-label" title={panelLabel(item.content)}
-                >{panelLabel(item.content)}</span
-              >
+              <ul class="panel-list" role="listbox" aria-label="Open panels in {splitLabel}">
+                {#each splitItems as item (item.id)}
+                  {@const isFocused = item.id === splitFocId && panelStore.focusedSplitId === sid}
+                  {@const connInfo = panelConnInfo(item.content)}
+                  {#if dropTarget?.id === item.id && dropTarget.position === 'before'}
+                    <div class="drop-indicator" aria-hidden="true"></div>
+                  {/if}
+                  <li
+                    class="panel-item"
+                    class:focused={isFocused}
+                    class:dragging={isDragging && dragId === item.id}
+                    role="option"
+                    aria-selected={isFocused}
+                    data-drag-id={item.id}
+                    data-item-split-id={sid}
+                    onclick={() => {
+                      panelStore.focusSplit(sid);
+                      panelStore.showItem(item);
+                    }}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') {
+                        panelStore.focusSplit(sid);
+                        panelStore.showItem(item);
+                      }
+                    }}
+                    onpointerdown={(e) => onPointerDown(e, item.id, sid)}
+                    oncontextmenu={(e) => onContextMenu(e, item, sid)}
+                    tabindex="0"
+                  >
+                    <span
+                      class="conn-dot"
+                      style={connInfo
+                        ? `background:${connInfo.color ?? 'var(--color-accent)'}`
+                        : 'background:transparent'}
+                      aria-hidden="true"
+                    ></span>
+                    <span class="panel-icon" aria-hidden="true">
+                      {#if item.content.kind === 'table_browser'}
+                        <TableIcon
+                          system={isSystemDatabase(
+                            item.content.database,
+                            settingsStore.settings.systemDatabases,
+                          ) ||
+                            isSystemTable(
+                              item.content.table,
+                              settingsStore.settings.systemTablePatterns,
+                            )}
+                        />
+                      {:else if item.content.kind === 'table_structure'}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                          <line x1="9" y1="4" x2="9" y2="20"></line>
+                          <line x1="15" y1="4" x2="15" y2="20"></line>
+                        </svg>
+                      {:else if item.content.kind === 'query_editor'}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <polyline points="8 7 4 12 8 17"></polyline>
+                          <polyline points="16 7 20 12 16 17"></polyline>
+                        </svg>
+                      {:else if item.content.kind === 'ddl_viewer'}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                          ></path>
+                          <polyline points="14 2 14 8 20 8"></polyline>
+                          <line x1="8" y1="13" x2="16" y2="13"></line>
+                          <line x1="8" y1="17" x2="13" y2="17"></line>
+                        </svg>
+                      {:else if item.content.kind === 'settings'}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <circle cx="12" cy="12" r="3"></circle>
+                          <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+                          ></path>
+                        </svg>
+                      {:else if item.content.kind === 'user_manager'}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <circle cx="12" cy="8" r="4"></circle>
+                          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
+                        </svg>
+                      {:else if item.content.kind === 'speed_analysis'}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <line x1="18" y1="20" x2="18" y2="10"></line>
+                          <line x1="12" y1="20" x2="12" y2="4"></line>
+                          <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                      {:else if item.content.kind === 'release_notes'}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                      {:else}
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                        >
+                          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                        </svg>
+                      {/if}
+                    </span>
+                    {#if renamingItemId === item.id}
+                      <input
+                        bind:this={renameInputEl}
+                        bind:value={renameValue}
+                        class="rename-input"
+                        type="text"
+                        maxlength="120"
+                        autocomplete="off"
+                        spellcheck={false}
+                        onclick={(e) => e.stopPropagation()}
+                        onkeydown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitRename(item);
+                          }
+                          if (e.key === 'Escape') {
+                            renamingItemId = null;
+                          }
+                        }}
+                        onblur={() => commitRename(item)}
+                      />
+                    {:else}
+                      <span class="panel-label" title={panelLabel(item.content)}
+                        >{panelLabel(item.content)}</span
+                      >
+                    {/if}
+                    {#if itemIsDirty(item)}
+                      <span
+                        class="dirty-dot"
+                        title="Unsaved changes"
+                        aria-label="Has unsaved changes"
+                      ></span>
+                    {/if}
+                    {#if connInfo}
+                      <span class="conn-short">{connInfo.shortName}</span>
+                    {/if}
+                    <button
+                      class="close-btn"
+                      aria-label="Close panel"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        if (itemIsDirty(item)) {
+                          confirmCloseItemId = item.id;
+                        } else {
+                          panelStore.closeOpenItem(item.id);
+                        }
+                      }}
+                    >
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                      >
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                      </svg>
+                    </button>
+                  </li>
+                  {#if dropTarget?.id === item.id && dropTarget.position === 'after'}
+                    <div class="drop-indicator" aria-hidden="true"></div>
+                  {/if}
+                {/each}
+              </ul>
             {/if}
-            {#if itemIsDirty(item)}
-              <span class="dirty-dot" title="Unsaved changes" aria-label="Has unsaved changes"
-              ></span>
-            {/if}
-            {#if connInfo}
-              <span class="conn-short">{connInfo.shortName}</span>
-            {/if}
-            <button
-              class="close-btn"
-              aria-label="Close panel"
-              onclick={(e) => {
-                e.stopPropagation();
-                if (itemIsDirty(item)) {
-                  confirmCloseItemId = item.id;
-                } else {
-                  panelStore.closeOpenItem(item.id);
-                }
-              }}
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-              >
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-              </svg>
-            </button>
-          </li>
-          {#if dropTarget?.id === item.id && dropTarget.position === 'after'}
-            <div class="drop-indicator" aria-hidden="true"></div>
-          {/if}
+          </div>
         {/each}
-      </ul>
+      </div>
     {/if}
   </div>
 {/if}
 
 {#if contextMenuItemId !== null}
-  {@const contextItem = panelStore.openItems.find((i) => i.id === contextMenuItemId)}
-  {#if contextItem}
+  {@const allItems = panelStore.openItems}
+  {@const contextItem = allItems.find((i) => i.id === contextMenuItemId)}
+  {@const ctxSplitId = contextMenuItemSplitId}
+  {#if contextItem && ctxSplitId}
     <ContextMenu
       x={contextMenuLeft}
       y={contextMenuTop}
@@ -458,7 +802,7 @@
       {#if contextItem.content.kind === 'query_editor' && contextItem.content.savedQueryId}
         <CtxItem onclick={() => startRename(contextItem)}>Rename</CtxItem>
       {/if}
-      {#if panelStore.openItems.length > 1}
+      {#if panelStore.getSplitItems(ctxSplitId).length > 1}
         <CtxItem
           onclick={() => {
             const id = contextItem.id;
@@ -474,6 +818,33 @@
             contextMenuItemId = null;
             panelStore.closeItemsForConnection(connId);
           }}>Close all tabs for this connection</CtxItem
+        >
+      {/if}
+      {#if panelStore.splitCount > 1}
+        {#each panelStore.getAllLeafIds().filter((id) => id !== ctxSplitId) as otherSplitId}
+          <CtxItem
+            onclick={() => {
+              const id = contextItem.id;
+              contextMenuItemId = null;
+              panelStore.moveItemToSplit(id, otherSplitId);
+            }}>Move to {panelStore.getSplitLabel(otherSplitId)}</CtxItem
+          >
+        {/each}
+        {#each panelStore.getAllLeafIds().filter((id) => id !== ctxSplitId) as otherSplitId}
+          <CtxItem
+            onclick={() => {
+              const content = contextItem.content;
+              contextMenuItemId = null;
+              panelStore.copyItemToSplit(content, otherSplitId);
+            }}>Open copy in {panelStore.getSplitLabel(otherSplitId)}</CtxItem
+          >
+        {/each}
+        <CtxItem
+          onclick={() => {
+            const sid = ctxSplitId;
+            contextMenuItemId = null;
+            panelStore.closeSplit(sid);
+          }}>Close split</CtxItem
         >
       {/if}
     </ContextMenu>
@@ -552,9 +923,20 @@
       color var(--transition-fast);
   }
 
+  .icon-btn--sm {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+  }
+
   .icon-btn:hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
+  }
+
+  .close-split-btn:hover {
+    background: color-mix(in srgb, var(--color-danger, #e53e3e) 12%, transparent);
+    color: var(--color-danger, #e53e3e);
   }
 
   .empty-hint {
@@ -564,16 +946,60 @@
     font-style: italic;
   }
 
+  .empty-hint--group {
+    padding: 4px 12px 4px;
+    font-size: 11px;
+  }
+
+  /* ── Split groups ─────────────────────────────────────────────────────────── */
+
+  .split-groups {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .split-groups.is-dragging {
+    cursor: grabbing;
+  }
+
+  .split-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .split-group + .split-group {
+    border-top: 1px solid var(--color-border);
+    margin-top: 2px;
+    padding-top: 2px;
+  }
+
+  .split-group-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 2px 12px;
+    min-height: 24px;
+  }
+
+  .split-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--color-text-disabled);
+    text-transform: uppercase;
+  }
+
+  /* ── Items list ─────────────────────────────────────────────────────────── */
+
   .panel-list {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
     min-height: 0;
     padding: 1px 0;
-  }
-
-  .panel-list.is-dragging {
-    cursor: grabbing;
   }
 
   .panel-item {

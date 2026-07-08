@@ -340,7 +340,20 @@ export interface PanelState {
   content: PanelKind;
 }
 
-export type SplitMode = 'none' | 'horizontal' | 'vertical' | 'quad';
+export type SplitNode =
+  | { type: 'leaf'; splitId: string }
+  | {
+      type: 'container';
+      containerId: string;
+      direction: 'horizontal' | 'vertical';
+      children: SplitChild[];
+    };
+
+export interface SplitChild {
+  node: SplitNode;
+  /** Percentage 0–100; all siblings in the same container sum to 100. */
+  size: number;
+}
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -371,6 +384,8 @@ export interface AppSettings {
   formatLinesBetweenQueries: number;
   formatCompact: boolean;
   openItemsLocation: 'sidebar' | 'top';
+  maxHorizontalSplits: number;
+  maxVerticalSplits: number;
   cellMaxLines: number;
   newlineReplacement: string;
   newRowPosition: 'top' | 'bottom';
@@ -406,6 +421,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formatLinesBetweenQueries: 1,
   formatCompact: false,
   openItemsLocation: 'sidebar',
+  maxHorizontalSplits: 2,
+  maxVerticalSplits: 2,
   cellMaxLines: 1,
   newlineReplacement: '↵',
   newRowPosition: 'bottom',

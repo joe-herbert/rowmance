@@ -85,6 +85,7 @@
   import { useToast } from '$lib/stores/toast.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { loadColPrefs, saveColPrefs } from '$lib/utils/table-prefs';
+  import { useTabDrag } from '$lib/stores/tabDragState.svelte';
 
   interface Props {
     connectionId: string;
@@ -92,14 +93,63 @@
     table: string;
     initialFilter?: string;
     isFocused?: boolean;
+    itemId?: string;
+    splitId?: string;
   }
 
-  let { connectionId, database, table, initialFilter, isFocused = false }: Props = $props();
+  let { connectionId, database, table, initialFilter, isFocused = false, itemId = '', splitId = '' }: Props = $props();
 
   const connections = useConnections();
   const cellSelectionStore = useCellSelection();
   const panelStore = usePanels();
   const vrStore = useVirtualRelations();
+  const tabDrag = useTabDrag();
+
+  // ── Table-name drag-to-split ──────────────────────────────────────────────
+  let tableNameDragActive = $state(false);
+  let tableNameDragStartX = 0;
+  let tableNameDragStartY = 0;
+  let tableNameDragDidDrag = false;
+
+  $effect(() => {
+    if (!tableNameDragActive) return;
+
+    function onMove(e: PointerEvent) {
+      if (
+        !tabDrag.isDragging &&
+        (Math.abs(e.clientX - tableNameDragStartX) > 4 ||
+          Math.abs(e.clientY - tableNameDragStartY) > 4)
+      ) {
+        if (itemId && splitId) {
+          tabDrag.start(itemId, splitId);
+        } else {
+          tabDrag.startContent({ kind: 'table_browser', connectionId, database, table });
+        }
+        tableNameDragDidDrag = true;
+      }
+    }
+
+    function onUp() {
+      tableNameDragActive = false;
+      if (tabDrag.isDragging) tabDrag.end();
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  });
+
+  function onTableNamePointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    tableNameDragStartX = e.clientX;
+    tableNameDragStartY = e.clientY;
+    tableNameDragDidDrag = false;
+    tableNameDragActive = true;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  }
   let connectColumnName = $state<string | null>(null);
   const statusBar = useStatusBar();
   const toast = useToast();
@@ -121,9 +171,10 @@
   let filterButtonEl = $state<HTMLButtonElement | null>(null);
   let filterEditorTop = $state(0);
   let filterEditorLeft = $state(0);
-  let result = $state<QueryResult | null>(null);
-  let unfilteredTotal = $state<number | null>(null);
-  let foreignKeys = $state<ForeignKeyInfo[]>([]);
+  const _initialCached = untrack(() => tableDataCache.get(`${connectionId}:${database}:${table}`));
+  let result = $state<QueryResult | null>(_initialCached?.result ?? null);
+  let unfilteredTotal = $state<number | null>(_initialCached?.unfilteredTotal ?? null);
+  let foreignKeys = $state<ForeignKeyInfo[]>(_initialCached?.foreignKeys ?? []);
   let isLoading = $state(false);
   let isRefreshing = $state(false);
   let error = $state<string | null>(null);
@@ -1312,13 +1363,16 @@
   <div class="toolbar" style="border-bottom: 2px solid {connectionColor ?? 'var(--color-accent)'}">
     <span
       class="table-name"
-      title={`Click to copy ${database}.${table}`}
+      title={`Click to copy ${database}.${table} · Drag to open in another split`}
       role="button"
       tabindex="0"
-      onclick={() =>
+      onpointerdown={onTableNamePointerDown}
+      onclick={() => {
+        if (tableNameDragDidDrag) { tableNameDragDidDrag = false; return; }
         navigator.clipboard
           .writeText(`${database}.${table}`)
-          .then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'))}
+          .then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'));
+      }}
       onkeydown={(e) =>
         e.key === 'Enter' &&
         navigator.clipboard
@@ -1628,12 +1682,17 @@
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     aria-hidden="true"
-                  ><line x1="4" y1="9" x2="20" y2="9" /><line x1="4" y1="15" x2="20" y2="15" /><line
-                      x1="10"
+                    ><line x1="4" y1="9" x2="20" y2="9" /><line
+                      x1="4"
+                      y1="15"
+                      x2="20"
+                      y2="15"
+                    /><line x1="10" y1="3" x2="8" y2="21" /><line
+                      x1="16"
                       y1="3"
-                      x2="8"
+                      x2="14"
                       y2="21"
-                    /><line x1="16" y1="3" x2="14" y2="21" /></svg
+                    /></svg
                   >
                   <span>Fetch total row count</span>
                 </button>

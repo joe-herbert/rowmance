@@ -1,10 +1,10 @@
 <!--
-  TabBar — horizontal open-items tab strip rendered at the top of the main area.
-  Shown when openItemsLocation === 'top'. Mirrors SidebarTopHalf's logic but
-  laid out as a scrollable row of tabs.
+  TabBar — horizontal open-items tab strip rendered at the top of each split.
+  Shown when openItemsLocation === 'top'. Displays items for a single split.
 -->
 <script lang="ts">
-  import { usePanels, sameContent, dirtyKeyForContent } from '$lib/stores/panels.svelte';
+  import { usePanels, dirtyKeyForContent } from '$lib/stores/panels.svelte';
+  import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
@@ -17,7 +17,14 @@
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
 
+  interface Props {
+    splitId: string;
+  }
+
+  const { splitId }: Props = $props();
+
   const panelStore = usePanels();
+  const tabDrag = useTabDrag();
   const connectionStore = useConnections();
   const settingsStore = useSettings();
 
@@ -55,16 +62,26 @@
     return { color: conn.color };
   }
 
-  const focusedContent = $derived(panelStore.panels[panelStore.focusedIndex]?.content);
+  // Items for this split only
+  const items = $derived(panelStore.getSplitItems(splitId));
+  const focusedItemId = $derived(panelStore.getSplitFocusedItemId(splitId));
+  const isThisSplitFocused = $derived(panelStore.focusedSplitId === splitId);
+
+  const splitActiveContent = $derived.by(() => {
+    const id = panelStore.getSplitFocusedItemId(splitId);
+    const splitItems = panelStore.getSplitItems(splitId);
+    return splitItems.find((i) => i.id === id)?.content;
+  });
   const hasFocusedConnection = $derived(
-    focusedContent !== undefined && 'connectionId' in focusedContent,
+    splitActiveContent !== undefined && 'connectionId' in splitActiveContent,
   );
 
-  // ── Drag state (horizontal) ───────────────────────────────────────────────
+  // ── Same-split drag state ─────────────────────────────────────────────────
 
   let dragId = $state<string | null>(null);
   let isDragging = $state(false);
   let dropTarget = $state<{ id: string; position: 'before' | 'after' } | null>(null);
+  let crossSplitTarget = $state<string | null>(null); // target splitId for cross-split drop
   let pointerStartX = 0;
 
   $effect(() => {
@@ -73,30 +90,60 @@
     function onMove(e: PointerEvent) {
       if (!isDragging && Math.abs(e.clientX - pointerStartX) > 4) {
         isDragging = true;
+        tabDrag.start(dragId!, splitId);
       }
       if (!isDragging) return;
 
       const el = document.elementFromPoint(e.clientX, e.clientY);
-      const item = el?.closest<HTMLElement>('[data-drag-id]');
-      const targetId = item?.dataset.dragId;
 
-      if (!targetId || targetId === dragId) {
+      // Check for cross-split drop: tab in another split's TabBar
+      const tabEl = el?.closest<HTMLElement>('[data-drag-id]');
+      const targetTabId = tabEl?.dataset.dragId;
+      const targetSplitAttr = tabEl?.dataset.splitId;
+      if (targetSplitAttr && targetSplitAttr !== splitId) {
+        crossSplitTarget = targetSplitAttr;
         dropTarget = null;
         return;
       }
 
-      const rect = item!.getBoundingClientRect();
+      // Check for cross-split drop: anywhere over another split's content area
+      const leafEl = el?.closest<HTMLElement>('[data-split-leaf-id]');
+      const targetLeafSplitId = leafEl?.dataset.splitLeafId;
+      if (targetLeafSplitId && targetLeafSplitId !== splitId) {
+        crossSplitTarget = targetLeafSplitId;
+        dropTarget = null;
+        return;
+      }
+
+      crossSplitTarget = null;
+
+      if (!targetTabId || targetTabId === dragId) {
+        dropTarget = null;
+        return;
+      }
+
+      const rect = tabEl!.getBoundingClientRect();
       const position = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
-      dropTarget = { id: targetId, position };
+      dropTarget = { id: targetTabId, position };
     }
 
     function onUp() {
-      if (isDragging && dropTarget) {
-        panelStore.reorderOpenItems(dragId!, dropTarget.id, dropTarget.position);
+      if (isDragging) {
+        // tabDrag.isDragging will be false if a drop zone already handled this drop
+        if (tabDrag.isDragging) {
+          if (crossSplitTarget) {
+            // Move to the other split
+            panelStore.moveItemToSplit(dragId!, crossSplitTarget);
+          } else if (dropTarget) {
+            panelStore.reorderOpenItems(dragId!, dropTarget.id, dropTarget.position, splitId);
+          }
+          tabDrag.end();
+        }
       }
       dragId = null;
       isDragging = false;
       dropTarget = null;
+      crossSplitTarget = null;
     }
 
     window.addEventListener('pointermove', onMove);
@@ -113,6 +160,9 @@
     if ((e.target as HTMLElement).closest('.close-btn')) return;
     pointerStartX = e.clientX;
     dragId = id;
+    // Release implicit pointer capture so pointerup fires on the element actually
+    // under the pointer, letting split-leaf's onpointerup handle cross-split drops.
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   }
 
   let confirmCloseItemId = $state<string | null>(null);
@@ -126,8 +176,9 @@
   function onContextMenu(e: MouseEvent, item: import('$lib/stores/panels.svelte').OpenItem) {
     const hasConnection = 'connectionId' in item.content;
     const hasSavedQuery = item.content.kind === 'query_editor' && !!item.content.savedQueryId;
-    const hasOtherTabs = panelStore.openItems.length > 1;
-    if (!hasConnection && !hasSavedQuery && !hasOtherTabs) return;
+    const hasOtherTabs = panelStore.getSplitItems(splitId).length > 1;
+    const hasOtherSplits = panelStore.splitCount > 1;
+    if (!hasConnection && !hasSavedQuery && !hasOtherTabs && !hasOtherSplits) return;
     e.preventDefault();
     contextMenuItemId = item.id;
     contextMenuTop = e.clientY;
@@ -183,16 +234,17 @@
   }
 
   function openNewQueryEditor() {
-    const focused = panelStore.focusedPanel.content;
-    const connectionId = 'connectionId' in focused ? focused.connectionId : null;
-    if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
+    if (!splitActiveContent) return;
+    const connectionId =
+      'connectionId' in splitActiveContent ? splitActiveContent.connectionId : null;
+    if (connectionId) panelStore.openInSplit({ kind: 'query_editor', connectionId }, splitId);
   }
 </script>
 
-<div class="tab-bar" class:is-dragging={isDragging}>
+<div class="tab-bar" class:is-dragging={isDragging} class:split-focused={isThisSplitFocused}>
   <div class="tabs-scroll">
-    {#each panelStore.openItems as item (item.id)}
-      {@const isFocused = focusedContent !== undefined && sameContent(focusedContent, item.content)}
+    {#each items as item (item.id)}
+      {@const isFocused = item.id === focusedItemId}
       {@const connInfo = panelConnInfo(item.content)}
       {#if dropTarget?.id === item.id && dropTarget.position === 'before'}
         <div class="drop-indicator" aria-hidden="true"></div>
@@ -204,10 +256,15 @@
         role="tab"
         aria-selected={isFocused}
         data-drag-id={item.id}
-        onclick={() => panelStore.showItem(item)}
+        data-split-id={splitId}
+        onclick={() => {
+          panelStore.focusSplit(splitId);
+          panelStore.showItem(item);
+        }}
         onkeydown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
+            panelStore.focusSplit(splitId);
             panelStore.showItem(item);
             return;
           }
@@ -436,23 +493,23 @@
       aria-label="New query editor"
     >
       <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
+        width="11"
+        height="11"
+        viewBox="0 0 11 11"
         fill="none"
         stroke="currentColor"
-        stroke-width="2"
+        stroke-width="1"
         stroke-linecap="round"
       >
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
+        <line x1="5.5" y1="1.5" x2="5.5" y2="9.5"></line>
+        <line x1="1.5" y1="5.5" x2="9.5" y2="5.5"></line>
       </svg>
     </button>
   {/if}
 </div>
 
 {#if contextMenuItemId !== null}
-  {@const contextItem = panelStore.openItems.find((i) => i.id === contextMenuItemId)}
+  {@const contextItem = items.find((i) => i.id === contextMenuItemId)}
   {#if contextItem}
     <ContextMenu
       x={contextMenuLeft}
@@ -473,7 +530,7 @@
           }}>Rename</CtxItem
         >
       {/if}
-      {#if panelStore.openItems.length > 1}
+      {#if panelStore.getSplitItems(splitId).length > 1}
         <CtxItem
           onclick={() => {
             const id = contextItem.id;
@@ -491,12 +548,38 @@
           }}>Close all tabs for this connection</CtxItem
         >
       {/if}
+      {#if panelStore.splitCount > 1}
+        {#each panelStore.getAllLeafIds().filter((id) => id !== splitId) as otherSplitId}
+          <CtxItem
+            onclick={() => {
+              const id = contextItem.id;
+              contextMenuItemId = null;
+              panelStore.moveItemToSplit(id, otherSplitId);
+            }}>Move to {panelStore.getSplitLabel(otherSplitId)}</CtxItem
+          >
+        {/each}
+        {#each panelStore.getAllLeafIds().filter((id) => id !== splitId) as otherSplitId}
+          <CtxItem
+            onclick={() => {
+              const content = contextItem.content;
+              contextMenuItemId = null;
+              panelStore.copyItemToSplit(content, otherSplitId);
+            }}>Open copy in {panelStore.getSplitLabel(otherSplitId)}</CtxItem
+          >
+        {/each}
+        <CtxItem
+          onclick={() => {
+            contextMenuItemId = null;
+            panelStore.closeSplit(splitId);
+          }}>Close split</CtxItem
+        >
+      {/if}
     </ContextMenu>
   {/if}
 {/if}
 
 {#if confirmCloseItemId !== null}
-  {@const itemToClose = panelStore.openItems.find((i) => i.id === confirmCloseItemId)}
+  {@const itemToClose = items.find((i) => i.id === confirmCloseItemId)}
   {#if itemToClose}
     <ConfirmDialog
       title="Close tab"
@@ -527,6 +610,7 @@
     border-bottom: 1px solid var(--color-border);
     background: var(--color-bg-secondary);
     overflow: hidden;
+    position: relative;
   }
 
   .tab-bar.is-dragging {

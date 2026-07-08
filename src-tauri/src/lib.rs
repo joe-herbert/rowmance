@@ -117,6 +117,12 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
+            let split_right_item =
+                MenuItem::with_id(app, "split-right", "Split Right", true, None::<&str>)?;
+            let split_down_item =
+                MenuItem::with_id(app, "split-down", "Split Down", true, None::<&str>)?;
+            let split_close_item =
+                MenuItem::with_id(app, "split-close", "Close Split", true, None::<&str>)?;
             let view_submenu = Submenu::with_items(
                 app,
                 "View",
@@ -128,6 +134,10 @@ pub fn run() {
                     &toggle_system_item,
                     &PredefinedMenuItem::separator(app)?,
                     &command_palette_item,
+                    &PredefinedMenuItem::separator(app)?,
+                    &split_right_item,
+                    &split_down_item,
+                    &split_close_item,
                 ],
             )?;
 
@@ -236,6 +246,15 @@ pub fn run() {
                     }
                     "command-palette" => {
                         let _ = app.emit("menu:command-palette", ());
+                    }
+                    "split-right" => {
+                        let _ = app.emit("menu:split-right", ());
+                    }
+                    "split-down" => {
+                        let _ = app.emit("menu:split-down", ());
+                    }
+                    "split-close" => {
+                        let _ = app.emit("menu:split-close", ());
                     }
                     #[cfg(debug_assertions)]
                     "dev-speed-analysis" => {

@@ -7,6 +7,7 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import ConnectionForm from './ConnectionForm.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
@@ -31,6 +32,7 @@
   const panelStore = usePanels();
   const settingsStore = useSettings();
   const toast = useToast();
+  const tabDrag = useTabDrag();
 
   let treeScrollEl = $state<HTMLDivElement | undefined>(undefined);
 
@@ -558,6 +560,17 @@
     tableCtx = null;
   }
 
+  function ctxOpenTableCopy() {
+    if (!tableCtx) return;
+    panelStore.openCopyInFocused({
+      kind: 'table_browser',
+      connectionId: tableCtx.connectionId,
+      database: tableCtx.database,
+      table: tableCtx.table.name,
+    });
+    tableCtx = null;
+  }
+
   function ctxViewDdl() {
     if (!tableCtx) return;
     panelStore.openInFocused({
@@ -816,9 +829,55 @@
     }
   }
 
+  // ── Table row drag-to-split ───────────────────────────────────────────────
+
+  interface TableDragStart {
+    x: number;
+    y: number;
+    connectionId: string;
+    database: string;
+    tableName: string;
+  }
+
+  let tableDragStart = $state<TableDragStart | null>(null);
+
+  function onTablePointerDown(
+    e: PointerEvent,
+    connectionId: string,
+    database: string,
+    tableName: string,
+  ) {
+    tableDragStart = { x: e.clientX, y: e.clientY, connectionId, database, tableName };
+  }
+
+  function onTablePointerMove(e: PointerEvent) {
+    if (!tableDragStart || tabDrag.isDragging) return;
+    const dx = e.clientX - tableDragStart.x;
+    const dy = e.clientY - tableDragStart.y;
+    if (Math.hypot(dx, dy) > 5) {
+      tabDrag.startContent({
+        kind: 'table_browser',
+        connectionId: tableDragStart.connectionId,
+        database: tableDragStart.database,
+        table: tableDragStart.tableName,
+      });
+    }
+  }
+
+  function onTablePointerUp() {
+    tableDragStart = null;
+  }
+
   function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       renamingGroupId = null;
+    }
+  }
+
+  function handleWindowPointerUp() {
+    tableDragStart = null;
+    if (tabDrag.isDragging && tabDrag.dragContent !== null) {
+      tabDrag.end();
     }
   }
 
@@ -846,7 +905,7 @@
   });
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} onpointerup={handleWindowPointerUp} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="connection-tree">
@@ -1144,8 +1203,23 @@
                       class="table-row"
                       class:system-item={isTableSystem}
                       class:active={isTableActive(profile.id, database, table.name)}
-                      onclick={() => openTable(profile.id, database, table.name)}
+                      class:dragging={tabDrag.isDragging &&
+                        tabDrag.dragContent?.kind === 'table_browser' &&
+                        tabDrag.dragContent.connectionId === profile.id &&
+                        tabDrag.dragContent.database === database &&
+                        tabDrag.dragContent.table === table.name}
+                      onclick={(e) => {
+                        if (tabDrag.isDragging) {
+                          e.preventDefault();
+                          tabDrag.end();
+                          return;
+                        }
+                        openTable(profile.id, database, table.name);
+                      }}
                       oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
+                      onpointerdown={(e) => onTablePointerDown(e, profile.id, database, table.name)}
+                      onpointermove={onTablePointerMove}
+                      onpointerup={onTablePointerUp}
                       title={table.name}
                       aria-label="Open {table.name}"
                     >
@@ -1196,6 +1270,7 @@
   {@const tableCtxProfile = connectionStore.getById(tableCtx.connectionId)}
   <ContextMenu x={tableCtx.x} y={tableCtx.y} open={true} onclose={closeAllCtx}>
     <CtxItem onclick={ctxOpenTable}>Open Table</CtxItem>
+    <CtxItem onclick={ctxOpenTableCopy}>Open Copy</CtxItem>
     <CtxItem onclick={ctxViewDdl}>View DDL</CtxItem>
     <CtxItem onclick={ctxCopyName}>Copy Name</CtxItem>
     {#if !tableCtxProfile?.readOnly}
@@ -2183,6 +2258,10 @@
   }
   .table-row.active:hover {
     background: var(--color-accent-subtle);
+  }
+  .table-row.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
   }
 
   .table-name {

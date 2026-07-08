@@ -139,3 +139,8 @@ ol {
   left: 0;
   right: 0;
 }
+
+body.tab-dragging,
+body.tab-dragging * {
+  cursor: grabbing !important;
+}
