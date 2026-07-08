@@ -23,6 +23,33 @@
   let textValue = $state<string>(untrack(() => (value === null ? '' : String(value))));
   let copied = $state(false);
 
+  function contentLooksLikeJson(v: string): boolean {
+    const t = v.trim();
+    if (!t || (t[0] !== '{' && t[0] !== '[')) return false;
+    try {
+      const parsed = JSON.parse(t);
+      return typeof parsed === 'object' && parsed !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  const showFormatJson = $derived(value !== null && (isJsonType || contentLooksLikeJson(textValue)));
+
+  const hasInvalidJson = $derived(
+    isJsonType &&
+      value !== null &&
+      textValue.trim() !== '' &&
+      (() => {
+        try {
+          JSON.parse(textValue);
+          return false;
+        } catch {
+          return true;
+        }
+      })(),
+  );
+
   function handleKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -62,14 +89,19 @@
       {#if value === null}
         <div class="null-display">NULL</div>
       {:else}
-        <pre class="modal-pre">{textValue}</pre>
+        <pre class="modal-pre" class:invalid-json={hasInvalidJson}>{textValue}</pre>
       {/if}
     </div>
 
     <footer class="modal-footer">
-      <span class="modal-hint">Escape to close</span>
+      <div class="modal-footer-left">
+        <span class="modal-hint">Escape to close</span>
+        {#if hasInvalidJson}
+          <span class="modal-invalid-json">Invalid JSON</span>
+        {/if}
+      </div>
       <div class="modal-actions">
-        {#if isJsonType && value !== null}
+        {#if showFormatJson}
           <button class="modal-btn btn-format-json" onclick={formatJson}>Format JSON</button>
         {/if}
         {#if value !== null}
@@ -90,7 +122,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
     width: min(600px, calc(100vw - 48px));
-    max-height: 80vh;
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -120,6 +152,7 @@
   .modal-body {
     padding: var(--spacing-3) var(--spacing-4);
     overflow-y: auto;
+    min-height: 0;
   }
 
   .null-display {
@@ -147,7 +180,13 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-all;
+    -webkit-user-select: text;
     user-select: text;
+  }
+
+  .modal-pre.invalid-json {
+    border-color: var(--color-danger);
+    background: var(--color-danger-subtle);
   }
 
   .modal-footer {
@@ -160,9 +199,21 @@
     flex-shrink: 0;
   }
 
+  .modal-footer-left {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+  }
+
   .modal-hint {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
+  }
+
+  .modal-invalid-json {
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    color: var(--color-danger);
   }
 
   .modal-actions {

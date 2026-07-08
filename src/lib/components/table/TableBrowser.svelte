@@ -1834,14 +1834,28 @@
         aria-label="Edit active filters"
       >
         {#each filterSummaryBlocks as grp}
-          <span class="fsb-group" class:fsb-group--bordered={grp.bordered}>
-            {#each grp.rules as rule}
-              <span class="fsb-line">
-                <span class="fsb-kw">{rule.first ? grp.keyword : rule.conjunction}</span>
-                <span class="fsb-text">{rule.text}</span>
+          {#if grp.bordered}
+            <span class="fsb-group-wrapper">
+              <span class="fsb-kw">{grp.keyword}</span>
+              <span class="fsb-group fsb-group--bordered">
+                {#each grp.rules as rule}
+                  <span class="fsb-line">
+                    <span class="fsb-kw">{rule.first ? '' : rule.conjunction}</span>
+                    <span class="fsb-text">{rule.text}</span>
+                  </span>
+                {/each}
               </span>
-            {/each}
-          </span>
+            </span>
+          {:else}
+            <span class="fsb-group">
+              {#each grp.rules as rule}
+                <span class="fsb-line">
+                  <span class="fsb-kw">{rule.first ? grp.keyword : rule.conjunction}</span>
+                  <span class="fsb-text">{rule.text}</span>
+                </span>
+              {/each}
+            </span>
+          {/if}
         {/each}
       </button>
       <button
@@ -2636,7 +2650,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 1px;
+    gap: 4px;
     padding: var(--spacing-1) var(--spacing-3);
     cursor: pointer;
     text-align: left;
@@ -2678,27 +2692,34 @@
     display: contents;
   }
 
-  .fsb-group--bordered {
+  .fsb-group-wrapper {
     display: flex;
-    flex-direction: column;
-    gap: 1px;
+    align-items: flex-start;
+    gap: var(--spacing-1);
+    width: 100%;
+  }
+
+  .fsb-group-wrapper > .fsb-kw {
+    line-height: 1.5;
+  }
+
+  .fsb-group--bordered {
+    display: grid;
+    grid-template-columns: min-content 1fr;
+    align-items: baseline;
+    column-gap: var(--spacing-1);
+    flex: 1;
+    min-width: 0;
     border-left: 2px solid var(--color-accent);
     padding-left: var(--spacing-2);
   }
 
   .fsb-group--bordered .fsb-line {
-    display: grid;
-    grid-template-columns: 3em 1fr;
-    align-items: baseline;
-    gap: var(--spacing-1);
+    display: contents;
   }
 
-  .fsb-group--bordered .fsb-line:first-child .fsb-kw {
-    text-align: left;
-  }
-
-  .fsb-group--bordered .fsb-line:not(:first-child) .fsb-kw {
-    text-align: right;
+  .fsb-group--bordered .fsb-line .fsb-kw {
+    min-width: unset;
   }
 
   .fsb-line {

@@ -60,6 +60,8 @@
   let boolState = $state<boolean | null>(untrack(() => toBoolState(value)));
 
   let textValue = $state<string>(untrack(() => (value === null ? '' : String(value))));
+  let hasFormatted = $state(false);
+  let showConfirmDropdown = $state(false);
 
   let inputEl = $state<HTMLInputElement | HTMLTextAreaElement | null>(null);
   let modalEl = $state<HTMLDivElement | null>(null);
@@ -68,6 +70,14 @@
     if (inputEl) {
       inputEl.focus();
       if ('select' in inputEl) inputEl.select();
+    }
+  });
+
+  $effect(() => {
+    if (inputEl instanceof HTMLTextAreaElement) {
+      void textValue;
+      inputEl.style.height = 'auto';
+      inputEl.style.height = `${inputEl.scrollHeight}px`;
     }
   });
 
@@ -108,11 +118,7 @@
   }
 
   function handleBackdropClick(): void {
-    if (settings.clickOutsideEdit === 'confirm') {
-      confirmEdit();
-    } else {
-      onCancel();
-    }
+    onCancel();
   }
 
   const showNow = $derived(
@@ -123,12 +129,51 @@
     dataType.toLowerCase() === 'json' || dataType.toLowerCase() === 'jsonb',
   );
 
+  function contentLooksLikeJson(v: string): boolean {
+    const t = v.trim();
+    if (!t || (t[0] !== '{' && t[0] !== '[')) return false;
+    try {
+      const parsed = JSON.parse(t);
+      return typeof parsed === 'object' && parsed !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  const initialLooksLikeJson = contentLooksLikeJson(value === null ? '' : String(value));
+
+  const showFormatJson = $derived(inputType === 'text' && (isJsonType || contentLooksLikeJson(textValue)));
+
+  const hasInvalidJson = $derived(
+    (isJsonType || initialLooksLikeJson) &&
+      inputType === 'text' &&
+      textValue.trim() !== '' &&
+      (() => {
+        try {
+          JSON.parse(textValue);
+          return false;
+        } catch {
+          return true;
+        }
+      })(),
+  );
+
   function formatJson(): void {
     try {
       textValue = JSON.stringify(JSON.parse(textValue), null, 2);
+      hasFormatted = true;
     } catch {
       // not valid JSON, do nothing
     }
+  }
+
+  function confirmAndMinify(): void {
+    try {
+      textValue = JSON.stringify(JSON.parse(textValue));
+    } catch {
+      // not valid JSON, confirm as-is
+    }
+    confirmEdit();
   }
 
   function formatNow(d: Date, type: typeof inputType): string {
@@ -173,6 +218,9 @@
     <header class="modal-header">
       <span class="modal-title">{colName}</span>
       <span class="modal-type">{dataType}</span>
+      {#if inputType !== 'boolean'}
+        <span class="modal-hint">Ctrl+Enter to confirm · Escape to cancel</span>
+      {/if}
     </header>
 
     <div class="modal-body">
@@ -210,6 +258,7 @@
         <textarea
           bind:this={inputEl}
           class="modal-textarea"
+          class:invalid-json={hasInvalidJson}
           bind:value={textValue}
           autocomplete="off"
           autocapitalize="off"
@@ -220,13 +269,13 @@
     </div>
 
     <footer class="modal-footer">
-      <span class="modal-hint">
-        {inputType === 'boolean'
-          ? 'Click to cycle value'
-          : 'Ctrl+Enter to confirm · Escape to cancel'}
-      </span>
+      <div class="modal-footer-left">
+        {#if hasInvalidJson}
+          <span class="modal-invalid-json">Invalid JSON</span>
+        {/if}
+      </div>
       <div class="modal-actions">
-        {#if isJsonType}
+        {#if showFormatJson}
           <button class="modal-btn btn-format-json" onclick={formatJson}>Format JSON</button>
         {/if}
         {#if showNow}
@@ -242,7 +291,36 @@
           <button class="modal-btn btn-null" onclick={() => onConfirm(null)}>Set NULL</button>
         {/if}
         <button class="modal-btn btn-cancel" onclick={onCancel}>Cancel</button>
-        <button class="modal-btn btn-confirm" onclick={confirmEdit}>Confirm</button>
+        {#if hasFormatted}
+          <div class="split-btn">
+            <button class="modal-btn btn-confirm btn-confirm-main" onclick={confirmAndMinify}
+              >Confirm & Minify</button
+            >
+            <button
+              class="modal-btn btn-confirm btn-confirm-toggle"
+              onclick={() => (showConfirmDropdown = !showConfirmDropdown)}
+              aria-label="More confirm options">▾</button
+            >
+            {#if showConfirmDropdown}
+              <div
+                class="split-btn-backdrop"
+                role="presentation"
+                onpointerdown={() => (showConfirmDropdown = false)}
+              ></div>
+              <div class="split-btn-dropdown">
+                <button
+                  class="split-btn-option"
+                  onclick={() => {
+                    showConfirmDropdown = false;
+                    confirmEdit();
+                  }}>Confirm</button
+                >
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <button class="modal-btn btn-confirm" onclick={confirmEdit}>Confirm</button>
+        {/if}
       </div>
     </footer>
   </div>
@@ -255,7 +333,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-overlay);
     width: min(600px, calc(100vw - 48px));
-    max-height: calc(100vh - 96px);
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -282,19 +360,25 @@
     color: var(--color-text-muted);
   }
 
+  .modal-hint {
+    margin-left: auto;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
   .modal-body {
-    flex: 1;
     padding: var(--spacing-3) var(--spacing-4);
-    min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .modal-textarea {
-    flex: 1;
     width: 100%;
     min-height: 160px;
-    resize: vertical;
+    resize: none;
+    overflow: hidden;
     padding: var(--spacing-2) var(--spacing-3);
     background: var(--color-bg-primary);
     border: 1px solid var(--color-border);
@@ -312,6 +396,15 @@
     border-color: var(--color-accent);
   }
 
+  .modal-textarea.invalid-json {
+    border-color: var(--color-danger);
+    background: var(--color-danger-subtle);
+  }
+
+  .modal-textarea.invalid-json:focus {
+    border-color: var(--color-danger);
+  }
+
   .modal-footer {
     display: flex;
     align-items: center;
@@ -322,9 +415,16 @@
     flex-shrink: 0;
   }
 
-  .modal-hint {
+  .modal-footer-left {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+  }
+
+  .modal-invalid-json {
     font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
+    font-family: var(--font-family-mono);
+    color: var(--color-danger);
   }
 
   .modal-actions {
@@ -397,5 +497,56 @@
 
   .btn-confirm:hover {
     background: color-mix(in srgb, var(--color-accent) 85%, black);
+  }
+
+  .split-btn {
+    position: relative;
+    display: flex;
+  }
+
+  .btn-confirm-main {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    border-right: none;
+  }
+
+  .btn-confirm-toggle {
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+
+  .split-btn-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .split-btn-dropdown {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-overlay);
+    z-index: 2;
+    min-width: 100%;
+    white-space: nowrap;
+  }
+
+  .split-btn-option {
+    display: block;
+    width: 100%;
+    padding: var(--spacing-1) var(--spacing-3);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    color: var(--color-text-primary);
+    text-align: left;
+  }
+
+  .split-btn-option:hover {
+    background: var(--color-bg-hover);
   }
 </style>
