@@ -36,6 +36,7 @@
   });
 
   const focusedItemId = $derived(panelStore.getSplitFocusedItemId(splitId) ?? '');
+  const hasItems = $derived(panelStore.getSplitItems(splitId).length > 0);
 
   const panel = $derived({ id: splitId, content: activeContent });
 
@@ -111,7 +112,7 @@
     }
   }}
 >
-  {#if settingsStore.settings.openItemsLocation === 'top'}
+  {#if hasItems && settingsStore.settings.openItemsLocation === 'top'}
     <TabBar {splitId} />
   {/if}
   <Panel {panel} {isFocused} {splitId} itemId={focusedItemId} />
