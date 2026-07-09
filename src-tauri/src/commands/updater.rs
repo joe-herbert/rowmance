@@ -41,8 +41,9 @@ pub async fn updater_check(app: tauri::AppHandle) -> Result<UpdateCheckResult, A
 }
 
 /// Download and install the available update, then restart.
+/// Returns the release notes fetched at install time (fresher than the check-time notes).
 #[tauri::command]
-pub async fn updater_install(app: tauri::AppHandle) -> Result<(), AppError> {
+pub async fn updater_install(app: tauri::AppHandle) -> Result<Option<String>, AppError> {
     use tauri_plugin_updater::UpdaterExt;
     let updater = app
         .updater()
@@ -52,11 +53,13 @@ pub async fn updater_install(app: tauri::AppHandle) -> Result<(), AppError> {
         .await
         .map_err(|e| AppError::new("UPDATER_ERROR", e.to_string()))?;
     if let Some(update) = update {
+        let notes = update.body.clone();
         update
             .download_and_install(|_, _| {}, || {})
             .await
             .map_err(|e| AppError::new("UPDATER_ERROR", e.to_string()))?;
         app.restart();
+        return Ok(notes);
     }
-    Ok(())
+    Ok(None)
 }
