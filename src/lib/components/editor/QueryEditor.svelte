@@ -51,6 +51,7 @@
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
   import type { FileQuery } from '$lib/types';
+  import { useRecording } from '$lib/stores/recording.svelte';
 
   interface Props {
     connectionId: string;
@@ -75,6 +76,7 @@
   const connections = useConnections();
   const settingsStore = useSettings();
   const panelStore = usePanels();
+  const recording = useRecording();
 
   const cached = untrack(() => (editorId ? queryEditorCache.get(editorId) : undefined));
 
@@ -636,6 +638,7 @@
     try {
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
+      recording.add(query, connectionId, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
       results = [
@@ -667,6 +670,7 @@
     try {
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
+      recording.add(query, connectionId, selectedDatabase || null);
       onExecute?.(query);
     } catch (err) {
       results = [
@@ -696,6 +700,7 @@
     try {
       results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
+      recording.add(stmt, connectionId, selectedDatabase || null);
       onExecute?.(stmt);
     } catch (err) {
       results = [
@@ -1254,6 +1259,7 @@
     width: calc(var(--toolbar-height) - var(--spacing-3));
     padding: 0;
   }
+
 
   /* Save name dialog */
   .save-dialog {

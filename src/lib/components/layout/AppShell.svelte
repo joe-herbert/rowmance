@@ -22,6 +22,8 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
   import GlobalSearch from '$lib/components/palette/GlobalSearch.svelte';
+  import RecordingModal from '$lib/components/ui/RecordingModal.svelte';
+  import { useRecording } from '$lib/stores/recording.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
@@ -57,6 +59,7 @@
   const shortcutsStore = useShortcuts();
   const connectionsStore = useConnections();
   const toast = useToast();
+  const recordingStore = useRecording();
 
   // ── Active connection + view mode (derived from focused panel) ────────────
 
@@ -706,6 +709,9 @@
           {#if txActiveInBar}
             <span class="conn-chip-tx-badge" aria-label="Transaction active">TX</span>
           {/if}
+          {#if recordingStore.isRecordingConnection(activeConnection.id)}
+            <span class="conn-chip-rec-dot" class:conn-chip-rec-dot--paused={recordingStore.isPaused} aria-label="Recording active"></span>
+          {/if}
           <svg
             class="conn-chip-chevron"
             width="10"
@@ -1090,6 +1096,48 @@
     {/if}
 
     {#if isConnected}
+      {@const recActive = recordingStore.isRecordingConnection(activeConnection.id)}
+      {@const recPaused = recActive && recordingStore.isPaused}
+      <div class="tx-section" class:tx-section--recording={recActive && !recPaused} class:tx-section--rec-paused={recPaused}>
+        <div class="tx-section-row">
+          <div class="tx-section-header">
+            <span class="rec-indicator" class:rec-indicator--active={recActive && !recPaused} class:rec-indicator--paused={recPaused}></span>
+            <span class="tx-section-label">
+              {#if recPaused}
+                Recording paused
+              {:else if recActive}
+                Recording · {recordingStore.statements.length} {recordingStore.statements.length === 1 ? 'statement' : 'statements'}
+              {:else}
+                Recording
+              {/if}
+            </span>
+          </div>
+          <div class="tx-section-actions">
+            {#if !recActive}
+              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); recordingStore.start(activeConnection.id); }}>
+                Start
+              </button>
+            {:else if recPaused}
+              <button class="tx-btn tx-btn--commit" onclick={(e) => { e.stopPropagation(); recordingStore.resume(); }}>
+                Resume
+              </button>
+              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); recordingStore.stop(); }}>
+                Stop
+              </button>
+            {:else}
+              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); recordingStore.pause(); }}>
+                Pause
+              </button>
+              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); recordingStore.stop(); }}>
+                Stop
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if isConnected}
       <button class="conn-popup-disconnect" onclick={handleDisconnect} disabled={disconnecting}>
         {disconnecting ? 'Disconnecting…' : 'Disconnect'}
       </button>
@@ -1133,6 +1181,10 @@
 
 {#if globalSearchOpen}
   <GlobalSearch onclose={closeGlobalSearch} />
+{/if}
+
+{#if recordingStore.reviewOpen}
+  <RecordingModal />
 {/if}
 
 <style>
@@ -1260,6 +1312,25 @@
     flex-shrink: 0;
   }
 
+  .conn-chip-rec-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-danger, #ef4444);
+    flex-shrink: 0;
+    animation: rec-pulse 1.2s ease-in-out infinite;
+  }
+
+  .conn-chip-rec-dot--paused {
+    animation: none;
+    opacity: 0.5;
+  }
+
+  @keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
   .tx-section {
     display: flex;
     flex-direction: column;
@@ -1280,6 +1351,52 @@
   .tx-section--active {
     background: color-mix(in srgb, var(--color-warning, #f59e0b) 8%, var(--color-bg-secondary));
     border-color: color-mix(in srgb, var(--color-warning, #f59e0b) 35%, transparent);
+  }
+
+  .tx-section--recording {
+    background: color-mix(in srgb, var(--color-danger, #ef4444) 8%, var(--color-bg-secondary));
+    border-color: color-mix(in srgb, var(--color-danger, #ef4444) 35%, transparent);
+  }
+
+  .tx-section--recording .tx-section-label {
+    color: var(--color-danger, #ef4444);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .tx-section--rec-paused {
+    background: color-mix(in srgb, var(--color-danger, #ef4444) 5%, var(--color-bg-secondary));
+    border-color: color-mix(in srgb, var(--color-danger, #ef4444) 20%, transparent);
+  }
+
+  .tx-section--rec-paused .tx-section-label {
+    color: color-mix(in srgb, var(--color-danger, #ef4444) 70%, var(--color-text-muted));
+    font-weight: var(--font-weight-medium);
+  }
+
+  .rec-indicator {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--color-text-muted);
+    opacity: 0.4;
+  }
+
+  .rec-indicator--active {
+    background: var(--color-danger, #ef4444);
+    opacity: 1;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-danger, #ef4444) 25%, transparent);
+    animation: rec-indicator-pulse 1.2s ease-in-out infinite;
+  }
+
+  .rec-indicator--paused {
+    background: var(--color-danger, #ef4444);
+    opacity: 0.45;
+  }
+
+  @keyframes rec-indicator-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 
   .tx-section-header {

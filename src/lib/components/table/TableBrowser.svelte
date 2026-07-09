@@ -49,6 +49,7 @@
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
   import { listen } from '@tauri-apps/api/event';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useRecording } from '$lib/stores/recording.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
@@ -103,6 +104,7 @@
   const cellSelectionStore = useCellSelection();
   const panelStore = usePanels();
   const vrStore = useVirtualRelations();
+  const recording = useRecording();
   const tabDrag = useTabDrag();
 
   // ── Table-name drag-to-split ──────────────────────────────────────────────
@@ -371,29 +373,23 @@
     inserts: Record<string, unknown>[],
     deletes: RowDelete[],
   ): string {
-    function sqlVal(v: unknown): string {
-      if (v === null || v === undefined) return 'NULL';
-      if (typeof v === 'number' || typeof v === 'bigint') return String(v);
-      if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
-      return `'${String(v).replace(/'/g, "''")}'`;
-    }
-    function quoteName(name: string): string {
-      return `"${name.replace(/"/g, '""')}"`;
-    }
-    const target = `${quoteName(db)}.${quoteName(tbl)}`;
+    const dbType: DbType = connections.getById(connectionId)?.dbType ?? 'mysql';
+    const q = (name: string) => quoteIdent(name, dbType);
+    const v = (val: unknown) => formatSqlValue(val, dbType);
+    const target = dbType === 'sqlite' ? q(tbl) : `${q(db)}.${q(tbl)}`;
     const lines: string[] = [];
     for (const { primaryKeys, changes } of updates) {
-      const set = Object.entries(changes).map(([c, v]) => `${quoteName(c)} = ${sqlVal(v)}`).join(', ');
-      const where = Object.entries(primaryKeys).map(([c, v]) => v === null ? `${quoteName(c)} IS NULL` : `${quoteName(c)} = ${sqlVal(v)}`).join(' AND ');
+      const set = Object.entries(changes).map(([c, val]) => `${q(c)} = ${v(val)}`).join(', ');
+      const where = Object.entries(primaryKeys).map(([c, val]) => val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`).join(' AND ');
       lines.push(`UPDATE ${target} SET ${set} WHERE ${where};`);
     }
     for (const vals of inserts) {
-      const cols = Object.keys(vals).map(quoteName).join(', ');
-      const values = Object.values(vals).map(sqlVal).join(', ');
+      const cols = Object.keys(vals).map(q).join(', ');
+      const values = Object.values(vals).map(v).join(', ');
       lines.push(`INSERT INTO ${target} (${cols}) VALUES (${values});`);
     }
     for (const { primaryKeys } of deletes) {
-      const where = Object.entries(primaryKeys).map(([c, v]) => v === null ? `${quoteName(c)} IS NULL` : `${quoteName(c)} = ${sqlVal(v)}`).join(' AND ');
+      const where = Object.entries(primaryKeys).map(([c, val]) => val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`).join(' AND ');
       lines.push(`DELETE FROM ${target} WHERE ${where};`);
     }
     return lines.join('\n');
@@ -483,10 +479,11 @@
         insertValues,
         deleteChanges,
       );
-      if (connections.isTransactionActive(connectionId)) {
-        const sql = buildChangesSql(database, table, rowChanges, insertValues, deleteChanges);
-        if (sql) connections.addTxQuery(connectionId, sql);
+      const changesSql = buildChangesSql(database, table, rowChanges, insertValues, deleteChanges);
+      if (connections.isTransactionActive(connectionId) && changesSql) {
+        connections.addTxQuery(connectionId, changesSql);
       }
+      if (changesSql) recording.add(changesSql, connectionId, database);
       tablePendingState.delete(_pendingKey);
       pendingChanges = new Map();
       pendingDeletedRows = new Map();

@@ -47,7 +47,7 @@
       <div class="tip-body">
         <strong class="tip-title">Welcome to Rowmance!</strong>
         <p class="tip-text">
-          Click the <strong>+</strong> button in the sidebar to add your first database connection.
+          Click the <strong>+ Add Connection</strong> button in the sidebar to add your first database connection.
         </p>
       </div>
     </div>
