@@ -159,6 +159,24 @@
     gap: 16px;
     min-width: 400px;
     max-width: 520px;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    padding: 20px;
+    overflow: hidden;
+    animation: modal-in 140ms ease both;
+  }
+
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 
   .description {
