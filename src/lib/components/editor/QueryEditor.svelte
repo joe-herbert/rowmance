@@ -32,16 +32,19 @@
     type CompletionSource,
   } from '@codemirror/autocomplete';
   import { format as sqlFormat } from 'sql-formatter';
-  import type { QueryResult } from '$lib/types';
+  import type { QueryResult, ForeignKeyInfo, VirtualRelation } from '$lib/types';
   import { executeMultiQuery, explainQuery } from '$lib/tauri/query';
   import { listen } from '@tauri-apps/api/event';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import ResultsPanel from '$lib/components/editor/ResultsPanel.svelte';
+  import FkSearchPopup from '$lib/components/editor/FkSearchPopup.svelte';
   import * as schemaApi from '$lib/tauri/schema';
+  import { listVirtualRelations } from '$lib/tauri/virtual_relations';
   import { splitStatements, statementAtCursor } from '$lib/utils/sql';
   import { errorMessage } from '$lib/utils/errors';
+  import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
   import { portal } from '$lib/actions/portal';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
@@ -290,6 +293,55 @@
     columns: Map<string, string[]>;
   } = { connectionId: '', tables: [], columns: new Map() };
 
+  // ── FK / virtual-relation cache ───────────────────────────────────────────
+
+  /** Cache: `${database}.${table}` → ForeignKeyInfo[] */
+  const fkCache = new Map<string, ForeignKeyInfo[]>();
+  /** Virtual relations loaded once per editor instance */
+  let virtualRelations = $state<VirtualRelation[]>([]);
+
+  $effect(() => {
+    if (connections.isActive(connectionId)) {
+      listVirtualRelations().then((vrs) => {
+        virtualRelations = vrs;
+      });
+    }
+  });
+
+  // ── FK search popup state ─────────────────────────────────────────────────
+
+  interface FkSearchState {
+    referencedConnectionId: string;
+    referencedDatabase: string;
+    referencedTable: string;
+    referencedColumn: string;
+    /** Editor position where the selected value should be inserted */
+    insertFrom: number;
+    insertTo: number;
+    anchorX: number;
+    anchorY: number;
+  }
+
+  let fkSearchState = $state<FkSearchState | null>(null);
+
+  function openFkSearch(state: FkSearchState): void {
+    fkSearchState = state;
+  }
+
+  function closeFkSearch(): void {
+    fkSearchState = null;
+    editorView?.focus();
+  }
+
+  function applyFkSelection(value: string): void {
+    if (!editorView || !fkSearchState) return;
+    editorView.dispatch({
+      changes: { from: fkSearchState.insertFrom, to: fkSearchState.insertTo, insert: value },
+      selection: { anchor: fkSearchState.insertFrom + value.length },
+    });
+    closeFkSearch();
+  }
+
   async function loadSchemaForCompletion(connId: string): Promise<void> {
     schemaRef.connectionId = connId;
     schemaRef.tables = [];
@@ -321,6 +373,14 @@
 
   function makeSchemaCompletionSource(): CompletionSource {
     return async (context: CompletionContext): Promise<CompletionResult | null> => {
+      // ── FK value search ──────────────────────────────────────────────────────
+      const fkCtx = getFkValueContext(context.state, context.pos);
+      if (fkCtx) {
+        const fkCompletion = await buildFkCompletion(context, fkCtx.tableName, fkCtx.columnName);
+        if (fkCompletion) return fkCompletion;
+      }
+
+      // ── table.column dot-completion ──────────────────────────────────────────
       const dotMatch = context.matchBefore(/[\w"`]+\.[\w"`]*/);
       if (dotMatch) {
         const rawTable = dotMatch.text.split('.')[0].replace(/["`]/g, '');
@@ -351,6 +411,7 @@
         }
       }
 
+      // ── table-name completion ────────────────────────────────────────────────
       const word = context.matchBefore(/\w*/);
       if (!word || (word.from === word.to && !context.explicit)) return null;
       if (schemaRef.tables.length === 0) return null;
@@ -364,6 +425,115 @@
         })),
         validFor: /^\w*$/,
       };
+    };
+  }
+
+  /**
+   * Look up FK/virtual-relation info for `tableName.columnName` and return a
+   * CompletionResult with a single "Search [refTable]…" item if a relation exists.
+   */
+  async function buildFkCompletion(
+    context: CompletionContext,
+    tableName: string,
+    columnName: string,
+  ): Promise<CompletionResult | null> {
+    // Find which database has this table (use selectedDatabase first, then first match)
+    const schemaTable =
+      schemaRef.tables.find(
+        (t) =>
+          t.name.toLowerCase() === tableName.toLowerCase() &&
+          t.database === selectedDatabase,
+      ) ??
+      schemaRef.tables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+
+    const database = schemaTable?.database ?? selectedDatabase;
+    if (!database) return null;
+
+    // Load FK info (cached)
+    const cacheKey = `${database}.${tableName}`;
+    let fks = fkCache.get(cacheKey);
+    if (!fks) {
+      try {
+        fks = await schemaApi.listForeignKeys(connectionId, database, tableName);
+        fkCache.set(cacheKey, fks);
+      } catch {
+        fks = [];
+        fkCache.set(cacheKey, fks);
+      }
+    }
+
+    // Check real FKs
+    const matchingFk = fks.find((fk) =>
+      fk.columns.some((c) => c.toLowerCase() === columnName.toLowerCase()),
+    );
+
+    let referencedConnectionId: string = connectionId;
+    let referencedDatabase: string = database;
+    let referencedTable: string | null = null;
+    let referencedColumn: string | null = null;
+
+    if (matchingFk) {
+      // Real FK: referenced table is always in the same connection/database
+      const colIdx = matchingFk.columns.findIndex(
+        (c) => c.toLowerCase() === columnName.toLowerCase(),
+      );
+      referencedTable = matchingFk.referencedTable;
+      referencedColumn = matchingFk.referencedColumns[colIdx] ?? matchingFk.referencedColumns[0];
+    } else {
+      // Check virtual relations — these can point to a different database or connection
+      const vr = virtualRelations.find(
+        (r) =>
+          r.from.connectionId === connectionId &&
+          r.from.database === database &&
+          r.from.table.toLowerCase() === tableName.toLowerCase() &&
+          r.from.column.toLowerCase() === columnName.toLowerCase(),
+      );
+      if (vr) {
+        referencedConnectionId = vr.to.connectionId;
+        referencedDatabase = vr.to.database;
+        referencedTable = vr.to.table;
+        referencedColumn = vr.to.column;
+      }
+    }
+
+    if (!referencedTable || !referencedColumn) return null;
+
+    // Determine the range of text the completion should replace (current partial value word)
+    const word = context.matchBefore(/[\w.'"-]*/);
+    const from = word ? word.from : context.pos;
+    const to = context.pos;
+
+    // Capture in local vars for the closure
+    const refConnId = referencedConnectionId;
+    const refDb = referencedDatabase;
+    const refTable = referencedTable;
+    const refColumn = referencedColumn;
+
+    return {
+      from,
+      filter: false,
+      options: [
+        {
+          label: `Search ${refTable}…`,
+          detail: `insert ${refColumn}`,
+          type: 'keyword',
+          boost: 99,
+          apply: (view, _completion, applyFrom, applyTo) => {
+            const coords = view.coordsAtPos(applyFrom);
+            openFkSearch({
+              referencedConnectionId: refConnId,
+              referencedDatabase: refDb,
+              referencedTable: refTable,
+              referencedColumn: refColumn,
+              insertFrom: applyFrom,
+              insertTo: applyTo,
+              anchorX: coords ? coords.left : window.innerWidth / 2,
+              anchorY: coords ? coords.bottom : window.innerHeight / 2,
+            });
+          },
+        },
+      ],
+      validFor: /^[\w.'"-]*$/,
     };
   }
 
@@ -940,6 +1110,19 @@
     />
   </div>
 </div>
+
+{#if fkSearchState}
+  <FkSearchPopup
+    connectionId={fkSearchState.referencedConnectionId}
+    database={fkSearchState.referencedDatabase}
+    referencedTable={fkSearchState.referencedTable}
+    referencedColumn={fkSearchState.referencedColumn}
+    anchorX={fkSearchState.anchorX}
+    anchorY={fkSearchState.anchorY}
+    onselect={applyFkSelection}
+    onclose={closeFkSearch}
+  />
+{/if}
 
 <style>
   .query-editor-panel {

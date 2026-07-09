@@ -1461,7 +1461,7 @@
 {#if confirmDeleteFolderId !== null}
   <ConfirmDialog
     title="Delete folder"
-    message={`Delete the folder "${confirmDeleteFolderName}"? Any queries inside will become unfiled. This cannot be undone.`}
+    message={`Delete the folder "${confirmDeleteFolderName}"? Any queries inside will also be deleted. This cannot be undone.`}
     confirmText="Delete"
     cancelText="Cancel"
     danger={true}

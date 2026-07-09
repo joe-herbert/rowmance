@@ -713,7 +713,7 @@
     {:else if result !== null}
       <!-- Query ran successfully but returned no columns (e.g. DDL or empty result). -->
       <div class="empty-result">
-        <span class="empty-text">Query executed successfully — no rows returned.</span>
+        <span class="empty-text">Query executed successfully</span>
       </div>
       <div class="status-bar">
         {#if durationLabel}
