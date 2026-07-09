@@ -1052,6 +1052,20 @@ pub async fn connections_get_db_url(
     Ok(url)
 }
 
+#[tauri::command]
+pub async fn connections_copy_db_url_to_clipboard(
+    sqlite: State<'_, SqlitePool>,
+    id: String,
+) -> Result<(), AppError> {
+    let url = connections_get_db_url(sqlite, id).await?;
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| AppError::new("CLIPBOARD_ERROR", e.to_string()))?;
+    clipboard
+        .set_text(url)
+        .map_err(|e| AppError::new("CLIPBOARD_ERROR", e.to_string()))?;
+    Ok(())
+}
+
 // ── Import command ────────────────────────────────────────────────────────────
 
 /// Import connection profiles from a JSON file produced by `connections_export`.

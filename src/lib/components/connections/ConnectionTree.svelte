@@ -1396,10 +1396,16 @@
       >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</CtxItem
     >
     <CtxItem
-      onclick={() => {
+      onclick={async () => {
         if (connCtx) {
-          navigator.clipboard.writeText(connCtx.profile.name);
+          const name = connCtx.profile.name;
           connCtx = null;
+          try {
+            await navigator.clipboard.writeText(name);
+            toast.addToast('Name copied', 'success');
+          } catch (err) {
+            toast.addToast(`Copy failed: ${errorMessage(err)}`, 'error', 0);
+          }
         }
       }}>Copy Name</CtxItem
     >
@@ -1409,10 +1415,10 @@
           const id = connCtx.profile.id;
           connCtx = null;
           try {
-            const url = await connectionsApi.getConnectionDbUrl(id);
-            await navigator.clipboard.writeText(url);
+            await connectionsApi.copyConnectionDbUrlToClipboard(id);
+            toast.addToast('Database URL copied', 'success');
           } catch (err) {
-            errorModal = { title: 'Copy Failed', message: errorMessage(err) };
+            toast.addToast(`Copy failed: ${errorMessage(err)}`, 'error', 0);
           }
         }
       }}>Copy as Database URL</CtxItem
