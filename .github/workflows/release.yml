@@ -48,3 +48,12 @@ jobs:
           prerelease: false
           args: --target universal-apple-darwin
           updaterJsonKeepUniversal: true
+
+      - name: Verify signing succeeded
+        run: |
+          COUNT=$(find src-tauri/target -name "*.sig" 2>/dev/null | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No signature files found after build. Check that TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets are correct."
+            exit 1
+          fi
+          echo "Found $COUNT signature file(s) — signing succeeded."
