@@ -6,6 +6,6 @@ export async function updaterCheck(): Promise<UpdateCheckResult> {
   return invoke<UpdateCheckResult>('updater_check');
 }
 
-export async function updaterInstall(): Promise<string | null> {
-  return invoke<string | null>('updater_install');
+export async function updaterInstall(): Promise<void> {
+  return invoke<void>('updater_install');
 }

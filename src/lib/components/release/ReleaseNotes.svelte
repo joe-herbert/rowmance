@@ -9,7 +9,9 @@
 
   const { version, notes }: Props = $props();
 
-  const paragraphs = $derived(notes.split(/\n+/).filter((p) => p.trim().length > 0));
+  const paragraphs = $derived(
+    notes.trim().length > 0 ? notes.split(/\n+/).filter((p) => p.trim().length > 0) : [],
+  );
 </script>
 
 <div class="release-notes">
@@ -35,9 +37,13 @@
   </div>
 
   <div class="release-body">
-    {#each paragraphs as paragraph}
-      <p>{paragraph}</p>
-    {/each}
+    {#if paragraphs.length > 0}
+      {#each paragraphs as paragraph}
+        <p>{paragraph}</p>
+      {/each}
+    {:else}
+      <p class="release-empty">See the <a href="https://github.com/joe-herbert/rowmance/releases/tag/v{version}" target="_blank" rel="noreferrer">release page</a> for what's new.</p>
+    {/if}
   </div>
 </div>
 
@@ -92,5 +98,14 @@
 
   .release-body p {
     margin: 0 0 0.75rem;
+  }
+
+  .release-empty {
+    color: var(--color-text-muted, #888);
+  }
+
+  .release-empty a {
+    color: var(--color-accent, #4f46e5);
+    text-decoration: underline;
   }
 </style>
