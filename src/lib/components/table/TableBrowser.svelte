@@ -50,6 +50,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useRecording } from '$lib/stores/recording.svelte';
+  import { useRevert, type RevertRowChange, type RevertColumnChange } from '$lib/stores/revert.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
@@ -105,6 +106,7 @@
   const panelStore = usePanels();
   const vrStore = useVirtualRelations();
   const recording = useRecording();
+  const revertStore = useRevert();
   const tabDrag = useTabDrag();
 
   // ── Table-name drag-to-split ──────────────────────────────────────────────
@@ -366,6 +368,43 @@
     tableKey++;
   }
 
+  function buildRevertSql(db: string, tbl: string, rows: RevertRowChange[]): string {
+    const dbType: DbType = connections.getById(connectionId)?.dbType ?? 'mysql';
+    const q = (name: string) => quoteIdent(name, dbType);
+    const v = (val: unknown) => formatSqlValue(val, dbType);
+    const target = dbType === 'sqlite' ? q(tbl) : `${q(db)}.${q(tbl)}`;
+    const limit = dbType === 'mysql' || dbType === 'mariadb' ? ' LIMIT 1' : '';
+    const lines: string[] = [];
+    for (const row of rows) {
+      if (row.operation === 'update') {
+        const set = row.columnChanges.map((c) => `${q(c.column)} = ${v(c.previousValue)}`).join(', ');
+        const where = Object.entries(row.pkValues)
+          .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
+          .join(' AND ');
+        if (set && where) lines.push(`UPDATE ${target} SET ${set} WHERE ${where}${limit};`);
+      } else if (row.operation === 'insert') {
+        const pkEntries = Object.entries(row.pkValues);
+        let where: string;
+        if (pkEntries.length > 0) {
+          where = pkEntries
+            .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
+            .join(' AND ');
+        } else {
+          where = row.columnChanges
+            .filter((c) => c.newValue !== undefined && c.newValue !== null)
+            .map((c) => `${q(c.column)} = ${v(c.newValue)}`)
+            .join(' AND ');
+        }
+        if (where) lines.push(`DELETE FROM ${target} WHERE ${where}${limit};`);
+      } else if (row.operation === 'delete') {
+        const cols = row.columnChanges.map((c) => q(c.column)).join(', ');
+        const values = row.columnChanges.map((c) => v(c.previousValue)).join(', ');
+        lines.push(`INSERT INTO ${target} (${cols}) VALUES (${values});`);
+      }
+    }
+    return lines.join('\n');
+  }
+
   function buildChangesSql(
     db: string,
     tbl: string,
@@ -410,6 +449,7 @@
 
       const rowChanges: RowChange[] = [];
       const insertValues: Record<string, unknown>[] = [];
+      const revertRows: RevertRowChange[] = [];
 
       for (const [rowKey, colMap] of pendingChanges) {
         if (rowKey.startsWith('__new__')) {
@@ -419,7 +459,18 @@
             if (col.isAutoIncrement) continue;
             if (col.nullable && col.defaultValue == null) vals[col.name] = null;
           }
-          if (Object.keys(vals).length > 0) insertValues.push(vals);
+          if (Object.keys(vals).length > 0) {
+            insertValues.push(vals);
+            // Capture revert data for insert: use PK values if present in the inserted data
+            const pkVals: Record<string, unknown> = {};
+            pkColumns.forEach((pkCol) => { if (pkCol in vals) pkVals[pkCol] = vals[pkCol]; });
+            const colChanges: RevertColumnChange[] = Object.entries(vals).map(([col, newVal]) => ({
+              column: col,
+              previousValue: undefined,
+              newValue: newVal,
+            }));
+            revertRows.push({ operation: 'insert', pkValues: pkVals, columnChanges: colChanges });
+          }
           continue;
         }
 
@@ -435,6 +486,13 @@
             const idx = result!.columns.findIndex((c) => c.name === pkCol);
             primaryKeys[pkCol] = idx >= 0 ? (origRow[idx] ?? null) : null;
           });
+          // Capture revert data for update
+          const colChanges: RevertColumnChange[] = [];
+          for (const [col, newVal] of colMap) {
+            const idx = result!.columns.findIndex((c) => c.name === col);
+            colChanges.push({ column: col, previousValue: idx >= 0 ? (origRow[idx] ?? null) : null, newValue: newVal });
+          }
+          revertRows.push({ operation: 'update', pkValues: { ...primaryKeys }, columnChanges: colChanges });
         } else {
           // No PK: identify the row by all its original column values.
           // The backend will use IS NULL for null values and = ? for non-null,
@@ -444,6 +502,12 @@
           result.columns.forEach((col, i) => {
             primaryKeys[col.name] = origRow[i] ?? null;
           });
+          const colChanges: RevertColumnChange[] = [];
+          for (const [col, newVal] of colMap) {
+            const idx = result!.columns.findIndex((c) => c.name === col);
+            colChanges.push({ column: col, previousValue: idx >= 0 ? (origRow[idx] ?? null) : null, newValue: newVal });
+          }
+          revertRows.push({ operation: 'update', pkValues: { ...primaryKeys }, columnChanges: colChanges });
         }
 
         const changes: Record<string, unknown> = {};
@@ -469,6 +533,13 @@
           });
         }
         deleteChanges.push({ primaryKeys });
+        // Capture revert data for delete
+        const colChanges: RevertColumnChange[] = result!.columns.map((col, i) => ({
+          column: col.name,
+          previousValue: origRow[i] ?? null,
+          newValue: undefined,
+        }));
+        revertRows.push({ operation: 'delete', pkValues: { ...primaryKeys }, columnChanges: colChanges });
       }
 
       await saveTableChanges(
@@ -484,6 +555,21 @@
         connections.addTxQuery(connectionId, changesSql);
       }
       if (changesSql) recording.add(changesSql, connectionId, database);
+      if (revertRows.length > 0 && revertStore.isRevertingConnection(connectionId)) {
+        const revertSql = buildRevertSql(database, table, revertRows);
+        revertStore.add({
+          id: crypto.randomUUID(),
+          source: 'table',
+          connectionId,
+          database,
+          table,
+          sql: changesSql,
+          revertSql,
+          rows: revertRows,
+          executedAt: new Date(),
+          reverted: false,
+        });
+      }
       tablePendingState.delete(_pendingKey);
       pendingChanges = new Map();
       pendingDeletedRows = new Map();

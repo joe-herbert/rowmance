@@ -42,7 +42,7 @@
   import FkSearchPopup from '$lib/components/editor/FkSearchPopup.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { listVirtualRelations } from '$lib/tauri/virtual_relations';
-  import { splitStatements, statementAtCursor } from '$lib/utils/sql';
+  import { splitStatements, statementAtCursor, isMutatingStatement } from '$lib/utils/sql';
   import { errorMessage } from '$lib/utils/errors';
   import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
@@ -52,6 +52,7 @@
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
   import type { FileQuery } from '$lib/types';
   import { useRecording } from '$lib/stores/recording.svelte';
+  import { useRevert } from '$lib/stores/revert.svelte';
 
   interface Props {
     connectionId: string;
@@ -77,6 +78,7 @@
   const settingsStore = useSettings();
   const panelStore = usePanels();
   const recording = useRecording();
+  const revertStore = useRevert();
 
   const cached = untrack(() => (editorId ? queryEditorCache.get(editorId) : undefined));
 
@@ -639,6 +641,9 @@
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
+      if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
+        revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
+      }
       onExecute?.(query);
     } catch (err) {
       results = [
@@ -671,6 +676,9 @@
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
+      if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
+        revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
+      }
       onExecute?.(query);
     } catch (err) {
       results = [
@@ -701,6 +709,9 @@
       results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
       recording.add(stmt, connectionId, selectedDatabase || null);
+      if (revertStore.isRevertingConnection(connectionId) && isMutatingStatement(stmt)) {
+        revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: stmt, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
+      }
       onExecute?.(stmt);
     } catch (err) {
       results = [

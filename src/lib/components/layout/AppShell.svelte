@@ -23,7 +23,9 @@
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
   import GlobalSearch from '$lib/components/palette/GlobalSearch.svelte';
   import RecordingModal from '$lib/components/ui/RecordingModal.svelte';
+  import RevertModal from '$lib/components/ui/RevertModal.svelte';
   import { useRecording } from '$lib/stores/recording.svelte';
+  import { useRevert } from '$lib/stores/revert.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
@@ -60,6 +62,7 @@
   const connectionsStore = useConnections();
   const toast = useToast();
   const recordingStore = useRecording();
+  const revertStore = useRevert();
 
   // ── Active connection + view mode (derived from focused panel) ────────────
 
@@ -1138,6 +1141,53 @@
     {/if}
 
     {#if isConnected}
+      {@const rvActive = revertStore.isRevertingConnection(activeConnection.id)}
+      {@const rvPaused = rvActive && revertStore.isPaused}
+      <div class="tx-section" class:tx-section--revert={rvActive && !rvPaused} class:tx-section--revert-paused={rvPaused}>
+        <div class="tx-section-row">
+          <div class="tx-section-header">
+            <span class="revert-indicator" class:revert-indicator--active={rvActive && !rvPaused} class:revert-indicator--paused={rvPaused}></span>
+            <span class="tx-section-label">
+              {#if rvPaused}
+                Revert paused · {revertStore.entries.length} {revertStore.entries.length === 1 ? 'change' : 'changes'}
+              {:else if rvActive}
+                Revert · {revertStore.entries.length} {revertStore.entries.length === 1 ? 'change' : 'changes'}
+              {:else}
+                Revert Mode
+              {/if}
+            </span>
+          </div>
+          <div class="tx-section-actions">
+            {#if !rvActive}
+              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); revertStore.start(activeConnection.id); }}>
+                Start
+              </button>
+            {:else if rvPaused}
+              <button class="tx-btn tx-btn--commit" onclick={(e) => { e.stopPropagation(); revertStore.resume(); }}>
+                Resume
+              </button>
+              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); revertStore.stop(); }}>
+                Stop
+              </button>
+            {:else}
+              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); revertStore.pause(); }}>
+                Pause
+              </button>
+              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); revertStore.stop(); }}>
+                Stop
+              </button>
+            {/if}
+            {#if rvActive && revertStore.entries.length > 0}
+              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); revertStore.openModal(); }}>
+                View
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if isConnected}
       <button class="conn-popup-disconnect" onclick={handleDisconnect} disabled={disconnecting}>
         {disconnecting ? 'Disconnecting…' : 'Disconnect'}
       </button>
@@ -1185,6 +1235,10 @@
 
 {#if recordingStore.reviewOpen}
   <RecordingModal />
+{/if}
+
+{#if revertStore.modalOpen}
+  <RevertModal />
 {/if}
 
 <style>
@@ -1395,6 +1449,52 @@
   }
 
   @keyframes rec-indicator-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .tx-section--revert {
+    background: color-mix(in srgb, #f59e0b 8%, var(--color-bg-secondary));
+    border-color: color-mix(in srgb, #f59e0b 35%, transparent);
+  }
+
+  .tx-section--revert .tx-section-label {
+    color: #f59e0b;
+    font-weight: var(--font-weight-medium);
+  }
+
+  .tx-section--revert-paused {
+    background: color-mix(in srgb, #f59e0b 5%, var(--color-bg-secondary));
+    border-color: color-mix(in srgb, #f59e0b 20%, transparent);
+  }
+
+  .tx-section--revert-paused .tx-section-label {
+    color: color-mix(in srgb, #f59e0b 70%, var(--color-text-muted));
+    font-weight: var(--font-weight-medium);
+  }
+
+  .revert-indicator {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--color-text-muted);
+    opacity: 0.4;
+  }
+
+  .revert-indicator--active {
+    background: #f59e0b;
+    opacity: 1;
+    box-shadow: 0 0 0 2px color-mix(in srgb, #f59e0b 25%, transparent);
+    animation: revert-indicator-pulse 1.2s ease-in-out infinite;
+  }
+
+  .revert-indicator--paused {
+    background: #f59e0b;
+    opacity: 0.45;
+  }
+
+  @keyframes revert-indicator-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
