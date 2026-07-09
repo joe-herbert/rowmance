@@ -28,6 +28,8 @@
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
+  import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
+  import { readTextFile } from '@tauri-apps/plugin-fs';
 
   // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -143,6 +145,53 @@
     panelStore.openInFocused({ kind: 'settings' });
   }
 
+  async function openSqliteFile(filePath: string) {
+    const filename = filePath.split('/').pop() ?? filePath;
+    const name = filename.replace(/\.(sqlite3?|db)$/i, '');
+    try {
+      const profile = await connectionsStore.create({
+        name,
+        dbType: 'sqlite',
+        host: filePath,
+        port: 0,
+        database: '',
+        username: '',
+      });
+      await connectionsStore.connect(profile.id);
+    } catch (err) {
+      toast.addToast(`Failed to open ${filename}: ${errorMessage(err)}`, 'error');
+    }
+  }
+
+  async function openSqlFile(filePath: string) {
+    let content: string;
+    try {
+      content = await readTextFile(filePath);
+    } catch (err) {
+      toast.addToast(`Failed to read SQL file: ${errorMessage(err)}`, 'error');
+      return;
+    }
+    const focused = panelStore.focusedPanel.content;
+    const connectionId =
+      'connectionId' in focused
+        ? focused.connectionId
+        : ([...connectionsStore.activeIds][0] ?? null);
+    if (connectionId) {
+      panelStore.openInFocused({ kind: 'query_editor', connectionId, initialSql: content });
+    } else {
+      toast.addToast('Connect to a database to open SQL files.', 'info');
+    }
+  }
+
+  async function handleFileOpen(filePath: string) {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    if (ext === 'sqlite' || ext === 'db' || ext === 'sqlite3') {
+      await openSqliteFile(filePath);
+    } else if (ext === 'sql') {
+      await openSqlFile(filePath);
+    }
+  }
+
   interface UpdateInfo {
     version: string;
     notes: string | null;
@@ -210,6 +259,23 @@
           }
         } catch {
           toast.addToast('Update check failed. Please try again later.', 'error');
+        }
+      }),
+      listen('menu:open-file', async () => {
+        const filePath = await openFileDialog({
+          multiple: false,
+          filters: [
+            { name: 'Database & SQL Files', extensions: ['sqlite', 'db', 'sqlite3', 'sql'] },
+          ],
+        });
+        if (filePath && typeof filePath === 'string') {
+          await handleFileOpen(filePath);
+        }
+      }),
+      listen('file:opened', async (event) => {
+        const paths = event.payload as string[];
+        for (const p of paths) {
+          await handleFileOpen(p);
         }
       }),
       listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),

@@ -6,8 +6,8 @@ export interface CellSelection {
   connectionId: string;
   database: string;
   table: string;
-  columnName: string;
-  cellValue: CellValue;
+  columnName?: string;
+  cellValue?: CellValue;
   row: CellValue[];
   columns: ColumnMeta[];
 }

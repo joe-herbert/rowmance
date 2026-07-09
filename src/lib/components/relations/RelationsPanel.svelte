@@ -231,7 +231,7 @@
     const _vr = vrStore.relations; // track virtual relation changes
 
     const timer = setTimeout(() => {
-      if (sel && sel.cellValue !== null) {
+      if (sel && sel.columnName && sel.cellValue !== null && sel.cellValue !== undefined) {
         loadRelations(sel);
       } else {
         relations = [];
@@ -257,7 +257,7 @@
 </script>
 
 <div class="relations-panel">
-  {#if !sel}
+  {#if !sel || !sel.columnName}
     <div class="empty-state">
       <svg
         class="empty-icon"
@@ -274,7 +274,7 @@
       </svg>
       <p>Select a table cell to explore its relations</p>
     </div>
-  {:else if sel.cellValue === null}
+  {:else if sel.cellValue === null || sel.cellValue === undefined}
     <div class="empty-state">
       <svg
         class="empty-icon"

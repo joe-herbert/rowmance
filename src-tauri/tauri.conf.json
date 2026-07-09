@@ -36,6 +36,22 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "fileAssociations": [
+      {
+        "ext": ["sqlite", "db", "sqlite3"],
+        "name": "SQLite Database",
+        "description": "SQLite Database File",
+        "mimeType": "application/x-sqlite3",
+        "role": "Editor"
+      },
+      {
+        "ext": ["sql"],
+        "name": "SQL Script",
+        "description": "SQL Script File",
+        "mimeType": "application/sql",
+        "role": "Editor"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

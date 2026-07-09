@@ -53,6 +53,7 @@
       _originalRows: Map<string, CellValue[]>,
     ) => void;
     onCellSelect?: (_originalColIndex: number, _row: CellValue[]) => void;
+    onRowSelect?: (_row: CellValue[], _columns: ColumnMeta[]) => void;
     onDeselect?: () => void;
     onAddRow?: () => void;
     addRowTrigger?: number;
@@ -153,6 +154,7 @@
     rowOffset = 0,
     onChangePending,
     onCellSelect,
+    onRowSelect,
     onDeselect,
     onAddRow,
     addRowTrigger = 0,
@@ -1884,6 +1886,17 @@
         selectedRowKeys = newKeys;
       } else {
         selectedRowKeys = new Set();
+      }
+    }
+  });
+
+  $effect(() => {
+    if (!rowSelectionMode || selectedRowKeys.size !== 1) return;
+    const selectedKey = [...selectedRowKeys][0];
+    for (let i = 0; i < pageRows.length; i++) {
+      if (buildRowKey(pageRows[i], columns, pageOffset + i) === selectedKey) {
+        onRowSelect?.(pageRows[i], columns);
+        break;
       }
     }
   });

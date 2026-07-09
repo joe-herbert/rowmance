@@ -51,6 +51,8 @@ pub fn run() {
             )?;
 
             // ── File menu ──────────────────────────────────────────────────
+            let open_file_item =
+                MenuItem::with_id(app, "open-file", "Open File…", true, Some("cmd+o"))?;
             let new_query_item =
                 MenuItem::with_id(app, "new-query", "New Query Editor", true, None::<&str>)?;
             let new_window_file_item =
@@ -64,6 +66,8 @@ pub fn run() {
                 "File",
                 true,
                 &[
+                    &open_file_item,
+                    &PredefinedMenuItem::separator(app)?,
                     &new_query_item,
                     &new_window_file_item,
                     &PredefinedMenuItem::separator(app)?,
@@ -228,6 +232,9 @@ pub fn run() {
                     }
                     "new-window" | "new-window-win" => {
                         let _ = app.emit("menu:new-window", ());
+                    }
+                    "open-file" => {
+                        let _ = app.emit("menu:open-file", ());
                     }
                     "import-csv" => {
                         let _ = app.emit("menu:import-csv", ());
@@ -434,6 +441,19 @@ pub fn run() {
             #[cfg(debug_assertions)]
             commands::speed_analysis::speed_analysis_clear,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Rowmance");
+        .build(tauri::generate_context!())
+        .expect("error while building Rowmance")
+        .run(|app, event| {
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+            if let tauri::RunEvent::Opened { urls } = event {
+                let paths: Vec<String> = urls
+                    .iter()
+                    .filter_map(|u| u.to_file_path().ok())
+                    .filter_map(|p| p.to_str().map(String::from))
+                    .collect();
+                if !paths.is_empty() {
+                    let _ = app.emit("file:opened", paths);
+                }
+            }
+        });
 }

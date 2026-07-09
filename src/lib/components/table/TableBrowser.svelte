@@ -1093,6 +1093,16 @@
     });
   }
 
+  function handleRowSelect(row: CellValue[], cols: import('$lib/types').ColumnMeta[]): void {
+    cellSelectionStore.set({
+      connectionId,
+      database,
+      table,
+      row,
+      columns: cols,
+    });
+  }
+
   async function handleForeignKeyClick(colName: string, value: CellValue): Promise<void> {
     const fk = foreignKeys.find((f) => f.columns.includes(colName));
     if (fk) {
@@ -2113,6 +2123,7 @@
           onChangePending={handleChangePending}
           onDeleteRowsPending={handleDeleteRowsPending}
           onCellSelect={handleCellSelect}
+          onRowSelect={handleRowSelect}
           onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}
           onForeignKeyClick={foreignKeys.length > 0 ||

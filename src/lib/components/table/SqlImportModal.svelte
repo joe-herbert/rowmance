@@ -134,6 +134,7 @@
     </header>
 
     <div class="modal-body">
+      <span class="import-note">This will run your SQL statements against the active database.<br>To open a SQL file in the query editor, use the 'Open File...' option.</span>
       {#if phase === 'pick'}
         <div class="pick-step">
           {#if source === 'clipboard'}
@@ -312,6 +313,14 @@
     justify-content: flex-end;
     gap: var(--spacing-2);
     flex-shrink: 0;
+  }
+
+  .import-note {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-3);
+    font-style: italic;
   }
 
   .pick-step {

@@ -38,6 +38,7 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 anyhow = "1"
 thiserror = "2"
+url = "2"
 dashmap = "6"
 chrono = { version = "0.4", features = ["serde"] }
 sqlparser = "0.62.0"
