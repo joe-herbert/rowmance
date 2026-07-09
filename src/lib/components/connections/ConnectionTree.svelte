@@ -589,6 +589,110 @@
     tableCtx = null;
   }
 
+  function tableRef(database: string, table: string, dbType: string): string {
+    if (dbType === 'sqlite') return qi(table, dbType);
+    return `${qi(database, dbType)}.${qi(table, dbType)}`;
+  }
+
+  function ctxGenerateSqlSelectAll() {
+    if (!tableCtx) return;
+    const { connectionId, database, table } = tableCtx;
+    const profile = connectionStore.getById(connectionId);
+    tableCtx = null;
+    if (!profile) return;
+    const ref = tableRef(database, table.name, profile.dbType);
+    panelStore.openCopyInFocused({
+      kind: 'query_editor',
+      connectionId,
+      database,
+      initialSql: `SELECT * FROM ${ref}`,
+    });
+  }
+
+  function ctxGenerateSqlSelectFirst() {
+    if (!tableCtx) return;
+    const { connectionId, database, table } = tableCtx;
+    const profile = connectionStore.getById(connectionId);
+    tableCtx = null;
+    if (!profile) return;
+    const ref = tableRef(database, table.name, profile.dbType);
+    panelStore.openCopyInFocused({
+      kind: 'query_editor',
+      connectionId,
+      database,
+      initialSql: `SELECT * FROM ${ref} LIMIT `,
+    });
+  }
+
+  async function ctxGenerateSqlInsert() {
+    if (!tableCtx) return;
+    const { connectionId, database, table } = tableCtx;
+    const profile = connectionStore.getById(connectionId);
+    tableCtx = null;
+    if (!profile) return;
+    const ref = tableRef(database, table.name, profile.dbType);
+    let sql: string;
+    try {
+      const columns = await schemaApi.listColumns(connectionId, database, table.name);
+      const insertCols = columns.filter((c) => !c.isAutoIncrement);
+      const colList = insertCols.map((c) => qi(c.name, profile.dbType)).join(', ');
+      const valList = insertCols.map(() => '').join(', ');
+      sql = `INSERT INTO ${ref} (${colList})\nVALUES (${valList})`;
+    } catch {
+      sql = `INSERT INTO ${ref} ()\nVALUES ()`;
+    }
+    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
+  }
+
+  async function ctxGenerateSqlUpdate() {
+    if (!tableCtx) return;
+    const { connectionId, database, table } = tableCtx;
+    const profile = connectionStore.getById(connectionId);
+    tableCtx = null;
+    if (!profile) return;
+    const ref = tableRef(database, table.name, profile.dbType);
+    let sql: string;
+    try {
+      const columns = await schemaApi.listColumns(connectionId, database, table.name);
+      const pkCols = columns.filter((c) => c.isPrimaryKey);
+      const dataCols = columns.filter((c) => !c.isPrimaryKey);
+      const setCols = dataCols.length > 0 ? dataCols : columns;
+      const setClauses = setCols
+        .map((c) => `    ${qi(c.name, profile.dbType)} = `)
+        .join(',\n');
+      const whereClauses =
+        pkCols.length > 0
+          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+          : '';
+      sql = `UPDATE ${ref}\nSET\n${setClauses}\nWHERE ${whereClauses}`;
+    } catch {
+      sql = `UPDATE ${ref}\nSET\n    \nWHERE `;
+    }
+    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
+  }
+
+  async function ctxGenerateSqlDelete() {
+    if (!tableCtx) return;
+    const { connectionId, database, table } = tableCtx;
+    const profile = connectionStore.getById(connectionId);
+    tableCtx = null;
+    if (!profile) return;
+    const ref = tableRef(database, table.name, profile.dbType);
+    let sql: string;
+    try {
+      const columns = await schemaApi.listColumns(connectionId, database, table.name);
+      const pkCols = columns.filter((c) => c.isPrimaryKey);
+      const whereClauses =
+        pkCols.length > 0
+          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+          : '';
+      sql = `DELETE FROM ${ref}\nWHERE ${whereClauses}`;
+    } catch {
+      sql = `DELETE FROM ${ref}\nWHERE `;
+    }
+    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
+  }
+
   function ctxOpenErd() {
     if (!dbCtx) return;
     panelStore.openInFocused({
@@ -1273,6 +1377,12 @@
     <CtxItem onclick={ctxOpenTableCopy}>Open Copy</CtxItem>
     <CtxItem onclick={ctxViewDdl}>View DDL</CtxItem>
     <CtxItem onclick={ctxCopyName}>Copy Name</CtxItem>
+    <CtxSep />
+    <CtxItem onclick={ctxGenerateSqlSelectAll}>Select All Rows</CtxItem>
+    <CtxItem onclick={ctxGenerateSqlSelectFirst}>Select First N Rows</CtxItem>
+    <CtxItem onclick={ctxGenerateSqlInsert}>Insert Row</CtxItem>
+    <CtxItem onclick={ctxGenerateSqlUpdate}>Update Rows</CtxItem>
+    <CtxItem onclick={ctxGenerateSqlDelete}>Delete Rows</CtxItem>
     {#if !tableCtxProfile?.readOnly}
       <CtxSep />
       <CtxItem danger onclick={ctxDropTable}>Drop Table</CtxItem>

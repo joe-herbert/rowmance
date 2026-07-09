@@ -13,9 +13,11 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
+  import * as schemaApi from '$lib/tauri/schema';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
+  import CtxSep from '$lib/components/ui/CtxSep.svelte';
 
   interface Props {
     splitId: string;
@@ -166,6 +168,102 @@
   }
 
   let confirmCloseItemId = $state<string | null>(null);
+
+  // ── SQL generation helpers ────────────────────────────────────────────────
+
+  function qi(name: string, dbType: string): string {
+    if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
+    return '"' + name.replace(/"/g, '""') + '"';
+  }
+
+  function tableRef(database: string, table: string, dbType: string): string {
+    if (dbType === 'sqlite') return qi(table, dbType);
+    return `${qi(database, dbType)}.${qi(table, dbType)}`;
+  }
+
+  function generateSqlSelectAll(connectionId: string, database: string, table: string) {
+    const profile = connectionStore.getById(connectionId);
+    if (!profile) return;
+    const ref = tableRef(database, table, profile.dbType);
+    panelStore.openCopyInFocused({
+      kind: 'query_editor',
+      connectionId,
+      database,
+      initialSql: `SELECT * FROM ${ref}`,
+    });
+  }
+
+  function generateSqlSelectFirst(connectionId: string, database: string, table: string) {
+    const profile = connectionStore.getById(connectionId);
+    if (!profile) return;
+    const ref = tableRef(database, table, profile.dbType);
+    panelStore.openCopyInFocused({
+      kind: 'query_editor',
+      connectionId,
+      database,
+      initialSql: `SELECT * FROM ${ref} LIMIT `,
+    });
+  }
+
+  async function generateSqlInsert(connectionId: string, database: string, table: string) {
+    const profile = connectionStore.getById(connectionId);
+    if (!profile) return;
+    const ref = tableRef(database, table, profile.dbType);
+    let sql: string;
+    try {
+      const columns = await schemaApi.listColumns(connectionId, database, table);
+      const insertCols = columns.filter((c) => !c.isAutoIncrement);
+      const colList = insertCols.map((c) => qi(c.name, profile.dbType)).join(', ');
+      const valList = insertCols.map(() => '').join(', ');
+      sql = `INSERT INTO ${ref} (${colList})\nVALUES (${valList})`;
+    } catch {
+      sql = `INSERT INTO ${ref} ()\nVALUES ()`;
+    }
+    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
+  }
+
+  async function generateSqlUpdate(connectionId: string, database: string, table: string) {
+    const profile = connectionStore.getById(connectionId);
+    if (!profile) return;
+    const ref = tableRef(database, table, profile.dbType);
+    let sql: string;
+    try {
+      const columns = await schemaApi.listColumns(connectionId, database, table);
+      const pkCols = columns.filter((c) => c.isPrimaryKey);
+      const dataCols = columns.filter((c) => !c.isPrimaryKey);
+      const setCols = dataCols.length > 0 ? dataCols : columns;
+      const setClauses = setCols
+        .map((c) => `    ${qi(c.name, profile.dbType)} = `)
+        .join(',\n');
+      const whereClauses =
+        pkCols.length > 0
+          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+          : '';
+      sql = `UPDATE ${ref}\nSET\n${setClauses}\nWHERE ${whereClauses}`;
+    } catch {
+      sql = `UPDATE ${ref}\nSET\n    \nWHERE `;
+    }
+    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
+  }
+
+  async function generateSqlDelete(connectionId: string, database: string, table: string) {
+    const profile = connectionStore.getById(connectionId);
+    if (!profile) return;
+    const ref = tableRef(database, table, profile.dbType);
+    let sql: string;
+    try {
+      const columns = await schemaApi.listColumns(connectionId, database, table);
+      const pkCols = columns.filter((c) => c.isPrimaryKey);
+      const whereClauses =
+        pkCols.length > 0
+          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+          : '';
+      sql = `DELETE FROM ${ref}\nWHERE ${whereClauses}`;
+    } catch {
+      sql = `DELETE FROM ${ref}\nWHERE `;
+    }
+    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
+  }
 
   // ── Context menu ──────────────────────────────────────────────────────────
 
@@ -529,6 +627,41 @@
                 : '';
           }}>Rename</CtxItem
         >
+      {/if}
+      {#if contextItem.content.kind === 'table_browser'}
+        {@const tb = contextItem.content}
+        <CtxSep />
+        <CtxItem
+          onclick={() => {
+            contextMenuItemId = null;
+            generateSqlSelectAll(tb.connectionId, tb.database, tb.table);
+          }}>Select All Rows</CtxItem
+        >
+        <CtxItem
+          onclick={() => {
+            contextMenuItemId = null;
+            generateSqlSelectFirst(tb.connectionId, tb.database, tb.table);
+          }}>Select First N Rows</CtxItem
+        >
+        <CtxItem
+          onclick={async () => {
+            contextMenuItemId = null;
+            await generateSqlInsert(tb.connectionId, tb.database, tb.table);
+          }}>Insert Row</CtxItem
+        >
+        <CtxItem
+          onclick={async () => {
+            contextMenuItemId = null;
+            await generateSqlUpdate(tb.connectionId, tb.database, tb.table);
+          }}>Update Rows</CtxItem
+        >
+        <CtxItem
+          onclick={async () => {
+            contextMenuItemId = null;
+            await generateSqlDelete(tb.connectionId, tb.database, tb.table);
+          }}>Delete Rows</CtxItem
+        >
+        <CtxSep />
       {/if}
       {#if panelStore.getSplitItems(splitId).length > 1}
         <CtxItem
