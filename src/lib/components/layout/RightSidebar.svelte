@@ -22,6 +22,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
+  import JsonViewerPanel from '$lib/components/json/JsonViewerPanel.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
@@ -30,7 +31,7 @@
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
 
-  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | null;
+  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | 'json' | null;
 
   interface Props {
     initialPanel?: ActivePanel;
@@ -67,17 +68,21 @@
   $effect(() => {
     const sel = cellSelectionStore.current;
     if (activePanel !== 'column') return;
-    const key = sel ? `${sel.connectionId}:${sel.database}:${sel.table}:${sel.columnName}` : null;
+    const key =
+      sel && sel.columnName
+        ? `${sel.connectionId}:${sel.database}:${sel.table}:${sel.columnName}`
+        : null;
     if (key === columnInspectorKey) return;
     columnInspectorKey = key;
 
-    if (!sel) {
+    if (!sel || !sel.columnName) {
       columnInfoData = null;
       columnIndexes = [];
       columnForeignKeys = [];
       return;
     }
 
+    const columnName = sel.columnName;
     columnInfoLoading = true;
     Promise.all([
       schemaApi.listColumns(sel.connectionId, sel.database, sel.table),
@@ -85,9 +90,9 @@
       schemaApi.listForeignKeys(sel.connectionId, sel.database, sel.table),
     ])
       .then(([cols, idxs, fks]) => {
-        columnInfoData = cols.find((c) => c.name === sel.columnName) ?? null;
-        columnIndexes = idxs.filter((idx) => idx.columns.includes(sel.columnName));
-        columnForeignKeys = fks.filter((fk) => fk.columns.includes(sel.columnName));
+        columnInfoData = cols.find((c) => c.name === columnName) ?? null;
+        columnIndexes = idxs.filter((idx) => idx.columns.includes(columnName));
+        columnForeignKeys = fks.filter((fk) => fk.columns.includes(columnName));
         columnInfoLoading = false;
       })
       .catch((err) => {
@@ -960,6 +965,33 @@
         /></svg
       >
     </button>
+
+    <button
+      class="tab-btn"
+      class:active={activePanel === 'json'}
+      role="tab"
+      aria-selected={activePanel === 'json'}
+      aria-controls="panel-json"
+      title="JSON Viewer"
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('json');
+      }}
+    >
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+      </svg>
+    </button>
   </div>
 
   <!-- Panel content -->
@@ -1318,7 +1350,7 @@
         <div class="panel-toolbar">
           <span class="panel-title">Column Inspector</span>
         </div>
-        {#if !cellSelectionStore.current}
+        {#if !cellSelectionStore.current || !cellSelectionStore.current.columnName}
           <div class="placeholder-panel">
             <p>Select a cell in a table to inspect its column.</p>
           </div>
@@ -1412,6 +1444,13 @@
           <span class="panel-title">Relations</span>
         </div>
         <RelationsPanel />
+      </div>
+    {:else if activePanel === 'json'}
+      <div id="panel-json" role="tabpanel" aria-label="JSON Viewer" class="relations-tabpanel">
+        <div class="panel-toolbar">
+          <span class="panel-title">JSON Viewer</span>
+        </div>
+        <JsonViewerPanel />
       </div>
     {/if}
   </div>
