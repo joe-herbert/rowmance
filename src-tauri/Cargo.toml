@@ -1,6 +1,6 @@
 [package]
 name = "rowmance"
-version = "1.0.4"
+version = "1.0.5"
 description = "A keyboard-driven desktop database client for MySQL, MariaDB and PostgreSQL."
 authors = []
 edition = "2021"
