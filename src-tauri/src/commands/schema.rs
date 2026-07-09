@@ -542,7 +542,7 @@ pub async fn schema_get_ddl(
 ) -> Result<String, AppError> {
     let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
     match pool_ref.value() {
-        RemotePool::MySql(pool, _) => crate::connections::mysql::get_ddl(pool, &object_name)
+        RemotePool::MySql(pool, _) => crate::connections::mysql::get_ddl(pool, &database, &object_name)
             .await
             .map_err(AppError::from),
         RemotePool::Postgres(pool) => {
