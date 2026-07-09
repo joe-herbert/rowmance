@@ -168,11 +168,19 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
+            let help_whats_new_item = MenuItem::with_id(
+                app,
+                "help-whats-new",
+                "What's New…",
+                true,
+                None::<&str>,
+            )?;
             let help_submenu = Submenu::with_items(
                 app,
                 "Help",
                 true,
                 &[
+                    &help_whats_new_item,
                     &help_updates_item,
                     &PredefinedMenuItem::separator(app)?,
                     &PredefinedMenuItem::about(app, None, None)?,
@@ -226,6 +234,9 @@ pub fn run() {
                     }
                     "check-updates" | "help-check-updates" => {
                         let _ = app.emit("menu:check-updates", ());
+                    }
+                    "help-whats-new" => {
+                        let _ = app.emit("menu:whats-new", ());
                     }
                     "new-query" => {
                         let _ = app.emit("menu:new-query", ());

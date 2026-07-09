@@ -32,6 +32,7 @@
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import { listen } from '@tauri-apps/api/event';
+  import { getVersion } from '@tauri-apps/api/app';
   import { invoke } from '@tauri-apps/api/core';
   import { open as openFileDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
@@ -298,6 +299,20 @@
       listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),
       listen('menu:import-sql', () => document.dispatchEvent(new CustomEvent('menu-import-sql'))),
       listen('menu:speed-analysis', () => panelStore.openInFocused({ kind: 'speed_analysis' })),
+      listen('menu:whats-new', async () => {
+        const version = await getVersion();
+        fetch(`https://api.github.com/repos/joe-herbert/rowmance/releases/tags/v${version}`, {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data: { body?: string } | null) => {
+            const notes = data?.body?.trim() || '';
+            panelStore.openInFocused({ kind: 'release_notes', version, notes });
+          })
+          .catch(() => {
+            panelStore.openInFocused({ kind: 'release_notes', version, notes: '' });
+          });
+      }),
       listen('menu:split-right', () =>
         panelStore.splitFocused('right', settings.maxHorizontalSplits, settings.maxVerticalSplits),
       ),
