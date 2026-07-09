@@ -16,6 +16,8 @@ let connectingIds = $state<Set<string>>(new Set());
 let errorIds = $state<Map<string, string>>(new Map());
 let connectedAt = $state<Map<string, Date>>(new Map());
 let transactionIds = $state<Set<string>>(new Set());
+let txQueries = $state<Map<string, string[]>>(new Map());
+let txDatabases = $state<Map<string, string | undefined>>(new Map());
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
@@ -140,12 +142,32 @@ export function useConnections() {
     },
 
     /** Mark a transaction as started or ended for the given connection. */
-    setTransactionActive(id: string, active: boolean): void {
+    setTransactionActive(id: string, active: boolean, database?: string): void {
       if (active) {
         transactionIds = new Set([...transactionIds, id]);
+        txQueries = new Map([...txQueries, [id, []]]);
+        txDatabases = new Map([...txDatabases, [id, database]]);
       } else {
         transactionIds = new Set([...transactionIds].filter((i) => i !== id));
+        txQueries = new Map([...txQueries].filter(([k]) => k !== id));
+        txDatabases = new Map([...txDatabases].filter(([k]) => k !== id));
       }
+    },
+
+    /** Return the database the active transaction was started on, or undefined. */
+    getTxDatabase(id: string): string | undefined {
+      return txDatabases.get(id);
+    },
+
+    /** Append a SQL string to the transaction query log for the given connection. */
+    addTxQuery(id: string, sql: string): void {
+      const existing = txQueries.get(id) ?? [];
+      txQueries = new Map([...txQueries, [id, [...existing, sql]]]);
+    },
+
+    /** Return the list of queries run during the active transaction, or an empty array. */
+    getTxQueries(id: string): string[] {
+      return txQueries.get(id) ?? [];
     },
 
     /** Return the profile with the given ID, or undefined. */

@@ -26,10 +26,11 @@
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
+  import { queryEditorCache } from '$lib/stores/queryEditorState';
   import { listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
-  import { readTextFile } from '@tauri-apps/plugin-fs';
+  import { open as openFileDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
   // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -207,9 +208,19 @@
     if (stored) {
       localStorage.removeItem('rowmance:pending-release-notes');
       try {
-        const { version, notes } = JSON.parse(stored) as { version: string; notes: string };
-        if (version && notes) {
-          panelStore.openInFocused({ kind: 'release_notes', version, notes });
+        const { version } = JSON.parse(stored) as { version: string };
+        if (version) {
+          fetch(`https://api.github.com/repos/joe-herbert/rowmance/releases/tags/v${version}`, {
+            headers: { Accept: 'application/vnd.github+json' },
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data: { body?: string } | null) => {
+              const notes = data?.body?.trim() || '';
+              panelStore.openInFocused({ kind: 'release_notes', version, notes });
+            })
+            .catch(() => {
+              panelStore.openInFocused({ kind: 'release_notes', version, notes: '' });
+            });
         }
       } catch {
         /* ignore malformed entry */
@@ -307,7 +318,7 @@
       if (pendingUpdate) {
         localStorage.setItem(
           'rowmance:pending-release-notes',
-          JSON.stringify({ version: pendingUpdate.version, notes: pendingUpdate.notes ?? '' }),
+          JSON.stringify({ version: pendingUpdate.version }),
         );
       }
       await updaterApi.updaterInstall();
@@ -544,6 +555,7 @@
   // ── Transaction controls (in connection popup) ────────────────────────────
 
   let txBusy = $state(false);
+  let txQueriesExpanded = $state(false);
 
   async function handleBeginTransaction() {
     if (!activeConnection) return;
@@ -551,9 +563,14 @@
     txBusy = true;
     try {
       const c = focusedContent;
-      const database = 'database' in c && typeof c.database === 'string' ? c.database : undefined;
+      let database: string | undefined;
+      if ('database' in c && typeof c.database === 'string') {
+        database = c.database;
+      } else if (c.kind === 'query_editor' && c.editorId) {
+        database = queryEditorCache.get(c.editorId)?.selectedDatabase || undefined;
+      }
       await txApi.beginTransaction(id, database);
-      connectionsStore.setTransactionActive(id, true);
+      connectionsStore.setTransactionActive(id, true, database);
     } catch (err) {
       toast.addToast(errorMessage(err), 'error');
     } finally {
@@ -582,11 +599,52 @@
     try {
       await txApi.rollbackTransaction(id);
       connectionsStore.setTransactionActive(id, false);
+      txQueriesExpanded = false;
       document.dispatchEvent(new CustomEvent('tx-rollback', { detail: { connectionId: id } }));
     } catch (err) {
       toast.addToast(errorMessage(err), 'error');
     } finally {
       txBusy = false;
+    }
+  }
+
+  async function handleCommitTransactionWithReset() {
+    await handleCommitTransaction();
+    txQueriesExpanded = false;
+  }
+
+  function openTxQueryInEditor(sql: string) {
+    if (!activeConnection) return;
+    panelStore.openInFocused({ kind: 'query_editor', connectionId: activeConnection.id, initialSql: sql });
+    connChipOpen = false;
+  }
+
+  function openAllTxQueriesInEditor() {
+    if (!activeConnection) return;
+    const queries = connectionsStore.getTxQueries(activeConnection.id);
+    if (!queries.length) return;
+    panelStore.openInFocused({
+      kind: 'query_editor',
+      connectionId: activeConnection.id,
+      initialSql: queries.join('\n\n'),
+    });
+    connChipOpen = false;
+  }
+
+  async function saveTxQueriesAsFile() {
+    if (!activeConnection) return;
+    const queries = connectionsStore.getTxQueries(activeConnection.id);
+    if (!queries.length) return;
+    const filePath = await saveDialog({
+      defaultPath: 'transaction.sql',
+      filters: [{ name: 'SQL', extensions: ['sql'] }],
+    });
+    if (!filePath) return;
+    try {
+      await writeTextFile(filePath, queries.join('\n\n'));
+      toast.addToast('Saved transaction queries', 'success', 2000);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error');
     }
   }
 
@@ -785,9 +843,7 @@
   {#if pendingUpdate && !updateDismissed}
     <div class="update-banner" role="alert" aria-live="polite">
       <span class="update-message">
-        Update {pendingUpdate.version} available
-        {#if pendingUpdate.notes}
-          — {pendingUpdate.notes.slice(0, 80)}{/if}
+        Rowmance {pendingUpdate.version} is available
       </span>
       <div class="update-actions">
         <button
@@ -955,13 +1011,14 @@
     {#if isConnected}
       {@const txActive = connectionsStore.isTransactionActive(activeConnection.id)}
       <div class="tx-section" class:tx-section--active={txActive}>
-        <div class="tx-section-header">
-          <span class="tx-indicator" class:tx-indicator--active={txActive}></span>
-          <span class="tx-section-label">
-            {txActive ? 'Transaction active' : 'Transaction'}
-          </span>
-        </div>
-        <div class="tx-section-actions">
+        <div class="tx-section-row">
+          <div class="tx-section-header">
+            <span class="tx-indicator" class:tx-indicator--active={txActive}></span>
+            <span class="tx-section-label">
+              {txActive ? 'Transaction active' : 'Transaction'}
+            </span>
+          </div>
+          <div class="tx-section-actions">
           {#if !txActive}
             <button class="tx-btn" onclick={handleBeginTransaction} disabled={txBusy}>
               Begin
@@ -969,7 +1026,7 @@
           {:else}
             <button
               class="tx-btn tx-btn--commit"
-              onclick={handleCommitTransaction}
+              onclick={handleCommitTransactionWithReset}
               disabled={txBusy}
             >
               Commit
@@ -982,7 +1039,53 @@
               Rollback
             </button>
           {/if}
+          </div>
         </div>
+        {#if txActive}
+          {@const txQueryList = connectionsStore.getTxQueries(activeConnection.id)}
+          {#if txQueryList.length > 0}
+            <div class="tx-queries">
+              <button
+                class="tx-queries-toggle"
+                onclick={() => (txQueriesExpanded = !txQueriesExpanded)}
+                aria-expanded={txQueriesExpanded}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="transform: rotate({txQueriesExpanded ? 180 : 0}deg); transition: transform 150ms">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+                {txQueryList.length}
+                {txQueryList.length === 1 ? 'query' : 'queries'} in transaction
+              </button>
+              {#if txQueriesExpanded}
+                <div class="tx-queries-list" transition:slide={{ duration: 150 }}>
+                  {#each txQueryList as sql, i (i)}
+                    <div class="tx-query-item">
+                      <div class="tx-query-scroll">
+                        <span class="tx-query-sql">{sql}</span>
+                      </div>
+                      <button
+                        class="tx-query-open"
+                        onclick={() => openTxQueryInEditor(sql)}
+                        title="Open in editor"
+                        aria-label="Open query in editor"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="16 18 22 12 16 6"></polyline>
+                          <polyline points="8 6 2 12 8 18"></polyline>
+                          <line x1="14" y1="5" x2="10" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                  {/each}
+                  <div class="tx-queries-actions">
+                    <button class="tx-queries-action-btn" onclick={openAllTxQueriesInEditor}>Open all in editor</button>
+                    <button class="tx-queries-action-btn" onclick={saveTxQueriesAsFile}>Save as SQL</button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
+        {/if}
       </div>
     {/if}
 
@@ -1159,13 +1262,19 @@
 
   .tx-section {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    flex-direction: column;
+    gap: 0;
     padding: 8px 10px;
     border-radius: var(--radius-md);
     background: var(--color-bg-secondary);
     border: 1px solid var(--color-border);
+  }
+
+  .tx-section-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .tx-section--active {
@@ -1252,9 +1361,110 @@
     background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   }
 
+  .tx-queries {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+    overflow: hidden;
+  }
+
+  .tx-queries-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 4px 0;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .tx-queries-toggle:hover {
+    color: var(--color-text);
+  }
+
+  .tx-queries-list {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .tx-query-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-secondary);
+  }
+
+  .tx-query-scroll {
+    flex: 1;
+    overflow-x: auto;
+    padding: 4px 6px;
+    min-width: 0;
+  }
+
+  .tx-query-sql {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--color-text-secondary);
+    white-space: pre;
+  }
+
+  .tx-query-open {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 4px 6px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    border-left: 1px solid var(--color-border);
+  }
+
+  .tx-query-open:hover {
+    color: var(--color-text);
+    background: var(--color-bg-hover);
+  }
+
+  .tx-queries-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .tx-queries-action-btn {
+    flex: 1;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 4px 6px;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .tx-queries-action-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+  }
+
   .conn-popup {
     position: fixed;
     min-width: 220px;
+    max-width: 320px;
+    width: max-content;
     background: var(--color-bg-primary);
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);

@@ -269,6 +269,16 @@
   }
 
   let connectionName = $derived(connections.getById(connectionId)?.name ?? connectionId);
+
+  const txDatabaseMismatch = $derived.by(() => {
+    if (!connections.isTransactionActive(connectionId)) return null;
+    const profile = connections.getById(connectionId);
+    if (!profile || (profile.dbType !== 'mysql' && profile.dbType !== 'mariadb')) return null;
+    const txDb = connections.getTxDatabase(connectionId);
+    if (!txDb || !selectedDatabase || txDb === selectedDatabase) return null;
+    return txDb;
+  });
+
   const DB_TYPE_DIALECT: Record<string, string> = {
     mysql: 'mysql',
     mariadb: 'mysql',
@@ -625,6 +635,7 @@
     executedStatements = splitStatements(query);
     try {
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
+      if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       onExecute?.(query);
     } catch (err) {
       results = [
@@ -655,6 +666,7 @@
     executedStatements = splitStatements(query);
     try {
       results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
+      if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       onExecute?.(query);
     } catch (err) {
       results = [
@@ -683,6 +695,7 @@
     executedStatements = [stmt];
     try {
       results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null);
+      if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
       onExecute?.(stmt);
     } catch (err) {
       results = [
@@ -1092,6 +1105,17 @@
     {/if}
   </div>
 
+  {#if txDatabaseMismatch}
+    <div class="tx-db-warning" role="alert">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+      Transaction started on <code>{txDatabaseMismatch}</code> — query will run on <code>{txDatabaseMismatch}</code>, not <code>{selectedDatabase}</code>
+    </div>
+  {/if}
+
   <div class="editor-wrapper">
     <div class="editor-container" bind:this={editorContainer}></div>
   </div>
@@ -1359,6 +1383,25 @@
     height: 1px;
     background: var(--color-border);
     margin: 3px 0;
+  }
+
+  .tx-db-warning {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: 0 var(--spacing-3);
+    height: 28px;
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent);
+    color: var(--color-warning, #f59e0b);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+  }
+
+  .tx-db-warning code {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
   }
 
   /* Transaction toolbar */

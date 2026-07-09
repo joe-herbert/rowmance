@@ -364,6 +364,41 @@
     tableKey++;
   }
 
+  function buildChangesSql(
+    db: string,
+    tbl: string,
+    updates: RowChange[],
+    inserts: Record<string, unknown>[],
+    deletes: RowDelete[],
+  ): string {
+    function sqlVal(v: unknown): string {
+      if (v === null || v === undefined) return 'NULL';
+      if (typeof v === 'number' || typeof v === 'bigint') return String(v);
+      if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+      return `'${String(v).replace(/'/g, "''")}'`;
+    }
+    function quoteName(name: string): string {
+      return `"${name.replace(/"/g, '""')}"`;
+    }
+    const target = `${quoteName(db)}.${quoteName(tbl)}`;
+    const lines: string[] = [];
+    for (const { primaryKeys, changes } of updates) {
+      const set = Object.entries(changes).map(([c, v]) => `${quoteName(c)} = ${sqlVal(v)}`).join(', ');
+      const where = Object.entries(primaryKeys).map(([c, v]) => v === null ? `${quoteName(c)} IS NULL` : `${quoteName(c)} = ${sqlVal(v)}`).join(' AND ');
+      lines.push(`UPDATE ${target} SET ${set} WHERE ${where};`);
+    }
+    for (const vals of inserts) {
+      const cols = Object.keys(vals).map(quoteName).join(', ');
+      const values = Object.values(vals).map(sqlVal).join(', ');
+      lines.push(`INSERT INTO ${target} (${cols}) VALUES (${values});`);
+    }
+    for (const { primaryKeys } of deletes) {
+      const where = Object.entries(primaryKeys).map(([c, v]) => v === null ? `${quoteName(c)} IS NULL` : `${quoteName(c)} = ${sqlVal(v)}`).join(' AND ');
+      lines.push(`DELETE FROM ${target} WHERE ${where};`);
+    }
+    return lines.join('\n');
+  }
+
   async function saveChanges(): Promise<void> {
     if (!result) return;
     if (pendingDeletedRows.size > 0 && settings.settings.confirmBeforeDelete) {
@@ -448,6 +483,10 @@
         insertValues,
         deleteChanges,
       );
+      if (connections.isTransactionActive(connectionId)) {
+        const sql = buildChangesSql(database, table, rowChanges, insertValues, deleteChanges);
+        if (sql) connections.addTxQuery(connectionId, sql);
+      }
       tablePendingState.delete(_pendingKey);
       pendingChanges = new Map();
       pendingDeletedRows = new Map();
