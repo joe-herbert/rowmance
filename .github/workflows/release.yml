@@ -28,6 +28,15 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
+      - name: Debug signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          echo "Key length: ${#TAURI_SIGNING_PRIVATE_KEY}"
+          echo "Key first 30 chars: ${TAURI_SIGNING_PRIVATE_KEY:0:30}"
+          echo "Key last 10 chars: ${TAURI_SIGNING_PRIVATE_KEY: -10}"
+          printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | wc -l
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
