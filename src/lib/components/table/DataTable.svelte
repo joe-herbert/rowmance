@@ -1402,12 +1402,6 @@
       cutSelection();
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
-      e.preventDefault();
-      pasteFromClipboard();
-      return;
-    }
-
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
       e.preventDefault();
     }
@@ -1980,6 +1974,29 @@
   let contextMenuSnapshotIsMultiCell = $state(false);
   let contextMenuSnapshotIsMultiCol = $state(false);
   let contextMenuSnapshotIsRowSelection = $state(false);
+  let contextMenuSnapshotAllCellsDatetime = $state(false);
+
+  function checkCurrentSelectionAllDatetime(colName: string | null): boolean {
+    if (additionalSelectedCells.size > 0) {
+      return getAltSelectedCells().every(({ col: c }) => {
+        const { originalIndex } = visibleColumns[c];
+        return isDatetimeishType(columns[originalIndex]?.dataType ?? '');
+      });
+    }
+    const range = getSelectionRange();
+    if (range) {
+      for (let c = range.minCol; c <= range.maxCol; c++) {
+        const { originalIndex } = visibleColumns[c];
+        if (!isDatetimeishType(columns[originalIndex]?.dataType ?? '')) return false;
+      }
+      return true;
+    }
+    if (colName) {
+      const col = columns.find((c) => c.name === colName);
+      return col ? isDatetimeishType(col.dataType) : false;
+    }
+    return false;
+  }
 
   function handleRowContextMenu(
     e: MouseEvent,
@@ -2001,6 +2018,7 @@
     contextMenuSnapshotIsRowSelection = rowSelectionMode;
     const range = getSelectionRange();
     contextMenuSnapshotIsMultiCol = range ? range.minCol !== range.maxCol : false;
+    contextMenuSnapshotAllCellsDatetime = checkCurrentSelectionAllDatetime(colName);
     activeMenuDismiss = () => {
       contextMenu = null;
     };
@@ -2074,35 +2092,99 @@
   }
 
   async function setNowFromContextMenu(): Promise<void> {
-    if (!contextMenu?.colName || !editable || readOnly) return;
-    const { rowKey, row, colName } = contextMenu;
-    const col = columns.find((c) => c.name === colName);
-    if (!col) return;
-    const type = getDatetimeInputType(col.dataType);
+    if (!editable || readOnly) return;
 
-    let nowValue: string;
+    let rawDbString: string | null = null;
+    let rawDate: Date | null = null;
     if (settings.nowTimeSource === 'database' && connectionId) {
       try {
         const result = await executeQuery(connectionId, 'SELECT NOW()', 1, 1, database ?? null);
         if (!result.error && result.rows[0]?.[0] != null) {
-          nowValue = parseDbNow(String(result.rows[0][0]), type);
-        } else {
-          nowValue = formatNow(new Date(), type);
+          rawDbString = String(result.rows[0][0]);
         }
-      } catch {
-        nowValue = formatNow(new Date(), type);
-      }
-    } else {
-      nowValue = formatNow(new Date(), type);
+      } catch {}
+    }
+    if (!rawDbString) rawDate = new Date();
+
+    function getNowForType(dataType: string): string {
+      const type = getDatetimeInputType(dataType);
+      return rawDbString ? parseDbNow(rawDbString, type) : formatNow(rawDate!, type);
     }
 
+    if (contextMenuSnapshotIsMultiCell) {
+      if (newRowFocusedCell && !focusedCell) {
+        const anchor = newRowAnchorCell ?? newRowFocusedCell;
+        const anchorIdx = newRowPositionIndex(anchor.rowKey);
+        const focusIdx = newRowPositionIndex(newRowFocusedCell.rowKey);
+        const minRow = Math.min(anchorIdx, focusIdx);
+        const maxRow = Math.max(anchorIdx, focusIdx);
+        const minCol = Math.min(anchor.col, newRowFocusedCell.col);
+        const maxCol = Math.max(anchor.col, newRowFocusedCell.col);
+        for (let r = minRow; r <= maxRow; r++) {
+          const rKey = pendingNewRows[r]?.key;
+          if (!rKey) continue;
+          for (let c = minCol; c <= maxCol; c++) {
+            const { originalIndex } = visibleColumns[c];
+            const colDef = columns[originalIndex];
+            if (colDef && isDatetimeishType(colDef.dataType)) {
+              applyPendingChange(rKey, colDef.name, null, getNowForType(colDef.dataType));
+            }
+          }
+        }
+      } else if (additionalSelectedCells.size > 0) {
+        for (const { row: r, col: c } of getAltSelectedCells()) {
+          const rowData = pageRows[r];
+          if (!rowData) continue;
+          const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+          if (!originalRows.has(rowKey)) {
+            const next = new Map(originalRows);
+            next.set(rowKey, [...rowData]);
+            originalRows = next;
+          }
+          const { originalIndex } = visibleColumns[c];
+          const colDef = columns[originalIndex];
+          if (colDef && isDatetimeishType(colDef.dataType)) {
+            applyPendingChange(rowKey, colDef.name, rowData[originalIndex], getNowForType(colDef.dataType));
+          }
+        }
+      } else {
+        const range = getSelectionRange();
+        if (!range) { dismissContextMenu(); return; }
+        const { minRow, maxRow, minCol, maxCol } = range;
+        for (let r = minRow; r <= maxRow; r++) {
+          const rowData = pageRows[r];
+          if (!rowData) continue;
+          const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+          if (!originalRows.has(rowKey)) {
+            const next = new Map(originalRows);
+            next.set(rowKey, [...rowData]);
+            originalRows = next;
+          }
+          for (let c = minCol; c <= maxCol; c++) {
+            const { originalIndex } = visibleColumns[c];
+            const colDef = columns[originalIndex];
+            if (colDef && isDatetimeishType(colDef.dataType)) {
+              applyPendingChange(rowKey, colDef.name, rowData[originalIndex], getNowForType(colDef.dataType));
+            }
+          }
+        }
+      }
+      onChangePending?.(pendingChanges, originalRows);
+      dismissContextMenu();
+      return;
+    }
+
+    if (!contextMenu?.colName) return;
+    const { rowKey, row, colName } = contextMenu;
+    const col = columns.find((c) => c.name === colName);
+    if (!col) return;
     const originalColIndex = columns.findIndex((c) => c.name === colName);
     if (!originalRows.has(rowKey)) {
       const next = new Map(originalRows);
       next.set(rowKey, [...row]);
       originalRows = next;
     }
-    applyPendingChange(rowKey, colName, row[originalColIndex], nowValue);
+    applyPendingChange(rowKey, colName, row[originalColIndex], getNowForType(col.dataType));
     onChangePending?.(pendingChanges, originalRows);
     dismissContextMenu();
   }
@@ -2407,6 +2489,36 @@
     navigator.clipboard.writeText(text).catch(() => {});
   }
 
+  function copySelectionForIn(): void {
+    const values: string[] = [];
+    if (additionalSelectedCells.size > 0) {
+      for (const { row: r, col: c } of getAltSelectedCells()) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        const { originalIndex } = visibleColumns[c];
+        const col = columns[originalIndex];
+        values.push(sqlEscape(getPendingValue(rowKey, col.name, rowData[originalIndex])));
+      }
+    } else {
+      const range = getSelectionRange();
+      if (!range) return;
+      const { minRow, maxRow, minCol, maxCol } = range;
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        for (let c = minCol; c <= maxCol; c++) {
+          const { originalIndex } = visibleColumns[c];
+          const col = columns[originalIndex];
+          values.push(sqlEscape(getPendingValue(rowKey, col.name, rowData[originalIndex])));
+        }
+      }
+    }
+    navigator.clipboard.writeText(values.join(', ')).catch(() => {});
+    dismissContextMenu();
+  }
+
   function applyPendingChange(
     rowKey: string,
     colName: string,
@@ -2497,15 +2609,19 @@
     onChangePending?.(pendingChanges, originalRows);
   }
 
-  async function pasteFromClipboard(): Promise<void> {
+  async function readClipboardText(preloaded?: string): Promise<string | null> {
+    if (preloaded !== undefined) return preloaded;
+    try {
+      return await navigator.clipboard.readText();
+    } catch {
+      return null;
+    }
+  }
+
+  async function pasteFromClipboard(preloadedText?: string): Promise<void> {
     if (!editable || readOnly) return;
     if (rowSelectionMode) {
-      let text: string;
-      try {
-        text = await navigator.clipboard.readText();
-      } catch {
-        return;
-      }
+      const text = await readClipboardText(preloadedText);
       if (!text) return;
       const clipLines = text.split('\n').filter((l) => l !== '');
       if (clipLines.length === 0) return;
@@ -2539,12 +2655,7 @@
       return;
     }
     if (!focusedCell && newRowFocusedCell) {
-      let newRowPasteText: string;
-      try {
-        newRowPasteText = await navigator.clipboard.readText();
-      } catch {
-        return;
-      }
+      const newRowPasteText = await readClipboardText(preloadedText);
       if (!newRowPasteText) return;
       const anchor = newRowAnchorCell ?? newRowFocusedCell;
       const anchorIdx = newRowPositionIndex(anchor.rowKey);
@@ -2574,12 +2685,7 @@
       return;
     }
     if (!focusedCell) return;
-    let text: string;
-    try {
-      text = await navigator.clipboard.readText();
-    } catch {
-      return;
-    }
+    const text = await readClipboardText(preloadedText);
     if (!text) return;
     // Flatten clipboard into a linear list, looped across selected cells
     const clipValues = text.split('\n').flatMap((line) => line.split('\t'));
@@ -2947,8 +3053,19 @@
     handleContextMenuKeydown(e);
     handleTableKeydown(e);
   }}
+  onpaste={(e) => {
+    const text = e.clipboardData?.getData('text/plain');
+    if (text !== undefined) {
+      e.preventDefault();
+      pasteFromClipboard(text);
+    }
+  }}
   onfocusout={(e) => {
-    if (!tableContainerEl?.contains(e.relatedTarget as Node | null) && editTarget === null) {
+    if (
+      !tableContainerEl?.contains(e.relatedTarget as Node | null) &&
+      editTarget === null &&
+      !contextMenu
+    ) {
       anchorCell = null;
       focusedCell = null;
       isDraggingSelection = false;
@@ -3110,6 +3227,7 @@
                     newRowSelectionIsMultiCell() &&
                     (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !==
                       (newRowFocusedCell?.col ?? 0);
+                  contextMenuSnapshotAllCellsDatetime = false;
                   activeMenuDismiss = () => {
                     contextMenu = null;
                   };
@@ -3169,6 +3287,13 @@
                       newRowFocusedCell?.col ?? colIndex,
                     );
                     contextMenuSnapshotIsMultiCol = _minCol !== _maxCol;
+                    contextMenuSnapshotAllCellsDatetime = (() => {
+                      for (let _c = _minCol; _c <= _maxCol; _c++) {
+                        const { originalIndex: _oi } = visibleColumns[_c];
+                        if (!isDatetimeishType(columns[_oi]?.dataType ?? '')) return false;
+                      }
+                      return true;
+                    })();
                     activeMenuDismiss = () => {
                       contextMenu = null;
                     };
@@ -3672,6 +3797,7 @@
                     newRowSelectionIsMultiCell() &&
                     (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !==
                       (newRowFocusedCell?.col ?? 0);
+                  contextMenuSnapshotAllCellsDatetime = false;
                   activeMenuDismiss = () => {
                     contextMenu = null;
                   };
@@ -3731,6 +3857,13 @@
                       newRowFocusedCell?.col ?? colIndex,
                     );
                     contextMenuSnapshotIsMultiCol = _minCol !== _maxCol;
+                    contextMenuSnapshotAllCellsDatetime = (() => {
+                      for (let _c = _minCol; _c <= _maxCol; _c++) {
+                        const { originalIndex: _oi } = visibleColumns[_c];
+                        if (!isDatetimeishType(columns[_oi]?.dataType ?? '')) return false;
+                      }
+                      return true;
+                    })();
                     activeMenuDismiss = () => {
                       contextMenu = null;
                     };
@@ -3850,7 +3983,7 @@
           <CtxSep />
           {#if editable && !readOnly}
             <CtxItem onclick={() => setSelectionNull()}>Set to NULL</CtxItem>
-            {#if !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
+            {#if (!contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime) || (contextMenuSnapshotIsMultiCell && contextMenuSnapshotAllCellsDatetime)}
               <CtxItem onclick={setNowFromContextMenu}>Set to NOW</CtxItem>
             {/if}
             <CtxSep />
@@ -3885,9 +4018,12 @@
             {/if}
           {/if}
           <CtxSep />
-          <CtxItem onclick={() => copyAsJson()}>Copy cell as JSON</CtxItem>
-          <CtxItem onclick={() => copyAsSql()}>Copy cell as SQL</CtxItem>
-          <CtxItem onclick={() => copyAsCsv()}>Copy cell as CSV</CtxItem>
+          <CtxItem onclick={() => copyAsJson()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as JSON</CtxItem>
+          <CtxItem onclick={() => copyAsSql()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as SQL</CtxItem>
+          <CtxItem onclick={() => copyAsCsv()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as CSV</CtxItem>
+          {#if contextMenuSnapshotIsMultiCell}
+            <CtxItem onclick={() => copySelectionForIn()}>Copy selection for IN</CtxItem>
+          {/if}
           <CtxSep />
           <CtxItem onclick={() => copyColumnNames()}>
             {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
@@ -3953,18 +4089,20 @@
           </CtxItem>
         {/if}
       {:else}
-        {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
-          <CtxItem onclick={() => openInlineEditFromContextMenu()}>Edit</CtxItem>
-          <CtxItem onclick={() => openModalFromContextMenu()}>Edit in modal</CtxItem>
+        {#if (contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell) || (contextMenu.colName && !contextMenuSnapshotIsMultiCell)}
+          {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
+            <CtxItem onclick={() => openInlineEditFromContextMenu()}>Edit</CtxItem>
+            <CtxItem onclick={() => openModalFromContextMenu()}>Edit in modal</CtxItem>
+          {/if}
+          {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell}
+            <CtxItem onclick={() => openViewModalFromContextMenu()}>View in modal</CtxItem>
+          {/if}
+          <CtxSep />
         {/if}
-        {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell}
-          <CtxItem onclick={() => openViewModalFromContextMenu()}>View in modal</CtxItem>
-        {/if}
-        <CtxSep />
         {#if editable && !readOnly}
           <CtxItem onclick={() => setSelectionNull()}>Set to NULL</CtxItem>
         {/if}
-        {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime}
+        {#if editable && !readOnly && ((!contextMenuSnapshotIsMultiCell && contextMenu.colName && contextMenuColIsDatetime) || (contextMenuSnapshotIsMultiCell && contextMenuSnapshotAllCellsDatetime))}
           <CtxItem onclick={setNowFromContextMenu}>Set to NOW</CtxItem>
         {/if}
         {#if editable && !readOnly}
@@ -4004,9 +4142,12 @@
           {/if}
         {/if}
         <CtxSep />
-        <CtxItem onclick={() => copyAsJson()}>Copy cell as JSON</CtxItem>
-        <CtxItem onclick={() => copyAsSql()}>Copy cell as SQL</CtxItem>
-        <CtxItem onclick={() => copyAsCsv()}>Copy cell as CSV</CtxItem>
+        <CtxItem onclick={() => copyAsJson()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as JSON</CtxItem>
+        <CtxItem onclick={() => copyAsSql()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as SQL</CtxItem>
+        <CtxItem onclick={() => copyAsCsv()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as CSV</CtxItem>
+        {#if contextMenuSnapshotIsMultiCell}
+          <CtxItem onclick={() => copySelectionForIn()}>Copy selection for IN</CtxItem>
+        {/if}
         <CtxSep />
         <CtxItem onclick={() => copyColumnNames()}>
           {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
