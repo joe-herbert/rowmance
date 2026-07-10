@@ -101,6 +101,7 @@
     onHideColumn?: (_colName: string) => void;
     searchTerm?: string;
     highlightEnabled?: boolean;
+    onSelectedRowsChange?: (_selectedRows: CellValue[][]) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -207,6 +208,7 @@
     onHideColumn,
     searchTerm = '',
     highlightEnabled = true,
+    onSelectedRowsChange,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -2060,6 +2062,17 @@
     } else {
       selectedNewRowKeys = new Set();
     }
+  });
+
+  // Notify parent of selected rows for chart integration
+  $effect(() => {
+    if (!onSelectedRowsChange) return;
+    const selRows: CellValue[][] = [];
+    for (let i = 0; i < pageRows.length; i++) {
+      const key = buildRowKey(pageRows[i], columns, pageOffset + i);
+      if (selectedRowKeys.has(key)) selRows.push(pageRows[i]);
+    }
+    onSelectedRowsChange(selRows);
   });
 
   function toggleRowSelection(rowKey: string): void {

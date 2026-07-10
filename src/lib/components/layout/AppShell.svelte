@@ -57,7 +57,7 @@
   let leftWidth = $state(240);
   let leftVisible = $state(untrack(() => settings.leftSidebarVisible));
   let rightWidth = $state(280);
-  type RightPanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations';
+  type RightPanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | 'json' | 'chart';
 
   let rightVisible = $state(untrack(() => settings.rightSidebarVisible));
   let activeRightPanel = $state<RightPanel>(
@@ -456,6 +456,20 @@
       requestAnimationFrame(() => document.dispatchEvent(new CustomEvent('focus-right-sidebar')));
     }
   }
+
+  $effect(() => {
+    function onOpenPanel(e: Event) {
+      const panel = (e as CustomEvent<string>).detail;
+      if (!rightVisible) {
+        rightVisible = true;
+        settingsStore.set('rightSidebarVisible', true);
+      }
+      activeRightPanel = panel as RightPanel;
+      settingsStore.set('rightSidebarPanel', panel);
+    }
+    document.addEventListener('open-right-panel', onOpenPanel);
+    return () => document.removeEventListener('open-right-panel', onOpenPanel);
+  });
 
   function handleShortcutAction(e: Event) {
     const action = (e as CustomEvent<{ action: string }>).detail.action;

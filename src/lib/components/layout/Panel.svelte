@@ -22,6 +22,7 @@
   import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
   import DashboardPanel from '$lib/components/dashboard/DashboardPanel.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
+  import ChartView from '$lib/components/chart/ChartView.svelte';
 
   interface Props {
     panel: PanelState;
@@ -120,6 +121,9 @@
     {#key panel.content.dashboardId}
       <DashboardPanel dashboardId={panel.content.dashboardId} />
     {/key}
+  {:else if panel.content.kind === 'chart'}
+    <ChartView initialConfig={(panel.content.initialConfig as import('$lib/components/chart/ChartPanel.svelte').SerializedChartConfig) ?? null} {itemId} {splitId} />
+
   {:else}
     <!-- Empty panel placeholder -->
     <div class="empty-panel">

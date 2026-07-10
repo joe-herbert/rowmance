@@ -84,6 +84,7 @@
   import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
   import WarningIcon from '$lib/components/icons/WarningIcon.svelte';
   import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
+  import { useChartData } from '$lib/stores/chartData.svelte';
 
   interface Props {
     connectionId: string;
@@ -114,6 +115,7 @@
   const panelStore = usePanels();
   const recording = useRecording();
   const revertStore = useRevert();
+  const chartStore = useChartData();
 
   const cached = untrack(() => (editorId ? queryEditorCache.get(editorId) : undefined));
 
@@ -230,6 +232,31 @@
       panelStore.setItemDirty(dirtyKey, sqlText.trim() !== '' || descriptionText.trim() !== '');
     }
   });
+
+  // ── Chart integration ────────────────────────────────────────────────────
+
+  const chartSourceId = $derived(`query:${editorId}`);
+
+  // Live-update chart when result rows change (only if this source is active).
+  // untrack prevents reading chartSource inside updateRows() from creating a dependency.
+  $effect(() => {
+    const r = results[activeResultTab];
+    const sid = chartSourceId;
+    if (!r || !r.columns) return;
+    untrack(() => chartStore.updateRows(sid, r.rows as (string | number | boolean | null)[][], []));
+  });
+
+  function openChartForCurrentResult() {
+    const r = results[activeResultTab];
+    if (!r || !r.columns || r.rows.length === 0) return;
+    chartStore.openChart({
+      columns: r.columns as import('$lib/types').ColumnMeta[],
+      allRows: r.rows as (string | number | boolean | null)[][],
+      selectedRows: [],
+      source: `Query ${activeResultTab + 1} results`,
+      sourceId: chartSourceId,
+    });
+  }
 
   let currentSavedQueryId = $state<string | undefined>(untrack(() => initialSavedQueryId));
   let currentSavedQueryName = $state<string | undefined>(untrack(() => initialSavedQueryName));
@@ -2291,6 +2318,14 @@
 
       <button class="toolbar-btn" onclick={runExplain} disabled={isRunning} title="Explain query">
         Explain
+      </button>
+      <button
+        class="toolbar-btn"
+        onclick={openChartForCurrentResult}
+        disabled={!results[activeResultTab]?.rows?.length}
+        title="Chart results"
+      >
+        Chart
       </button>
     {/if}
   </div>

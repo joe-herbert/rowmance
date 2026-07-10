@@ -31,6 +31,8 @@ export function panelLabel(
       return 'Connections';
     case 'dashboard':
       return dashboardsById.get(content.dashboardId)?.name ?? 'Dashboard';
+    case 'chart':
+      return content.initialConfig?.title ? `${content.initialConfig.title} Chart` : 'Chart';
     case 'empty':
       return 'Empty';
   }

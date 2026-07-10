@@ -118,6 +118,7 @@
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { isMac } from '$lib/stores/shortcuts.svelte';
   import { portal } from '$lib/actions/portal';
+  import { useChartData } from '$lib/stores/chartData.svelte';
 
   interface Props {
     connectionId: string;
@@ -148,6 +149,28 @@
   const recording = useRecording();
   const revertStore = useRevert();
   const tabDrag = useTabDrag();
+  const chartStore = useChartData();
+
+  // ── Chart integration ─────────────────────────────────────────────────────
+
+  let dtChartSelectedRows = $state<(string | number | boolean | null)[][]>([]);
+
+  // When this panel is focused, automatically feed its data to the chart store.
+  // untrack around update prevents re-tracking chartSource and causing infinite loops.
+  $effect(() => {
+    const r = result;
+    const selRows = dtChartSelectedRows;
+    if (!r || !isFocused) return;
+    untrack(() =>
+      chartStore.update({
+        columns: r.columns as import('$lib/types').ColumnMeta[],
+        allRows: r.rows as (string | number | boolean | null)[][],
+        selectedRows: selRows,
+        source: `${table} — ${database}`,
+        sourceId: itemId,
+      }),
+    );
+  });
 
   // ── Table-name drag-to-split ──────────────────────────────────────────────
   let tableNameDragActive = $state(false);
@@ -2303,6 +2326,9 @@
           onRenameColumn={handleRenameColumn}
           onQuickFilter={handleQuickFilter}
           onHideColumn={toggleColumn}
+          onSelectedRowsChange={(rows) => {
+            dtChartSelectedRows = rows;
+          }}
         />
       {/key}
     {:else}

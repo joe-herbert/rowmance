@@ -73,6 +73,8 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
       return true;
     case 'dashboard':
       return b.kind === 'dashboard' && a.dashboardId === b.dashboardId;
+    case 'chart':
+      return b.kind === 'chart';
     case 'empty':
       return true;
   }

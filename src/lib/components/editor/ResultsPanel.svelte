@@ -23,11 +23,13 @@
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
   import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+  import { useChartData } from '$lib/stores/chartData.svelte';
 
   const toast = useToast();
   const connections = useConnections();
   const settingsStore = useSettings();
   const cellSelectionStore = useCellSelection();
+  const chartStore = useChartData();
 
   interface Props {
     results: QueryResult[];
@@ -130,6 +132,20 @@
       vars.push(`@${m[1]}`);
     }
     return vars;
+  });
+
+  // ── Chart integration ─────────────────────────────────────────────────────
+
+  let chartSelectedRows = $state<CellValue[][]>([]);
+  const chartSourceId = $derived(`result-panel:${activeTab}`);
+
+  // Live-update chart when result rows change (only if this source is active).
+  // untrack prevents tracking chartSource inside update() and causing an infinite loop.
+  $effect(() => {
+    const r = result;
+    const sid = chartSourceId;
+    if (!r || !r.columns) return;
+    untrack(() => chartStore.updateRows(sid, r.rows as CellValue[][], chartSelectedRows));
   });
 
   // ── Editing state ─────────────────────────────────────────────────────────
@@ -656,6 +672,9 @@
             database={detectedDatabase ?? undefined}
             onCellSelect={detectedTable ? handleCellSelect : undefined}
             onRowSelect={detectedTable ? handleRowSelect : undefined}
+            onSelectedRowsChange={(rows) => {
+              chartSelectedRows = rows;
+            }}
           />
         {/key}
       </div>

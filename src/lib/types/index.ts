@@ -480,6 +480,20 @@ export type PanelKind =
   | { kind: 'release_notes'; version: string; notes: string }
   | { kind: 'connections' }
   | { kind: 'dashboard'; dashboardId: string }
+  | {
+      kind: 'chart';
+      initialConfig?: {
+        title: string;
+        chartType: string;
+        xColumn: string;
+        yColumn: string;
+        y2Column: string;
+        colorColumn: string;
+        sizeColumn: string;
+        useSelectedOnly: boolean;
+        bins: number;
+      };
+    }
   | { kind: 'empty' };
 
 export interface PanelState {

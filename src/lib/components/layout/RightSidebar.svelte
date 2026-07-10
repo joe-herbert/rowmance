@@ -36,6 +36,8 @@
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
   import DashboardsPanel from '$lib/components/dashboard/DashboardsPanel.svelte';
   import JsonViewerPanel from '$lib/components/json/JsonViewerPanel.svelte';
+  import ChartPanel from '$lib/components/chart/ChartPanel.svelte';
+  import type { SerializedChartConfig } from '$lib/components/chart/ChartPanel.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
@@ -52,6 +54,7 @@
     | 'relations'
     | 'json'
     | 'dashboards'
+    | 'chart'
     | null;
 
   interface Props {
@@ -875,6 +878,15 @@
     document.addEventListener('focus-right-sidebar', onFocusRightSidebar);
     return () => document.removeEventListener('focus-right-sidebar', onFocusRightSidebar);
   });
+
+  $effect(() => {
+    function onOpenPanel(e: Event) {
+      const panel = (e as CustomEvent<string>).detail as ActivePanel;
+      if (panel) activePanel = panel;
+    }
+    document.addEventListener('open-right-panel', onOpenPanel);
+    return () => document.removeEventListener('open-right-panel', onOpenPanel);
+  });
 </script>
 
 <div class="right-sidebar">
@@ -975,6 +987,33 @@
       }}
     >
       <GridIcon width={13} height={13} />
+    </button>
+
+    <button
+      class="tab-btn"
+      class:active={activePanel === 'chart'}
+      role="tab"
+      aria-selected={activePanel === 'chart'}
+      aria-controls="panel-chart"
+      title="Chart"
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('chart');
+      }}
+    >
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/>
+      </svg>
     </button>
   </div>
 
@@ -1358,6 +1397,15 @@
     {:else if activePanel === 'dashboards'}
       <div id="panel-dashboards" role="tabpanel" aria-label="Dashboards" class="relations-tabpanel">
         <DashboardsPanel />
+      </div>
+    {:else if activePanel === 'chart'}
+      <div id="panel-chart" role="tabpanel" aria-label="Chart" class="chart-tabpanel">
+        <ChartPanel
+          compact
+          onOpenAsTab={(config: SerializedChartConfig) => {
+            panelStore.openInFocused({ kind: 'chart', initialConfig: config });
+          }}
+        />
       </div>
     {/if}
   </div>
@@ -2162,6 +2210,14 @@
   }
 
   .relations-tabpanel {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .chart-tabpanel {
     flex: 1;
     overflow: hidden;
     display: flex;
