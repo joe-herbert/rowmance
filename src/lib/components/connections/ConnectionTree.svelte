@@ -1844,6 +1844,7 @@
                 size="sm"
                 mono={true}
                 style="width:100%"
+                searchable
               />
               <Checkbox bind:checked={col.nullable} size="sm" aria-label="Nullable" />
               <Checkbox bind:checked={col.primaryKey} size="sm" aria-label="Primary key" />
@@ -1902,6 +1903,7 @@
                     size="sm"
                     aria-label="Local column"
                     style="flex:1;min-width:0"
+                    searchable
                   />
                   <span class="fk-arrow">→</span>
                   <input

@@ -1005,6 +1005,7 @@
               options={activeProfiles.map((p) => ({ value: p.id, label: p.name }))}
               aria-label="Select connection"
               size="xs"
+              searchable
             />
           {:else if activeProfiles.length === 1}
             <span class="connection-label">{activeProfiles[0].name}</span>

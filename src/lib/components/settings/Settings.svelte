@@ -764,6 +764,7 @@
                 confirmingDelete = false;
                 update('theme', v);
               }}
+              searchable
             />
             <button class="action-btn" onclick={startCreatingTheme}>+ New</button>
             <button class="action-btn" onclick={importTheme}>Import</button>
@@ -884,7 +885,7 @@
         <div class="modal-field">
           <label class="modal-label" for="new-theme-base">Base theme</label>
           <span class="modal-hint">Your new theme starts as a copy of this</span>
-          <Select id="new-theme-base" bind:value={newThemeBase} options={themeBaseOptions} />
+          <Select id="new-theme-base" bind:value={newThemeBase} options={themeBaseOptions} searchable />
         </div>
 
         <div class="modal-field">

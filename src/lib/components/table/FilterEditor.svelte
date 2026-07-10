@@ -701,6 +701,7 @@
                       size="xs"
                       mono
                       style="flex:1; min-width:0; width:100%"
+                      searchable
                     />
 
                     <Select
@@ -711,6 +712,7 @@
                       size="xs"
                       mono
                       style="width:100px; flex-shrink:0"
+                      searchable
                     />
 
                     {#if needsValue(rule.operator)}
@@ -754,6 +756,7 @@
                           size="xs"
                           mono
                           style="flex:1; min-width:0"
+                          searchable
                         />
                       {:else}
                         {@const dateCategory = getDateCategory(rule.column)}

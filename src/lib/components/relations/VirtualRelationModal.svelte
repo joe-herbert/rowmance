@@ -202,6 +202,7 @@
             options={connectionOptions}
             onchange={onConnectionChange}
             size="md"
+            searchable
           />
         </div>
 
@@ -214,6 +215,7 @@
             onchange={onDatabaseChange}
             disabled={!toConnectionId || dbLoading}
             size="md"
+            searchable
           />
         </div>
 
@@ -226,6 +228,7 @@
             onchange={onTableChange}
             disabled={!toDatabase || tableLoading}
             size="md"
+            searchable
           />
         </div>
 
@@ -240,6 +243,7 @@
             }}
             disabled={!toTable || colLoading}
             size="md"
+            searchable
           />
         </div>
 

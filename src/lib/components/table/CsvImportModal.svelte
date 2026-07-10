@@ -255,6 +255,7 @@
                         options={DB_TYPES.map((t) => ({ value: t.toLowerCase(), label: t }))}
                         aria-label="Column {i + 1} type"
                         size="xs"
+                        searchable
                       />
                     </td>
                     <td class="sample-cell">

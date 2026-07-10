@@ -138,6 +138,7 @@
         size="xs"
         aria-label="Month"
         onchange={(v) => (viewMonth = +v)}
+        searchable
       />
       <Select
         value={String(viewYear)}
@@ -145,6 +146,7 @@
         size="xs"
         aria-label="Year"
         onchange={(v) => (viewYear = +v)}
+        searchable
       />
     </div>
     <button class="dp-nav" onclick={nextMonth} aria-label="Next month">

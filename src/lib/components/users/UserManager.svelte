@@ -811,6 +811,7 @@
                       grantTable = '';
                       grantPrivs = new Set();
                     }}
+                    searchable
                   />
 
                   <!-- Database / schema selector -->
@@ -826,6 +827,7 @@
                       size="sm"
                       mono={true}
                       disabled={isReadOnly || builderDbLoading}
+                      searchable
                       onchange={(v) => {
                         grantDb = v;
                         grantTable = '';
@@ -850,6 +852,7 @@
                       onchange={(v) => {
                         grantTable = v;
                       }}
+                      searchable
                     />
                   {/if}
                 </div>

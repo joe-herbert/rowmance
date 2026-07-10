@@ -945,6 +945,7 @@
         size="xs"
         aria-label="Select database"
         mono
+        searchable
       />
     {:else if selectedDatabase}
       <span class="connection-badge" title="Database">{selectedDatabase}</span>

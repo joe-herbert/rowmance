@@ -423,6 +423,7 @@
               options={columnOptions}
               onchange={(v) => { typeColumn = v; }}
               size="md"
+              searchable
             />
           </div>
           <div class="field">
@@ -433,6 +434,7 @@
               options={columnOptions}
               onchange={(v) => { valueColumn = v; }}
               size="md"
+              searchable
             />
           </div>
         </div>
@@ -521,6 +523,7 @@
                     options={connectionOptions}
                     onchange={(v) => onMappingConnectionChange(idx, v)}
                     size="md"
+                    searchable
                   />
                 </div>
 
@@ -536,6 +539,7 @@
                     onchange={(v) => onMappingDatabaseChange(idx, v)}
                     disabled={!mapping.toConnectionId || mapping.dbLoading}
                     size="md"
+                    searchable
                   />
                 </div>
 
@@ -551,6 +555,7 @@
                     onchange={(v) => onMappingTableChange(idx, v)}
                     disabled={!mapping.toDatabase || mapping.tableLoading}
                     size="md"
+                    searchable
                   />
                 </div>
 
@@ -566,6 +571,7 @@
                     onchange={(v) => onMappingColumnChange(idx, v)}
                     disabled={!mapping.toTable || mapping.colLoading}
                     size="md"
+                    searchable
                   />
                 </div>
 

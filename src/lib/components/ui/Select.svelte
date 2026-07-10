@@ -17,6 +17,18 @@
     return opts.flatMap((o) => (isGroup(o) ? o.options : [o]));
   }
 
+  function fuzzyMatch(text: string, query: string): boolean {
+    const t = text.toLowerCase();
+    const q = query.toLowerCase();
+    let ti = 0;
+    for (let qi = 0; qi < q.length; qi++) {
+      while (ti < t.length && t[ti] !== q[qi]) ti++;
+      if (ti >= t.length) return false;
+      ti++;
+    }
+    return true;
+  }
+
   interface Props {
     value?: string;
     options: SelectOption[];
@@ -25,6 +37,8 @@
     disabled?: boolean;
     size?: 'xs' | 'sm' | 'md';
     mono?: boolean;
+    searchable?: boolean;
+    fuzzy?: boolean;
     onchange?: (_value: string) => void;
     class?: string;
     style?: string;
@@ -38,6 +52,8 @@
     disabled = false,
     size = 'sm',
     mono = false,
+    searchable = false,
+    fuzzy = true,
     onchange,
     class: className = '',
     style = '',
@@ -48,6 +64,8 @@
   let open = $state(false);
   let triggerEl = $state<HTMLButtonElement | null>(null);
   let dropdownEl = $state<HTMLDivElement | null>(null);
+  let searchInputEl = $state<HTMLInputElement | null>(null);
+  let searchQuery = $state('');
   let focusedIndex = $state(-1);
   let dropTop = $state(0);
   let dropLeft = $state(0);
@@ -56,6 +74,30 @@
 
   const flat = $derived(flatOptions(options));
   const selectedLabel = $derived(flat.find((o) => o.value === value)?.label ?? '');
+
+  const matches = $derived((label: string) => {
+    const q = searchQuery.trim();
+    if (!q) return true;
+    return fuzzy ? fuzzyMatch(label, q) : label.toLowerCase().includes(q.toLowerCase());
+  });
+
+  const filteredFlat = $derived(
+    searchQuery.trim() ? flat.filter((o) => matches(o.label)) : flat,
+  );
+
+  const filteredOptions = $derived(
+    searchQuery.trim()
+      ? (options
+          .map((item) => {
+            if (isGroup(item)) {
+              const filtered = item.options.filter((o) => matches(o.label));
+              return filtered.length ? { ...item, options: filtered } : null;
+            }
+            return matches(item.label) ? item : null;
+          })
+          .filter(Boolean) as SelectOption[])
+      : options,
+  );
 
   function positionDropdown() {
     if (!triggerEl || !dropdownEl) return;
@@ -86,6 +128,7 @@
   function close() {
     open = false;
     focusedIndex = -1;
+    searchQuery = '';
     triggerEl?.focus();
   }
 
@@ -112,17 +155,45 @@
       close();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      focusedIndex = (focusedIndex + 1) % flat.length;
+      focusedIndex = (focusedIndex + 1) % filteredFlat.length;
       scrollFocusedIntoView();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      focusedIndex = (focusedIndex - 1 + flat.length) % flat.length;
+      focusedIndex = (focusedIndex - 1 + filteredFlat.length) % filteredFlat.length;
       scrollFocusedIntoView();
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      if (focusedIndex >= 0 && focusedIndex < flat.length) {
-        selectOption(flat[focusedIndex].value);
+      if (focusedIndex >= 0 && focusedIndex < filteredFlat.length) {
+        selectOption(filteredFlat[focusedIndex].value);
       }
+    }
+  }
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      focusedIndex = filteredFlat.length ? (focusedIndex + 1) % filteredFlat.length : -1;
+      scrollFocusedIntoView();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusedIndex = filteredFlat.length
+        ? (focusedIndex - 1 + filteredFlat.length) % filteredFlat.length
+        : -1;
+      scrollFocusedIntoView();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (focusedIndex >= 0 && focusedIndex < filteredFlat.length) {
+        selectOption(filteredFlat[focusedIndex].value);
+      } else if (filteredFlat.length === 1) {
+        selectOption(filteredFlat[0].value);
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      close();
     }
   }
 
@@ -135,7 +206,10 @@
   $effect(() => {
     if (!open) return;
 
-    requestAnimationFrame(positionDropdown);
+    requestAnimationFrame(() => {
+      positionDropdown();
+      if (searchable) searchInputEl?.focus();
+    });
 
     function onMousedown(e: MouseEvent) {
       const t = e.target as Node;
@@ -213,11 +287,28 @@
     onkeydown={handleDropdownKeydown}
     use:portal
   >
-    {#each options as item}
+    {#if searchable}
+      <div class="search-wrap">
+        <input
+          bind:this={searchInputEl}
+          bind:value={searchQuery}
+          type="text"
+          class="search-input"
+          placeholder="Search…"
+          autocomplete="off"
+          spellcheck="false"
+          oninput={() => {
+            focusedIndex = 0;
+          }}
+          onkeydown={handleSearchKeydown}
+        />
+      </div>
+    {/if}
+    {#each filteredOptions as item}
       {#if isGroup(item)}
         <div class="option-group-label">{item.group}</div>
         {#each item.options as opt}
-          {@const idx = flat.indexOf(opt)}
+          {@const idx = filteredFlat.indexOf(opt)}
           <button
             type="button"
             role="option"
@@ -240,7 +331,7 @@
           </button>
         {/each}
       {:else}
-        {@const idx = flat.indexOf(item)}
+        {@const idx = filteredFlat.indexOf(item)}
         <button
           type="button"
           role="option"
@@ -263,6 +354,9 @@
         </button>
       {/if}
     {/each}
+    {#if searchable && searchQuery.trim() && filteredFlat.length === 0}
+      <div class="search-empty">No results</div>
+    {/if}
   </div>
 {/if}
 
@@ -430,6 +524,41 @@
 
   .select-dropdown--mono {
     font-family: var(--font-family-mono);
+  }
+
+  /* ── Search ───────────────────────────────────────────────────────────────── */
+
+  .search-wrap {
+    position: sticky;
+    top: 0;
+    padding: 3px 3px 4px;
+    background: var(--color-bg-overlay);
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 3px;
+  }
+
+  .search-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-family: var(--font-family-ui);
+    font-size: inherit;
+    outline: none;
+    padding: 1px 4px;
+    box-sizing: border-box;
+  }
+
+  .search-input::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  .search-empty {
+    padding: 6px 10px;
+    color: var(--color-text-muted);
+    font-size: inherit;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   /* ── Option group label ───────────────────────────────────────────────────── */

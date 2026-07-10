@@ -1018,6 +1018,7 @@
               vrColPickModal!.selectedColumn = v;
             }}
             size="md"
+            searchable
           />
         </div>
       </div>
