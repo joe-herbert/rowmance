@@ -130,7 +130,7 @@
   let currentSavedQueryId = $state<string | undefined>(untrack(() => initialSavedQueryId));
   let currentSavedQueryName = $state<string | undefined>(untrack(() => initialSavedQueryName));
   let savedSql = $state<string | null>(
-    untrack(() => (initialSavedQueryId ? (cached?.sql ?? initialSql) : null)),
+    untrack(() => (initialSavedQueryId ? initialSql : null)),
   );
 
   $effect(() => {
@@ -151,6 +151,28 @@
   let saveDialogTop = $state(0);
   let saveDialogLeft = $state(0);
   let saveNameInputEl = $state<HTMLInputElement | undefined>(undefined);
+
+  let editorHeightPct = $state(40);
+  let isResizingEditor = $state(false);
+  let editorPanelEl = $state<HTMLDivElement | undefined>(undefined);
+
+  function onResizerPointerDown(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isResizingEditor = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizerPointerMove(e: PointerEvent): void {
+    if (!isResizingEditor || !editorPanelEl) return;
+    const rect = editorPanelEl.getBoundingClientRect();
+    const pct = ((e.clientY - rect.top) / rect.height) * 100;
+    editorHeightPct = Math.min(80, Math.max(15, pct));
+  }
+
+  function onResizerPointerUp(): void {
+    isResizingEditor = false;
+  }
 
   let toolbarEl = $state<HTMLDivElement | undefined>(undefined);
   let toolbarWidth = $state(9999);
@@ -301,10 +323,15 @@
     name: string;
   }
 
+  interface SchemaColumn {
+    name: string;
+    dataType: string;
+  }
+
   const schemaRef: {
     connectionId: string;
     tables: SchemaTable[];
-    columns: Map<string, string[]>;
+    columns: Map<string, SchemaColumn[]>;
   } = { connectionId: '', tables: [], columns: new Map() };
 
   // ── FK / virtual-relation cache ───────────────────────────────────────────
@@ -385,9 +412,139 @@
     }
   });
 
+  // ── SQL completion context detection ────────────────────────────────────────
+
+  type CompletionCtx =
+    | { kind: 'table' }
+    | { kind: 'column'; tables: string[] }
+    | { kind: 'database' }
+    | { kind: 'statement_start' }
+    | { kind: 'none' };
+
+  const TABLE_CTX_KEYWORDS = new Set([
+    'FROM', 'JOIN', 'UPDATE', 'TABLE', 'INTO',
+    'TRUNCATE', 'RENAME',
+  ]);
+  const COLUMN_CTX_KEYWORDS = new Set([
+    'SELECT', 'WHERE', 'HAVING', 'SET', 'ON', 'AND', 'OR', 'NOT',
+    'BY', 'WHEN', 'THEN', 'ELSE', 'RETURNING', 'DISTINCT',
+    'IF', 'CASE',
+  ]);
+  const SUPPRESS_CTX_KEYWORDS = new Set(['LIMIT', 'OFFSET', 'AS', 'FETCH', 'ROWS', 'ONLY', 'TIES']);
+  const DATABASE_CTX_KEYWORDS = new Set(['USE', 'DATABASE', 'SCHEMA']);
+
+  const SQL_STATEMENT_KEYWORDS = [
+    'SELECT', 'INSERT INTO', 'UPDATE', 'DELETE FROM', 'WITH',
+    'CREATE TABLE', 'CREATE VIEW', 'DROP TABLE', 'DROP VIEW', 'ALTER TABLE',
+    'EXPLAIN', 'BEGIN', 'COMMIT', 'ROLLBACK', 'TRUNCATE', 'SHOW', 'DESCRIBE', 'USE',
+  ];
+
+  function detectCompletionCtx(sqlBeforeCursor: string): CompletionCtx {
+    // Strip quoted identifiers, string literals, and comments so keywords
+    // inside them don't confuse the scanner.
+    const clean = sqlBeforeCursor
+      .replace(/`[^`]*`/g, ' _ID_ ')
+      .replace(/'(?:[^'\\]|\\.)*'/g, ' _STR_ ')
+      .replace(/"(?:[^"\\]|\\.)*"/g, ' _STR_ ')
+      .replace(/--[^\n]*/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+    if (!clean.trim()) return { kind: 'statement_start' };
+
+    // Tokenise into words and a few punctuation chars we care about
+    const tokens = [...clean.matchAll(/[A-Za-z_]\w*|[();,]/g)].map((m) => m[0]);
+
+    if (tokens.length === 0) return { kind: 'statement_start' };
+
+    // Walk backwards at depth 0 (depth increases inside parens)
+    let depth = 0;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const tok = tokens[i].toUpperCase();
+      if (tok === ')') { depth++; continue; }
+      if (tok === '(') { depth = Math.max(0, depth - 1); continue; }
+      if (depth > 0) continue; // inside parenthesised expression — skip
+
+      if (tok === ',') continue; // comma: keep scanning to find which clause we're in
+      if (tok === ';') return { kind: 'statement_start' }; // hit previous statement
+
+      if (TABLE_CTX_KEYWORDS.has(tok)) return { kind: 'table' };
+      if (SUPPRESS_CTX_KEYWORDS.has(tok)) return { kind: 'none' };
+      if (DATABASE_CTX_KEYWORDS.has(tok)) return { kind: 'database' };
+      if (COLUMN_CTX_KEYWORDS.has(tok)) {
+        return { kind: 'column', tables: extractReferencedTables(sqlBeforeCursor) };
+      }
+      // Non-keyword token (identifier, operator placeholder) — keep scanning
+    }
+
+    return { kind: 'statement_start' };
+  }
+
+  function extractReferencedTables(sql: string): string[] {
+    const clean = sql
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/'[^']*'/g, '')
+      .replace(/"[^"]*"/g, '')
+      .replace(/--[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+
+    const tables = new Set<string>();
+    const re = /\b(?:FROM|JOIN|UPDATE)\s+(?:\w+\.)?(\w+)/gi;
+    let m;
+    while ((m = re.exec(clean)) !== null) {
+      // Skip subquery keyword "SELECT" which might follow "FROM ("
+      if (m[1].toUpperCase() !== 'SELECT') tables.add(m[1].toLowerCase());
+    }
+    return [...tables];
+  }
+
+  /** Load and return column completions for the given table names. */
+  async function columnCompletions(
+    tableNames: string[],
+  ): Promise<{ label: string; detail: string; type: string }[]> {
+    const options: { label: string; detail: string; type: string }[] = [];
+    const seen = new Set<string>(); // deduplicate column labels
+
+    for (const tableName of tableNames) {
+      const schemaTable =
+        schemaRef.tables.find(
+          (t) =>
+            t.name.toLowerCase() === tableName.toLowerCase() &&
+            (!selectedDatabase || t.database === selectedDatabase),
+        ) ?? schemaRef.tables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+
+      if (!schemaTable) continue;
+
+      const cacheKey = `${schemaTable.database}.${schemaTable.name}`;
+      let cols = schemaRef.columns.get(cacheKey);
+      if (!cols) {
+        try {
+          const colInfos = await schemaApi.listColumns(
+            schemaRef.connectionId,
+            schemaTable.database,
+            schemaTable.name,
+          );
+          cols = colInfos.map((c) => ({ name: c.name, dataType: c.dataType }));
+          schemaRef.columns.set(cacheKey, cols);
+        } catch {
+          cols = [];
+        }
+      }
+
+      for (const col of cols) {
+        if (!seen.has(col.name)) {
+          seen.add(col.name);
+          const detail = tableNames.length > 1 ? `${schemaTable.name} · ${col.dataType}` : col.dataType;
+          options.push({ label: col.name, detail, type: 'property' });
+        }
+      }
+    }
+
+    return options;
+  }
+
   function makeSchemaCompletionSource(): CompletionSource {
     return async (context: CompletionContext): Promise<CompletionResult | null> => {
-      // ── FK value search ──────────────────────────────────────────────────────
+      // ── FK value search (highest priority) ──────────────────────────────────
       const fkCtx = getFkValueContext(context.state, context.pos);
       if (fkCtx) {
         const fkCompletion = await buildFkCompletion(context, fkCtx.tableName, fkCtx.columnName);
@@ -411,7 +568,7 @@
                 schemaTable.database,
                 schemaTable.name,
               );
-              cols = colInfos.map((c) => c.name);
+              cols = colInfos.map((c) => ({ name: c.name, dataType: c.dataType }));
               schemaRef.columns.set(cacheKey, cols);
             } catch {
               cols = [];
@@ -419,17 +576,66 @@
           }
           return {
             from: dotMatch.from + rawTable.length + 1,
-            options: cols.map((col) => ({ label: col, type: 'property' })),
+            options: cols.map((col) => ({
+              label: col.name,
+              detail: col.dataType,
+              type: 'property',
+            })),
             validFor: /^[\w"`]*$/,
           };
         }
       }
 
-      // ── table-name completion ────────────────────────────────────────────────
+      // ── Context-aware word completion ────────────────────────────────────────
       const word = context.matchBefore(/\w*/);
       if (!word || (word.from === word.to && !context.explicit)) return null;
-      if (schemaRef.tables.length === 0) return null;
 
+      // Analyse the SQL before the current word to determine expected token kind
+      const textBeforeWord = context.state.doc.sliceString(0, word.from);
+      const ctx = detectCompletionCtx(textBeforeWord);
+
+      if (ctx.kind === 'none') return null;
+
+      if (ctx.kind === 'statement_start') {
+        return {
+          from: word.from,
+          options: SQL_STATEMENT_KEYWORDS.map((k) => ({ label: k, type: 'keyword' })),
+          validFor: /^\w*$/,
+        };
+      }
+
+      if (ctx.kind === 'database') {
+        return {
+          from: word.from,
+          options: databases.map((db) => ({ label: db, type: 'constant' })),
+          validFor: /^\w*$/,
+        };
+      }
+
+      if (ctx.kind === 'table') {
+        if (schemaRef.tables.length === 0) return null;
+        return {
+          from: word.from,
+          options: schemaRef.tables.map((t) => ({
+            label: t.name,
+            detail: t.database,
+            type: 'class',
+          })),
+          validFor: /^\w*$/,
+        };
+      }
+
+      // ctx.kind === 'column'
+      if (ctx.tables.length > 0) {
+        const cols = await columnCompletions(ctx.tables);
+        if (cols.length > 0) {
+          return { from: word.from, options: cols, validFor: /^\w*$/ };
+        }
+      }
+
+      // No referenced tables found or columns not loaded yet — fall back to
+      // showing all tables so the user at least sees something useful.
+      if (schemaRef.tables.length === 0) return null;
       return {
         from: word.from,
         options: schemaRef.tables.map((t) => ({
@@ -616,15 +822,66 @@
         overflow: 'auto',
         fontFamily: 'var(--font-family-mono)',
       },
+      // Tooltip shell — matches .select-dropdown
       '.cm-tooltip': {
-        backgroundColor: 'var(--color-bg-overlay)',
-        border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-md)',
-        borderRadius: 'var(--radius-sm)',
+        background: 'var(--color-bg-overlay)',
+        border: '1px solid var(--color-border-strong)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-overlay)',
       },
-      '.cm-tooltip-autocomplete ul li[aria-selected]': {
-        backgroundColor: 'var(--color-bg-active)',
+      '.cm-tooltip.cm-tooltip-autocomplete': {
+        padding: '3px',
+        backdropFilter: 'blur(20px) saturate(160%)',
+      },
+      // List element — reset browser defaults
+      '.cm-tooltip-autocomplete ul': {
+        fontFamily: 'var(--font-family-ui)',
+        fontSize: 'var(--font-size-sm)',
+        padding: '0',
+        margin: '0',
+        listStyle: 'none',
+        maxHeight: '260px',
+        overflowY: 'auto',
+      },
+      // Each completion row — matches .option
+      '.cm-tooltip-autocomplete ul li': {
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 8px',
+        minHeight: '26px',
+        borderRadius: 'var(--radius-sm)',
         color: 'var(--color-text-primary)',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'background var(--transition-fast)',
+        background: 'transparent',
+      },
+      // Focused/selected row — matches .option--focused
+      '.cm-tooltip-autocomplete ul li[aria-selected]': {
+        background: 'var(--color-accent-subtle)',
+        color: 'var(--color-text-primary)',
+      },
+      // Type icon — hidden; we rely on label+detail to convey type
+      '.cm-completionIcon': {
+        display: 'none',
+      },
+      // Main label — monospace since it's a SQL token
+      '.cm-completionLabel': {
+        fontFamily: 'var(--font-family-mono)',
+        fontSize: 'var(--font-size-xs)',
+        color: 'var(--color-text-primary)',
+        flex: '1',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      },
+      // Type / database hint — muted, ui font, right-aligned
+      '.cm-completionDetail': {
+        fontFamily: 'var(--font-family-ui)',
+        fontSize: '10px',
+        color: 'var(--color-text-muted)',
+        fontStyle: 'normal',
+        marginLeft: '8px',
+        flexShrink: '0',
       },
     });
   }
@@ -734,16 +991,16 @@
     if (!editorView) return;
     const dialect = sqlDialect();
     const s = settingsStore.settings;
+    const style = s.formatStyle ?? (s.formatCompact ? 'compact' : 'expanded');
+    const options: Parameters<typeof sqlFormat>[1] = {
+      language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'],
+      keywordCase: s.formatKeywordCase,
+      indentStyle: style === 'comfortable' ? 'standard' : s.formatIndentStyle,
+      linesBetweenQueries: s.formatLinesBetweenQueries,
+    };
     try {
-      let formatted = sqlFormat(sqlText, {
-        language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'],
-        keywordCase: s.formatKeywordCase,
-        indentStyle: s.formatIndentStyle,
-        linesBetweenQueries: s.formatLinesBetweenQueries,
-      });
-      if (s.formatCompact) {
-        // Collapse each statement to a single line, then re-insert the
-        // configured number of blank lines between statements.
+      let formatted = sqlFormat(sqlText, options);
+      if (style === 'compact') {
         const separator = ';\n' + '\n'.repeat(s.formatLinesBetweenQueries);
         formatted = formatted
           .split(/\n/)
@@ -752,12 +1009,39 @@
           .join(' ')
           .replace(/\s*;\s*/g, separator)
           .trim();
+      } else if (style === 'comfortable') {
+        const THRESHOLD = 80;
+        const blankSep = '\n'.repeat(s.formatLinesBetweenQueries + 1);
+        formatted = formatted
+          .split(/\n{2,}/)
+          .map((stmt) => {
+            const trimmed = stmt.trim();
+            const oneLiner = trimmed
+              .split('\n')
+              .map((l) => l.trim())
+              .filter(Boolean)
+              .join(' ');
+            return oneLiner.length <= THRESHOLD ? oneLiner : trimmed;
+          })
+          .join(blankSep);
       }
       editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
       });
     } catch {
-      // Formatting failed silently — leave content unchanged.
+      // sql-formatter can fail on certain comment styles. Strip block/line
+      // comments and retry — this preserves structure even if comments are lost.
+      try {
+        const stripped = sqlText
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/--[^\n]*/g, '');
+        const formatted = sqlFormat(stripped, options);
+        editorView.dispatch({
+          changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
+        });
+      } catch {
+        // If even the stripped version fails, leave content unchanged.
+      }
     }
   }
 
@@ -922,7 +1206,13 @@
   });
 </script>
 
-<div class="query-editor-panel">
+<div
+  class="query-editor-panel"
+  bind:this={editorPanelEl}
+  onpointermove={onResizerPointerMove}
+  onpointerup={onResizerPointerUp}
+  onpointercancel={onResizerPointerUp}
+>
   <div class="toolbar" bind:this={toolbarEl}>
     <button
       class="run-button"
@@ -1133,9 +1423,23 @@
     </div>
   {/if}
 
-  <div class="editor-wrapper">
+  <div class="editor-wrapper" style="flex-basis: {editorHeightPct}%">
     <div class="editor-container" bind:this={editorContainer}></div>
   </div>
+
+  <div
+    class="editor-resizer"
+    class:editor-resizer--active={isResizingEditor}
+    role="separator"
+    aria-label="Drag to resize editor"
+    aria-orientation="horizontal"
+    tabindex="0"
+    onpointerdown={onResizerPointerDown}
+    onkeydown={(e) => {
+      if (e.key === 'ArrowUp') { e.preventDefault(); editorHeightPct = Math.max(15, editorHeightPct - 2); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); editorHeightPct = Math.min(80, editorHeightPct + 2); }
+    }}
+  ></div>
 
   <div class="results-wrapper" bind:this={resultsWrapperEl} tabindex="-1">
     <ResultsPanel
@@ -1173,6 +1477,11 @@
     height: 100%;
     overflow: hidden;
     background: var(--color-editor-bg);
+  }
+
+  .query-editor-panel:has(.editor-resizer--active) {
+    cursor: row-resize;
+    user-select: none;
   }
 
   .toolbar {
@@ -1422,11 +1731,34 @@
     font-size: var(--font-size-xs);
   }
 
-  /* Transaction toolbar */
   .editor-wrapper {
     flex: 0 0 40%;
+    min-height: 60px;
     overflow: hidden;
-    border-bottom: 1px solid var(--color-border);
+  }
+
+  .editor-resizer {
+    flex-shrink: 0;
+    height: 5px;
+    background: var(--color-border);
+    cursor: row-resize;
+    position: relative;
+    transition: background var(--transition-fast);
+    z-index: 1;
+  }
+
+  .editor-resizer:hover,
+  .editor-resizer--active {
+    background: var(--color-accent);
+  }
+
+  .editor-resizer::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    left: 0;
+    right: 0;
   }
 
   .editor-container {

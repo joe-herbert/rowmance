@@ -598,16 +598,24 @@
 
         <div class="setting-row">
           <div class="setting-label">
-            <span class="label-text">Compact Mode</span>
-            <span class="label-hint">Keep each query on a single line when formatting</span>
+            <span class="label-text">Format Style</span>
+            <span class="label-hint">How much SQL is expanded when formatting</span>
           </div>
-          <Checkbox checked={settings.formatCompact} onchange={(c) => update('formatCompact', c)} />
+          <Select
+            value={settings.formatStyle ?? 'expanded'}
+            options={[
+              { value: 'expanded', label: 'Expanded' },
+              { value: 'comfortable', label: 'Comfortable' },
+              { value: 'compact', label: 'Compact' },
+            ]}
+            onchange={(v) => update('formatStyle', v as 'expanded' | 'comfortable' | 'compact')}
+          />
         </div>
 
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Indent Style</span>
-            <span class="label-hint">How clauses are indented in expanded format</span>
+            <span class="label-hint">How clauses are indented (expanded mode only)</span>
           </div>
           <Select
             value={settings.formatIndentStyle}

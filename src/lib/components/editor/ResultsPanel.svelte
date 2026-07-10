@@ -60,6 +60,9 @@
 
   let result = $derived(results[activeTab] ?? null);
 
+  let successCount = $derived(results.filter((r) => r.error === null).length);
+  let errorCount = $derived(results.filter((r) => r.error !== null).length);
+
   let rowLabel = $derived(
     result
       ? `${result.rows.length.toLocaleString()} row${result.rows.length !== 1 ? 's' : ''}`
@@ -449,15 +452,27 @@
                 activeTab = i;
               }}
             >
-              Result {i + 1}
+              {i + 1}
               {#if r.error !== null}
                 <span class="tab-error-dot" aria-hidden="true">●</span>
+              {:else}
+                <span class="tab-ok-dot" aria-hidden="true">●</span>
               {/if}
             </button>
           {/each}
         </div>
+        <div class="tab-summary">
+          {#if successCount > 0}
+            <span class="tab-summary-ok">{successCount} ok</span>
+          {/if}
+          {#if errorCount > 0}
+            <span class="tab-summary-err">{errorCount} err</span>
+          {/if}
+        </div>
         {#if statements[activeTab]}
-          <span class="tab-sql" title={statements[activeTab]}>{statements[activeTab]}</span>
+          <div class="tab-sql-wrap" title={statements[activeTab]}>
+            <span class="tab-sql">{statements[activeTab]}</span>
+          </div>
         {/if}
       </div>
     {/if}
@@ -767,21 +782,48 @@
     overflow-x: auto;
   }
 
-  .tab-sql {
-    flex: 1;
-    min-width: 0;
+  .tab-summary {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
+    gap: var(--spacing-1);
+    padding: 0 var(--spacing-2);
+    border-left: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+  }
+
+  .tab-summary-ok {
+    font-size: var(--font-size-xs);
+    color: var(--color-success, #22c55e);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tab-summary-err {
+    font-size: var(--font-size-xs);
+    color: var(--color-danger);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tab-sql-wrap {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-left: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+  }
+
+  .tab-sql-wrap::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-sql {
     padding: 0 var(--spacing-3);
     font-size: var(--font-size-xs);
     font-family: var(--font-family-mono);
     color: var(--color-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
-    border-left: 1px solid var(--color-border);
-    direction: rtl;
-    text-align: left;
   }
 
   .tab-btn {
@@ -815,6 +857,11 @@
 
   .tab-btn--error .tab-error-dot {
     color: var(--color-danger);
+    font-size: 8px;
+  }
+
+  .tab-ok-dot {
+    color: var(--color-success, #22c55e);
     font-size: 8px;
   }
 

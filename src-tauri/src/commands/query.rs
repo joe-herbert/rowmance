@@ -2463,14 +2463,89 @@ const UNBOUNDED: u32 = 0;
 
 /// Build the paginated SQL string sent to the driver for a row-returning statement.
 /// `sql` must already have its trailing semicolon stripped.
-/// Returns the SQL unchanged when `page_size` is `UNBOUNDED` (0), otherwise appends
-/// `LIMIT {page_size} OFFSET {offset}`.
+/// Returns the SQL unchanged when `page_size` is `UNBOUNDED` (0) or when the query
+/// already contains a top-level LIMIT clause (respecting the user's explicit limit).
+/// Otherwise appends `LIMIT {page_size} OFFSET {offset}`.
 fn build_paginated_sql(sql: &str, page_size: u32, offset: u32) -> String {
-    if page_size == UNBOUNDED {
+    if page_size == UNBOUNDED || sql_has_top_level_limit(sql) {
         sql.to_string()
     } else {
         format!("{sql} LIMIT {page_size} OFFSET {offset}")
     }
+}
+
+/// Returns true if `sql` has a LIMIT keyword at the top level
+/// (i.e., not inside quoted strings, block comments, or nested parentheses).
+fn sql_has_top_level_limit(sql: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let len = bytes.len();
+    let mut i = 0usize;
+    let mut depth = 0i32;
+
+    while i < len {
+        match bytes[i] {
+            // Quoted identifiers / strings: skip to matching close quote
+            q @ (b'\'' | b'"' | b'`') => {
+                i += 1;
+                while i < len {
+                    if bytes[i] == q {
+                        i += 1;
+                        // doubled-quote escape ('' or "" or ``)
+                        if i < len && bytes[i] == q {
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            // Line comment --
+            b'-' if i + 1 < len && bytes[i + 1] == b'-' => {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            // Block comment /* ... */
+            b'/' if i + 1 < len && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < len {
+                    if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                        i += 2;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            _ => {
+                if depth == 0 && i + 5 <= len {
+                    let word = &sql[i..i + 5];
+                    if word.eq_ignore_ascii_case("limit") {
+                        let before_ok = i == 0
+                            || !bytes[i - 1].is_ascii_alphabetic()
+                                && bytes[i - 1] != b'_';
+                        let after_ok = bytes
+                            .get(i + 5)
+                            .map_or(true, |b| !b.is_ascii_alphanumeric() && *b != b'_');
+                        if before_ok && after_ok {
+                            return true;
+                        }
+                    }
+                }
+                i += 1;
+            }
+        }
+    }
+    false
 }
 
 type ExecuteResult = Result<
@@ -3271,5 +3346,60 @@ mod tests {
         assert!(!returns_rows_mysql(sql));
         assert!(!returns_rows_postgres(sql));
         assert!(!returns_rows_sqlite(sql));
+    }
+
+    // ── sql_has_top_level_limit ───────────────────────────────────────────────
+
+    #[test]
+    fn top_level_limit_detected() {
+        assert!(sql_has_top_level_limit("SELECT * FROM t LIMIT 10"));
+        assert!(sql_has_top_level_limit("SELECT * FROM t limit 10"));
+        assert!(sql_has_top_level_limit("SELECT * FROM t LIMIT 10 OFFSET 5"));
+        assert!(sql_has_top_level_limit("select * from t\nLIMIT\n20"));
+    }
+
+    #[test]
+    fn limit_in_subquery_not_detected_as_top_level() {
+        assert!(!sql_has_top_level_limit(
+            "SELECT * FROM (SELECT * FROM t LIMIT 5) sub"
+        ));
+    }
+
+    #[test]
+    fn limit_in_string_not_detected() {
+        assert!(!sql_has_top_level_limit("SELECT 'LIMIT 10' FROM t"));
+        assert!(!sql_has_top_level_limit("SELECT \"LIMIT 10\" FROM t"));
+    }
+
+    #[test]
+    fn limit_in_comment_not_detected() {
+        assert!(!sql_has_top_level_limit(
+            "SELECT * FROM t -- LIMIT 10\nWHERE id = 1"
+        ));
+        assert!(!sql_has_top_level_limit(
+            "SELECT * FROM t /* LIMIT 10 */ WHERE id = 1"
+        ));
+    }
+
+    #[test]
+    fn word_containing_limit_not_detected() {
+        assert!(!sql_has_top_level_limit("SELECT limited FROM t"));
+        assert!(!sql_has_top_level_limit("SELECT * FROM unlimited"));
+    }
+
+    #[test]
+    fn existing_limit_prevents_pagination() {
+        assert_eq!(
+            build_paginated_sql("SELECT * FROM users LIMIT 10", 10_000, 0),
+            "SELECT * FROM users LIMIT 10"
+        );
+    }
+
+    #[test]
+    fn no_limit_still_paginated() {
+        assert_eq!(
+            build_paginated_sql("SELECT * FROM users", 10_000, 0),
+            "SELECT * FROM users LIMIT 10000 OFFSET 0"
+        );
     }
 }

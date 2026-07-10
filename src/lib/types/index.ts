@@ -400,6 +400,8 @@ export interface AppSettings {
   formatIndentStyle: 'standard' | 'tabularLeft' | 'tabularRight';
   formatLinesBetweenQueries: number;
   formatCompact: boolean;
+  /** Controls overall formatting density. Takes priority over formatCompact. */
+  formatStyle: 'expanded' | 'comfortable' | 'compact';
   openItemsLocation: 'sidebar' | 'top';
   maxHorizontalSplits: number;
   maxVerticalSplits: number;
@@ -438,6 +440,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formatIndentStyle: 'standard',
   formatLinesBetweenQueries: 1,
   formatCompact: false,
+  formatStyle: 'expanded',
   openItemsLocation: 'sidebar',
   maxHorizontalSplits: 2,
   maxVerticalSplits: 2,
