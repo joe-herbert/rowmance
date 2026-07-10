@@ -10,6 +10,7 @@
     ForeignKeyInfo,
     ColumnRef,
     VirtualRelation,
+    PolymorphicVirtualRelation,
   } from '$lib/types';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
@@ -18,6 +19,7 @@
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
+  import PolymorphicVirtualRelationModal from '$lib/components/relations/PolymorphicVirtualRelationModal.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
 
@@ -475,6 +477,20 @@
     return connections.getById(connId)?.name ?? connId;
   }
 
+  // ── Polymorphic Virtual Relations ─────────────────────────────────────────
+
+  const tablePolymorphicRelations = $derived(
+    vrStore.polymorphicRelations.filter(
+      (pvr) =>
+        pvr.connectionId === connectionId &&
+        pvr.database === database &&
+        pvr.table === table,
+    ),
+  );
+
+  let pvrEditModal = $state<PolymorphicVirtualRelation | null>(null);
+  let pvrCreateModal = $state(false);
+
   const refActions = [
     { value: 'NO ACTION', label: 'NO ACTION' },
     { value: 'RESTRICT', label: 'RESTRICT' },
@@ -873,6 +889,63 @@
             </div>
           </section>
         {/if}
+
+        <!-- Polymorphic Virtual Relations ───────────────────────────────── -->
+        {#if tablePolymorphicRelations.length > 0 || editMode}
+          <section class="section">
+            <div class="section-header section-header--flex">
+              <span>Polymorphic Virtual Relations ({tablePolymorphicRelations.length})</span>
+              {#if editMode}
+                <button class="add-btn" onclick={() => { pvrCreateModal = true; }}>+ Add Polymorphic Relation</button>
+              {/if}
+            </div>
+            <div class="fk-list">
+              {#each tablePolymorphicRelations as pvr (pvr.id)}
+                <div class="fk-card vr-card">
+                  <div class="vr-actions">
+                    <button class="act-btn" title="Edit relation" onclick={() => { pvrEditModal = pvr; }}>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z" />
+                      </svg>
+                    </button>
+                    <button class="act-btn act-btn--danger" title="Remove relation" onclick={() => vrStore.removePolymorphic(pvr.id)}>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9" />
+                      </svg>
+                    </button>
+                  </div>
+                  {#if pvr.label}
+                    <div class="fk-name">{pvr.label}</div>
+                  {/if}
+                  <div class="pvr-cols-row">
+                    <span class="pvr-col-label">type</span>
+                    <span class="mono pvr-col-name">{pvr.typeColumn}</span>
+                    <span class="pvr-col-sep">·</span>
+                    <span class="pvr-col-label">value</span>
+                    <span class="mono pvr-col-name">{pvr.valueColumn}</span>
+                  </div>
+                  <div class="pvr-mappings">
+                    {#each pvr.mappings as mapping (mapping.id)}
+                      <div class="pvr-mapping-row">
+                        <span class="pvr-type-badge">{mapping.typeValue}</span>
+                        <span class="fk-arrow">→</span>
+                        <span class="mono pvr-target">
+                          {#if mapping.to.connectionId !== connectionId}<span class="vr-conn-hint">{connName(mapping.to.connectionId)}/</span>{/if}{mapping.to.database}.{mapping.to.table}.{mapping.to.column}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                  <div class="fk-actions">
+                    <span class="badge badge--vr">polymorphic</span>
+                  </div>
+                </div>
+              {/each}
+              {#if tablePolymorphicRelations.length === 0 && editMode}
+                <div class="empty-hint">No polymorphic relations defined.</div>
+              {/if}
+            </div>
+          </section>
+        {/if}
       </div>
     {/if}
   </div>
@@ -964,6 +1037,26 @@
     initialTo={vrModal.initialTo}
     initialLabel={vrModal.initialLabel}
     onClose={() => (vrModal = null)}
+  />
+{/if}
+
+<!-- ── Polymorphic Virtual Relation Modals ────────────────────────────────── -->
+{#if pvrCreateModal}
+  <PolymorphicVirtualRelationModal
+    {connectionId}
+    {database}
+    {table}
+    onClose={() => (pvrCreateModal = false)}
+  />
+{/if}
+
+{#if pvrEditModal}
+  <PolymorphicVirtualRelationModal
+    connectionId={pvrEditModal.connectionId}
+    database={pvrEditModal.database}
+    table={pvrEditModal.table}
+    editRelation={pvrEditModal}
+    onClose={() => (pvrEditModal = null)}
   />
 {/if}
 
@@ -1846,6 +1939,76 @@
   .vr-conn-hint {
     color: var(--color-text-muted);
     font-size: 10px;
+  }
+
+  /* ── Polymorphic relation card ─────────────────────────────────────────── */
+
+  .pvr-cols-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--font-size-xs);
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pvr-col-label {
+    font-size: 9px;
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  .pvr-col-name {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .pvr-col-sep {
+    color: var(--color-border-strong);
+    margin: 0 2px;
+  }
+
+  .pvr-mappings {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 6px;
+    padding: var(--spacing-1) var(--spacing-2);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+  }
+
+  .pvr-mapping-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-xs);
+    min-width: 0;
+  }
+
+  .pvr-type-badge {
+    flex-shrink: 0;
+    display: inline-block;
+    padding: 1px 5px;
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family-mono);
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+  }
+
+  .pvr-target {
+    color: var(--color-accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    font-size: var(--font-size-xs);
   }
 
   .sqlite-note {

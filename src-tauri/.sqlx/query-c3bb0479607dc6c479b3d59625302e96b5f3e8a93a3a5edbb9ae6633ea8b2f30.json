@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM polymorphic_virtual_relations WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c3bb0479607dc6c479b3d59625302e96b5f3e8a93a3a5edbb9ae6633ea8b2f30"
+}

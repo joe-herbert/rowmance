@@ -55,6 +55,7 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
+  import PolymorphicVirtualRelationModal from '$lib/components/relations/PolymorphicVirtualRelationModal.svelte';
   import type { QueryResult, ColumnMeta, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import DataTable, {
@@ -155,6 +156,7 @@
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   }
   let connectColumnName = $state<string | null>(null);
+  let connectPolymorphicColumnName = $state<string | null>(null);
   const statusBar = useStatusBar();
   const toast = useToast();
   const settings = useSettings();
@@ -891,7 +893,8 @@
               isPrimaryKey: s?.isPrimaryKey ?? false,
               isForeignKey:
                 (s?.isForeignKey ?? false) ||
-                vrStore.hasForwardFrom(connectionId, database, table, col.name),
+                vrStore.hasForwardFrom(connectionId, database, table, col.name) ||
+                vrStore.hasPolymorphicValueColumn(connectionId, database, table, col.name),
               defaultValue: s?.defaultValue ?? null,
               isAutoIncrement: s?.isAutoIncrement ?? false,
               isUnique: uniqueColNames.has(col.name),
@@ -1225,7 +1228,11 @@
     });
   }
 
-  async function handleForeignKeyClick(colName: string, value: CellValue): Promise<void> {
+  async function handleForeignKeyClick(
+    colName: string,
+    value: CellValue,
+    rowContext: Record<string, CellValue>,
+  ): Promise<void> {
     const fk = foreignKeys.find((f) => f.columns.includes(colName));
     if (fk) {
       const colIdx = fk.columns.indexOf(colName);
@@ -1251,33 +1258,65 @@
 
     // Check virtual relations
     const vr = vrStore.forwardFrom({ connectionId, database, table, column: colName })[0];
-    if (!vr) return;
-    const targetConnId = vr.to.connectionId;
-    const targetDb = vr.to.database;
-    if (!connections.isActive(targetConnId)) {
-      await connections.connect(targetConnId);
+    if (vr) {
+      const targetConnId = vr.to.connectionId;
+      const targetDb = vr.to.database;
+      if (!connections.isActive(targetConnId)) {
+        await connections.connect(targetConnId);
+      }
+      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
+      const quotedCol = targetDbType === 'postgres' ? `"${vr.to.column}"` : `\`${vr.to.column}\``;
+      let filter: string;
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        filter = `${quotedCol} = ${value}`;
+      } else {
+        const escaped = String(value).replace(/'/g, "''");
+        filter = `${quotedCol} = '${escaped}'`;
+      }
+      panelStore.openInFocused({
+        kind: 'table_browser',
+        connectionId: targetConnId,
+        database: targetDb,
+        table: vr.to.table,
+        initialFilter: filter,
+      });
+      return;
     }
-    const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
-    const quotedCol = targetDbType === 'postgres' ? `"${vr.to.column}"` : `\`${vr.to.column}\``;
-    let filter: string;
-    if (typeof value === 'number' || typeof value === 'boolean') {
-      filter = `${quotedCol} = ${value}`;
-    } else {
-      const escaped = String(value).replace(/'/g, "''");
-      filter = `${quotedCol} = '${escaped}'`;
+
+    // Check polymorphic virtual relations
+    const pvr = vrStore.findPolymorphicForValueColumn(connectionId, database, table, colName);
+    if (pvr) {
+      const typeValue = String(rowContext[pvr.typeColumn] ?? '');
+      const mapping = pvr.mappings.find((m) => m.typeValue === typeValue);
+      if (!mapping) return;
+      const targetConnId = mapping.to.connectionId;
+      if (!connections.isActive(targetConnId)) {
+        await connections.connect(targetConnId);
+      }
+      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
+      const quotedCol =
+        targetDbType === 'postgres' ? `"${mapping.to.column}"` : `\`${mapping.to.column}\``;
+      let filter: string;
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        filter = `${quotedCol} = ${value}`;
+      } else {
+        const escaped = String(value).replace(/'/g, "''");
+        filter = `${quotedCol} = '${escaped}'`;
+      }
+      panelStore.openInFocused({
+        kind: 'table_browser',
+        connectionId: targetConnId,
+        database: mapping.to.database,
+        table: mapping.to.table,
+        initialFilter: filter,
+      });
     }
-    panelStore.openInFocused({
-      kind: 'table_browser',
-      connectionId: targetConnId,
-      database: targetDb,
-      table: vr.to.table,
-      initialFilter: filter,
-    });
   }
 
   async function handleForeignKeyQuickView(
     colName: string,
     value: CellValue,
+    rowContext: Record<string, CellValue>,
   ): Promise<QuickViewData | null> {
     const fk = foreignKeys.find((f) => f.columns.includes(colName));
     if (fk) {
@@ -1310,39 +1349,80 @@
       }
     }
 
-    // Fall back to virtual relations
+    // Check virtual relations
     const vr = vrStore.forwardFrom({ connectionId, database, table, column: colName })[0];
-    if (!vr) return null;
-    const targetConnId = vr.to.connectionId;
-    if (!connections.isActive(targetConnId)) {
-      await connections.connect(targetConnId);
+    if (vr) {
+      const targetConnId = vr.to.connectionId;
+      if (!connections.isActive(targetConnId)) {
+        await connections.connect(targetConnId);
+      }
+      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
+      const q = (name: string) => (targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``);
+      const quotedDb = q(vr.to.database);
+      const quotedTable = q(vr.to.table);
+      const quotedCol = q(vr.to.column);
+      let whereVal: string;
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        whereVal = String(value);
+      } else {
+        const escaped = String(value).replace(/'/g, "''");
+        whereVal = `'${escaped}'`;
+      }
+      const sql = `SELECT * FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} = ${whereVal}`;
+      try {
+        const queryResult = await executeQuery(targetConnId, sql, 1, 1);
+        if (queryResult.error) return null;
+        return {
+          tableName: vr.to.table,
+          refColumn: vr.to.column,
+          refValue: value,
+          columns: queryResult.columns,
+          row: queryResult.rows[0] ?? null,
+        };
+      } catch {
+        return null;
+      }
     }
-    const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
-    const q = (name: string) => (targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``);
-    const quotedDb = q(vr.to.database);
-    const quotedTable = q(vr.to.table);
-    const quotedCol = q(vr.to.column);
-    let whereVal: string;
-    if (typeof value === 'number' || typeof value === 'boolean') {
-      whereVal = String(value);
-    } else {
-      const escaped = String(value).replace(/'/g, "''");
-      whereVal = `'${escaped}'`;
+
+    // Check polymorphic virtual relations
+    const pvr = vrStore.findPolymorphicForValueColumn(connectionId, database, table, colName);
+    if (pvr) {
+      const typeValue = String(rowContext[pvr.typeColumn] ?? '');
+      const mapping = pvr.mappings.find((m) => m.typeValue === typeValue);
+      if (!mapping) return null;
+      const targetConnId = mapping.to.connectionId;
+      if (!connections.isActive(targetConnId)) {
+        await connections.connect(targetConnId);
+      }
+      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
+      const q = (name: string) => (targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``);
+      const quotedDb = q(mapping.to.database);
+      const quotedTable = q(mapping.to.table);
+      const quotedCol = q(mapping.to.column);
+      let whereVal: string;
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        whereVal = String(value);
+      } else {
+        const escaped = String(value).replace(/'/g, "''");
+        whereVal = `'${escaped}'`;
+      }
+      const sql = `SELECT * FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} = ${whereVal}`;
+      try {
+        const queryResult = await executeQuery(targetConnId, sql, 1, 1);
+        if (queryResult.error) return null;
+        return {
+          tableName: mapping.to.table,
+          refColumn: mapping.to.column,
+          refValue: value,
+          columns: queryResult.columns,
+          row: queryResult.rows[0] ?? null,
+        };
+      } catch {
+        return null;
+      }
     }
-    const sql = `SELECT * FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} = ${whereVal}`;
-    try {
-      const queryResult = await executeQuery(targetConnId, sql, 1, 1);
-      if (queryResult.error) return null;
-      return {
-        tableName: vr.to.table,
-        refColumn: vr.to.column,
-        refValue: value,
-        columns: queryResult.columns,
-        row: queryResult.rows[0] ?? null,
-      };
-    } catch {
-      return null;
-    }
+
+    return null;
   }
 
   // ── DataTable pagination state ─────────────────────────────────────────────
@@ -2039,6 +2119,28 @@
         </span>
       {/if}
       <button
+        class="local-search-highlight-toggle"
+        class:active={settings.settings.localSearchHighlight}
+        onclick={() => settings.set('localSearchHighlight', !settings.settings.localSearchHighlight)}
+        aria-label="Toggle search highlighting"
+        aria-pressed={settings.settings.localSearchHighlight}
+        title={settings.settings.localSearchHighlight ? 'Highlighting on' : 'Highlighting off'}
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          ><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+          /></svg
+        >
+      </button>
+      <button
         class="local-search-close"
         onclick={closeLocalSearch}
         aria-label="Close search"
@@ -2235,6 +2337,7 @@
           rows={result.rows}
           totalRows={result.totalRows}
           searchTerm={localSearchTerm || undefined}
+          highlightEnabled={settings.settings.localSearchHighlight}
           rowOffset={(page - 1) * PAGE_SIZE}
           pageSize={PAGE_SIZE}
           bind:pageIndex={dtPageIndex}
@@ -2249,15 +2352,24 @@
           onDeselect={() => cellSelectionStore.set(null)}
           onPageInfo={handleDtPageInfo}
           onForeignKeyClick={foreignKeys.length > 0 ||
-          vrStore.hasAnyForTable(connectionId, database, table)
+          vrStore.hasAnyForTable(connectionId, database, table) ||
+          vrStore.polymorphicRelations.some(
+            (r) => r.connectionId === connectionId && r.database === database && r.table === table,
+          )
             ? handleForeignKeyClick
             : undefined}
           onForeignKeyQuickView={foreignKeys.length > 0 ||
-          vrStore.hasAnyForTable(connectionId, database, table)
+          vrStore.hasAnyForTable(connectionId, database, table) ||
+          vrStore.polymorphicRelations.some(
+            (r) => r.connectionId === connectionId && r.database === database && r.table === table,
+          )
             ? handleForeignKeyQuickView
             : undefined}
           onConnectColumn={(colName) => {
             connectColumnName = colName;
+          }}
+          onConnectPolymorphic={(colName) => {
+            connectPolymorphicColumnName = colName;
           }}
           {initialColWidths}
           {initialColumnOrder}
@@ -2368,6 +2480,16 @@
   <VirtualRelationModal
     from={{ connectionId, database, table, column: connectColumnName }}
     onClose={() => (connectColumnName = null)}
+  />
+{/if}
+
+{#if connectPolymorphicColumnName !== null}
+  <PolymorphicVirtualRelationModal
+    {connectionId}
+    {database}
+    {table}
+    initialColumn={connectPolymorphicColumnName}
+    onClose={() => (connectPolymorphicColumnName = null)}
   />
 {/if}
 
@@ -3292,6 +3414,7 @@
     flex-shrink: 0;
   }
 
+  .local-search-highlight-toggle,
   .local-search-close {
     flex-shrink: 0;
     display: flex;
@@ -3310,8 +3433,13 @@
       color var(--transition-fast);
   }
 
+  .local-search-highlight-toggle:hover,
   .local-search-close:hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
+  }
+
+  .local-search-highlight-toggle.active {
+    color: var(--color-accent);
   }
 </style>

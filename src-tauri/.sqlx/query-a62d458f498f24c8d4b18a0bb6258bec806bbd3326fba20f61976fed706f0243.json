@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        UPDATE polymorphic_virtual_relations\n        SET label = ?, connection_id = ?, database = ?, table_name = ?,\n            type_column = ?, value_column = ?, updated_at = ?\n        WHERE id = ?\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "a62d458f498f24c8d4b18a0bb6258bec806bbd3326fba20f61976fed706f0243"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO polymorphic_vr_mappings\n                (id, relation_id, type_value, to_connection_id, to_database, to_table, to_column)\n            VALUES (?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "7a945f86649d4807a14399af832387801f8ebced441da1661e9c2c39d6f3ab33"
+}

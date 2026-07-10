@@ -62,9 +62,10 @@
     onDeleteRow?: (_row: CellValue[], _rowKey: string) => void;
     onCloneRow?: (_row: CellValue[]) => void;
     onDeleteRowsPending?: (_deletedRows: Map<string, CellValue[]>) => void;
-    onForeignKeyClick?: (_colName: string, _value: CellValue) => void;
-    onForeignKeyQuickView?: (_colName: string, _value: CellValue) => Promise<QuickViewData | null>;
+    onForeignKeyClick?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => void;
+    onForeignKeyQuickView?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => Promise<QuickViewData | null>;
     onConnectColumn?: (_colName: string) => void;
+    onConnectPolymorphic?: (_colName: string) => void;
     initialColWidths?: Record<string, number>;
     initialColumnOrder?: string[];
     columnOrderOverride?: string[];
@@ -78,6 +79,7 @@
     columnRenames?: Record<string, string>;
     onRenameColumn?: (_colName: string, _label: string) => void;
     searchTerm?: string;
+    highlightEnabled?: boolean;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -166,6 +168,7 @@
     onForeignKeyClick,
     onForeignKeyQuickView,
     onConnectColumn,
+    onConnectPolymorphic,
     initialColWidths,
     initialColumnOrder,
     columnOrderOverride,
@@ -179,6 +182,7 @@
     columnRenames = {},
     onRenameColumn,
     searchTerm = '',
+    highlightEnabled = true,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -782,6 +786,7 @@
     triggerRowKey: string;
     triggerColName: string;
     triggerCellValue: CellValue;
+    triggerRow: Record<string, CellValue>;
     loading: boolean;
     data: QuickViewData | null;
   } | null>(null);
@@ -790,6 +795,7 @@
     colName: string,
     cellValue: CellValue,
     rowKey: string,
+    rowContext: Record<string, CellValue>,
   ): Promise<void> {
     if (!onForeignKeyQuickView) return;
     if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
@@ -800,16 +806,18 @@
       triggerRowKey: rowKey,
       triggerColName: colName,
       triggerCellValue: cellValue,
+      triggerRow: rowContext,
       loading: true,
       data: null,
     };
     try {
-      const data = await onForeignKeyQuickView(colName, cellValue);
+      const data = await onForeignKeyQuickView(colName, cellValue, rowContext);
       if (quickViewState?.triggerRowKey === rowKey && quickViewState?.triggerColName === colName) {
         quickViewState = {
           triggerRowKey: rowKey,
           triggerColName: colName,
           triggerCellValue: cellValue,
+          triggerRow: rowContext,
           loading: false,
           data,
         };
@@ -820,6 +828,7 @@
           triggerRowKey: rowKey,
           triggerColName: colName,
           triggerCellValue: cellValue,
+          triggerRow: rowContext,
           loading: false,
           data: null,
         };
@@ -1639,7 +1648,10 @@
           const rowKey = buildRowKey(rowData, columns, pageOffset + row);
           const cellValue = getPendingValue(rowKey, colMeta.name, rowData[originalIndex]);
           if (cellValue !== null) {
-            triggerQuickView(colMeta.name, cellValue, rowKey);
+            const rowContext = Object.fromEntries(
+              columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, rowData[i])]),
+            );
+            triggerQuickView(colMeta.name, cellValue, rowKey, rowContext);
           }
         }
       }
@@ -1652,7 +1664,10 @@
           const rowKey = buildRowKey(rowData, columns, pageOffset + row);
           const cellValue = getPendingValue(rowKey, colMeta.name, rowData[originalIndex]);
           if (cellValue !== null) {
-            onForeignKeyClick?.(colMeta.name, cellValue);
+            const rowContext = Object.fromEntries(
+              columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, rowData[i])]),
+            );
+            onForeignKeyClick?.(colMeta.name, cellValue, rowContext);
           }
         }
       }
@@ -3461,6 +3476,7 @@
                 col.defaultValue == null}
               {@const cellMatches =
                 !!searchTerm &&
+                highlightEnabled &&
                 cellValue !== null &&
                 String(cellValue).toLowerCase().includes(searchTerm.toLowerCase())}
               <td
@@ -3495,12 +3511,18 @@
                     cellValue !== null
                   ) {
                     e.stopPropagation();
-                    triggerQuickView(col.name, cellValue, rowKey);
+                    const rowContext = Object.fromEntries(
+                      columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
+                    );
+                    triggerQuickView(col.name, cellValue, rowKey, rowContext);
                     return;
                   }
                   if (e.button === 0 && e.metaKey && col.isForeignKey && cellValue !== null) {
                     e.stopPropagation();
-                    onForeignKeyClick?.(col.name, cellValue);
+                    const rowContext = Object.fromEntries(
+                      columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
+                    );
+                    onForeignKeyClick?.(col.name, cellValue, rowContext);
                     return;
                   }
                   if (e.button === 2 || (e.button === 0 && e.ctrlKey)) {
@@ -3672,6 +3694,7 @@
                               onForeignKeyClick!(
                                 quickViewState!.triggerColName,
                                 quickViewState!.triggerCellValue,
+                                quickViewState!.triggerRow,
                               );
                               quickViewState = null;
                             }}
@@ -4028,16 +4051,28 @@
           <CtxItem onclick={() => copyColumnNames()}>
             {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
           </CtxItem>
-          {#if onConnectColumn && !contextMenuSnapshotIsMultiCell}
+          {#if (onConnectColumn || onConnectPolymorphic) && !contextMenuSnapshotIsMultiCell}
             <CtxSep />
-            <CtxItem
-              onclick={() => {
-                onConnectColumn!(contextMenu!.colName!);
-                dismissContextMenu();
-              }}
-            >
-              Connect column…
-            </CtxItem>
+            {#if onConnectColumn}
+              <CtxItem
+                onclick={() => {
+                  onConnectColumn!(contextMenu!.colName!);
+                  dismissContextMenu();
+                }}
+              >
+                Connect column…
+              </CtxItem>
+            {/if}
+            {#if onConnectPolymorphic}
+              <CtxItem
+                onclick={() => {
+                  onConnectPolymorphic!(contextMenu!.colName!);
+                  dismissContextMenu();
+                }}
+              >
+                Connect polymorphic…
+              </CtxItem>
+            {/if}
           {/if}
           <CtxSep />
         {/if}
@@ -4152,16 +4187,28 @@
         <CtxItem onclick={() => copyColumnNames()}>
           {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
         </CtxItem>
-        {#if contextMenu.colName && onConnectColumn && !contextMenuSnapshotIsMultiCell}
+        {#if contextMenu.colName && (onConnectColumn || onConnectPolymorphic) && !contextMenuSnapshotIsMultiCell}
           <CtxSep />
-          <CtxItem
-            onclick={() => {
-              onConnectColumn!(contextMenu!.colName!);
-              dismissContextMenu();
-            }}
-          >
-            Connect column…
-          </CtxItem>
+          {#if onConnectColumn}
+            <CtxItem
+              onclick={() => {
+                onConnectColumn!(contextMenu!.colName!);
+                dismissContextMenu();
+              }}
+            >
+              Connect column…
+            </CtxItem>
+          {/if}
+          {#if onConnectPolymorphic}
+            <CtxItem
+              onclick={() => {
+                onConnectPolymorphic!(contextMenu!.colName!);
+                dismissContextMenu();
+              }}
+            >
+              Connect polymorphic…
+            </CtxItem>
+          {/if}
         {/if}
         <CtxSep />
         {#if selectedRowKeys.size > 1}

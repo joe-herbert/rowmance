@@ -438,6 +438,11 @@ pub fn run() {
             commands::virtual_relations::virtual_relations_create,
             commands::virtual_relations::virtual_relations_update,
             commands::virtual_relations::virtual_relations_delete,
+            // Polymorphic virtual relations
+            commands::virtual_relations::polymorphic_vr_list,
+            commands::virtual_relations::polymorphic_vr_create,
+            commands::virtual_relations::polymorphic_vr_update,
+            commands::virtual_relations::polymorphic_vr_delete,
             // User management
             commands::users::users_list,
             commands::users::users_get_grants,

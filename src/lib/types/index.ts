@@ -262,6 +262,23 @@ export interface VirtualRelation {
   to: ColumnRef;
 }
 
+export interface PolymorphicMapping {
+  id: string;
+  typeValue: string;
+  to: ColumnRef;
+}
+
+export interface PolymorphicVirtualRelation {
+  id: string;
+  label?: string;
+  connectionId: string;
+  database: string;
+  table: string;
+  typeColumn: string;
+  valueColumn: string;
+  mappings: PolymorphicMapping[];
+}
+
 // ── EXPLAIN ──────────────────────────────────────────────────────────────────
 
 export interface ExplainResult {
@@ -392,6 +409,7 @@ export interface AppSettings {
   confirmBeforeDelete: boolean;
   /** Absolute path to the saved queries directory. Empty string = use default. */
   savedQueriesDirectory: string;
+  localSearchHighlight: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -428,6 +446,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   newRowPosition: 'bottom',
   confirmBeforeDelete: true,
   savedQueriesDirectory: '',
+  localSearchHighlight: true,
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

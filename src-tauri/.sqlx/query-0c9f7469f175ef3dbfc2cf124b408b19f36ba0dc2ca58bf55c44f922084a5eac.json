@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO polymorphic_virtual_relations\n            (id, label, connection_id, database, table_name, type_column, value_column, created_at, updated_at)\n        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "0c9f7469f175ef3dbfc2cf124b408b19f36ba0dc2ca58bf55c44f922084a5eac"
+}

@@ -502,6 +502,19 @@
               update('confirmBeforeDelete', (e.currentTarget as HTMLInputElement).checked)}
           />
         </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Highlight Local Search Matches</span>
+            <span class="label-hint">Highlight matching text in cells when using table search</span>
+          </div>
+          <input
+            type="checkbox"
+            class="setting-checkbox"
+            checked={settings.localSearchHighlight}
+            onchange={(e) =>
+              update('localSearchHighlight', (e.currentTarget as HTMLInputElement).checked)}
+          />
+        </div>
       </div>
     {:else if activeSection === 'editor'}
       <h2 class="section-title">Editor</h2>
