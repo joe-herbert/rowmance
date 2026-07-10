@@ -1045,7 +1045,7 @@
           <div class="tx-section-actions">
           {#if !txActive}
             <button class="tx-btn" onclick={handleBeginTransaction} disabled={txBusy}>
-              Begin
+              Start
             </button>
           {:else}
             <button
