@@ -1228,6 +1228,21 @@
     });
   }
 
+  function isForeignKeyNavigable(
+    colName: string,
+    value: CellValue,
+    rowContext: Record<string, CellValue>,
+  ): boolean {
+    if (foreignKeys.some((f) => f.columns.includes(colName))) return true;
+    if (vrStore.forwardFrom({ connectionId, database, table, column: colName }).length > 0) return true;
+    const pvr = vrStore.findPolymorphicForValueColumn(connectionId, database, table, colName);
+    if (pvr) {
+      const typeValue = String(rowContext[pvr.typeColumn] ?? '');
+      return pvr.mappings.some((m) => m.typeValue === typeValue);
+    }
+    return false;
+  }
+
   async function handleForeignKeyClick(
     colName: string,
     value: CellValue,
@@ -2365,6 +2380,7 @@
           )
             ? handleForeignKeyQuickView
             : undefined}
+          {isForeignKeyNavigable}
           onConnectColumn={(colName) => {
             connectColumnName = colName;
           }}

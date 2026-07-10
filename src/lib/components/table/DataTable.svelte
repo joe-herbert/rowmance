@@ -64,6 +64,7 @@
     onDeleteRowsPending?: (_deletedRows: Map<string, CellValue[]>) => void;
     onForeignKeyClick?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => void;
     onForeignKeyQuickView?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => Promise<QuickViewData | null>;
+    isForeignKeyNavigable?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => boolean;
     onConnectColumn?: (_colName: string) => void;
     onConnectPolymorphic?: (_colName: string) => void;
     initialColWidths?: Record<string, number>;
@@ -167,6 +168,7 @@
     onDeleteRowsPending,
     onForeignKeyClick,
     onForeignKeyQuickView,
+    isForeignKeyNavigable,
     onConnectColumn,
     onConnectPolymorphic,
     initialColWidths,
@@ -1651,7 +1653,9 @@
             const rowContext = Object.fromEntries(
               columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, rowData[i])]),
             );
-            triggerQuickView(colMeta.name, cellValue, rowKey, rowContext);
+            if (!isForeignKeyNavigable || isForeignKeyNavigable(colMeta.name, cellValue, rowContext)) {
+              triggerQuickView(colMeta.name, cellValue, rowKey, rowContext);
+            }
           }
         }
       }
@@ -1667,7 +1671,9 @@
             const rowContext = Object.fromEntries(
               columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, rowData[i])]),
             );
-            onForeignKeyClick?.(colMeta.name, cellValue, rowContext);
+            if (!isForeignKeyNavigable || isForeignKeyNavigable(colMeta.name, cellValue, rowContext)) {
+              onForeignKeyClick?.(colMeta.name, cellValue, rowContext);
+            }
           }
         }
       }
@@ -3479,6 +3485,18 @@
                 highlightEnabled &&
                 cellValue !== null &&
                 String(cellValue).toLowerCase().includes(searchTerm.toLowerCase())}
+              {@const isFkNavigable =
+                col.isForeignKey && cellValue !== null && !!onForeignKeyClick
+                  ? (isForeignKeyNavigable
+                      ? isForeignKeyNavigable(
+                          col.name,
+                          cellValue,
+                          Object.fromEntries(
+                            columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
+                          ),
+                        )
+                      : true)
+                  : false}
               <td
                 class="data-cell"
                 class:cell-number={typeCategory === 'number'}
@@ -3487,7 +3505,7 @@
                 class:cell-selected={isCellInSelection(rowIndex, colIndex)}
                 class:cell-focused={focusedCell?.row === rowIndex && focusedCell?.col === colIndex}
                 class:cell-required-empty={isRequiredEmpty}
-                class:cell-fk={col.isForeignKey && cellValue !== null && !!onForeignKeyClick}
+                class:cell-fk={isFkNavigable}
                 class:cell-search-match={cellMatches}
                 style="width: {colWidths[originalIndex]}px; min-width: {colWidths[
                   originalIndex
@@ -3503,26 +3521,20 @@
                   handleRowContextMenu(e, row, processedRowIndex, col.name);
                 }}
                 onmousedown={(e) => {
-                  if (
-                    e.button === 0 &&
-                    e.metaKey &&
-                    e.shiftKey &&
-                    col.isForeignKey &&
-                    cellValue !== null
-                  ) {
+                  if (e.button === 0 && e.metaKey && e.shiftKey && isFkNavigable) {
                     e.stopPropagation();
                     const rowContext = Object.fromEntries(
                       columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
                     );
-                    triggerQuickView(col.name, cellValue, rowKey, rowContext);
+                    triggerQuickView(col.name, cellValue!, rowKey, rowContext);
                     return;
                   }
-                  if (e.button === 0 && e.metaKey && col.isForeignKey && cellValue !== null) {
+                  if (e.button === 0 && e.metaKey && isFkNavigable) {
                     e.stopPropagation();
                     const rowContext = Object.fromEntries(
                       columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
                     );
-                    onForeignKeyClick?.(col.name, cellValue, rowContext);
+                    onForeignKeyClick?.(col.name, cellValue!, rowContext);
                     return;
                   }
                   if (e.button === 2 || (e.button === 0 && e.ctrlKey)) {
