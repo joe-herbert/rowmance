@@ -2,7 +2,7 @@
   RelationsPanel — shows foreign-key relations for the currently focused table cell.
   Forward: FKs FROM the current table that include the selected column (→ referenced table).
   Reverse: FKs FROM other tables that point TO the current table's selected column (← referencing tables).
-  Also shows user-defined virtual connections that span databases/connections.
+  Also shows user-defined virtual relations that span databases/connections.
 -->
 <script lang="ts">
   import { useCellSelection, type CellSelection } from '$lib/stores/cellSelection.svelte';
@@ -371,7 +371,7 @@
                         <span class="card-table">{rel.targetTable}</span>
                         <span class="card-filter">{rel.filterColumn}</span>
                         {#if rel.virtual}
-                          <span class="virtual-badge" title="Virtual connection"
+                          <span class="virtual-badge" title="Virtual relation"
                             >{#if rel.targetConnectionId}<span class="card-via"
                                 >{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span
                               >{:else}Virtual{/if}</span
@@ -513,7 +513,7 @@
                         <span class="card-table">{rel.targetTable}</span>
                         <span class="card-filter">{rel.filterColumn}</span>
                         {#if rel.virtual}
-                          <span class="virtual-badge" title="Virtual connection"
+                          <span class="virtual-badge" title="Virtual relation"
                             >{#if rel.targetConnectionId}<span class="card-via"
                                 >{connName(rel.targetConnectionId)}・{rel.targetDatabase}</span
                               >{:else}Virtual{/if}</span

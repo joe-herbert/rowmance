@@ -647,7 +647,7 @@
                         </button>
                         <button
                           class="act-btn act-btn--connect"
-                          title="Add virtual connection"
+                          title="Add virtual relation"
                           onclick={() => openAddVr(col.name)}
                         >
                           <svg
@@ -798,14 +798,14 @@
           </section>
         {/if}
 
-        <!-- Virtual Connections ──────────────────────────────────────────── -->
+        <!-- Virtual relations ──────────────────────────────────────────── -->
         {#if tableVirtualRelations.length > 0 || editMode}
           <section class="section">
             <div class="section-header section-header--flex">
-              <span>Virtual Connections ({tableVirtualRelations.length})</span>
+              <span>Virtual relations ({tableVirtualRelations.length})</span>
               {#if editMode}
                 <button class="add-btn" onclick={openAddVrFromHeader}
-                  >+ Add Virtual Connection</button
+                  >+ Add Virtual relation</button
                 >
               {/if}
             </div>
@@ -884,7 +884,7 @@
                 </div>
               {/each}
               {#if tableVirtualRelations.length === 0 && editMode}
-                <div class="empty-hint">No virtual connections defined.</div>
+                <div class="empty-hint">No virtual relations defined.</div>
               {/if}
             </div>
           </section>
@@ -1002,12 +1002,12 @@
   {/if}
 </datalist>
 
-<!-- ── Virtual Connection Column Picker ───────────────────────────────────── -->
+<!-- ── Virtual relation Column Picker ───────────────────────────────────── -->
 {#if vrColPickModal}
   {@const form = vrColPickModal}
-  <Modal label="Add Virtual Connection" onbackdropclick={() => (vrColPickModal = null)}>
+  <Modal label="Add Virtual relation" onbackdropclick={() => (vrColPickModal = null)}>
     <div class="modal-card modal-card--sm">
-      <div class="modal-title">Add Virtual Connection</div>
+      <div class="modal-title">Add Virtual relation</div>
       <div class="modal-body">
         <div class="form-row">
           <div class="form-label">Local Column</div>
