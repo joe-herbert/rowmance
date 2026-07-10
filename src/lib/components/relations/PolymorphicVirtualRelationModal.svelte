@@ -364,11 +364,27 @@
 
   const hasDuplicates = $derived(mappings.some((_, i) => isDuplicate(i)));
 
+  const duplicateRelationExists = $derived(
+    !!typeColumn &&
+      !!valueColumn &&
+      typeColumn !== valueColumn &&
+      vrStore.polymorphicRelations.some(
+        (pvr) =>
+          pvr.id !== editRelation?.id &&
+          pvr.connectionId === connectionId &&
+          pvr.database === database &&
+          pvr.table === table &&
+          pvr.typeColumn === typeColumn &&
+          pvr.valueColumn === valueColumn,
+      ),
+  );
+
   const canSave = $derived(
     !!typeColumn &&
       !!valueColumn &&
       typeColumn !== valueColumn &&
       !hasDuplicates &&
+      !duplicateRelationExists &&
       mappings.some(isComplete),
   );
 
@@ -422,6 +438,8 @@
         </div>
         {#if typeColumn && valueColumn && typeColumn === valueColumn}
           <div class="validation-msg">Type column and value column must be different.</div>
+        {:else if duplicateRelationExists}
+          <div class="validation-msg">A polymorphic relation with this type and value column already exists on this table.</div>
         {/if}
       </div>
 
