@@ -3,6 +3,7 @@
   import {
     EditorView,
     ViewPlugin,
+    tooltips as cmTooltips,
     Decoration,
     keymap,
     lineNumbers,
@@ -37,7 +38,9 @@
     type CompletionResult,
     type CompletionSource,
   } from '@codemirror/autocomplete';
+  import { lintGutter, setDiagnostics } from '@codemirror/lint';
   import { format as sqlFormat } from 'sql-formatter';
+  import { buildDiagnosticsFromErrors } from '$lib/utils/sqlErrorHighlight';
   import type { QueryResult, ForeignKeyInfo, VirtualRelation } from '$lib/types';
   import { executeMultiQuery, explainQuery } from '$lib/tauri/query';
   import { listen } from '@tauri-apps/api/event';
@@ -48,7 +51,7 @@
   import FkSearchPopup from '$lib/components/editor/FkSearchPopup.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { listVirtualRelations } from '$lib/tauri/virtual_relations';
-  import { splitStatements, statementAtCursor, isMutatingStatement } from '$lib/utils/sql';
+  import { splitStatements, statementAtCursor, isMutatingStatement, stripLineComments } from '$lib/utils/sql';
   import { errorMessage } from '$lib/utils/errors';
   import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
@@ -98,6 +101,7 @@
   let editorView = $state<EditorView | undefined>(undefined);
   let resultsWrapperEl = $state<HTMLDivElement | undefined>(undefined);
   let sqlText = $state(untrack(() => cached?.sql ?? initialSql));
+  let executedSql = $state('');
   let results = $state<QueryResult[]>(untrack(() => cached?.results ?? []));
   let executedStatements = $state<string[]>(untrack(() => cached?.executedStatements ?? []));
   let isRunning = $state(false);
@@ -950,8 +954,8 @@
 
   // ── Theme ─────────────────────────────────────────────────────────────────
 
-  function resolveCSSVar(name: string): string {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function resolveCSSVar(name: string, fallback = ''): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
 
   function buildHighlightStyle(): HighlightStyle {
@@ -1012,6 +1016,59 @@
       '.cm-scroller': {
         overflow: 'auto',
         fontFamily: 'var(--font-family-mono)',
+      },
+      // Error highlighting
+      '.cm-lintRange-error': {
+        backgroundImage: 'none',
+        borderBottom: `2px solid ${resolveCSSVar('--color-danger')}`,
+        paddingBottom: '1px',
+      },
+      '.cm-lintRange-warning': {
+        backgroundImage: 'none',
+        borderBottom: `2px solid ${resolveCSSVar('--color-warning')}`,
+        paddingBottom: '1px',
+      },
+      '.cm-gutter-lint': {
+        width: '16px',
+      },
+      '.cm-gutter-lint .cm-gutterElement': {
+        padding: '0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      '.cm-lint-marker': {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '8px',
+        height: '8px',
+      },
+      '.cm-lint-marker-error': {
+        content: '""',
+        display: 'block',
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        backgroundColor: resolveCSSVar('--color-danger'),
+      },
+      '.cm-tooltip.cm-tooltip-lint': {
+        background: 'var(--color-bg-overlay)',
+        border: '1px solid var(--color-border-strong)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-overlay)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        maxWidth: '420px',
+      },
+      '.cm-diagnosticText': {
+        fontFamily: 'var(--font-family-mono)',
+        fontSize: 'var(--font-size-xs)',
+        color: 'var(--color-text-primary)',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        lineHeight: '1.5',
+        padding: '6px 8px',
+        display: 'block',
       },
       // Tooltip shell — matches .select-dropdown
       '.cm-tooltip': {
@@ -1112,8 +1169,9 @@
 
     isRunning = true;
     executedStatements = splitStatements(query);
+    executedSql = query;
     try {
-      results = await executeMultiQuery(connectionId, query, selectedDatabase || null, editorId);
+      results = await executeMultiQuery(connectionId, stripLineComments(query), selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
@@ -1148,8 +1206,9 @@
 
     isRunning = true;
     executedStatements = splitStatements(query);
+    executedSql = query;
     try {
-      results = await executeMultiQuery(connectionId, query, selectedDatabase || null, editorId);
+      results = await executeMultiQuery(connectionId, stripLineComments(query), selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
@@ -1182,8 +1241,9 @@
 
     isRunning = true;
     executedStatements = [stmt];
+    executedSql = stmt;
     try {
-      results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null, editorId);
+      results = await executeMultiQuery(connectionId, stripLineComments(stmt), selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
       recording.add(stmt, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && isMutatingStatement(stmt)) {
@@ -1208,6 +1268,16 @@
     }
   }
 
+  // Returns true if the line contains a -- comment outside string literals.
+  // Used to avoid joining subsequent SQL onto the same line as a -- comment.
+  function lineHasLineComment(line: string): boolean {
+    const stripped = line
+      .replace(/'(?:[^'\\]|\\.)*'/g, '')
+      .replace(/"(?:[^"\\]|\\.)*"/g, '')
+      .replace(/`[^`]*/g, '');
+    return stripped.includes('--');
+  }
+
   function formatQuery(): void {
     if (!editorView) return;
     const dialect = sqlDialect();
@@ -1223,13 +1293,29 @@
       let formatted = sqlFormat(sqlText, options);
       if (style === 'compact') {
         const separator = ';\n' + '\n'.repeat(s.formatLinesBetweenQueries);
-        formatted = formatted
-          .split(/\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .join(' ')
-          .replace(/\s*;\s*/g, separator)
-          .trim();
+        // Process line by line so -- comment lines are never joined with the
+        // following SQL (which would hide the SQL inside the comment).
+        const resultParts: string[] = [];
+        let sqlBuffer = '';
+        const flushBuffer = () => {
+          const trimmed = sqlBuffer.trim();
+          if (!trimmed) return;
+          resultParts.push(trimmed.replace(/\s*;\s*/g, separator).trimEnd());
+          sqlBuffer = '';
+        };
+        for (const rawLine of [...formatted.split(/\n/), null]) {
+          const line = rawLine !== null ? rawLine.trim() : null;
+          if (line === null) { flushBuffer(); break; }
+          if (!line) continue;
+          if (lineHasLineComment(line)) {
+            // Append comment line to buffer, then flush — nothing can follow on same line
+            sqlBuffer += (sqlBuffer ? ' ' : '') + line;
+            flushBuffer();
+          } else {
+            sqlBuffer += (sqlBuffer ? ' ' : '') + line;
+          }
+        }
+        formatted = resultParts.join('\n').trim();
       } else if (style === 'comfortable') {
         const THRESHOLD = 80;
         const blankSep = '\n'.repeat(s.formatLinesBetweenQueries + 1);
@@ -1237,12 +1323,35 @@
           .split(/\n{2,}/)
           .map((stmt) => {
             const trimmed = stmt.trim();
-            const oneLiner = trimmed
-              .split('\n')
-              .map((l) => l.trim())
-              .filter(Boolean)
-              .join(' ');
-            return oneLiner.length <= THRESHOLD ? oneLiner : trimmed;
+            const origLines = trimmed.split('\n');
+            const flatLines = origLines.map((l) => l.trim()).filter(Boolean);
+            if (!flatLines.some(lineHasLineComment)) {
+              const oneLiner = flatLines.join(' ');
+              return oneLiner.length <= THRESHOLD ? oneLiner : trimmed;
+            }
+            // Block contains -- comments: process each SQL run between comments
+            // with the same threshold logic as the comment-free path.
+            const resultParts: string[] = [];
+            let sqlFlat: string[] = [];
+            let sqlOrig: string[] = [];
+            for (const origLine of [...origLines, null]) {
+              const flat = origLine !== null ? origLine.trim() : null;
+              if (flat === null || (flat && lineHasLineComment(flat))) {
+                if (sqlFlat.length > 0) {
+                  const oneLiner = sqlFlat.join(' ');
+                  resultParts.push(
+                    oneLiner.length <= THRESHOLD ? oneLiner : sqlOrig.join('\n').trim(),
+                  );
+                  sqlFlat = [];
+                  sqlOrig = [];
+                }
+                if (flat) resultParts.push(flat);
+              } else if (flat) {
+                sqlFlat.push(flat);
+                sqlOrig.push(origLine);
+              }
+            }
+            return resultParts.join('\n');
           })
           .join(blankSep);
       }
@@ -1449,6 +1558,8 @@
           },
         }),
         ...makeTableHighlightExtensions(),
+        lintGutter(),
+        cmTooltips({ tooltipSpace: (view) => view.dom.getBoundingClientRect() }),
       ],
     });
 
@@ -1465,6 +1576,53 @@
     unlistenShortcut?.();
     unlistenQueryCount?.();
     if (editorId) sessionRelease(editorId).catch(() => {});
+  });
+
+  // ── Error highlighting ────────────────────────────────────────────────────
+
+  $effect(() => {
+    // Clear diagnostics whenever the SQL text changes (user is editing)
+    sqlText;
+    const view = editorView;
+    if (!view) return;
+    view.dispatch(setDiagnostics(view.state, []));
+  });
+
+  $effect(() => {
+    const view = editorView;
+    if (!view || results.length === 0) return;
+
+    // If the SQL has changed since the last run (e.g. formatting, editing),
+    // positions would be wrong — clear and don't re-highlight.
+    if (sqlText !== executedSql) {
+      view.dispatch(setDiagnostics(view.state, []));
+      return;
+    }
+
+    const errorInputs = results
+      .map((result, i) => {
+        if (!result.error) return null;
+        const stmt = executedStatements[i] ?? executedStatements[0] ?? sqlText;
+        const offset = executedStatements[i]
+          ? findStatementStart(sqlText, executedStatements, i)
+          : 0;
+        return { error: result.error, statement: stmt, statementOffset: offset };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    if (errorInputs.length === 0) {
+      view.dispatch(setDiagnostics(view.state, []));
+      return;
+    }
+
+    const docLen = view.state.doc.length;
+    const diagnostics = buildDiagnosticsFromErrors(errorInputs).map((d) => ({
+      ...d,
+      from: Math.max(0, Math.min(d.from, docLen)),
+      to: Math.max(0, Math.min(d.to, docLen)),
+    }));
+
+    view.dispatch(setDiagnostics(view.state, diagnostics));
   });
 </script>
 

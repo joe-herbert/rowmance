@@ -86,6 +86,27 @@
   // Whether we have a meaningful data payload (successful query with columns).
   let hasData = $derived(result !== null && result.error === null && result.columns.length > 0);
 
+  // Strip leading -- and /* */ comments so the tab shows the executable SQL,
+  // not the comment text (which would collapse into the SQL visually at nowrap).
+  function displaySql(sql: string): string {
+    let s = sql;
+    for (;;) {
+      s = s.trimStart();
+      if (s.startsWith('--')) {
+        const nl = s.indexOf('\n');
+        if (nl === -1) return '';
+        s = s.slice(nl + 1);
+      } else if (s.startsWith('/*')) {
+        const end = s.indexOf('*/');
+        if (end === -1) return '';
+        s = s.slice(end + 2);
+      } else {
+        break;
+      }
+    }
+    return s.trim();
+  }
+
   // Detect @varnames being SET in the active statement (MySQL/MariaDB style).
   let setVariableNames = $derived.by((): string[] => {
     const stmt = statements[activeTab];
@@ -488,7 +509,7 @@
         </div>
         {#if statements[activeTab]}
           <div class="tab-sql-wrap" title={statements[activeTab]}>
-            <SqlHighlight sql={statements[activeTab]} class="tab-sql" />
+            <SqlHighlight sql={displaySql(statements[activeTab])} class="tab-sql" />
           </div>
         {/if}
       </div>

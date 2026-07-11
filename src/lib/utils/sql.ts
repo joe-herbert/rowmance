@@ -194,6 +194,82 @@ export function statementAtCursor(sql: string, cursorPos: number): string {
 }
 
 /**
+ * Strip -- line comments from SQL before sending to the database.
+ * MySQL requires "-- " (with a trailing space) for a valid line comment, but
+ * the editor accepts "--word" as a comment too. Stripping them avoids the
+ * MySQL syntax error without altering the user's editor content.
+ * Block comments (/* ... *‌/) are preserved because they may carry optimizer hints.
+ */
+export function stripLineComments(sql: string): string {
+  let result = '';
+  let i = 0;
+  const len = sql.length;
+
+  while (i < len) {
+    const ch = sql[i];
+    const next = sql[i + 1];
+
+    // Line comment: skip to end of line, keep the newline itself
+    if (ch === '-' && next === '-') {
+      const end = sql.indexOf('\n', i);
+      if (end === -1) break;
+      i = end;
+      continue;
+    }
+
+    // Block comment: pass through unchanged (may be an optimizer hint)
+    if (ch === '/' && next === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      const block = end === -1 ? sql.slice(i) : sql.slice(i, end + 2);
+      result += block;
+      i = end === -1 ? len : end + 2;
+      continue;
+    }
+
+    if (ch === "'") {
+      let j = i + 1;
+      while (j < len) {
+        if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
+        else if (sql[j] === "'") { j++; break; }
+        else j++;
+      }
+      result += sql.slice(i, j);
+      i = j;
+      continue;
+    }
+
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < len) {
+        if (sql[j] === '"' && sql[j + 1] === '"') j += 2;
+        else if (sql[j] === '"') { j++; break; }
+        else j++;
+      }
+      result += sql.slice(i, j);
+      i = j;
+      continue;
+    }
+
+    if (ch === '`') {
+      let j = i + 1;
+      while (j < len) {
+        if (sql[j] === '`' && sql[j + 1] === '`') j += 2;
+        else if (sql[j] === '`') { j++; break; }
+        else j++;
+      }
+      result += sql.slice(i, j);
+      i = j;
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
+/**
  * Return whether the first keyword of a SQL statement is a write operation.
  * Used to show an early error in the UI before sending to the backend.
  * The backend enforces read-only at the database connection level, which
