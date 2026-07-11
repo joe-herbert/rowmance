@@ -2,6 +2,8 @@
   import { onMount, onDestroy, untrack } from 'svelte';
   import {
     EditorView,
+    ViewPlugin,
+    Decoration,
     keymap,
     lineNumbers,
     highlightActiveLine,
@@ -10,18 +12,22 @@
     dropCursor,
     rectangularSelection,
     crosshairCursor,
+    type DecorationSet,
+    type ViewUpdate,
   } from '@codemirror/view';
-  import { EditorState, type Extension } from '@codemirror/state';
+  import { EditorState, StateEffect, StateField, RangeSetBuilder, type Extension } from '@codemirror/state';
   import { highlightSelectionMatches } from '@codemirror/search';
-  import { defaultKeymap, indentWithTab } from '@codemirror/commands';
+  import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands';
   import { sql as sqlLang } from '@codemirror/lang-sql';
   import {
     HighlightStyle,
     syntaxHighlighting,
     bracketMatching,
     foldGutter,
+    syntaxTree,
   } from '@codemirror/language';
   import { tags } from '@lezer/highlight';
+  import type { SyntaxNode } from '@lezer/common';
   import {
     closeBrackets,
     closeBracketsKeymap,
@@ -50,6 +56,7 @@
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
+  import { sessionAcquire, sessionRelease } from '$lib/tauri/sessions';
   import type { FileQuery } from '$lib/types';
   import { useRecording } from '$lib/stores/recording.svelte';
   import { useRevert } from '$lib/stores/revert.svelte';
@@ -106,6 +113,60 @@
   );
   let activeResultTab = $state(untrack(() => cached?.activeResultTab ?? 0));
 
+  // ── Editor session (pinned connection for variable persistence) ───────────
+
+  $effect(() => {
+    if (!editorId || !connections.isActive(connectionId)) return;
+    sessionAcquire(connectionId, editorId).catch(() => {});
+  });
+
+  // ── SQL variable tracking (MySQL/MariaDB @varname) ────────────────────────
+
+  let sqlVariableNames = $derived.by((): string[] => {
+    const dbType = connections.getById(connectionId)?.dbType;
+    if (dbType !== 'mysql' && dbType !== 'mariadb') return [];
+    const vars = new Set<string>();
+    const re = /@([a-zA-Z_]\w*)/g;
+    // Strip string literals and comments to avoid false positives
+    const cleaned = sqlText
+      .replace(/'(?:[^'\\]|\\.)*'/g, '')
+      .replace(/"(?:[^"\\]|\\.)*"/g, '')
+      .replace(/--[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    let m;
+    while ((m = re.exec(cleaned)) !== null) {
+      vars.add(`@${m[1]}`);
+    }
+    return [...vars].sort();
+  });
+
+  let variableValues = $state<Record<string, string | null>>(
+    untrack(() => cached?.variableValues ?? {}),
+  );
+
+  async function fetchVariableValues(): Promise<void> {
+    const vars = sqlVariableNames;
+    if (vars.length === 0) return;
+    try {
+      const res = await executeMultiQuery(
+        connectionId,
+        `SELECT ${vars.join(', ')}`,
+        selectedDatabase || null,
+        editorId,
+      );
+      if (res[0]?.error === null && res[0].rows.length > 0) {
+        const newValues: Record<string, string | null> = {};
+        res[0].columns.forEach((col, i) => {
+          const val = res[0].rows[0][i];
+          newValues[col.name] = val === null ? null : String(val);
+        });
+        variableValues = newValues;
+      }
+    } catch {
+      // Silently ignore — variables panel just won't update
+    }
+  }
+
   $effect(() => {
     if (!editorId) return;
     queryEditorCache.save(editorId, {
@@ -114,6 +175,7 @@
       executedStatements,
       selectedDatabase,
       activeResultTab,
+      variableValues,
     });
   });
 
@@ -154,20 +216,25 @@
 
   let editorHeightPct = $state(40);
   let isResizingEditor = $state(false);
+  let varsOpen = $state(true);
   let editorPanelEl = $state<HTMLDivElement | undefined>(undefined);
+  let resizerStartY = 0;
+  let resizerStartPct = 0;
 
   function onResizerPointerDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     e.preventDefault();
     isResizingEditor = true;
+    resizerStartY = e.clientY;
+    resizerStartPct = editorHeightPct;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onResizerPointerMove(e: PointerEvent): void {
     if (!isResizingEditor || !editorPanelEl) return;
     const rect = editorPanelEl.getBoundingClientRect();
-    const pct = ((e.clientY - rect.top) / rect.height) * 100;
-    editorHeightPct = Math.min(80, Math.max(15, pct));
+    const deltaPct = ((e.clientY - resizerStartY) / rect.height) * 100;
+    editorHeightPct = Math.min(80, Math.max(15, resizerStartPct + deltaPct));
   }
 
   function onResizerPointerUp(): void {
@@ -333,6 +400,130 @@
     tables: SchemaTable[];
     columns: Map<string, SchemaColumn[]>;
   } = { connectionId: '', tables: [], columns: new Map() };
+
+  // ── Table-link highlight extensions (Ctrl/Cmd hover) ─────────────────────
+
+  // Keywords that introduce a table name position in a SQL statement
+  const TABLE_INTRODUCERS = new Set(['FROM', 'JOIN', 'UPDATE', 'INTO', 'TABLE', 'TRUNCATE']);
+  // Keywords that change the clause context (used to track what governs each position)
+  const CLAUSE_KEYWORDS = new Set([
+    'SELECT', 'FROM', 'JOIN', 'WHERE', 'SET', 'UPDATE', 'INTO', 'TABLE',
+    'INSERT', 'DELETE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT', 'ON', 'WITH',
+    'TRUNCATE', 'CREATE', 'DROP', 'ALTER', 'BY', 'UNION', 'INTERSECT', 'EXCEPT',
+  ]);
+
+  function isTableNamePosition(view: EditorView, node: SyntaxNode): boolean {
+    // Find the nearest Statement ancestor
+    let stmt: SyntaxNode | null = node.parent;
+    while (stmt && stmt.name !== 'Statement') stmt = stmt.parent;
+    if (!stmt) return false;
+
+    // Node must be a direct child of that statement (not nested in an expression)
+    if (node.parent !== stmt) return false;
+
+    // Scan siblings that precede this node to find the governing clause keyword
+    let prevClauseKw: string | null = null;
+    let child = stmt.firstChild;
+    while (child && child.from < node.from) {
+      if (child.name === 'Keyword') {
+        const kw = view.state.sliceDoc(child.from, child.to).toUpperCase();
+        if (CLAUSE_KEYWORDS.has(kw)) prevClauseKw = kw;
+      }
+      child = child.nextSibling;
+    }
+
+    return prevClauseKw !== null && TABLE_INTRODUCERS.has(prevClauseKw);
+  }
+
+  function buildTableLinkDecorations(view: EditorView): DecorationSet {
+    const tableNames = new Set(schemaRef.tables.map((t) => t.name.toLowerCase()));
+    if (tableNames.size === 0) return Decoration.none;
+    const unq = (s: string) => s.replace(/^[`"'[]|[`"'\]]$/g, '');
+    const builder = new RangeSetBuilder<Decoration>();
+    const mark = Decoration.mark({ class: 'cm-table-link' });
+    syntaxTree(view.state).iterate({
+      enter(nodeRef) {
+        const node = nodeRef.node;
+        if (node.name === 'CompositeIdentifier') {
+          if (isTableNamePosition(view, node)) {
+            const parts = view.state.sliceDoc(node.from, node.to).split('.');
+            if (tableNames.has(unq(parts[parts.length - 1]).toLowerCase())) {
+              builder.add(node.from, node.to, mark);
+            }
+          }
+          return false;
+        }
+        if (node.name === 'Identifier' || node.name === 'QuotedIdentifier') {
+          if (
+            isTableNamePosition(view, node) &&
+            tableNames.has(unq(view.state.sliceDoc(node.from, node.to)).toLowerCase())
+          ) {
+            builder.add(node.from, node.to, mark);
+          }
+        }
+      },
+    });
+    return builder.finish();
+  }
+
+  function makeTableHighlightExtensions(): Extension[] {
+    const modifierEffect = StateEffect.define<boolean>();
+    const modifierField = StateField.define<boolean>({
+      create: () => false,
+      update(value, tr) {
+        for (const e of tr.effects) if (e.is(modifierEffect)) return e.value;
+        return value;
+      },
+    });
+
+    const plugin = ViewPlugin.fromClass(
+      class {
+        decorations: DecorationSet = Decoration.none;
+        private cmView: EditorView;
+        private boundKeyDown: (e: KeyboardEvent) => void;
+        private boundKeyUp: (e: KeyboardEvent) => void;
+
+        constructor(view: EditorView) {
+          this.cmView = view;
+          this.boundKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && !this.cmView.state.field(modifierField)) {
+              this.cmView.dispatch({ effects: modifierEffect.of(true) });
+            }
+          };
+          this.boundKeyUp = (e: KeyboardEvent) => {
+            if (!e.metaKey && !e.ctrlKey && this.cmView.state.field(modifierField)) {
+              this.cmView.dispatch({ effects: modifierEffect.of(false) });
+            }
+          };
+          window.addEventListener('keydown', this.boundKeyDown);
+          window.addEventListener('keyup', this.boundKeyUp);
+        }
+
+        update(update: ViewUpdate) {
+          const active = update.state.field(modifierField);
+          if (!active) {
+            this.decorations = Decoration.none;
+            return;
+          }
+          if (
+            update.docChanged ||
+            update.viewportChanged ||
+            update.transactions.some((tr) => tr.effects.some((e) => e.is(modifierEffect)))
+          ) {
+            this.decorations = buildTableLinkDecorations(update.view);
+          }
+        }
+
+        destroy() {
+          window.removeEventListener('keydown', this.boundKeyDown);
+          window.removeEventListener('keyup', this.boundKeyUp);
+        }
+      },
+      { decorations: (v) => v.decorations },
+    );
+
+    return [modifierField, plugin];
+  }
 
   // ── FK / virtual-relation cache ───────────────────────────────────────────
 
@@ -886,6 +1077,33 @@
     });
   }
 
+  // ── Editor navigation ────────────────────────────────────────────────────
+
+  function findStatementStart(sql: string, statements: string[], targetIndex: number): number {
+    let searchFrom = 0;
+    for (let i = 0; i <= targetIndex; i++) {
+      const stmt = statements[i]?.trim();
+      if (!stmt) continue;
+      const pos = sql.indexOf(stmt, searchFrom);
+      if (pos === -1) return 0;
+      if (i === targetIndex) return pos;
+      searchFrom = pos + stmt.length;
+    }
+    return 0;
+  }
+
+  function scrollEditorToStatement(index: number): void {
+    if (!editorView || executedStatements.length === 0) return;
+    const pos = findStatementStart(sqlText, executedStatements, index);
+    editorView.dispatch({ selection: { anchor: pos } });
+    const coords = editorView.coordsAtPos(pos);
+    if (coords) {
+      const scrollDOM = editorView.scrollDOM;
+      const targetTop = scrollDOM.scrollTop + coords.top - scrollDOM.getBoundingClientRect().top;
+      scrollDOM.scrollTo({ top: targetTop, behavior: 'smooth' });
+    }
+  }
+
   // ── Query execution ───────────────────────────────────────────────────────
 
   async function runQuery(): Promise<void> {
@@ -895,13 +1113,14 @@
     isRunning = true;
     executedStatements = splitStatements(query);
     try {
-      results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, query, selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
         revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
       }
       onExecute?.(query);
+      await fetchVariableValues();
     } catch (err) {
       results = [
         {
@@ -930,13 +1149,14 @@
     isRunning = true;
     executedStatements = splitStatements(query);
     try {
-      results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, query, selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
         revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
       }
       onExecute?.(query);
+      await fetchVariableValues();
     } catch (err) {
       results = [
         {
@@ -963,13 +1183,14 @@
     isRunning = true;
     executedStatements = [stmt];
     try {
-      results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
       recording.add(stmt, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && isMutatingStatement(stmt)) {
         revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: stmt, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
       }
       onExecute?.(stmt);
+      await fetchVariableValues();
     } catch (err) {
       results = [
         {
@@ -1182,12 +1403,52 @@
         autocompletion({ override: [makeSchemaCompletionSource()] }),
         sqlLang(),
         runKeymap,
-        keymap.of([...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
+        history(),
+        keymap.of([...historyKeymap, ...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             sqlText = update.state.doc.toString();
           }
         }),
+        EditorView.domEventHandlers({
+          mousedown(event, view) {
+            if (!event.metaKey && !event.ctrlKey) return false;
+
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (pos === null) return false;
+
+            const unquoteIdent = (s: string) => s.replace(/^[`"'[]|[`"'\]]$/g, '');
+            let node = syntaxTree(view.state).resolveInner(pos, -1);
+
+            // Promote a child of CompositeIdentifier up to the CompositeIdentifier itself
+            if (node.parent?.name === 'CompositeIdentifier') node = node.parent;
+
+            let tableName: string | null = null;
+            if (node.name === 'CompositeIdentifier') {
+              const parts = view.state.sliceDoc(node.from, node.to).split('.');
+              tableName = unquoteIdent(parts[parts.length - 1]);
+            } else if (node.name === 'Identifier' || node.name === 'QuotedIdentifier') {
+              tableName = unquoteIdent(view.state.sliceDoc(node.from, node.to));
+            }
+
+            if (!tableName || !isTableNamePosition(view, node)) return false;
+
+            const matched = schemaRef.tables.find(
+              (t) => t.name.toLowerCase() === tableName!.toLowerCase(),
+            );
+            if (!matched) return false;
+
+            event.preventDefault();
+            panelStore.openInFocused({
+              kind: 'table_browser',
+              connectionId,
+              database: matched.database,
+              table: matched.name,
+            });
+            return true;
+          },
+        }),
+        ...makeTableHighlightExtensions(),
       ],
     });
 
@@ -1203,6 +1464,7 @@
   onDestroy(() => {
     unlistenShortcut?.();
     unlistenQueryCount?.();
+    if (editorId) sessionRelease(editorId).catch(() => {});
   });
 </script>
 
@@ -1423,8 +1685,62 @@
     </div>
   {/if}
 
-  <div class="editor-wrapper" style="flex-basis: {editorHeightPct}%">
-    <div class="editor-container" bind:this={editorContainer}></div>
+  <div class="editor-area" style="flex-basis: {editorHeightPct}%">
+    <div class="editor-wrapper">
+      <div class="editor-container" bind:this={editorContainer}></div>
+    </div>
+
+    {#if sqlVariableNames.length > 0}
+      <div class="vars-panel" class:vars-panel--open={varsOpen} role="region" aria-label="SQL variables">
+        <button
+          class="vars-panel-tab"
+          onclick={() => (varsOpen = !varsOpen)}
+          title={varsOpen ? 'Collapse variables panel' : 'Expand variables panel'}
+          aria-expanded={varsOpen}
+        >
+          <span class="vars-panel-tab-label">Vars</span>
+          <svg
+            class="vars-panel-chevron"
+            class:vars-panel-chevron--open={varsOpen}
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="6,2 2,5 6,8" />
+          </svg>
+        </button>
+
+        {#if varsOpen}
+          <div class="vars-panel-body">
+            {#each sqlVariableNames as varName}
+              <div class="var-row">
+                <code class="var-name" title="Session variables are connection-scoped. Values shown are from the last execution on the same connection.">{varName}</code>
+                <span class="var-eq">=</span>
+                <code
+                  class="var-value"
+                  class:var-value--null={variableValues[varName] === null}
+                  class:var-value--unset={!(varName in variableValues)}
+                >
+                  {#if !(varName in variableValues)}
+                    —
+                  {:else if variableValues[varName] === null}
+                    NULL
+                  {:else}
+                    {variableValues[varName]}
+                  {/if}
+                </code>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div
@@ -1448,9 +1764,11 @@
       {connectionId}
       database={selectedDatabase || undefined}
       {isRunning}
+      {variableValues}
       initialActiveTab={activeResultTab}
       onActiveTabChange={(tab) => {
         activeResultTab = tab;
+        scrollEditorToStatement(tab);
       }}
     />
   </div>
@@ -1731,15 +2049,128 @@
     font-size: var(--font-size-xs);
   }
 
-  .editor-wrapper {
+  .editor-area {
     flex: 0 0 40%;
     min-height: 60px;
+    display: flex;
+    flex-direction: row;
     overflow: hidden;
+  }
+
+  .editor-wrapper {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* ── Variables panel ─────────────────────────────────────────────────────── */
+
+  .vars-panel {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: row;
+    border-left: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    overflow: hidden;
+    width: 28px;
+  }
+
+  .vars-panel--open {
+    width: 200px;
+  }
+
+  .vars-panel-tab {
+    flex-shrink: 0;
+    width: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: var(--spacing-3);
+    gap: var(--spacing-2);
+    border: none;
+    border-right: 1px solid var(--color-border);
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .vars-panel-tab:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .vars-panel-tab-label {
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-ui);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+  }
+
+  .vars-panel-chevron {
+    transform: rotate(0deg);
+    transition: transform var(--transition-fast);
+  }
+
+  .vars-panel-chevron--open {
+    transform: rotate(180deg);
+  }
+
+  .vars-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--spacing-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    scrollbar-width: thin;
+  }
+
+  .var-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .var-name {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-editor-keyword, var(--color-accent));
+  }
+
+  .var-eq {
+    display: none;
+  }
+
+  .var-value {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-editor-string, var(--color-text-primary));
+    word-break: break-all;
+    padding-left: var(--spacing-1);
+    border-left: 2px solid var(--color-border);
+  }
+
+  .var-value--null {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .var-value--unset {
+    color: var(--color-text-muted);
   }
 
   .editor-resizer {
     flex-shrink: 0;
-    height: 5px;
+    height: 1px;
     background: var(--color-border);
     cursor: row-resize;
     position: relative;
@@ -1772,6 +2203,12 @@
 
   .editor-container :global(.cm-scroller) {
     overflow: auto;
+  }
+
+  .editor-container :global(.cm-table-link) {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
   }
 
   .results-wrapper {

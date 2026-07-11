@@ -17,6 +17,7 @@ struct QueryCountPayload {
 
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::AppError;
+use crate::sessions::SessionManager;
 use crate::transactions::{HeldConnection, TransactionManager};
 
 /// Records granular timing for every query to the local SQLite DB, keeping only
@@ -1644,9 +1645,11 @@ pub async fn query_execute_multi(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
+    sessions: State<'_, Arc<SessionManager>>,
     connection_id: String,
     sql: String,
     database: Option<String>,
+    session_id: Option<String>,
 ) -> Result<Vec<QueryResult>, AppError> {
     let statements = split_statements(&sql);
     if statements.is_empty() {
@@ -1696,7 +1699,60 @@ pub async fn query_execute_multi(
         return Ok(results);
     }
 
-    // No active transaction — wrap the whole batch in a DB-managed transaction so
+    // If an editor session is active, route through its pinned connection.
+    // This guarantees session-scoped state (e.g. MySQL @variables) persists
+    // across separate query executions from the same editor tab.
+    if let Some(sid) = &session_id {
+        if let Some(session) = sessions.get(sid) {
+            let mut guard = session.lock().await;
+            // Switch database once before executing the batch.
+            if let Some(db) = &database {
+                match &mut *guard {
+                    HeldConnection::MySql(conn) => {
+                        let db_esc = db.replace('`', "``");
+                        if !mysql_switch_db(conn, &format!("USE `{}`", db_esc)).await {
+                            return Err(AppError::new(
+                                "QUERY_ERROR",
+                                format!("Failed to switch to database `{}`", db),
+                            ));
+                        }
+                    }
+                    HeldConnection::Postgres(conn) => {
+                        sqlx::query(&format!("SET search_path = {}", quote_postgres(db)))
+                            .execute(&mut **conn)
+                            .await
+                            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    }
+                    HeldConnection::Sqlite(_) => {}
+                }
+            }
+            for stmt in &statements {
+                let query_id = uuid::Uuid::new_v4().to_string();
+                let start = std::time::Instant::now();
+                let exec_result = match &mut *guard {
+                    HeldConnection::MySql(conn) => execute_mysql(conn, stmt, 10_000, 0).await,
+                    HeldConnection::Postgres(conn) => {
+                        execute_postgres(conn, stmt, 10_000, 0).await
+                    }
+                    HeldConnection::Sqlite(conn) => execute_sqlite(conn, stmt, 10_000, 0).await,
+                };
+                let duration_us = start.elapsed().as_micros() as u64;
+                push_result(
+                    &mut results,
+                    exec_result,
+                    query_id,
+                    &connection_id,
+                    stmt,
+                    duration_us,
+                    sqlite.inner(),
+                )
+                .await;
+            }
+            return Ok(results);
+        }
+    }
+
+    // No active transaction or session — wrap the whole batch in a DB-managed transaction so
     // that a failure in any statement rolls back all prior statements in the batch.
     // Single-statement batches skip the explicit BEGIN/COMMIT overhead.
     let multi = statements.len() > 1;

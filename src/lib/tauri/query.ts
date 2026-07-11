@@ -34,11 +34,13 @@ export async function executeMultiQuery(
   connectionId: string,
   sql: string,
   database?: string | null,
+  sessionId?: string | null,
 ): Promise<QueryResult[]> {
   return invoke<QueryResult[]>('query_execute_multi', {
     connectionId,
     sql,
     database: database ?? null,
+    sessionId: sessionId ?? null,
   });
 }
 

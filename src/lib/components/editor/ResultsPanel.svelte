@@ -17,6 +17,7 @@
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { saveTableChanges } from '$lib/tauri/query';
   import { portal } from '$lib/actions/portal';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
 
   const toast = useToast();
   const connections = useConnections();
@@ -29,6 +30,7 @@
     isRunning?: boolean;
     initialActiveTab?: number;
     onActiveTabChange?: (_tab: number) => void;
+    variableValues?: Record<string, string | null>;
   }
 
   let {
@@ -39,6 +41,7 @@
     isRunning = false,
     initialActiveTab = 0,
     onActiveTabChange,
+    variableValues = {},
   }: Props = $props();
 
   type CellValue = string | number | boolean | null;
@@ -82,6 +85,24 @@
 
   // Whether we have a meaningful data payload (successful query with columns).
   let hasData = $derived(result !== null && result.error === null && result.columns.length > 0);
+
+  // Detect @varnames being SET in the active statement (MySQL/MariaDB style).
+  let setVariableNames = $derived.by((): string[] => {
+    const stmt = statements[activeTab];
+    if (!stmt) return [];
+    const cleaned = stmt
+      .replace(/--[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .trim();
+    if (!/^\s*SET\s+@/i.test(cleaned)) return [];
+    const re = /@([a-zA-Z_]\w*)\s*:?=/g;
+    const vars: string[] = [];
+    let m;
+    while ((m = re.exec(cleaned)) !== null) {
+      vars.push(`@${m[1]}`);
+    }
+    return vars;
+  });
 
   // ── Editing state ─────────────────────────────────────────────────────────
 
@@ -440,11 +461,20 @@
   {:else}
     {#if results.length > 1}
       <div class="tab-bar" role="tablist">
+        <div class="tab-counts">
+          {#if successCount > 0}
+            <span class="tab-count-ok">{successCount} ok</span>
+          {/if}
+          {#if errorCount > 0}
+            <span class="tab-count-err">{errorCount} err</span>
+          {/if}
+        </div>
         <div class="tab-list">
           {#each results as r, i}
             <button
               class="tab-btn"
               class:tab-btn--active={activeTab === i}
+              class:tab-btn--ok={r.error === null}
               class:tab-btn--error={r.error !== null}
               role="tab"
               aria-selected={activeTab === i}
@@ -453,25 +483,12 @@
               }}
             >
               {i + 1}
-              {#if r.error !== null}
-                <span class="tab-error-dot" aria-hidden="true">●</span>
-              {:else}
-                <span class="tab-ok-dot" aria-hidden="true">●</span>
-              {/if}
             </button>
           {/each}
         </div>
-        <div class="tab-summary">
-          {#if successCount > 0}
-            <span class="tab-summary-ok">{successCount} ok</span>
-          {/if}
-          {#if errorCount > 0}
-            <span class="tab-summary-err">{errorCount} err</span>
-          {/if}
-        </div>
         {#if statements[activeTab]}
           <div class="tab-sql-wrap" title={statements[activeTab]}>
-            <span class="tab-sql">{statements[activeTab]}</span>
+            <SqlHighlight sql={statements[activeTab]} class="tab-sql" />
           </div>
         {/if}
       </div>
@@ -507,6 +524,11 @@
           </button>
         </div>
         <span class="error-message">{result.error}</span>
+      </div>
+      <div class="flex-fill"></div>
+      <div class="status-bar">
+        <span class="status-item">{durationLabel}</span>
+        <div class="status-spacer"></div>
       </div>
     {:else if hasData}
       <div class="results-toolbar">
@@ -726,9 +748,29 @@
         </div>
       </div>
     {:else if result !== null}
-      <!-- Query ran successfully but returned no columns (e.g. DDL or empty result). -->
+      <!-- Query ran successfully but returned no columns (e.g. DDL, SET, or empty result). -->
       <div class="empty-result">
-        <span class="empty-text">Query executed successfully</span>
+        {#if setVariableNames.length > 0}
+          <div class="set-variable-result">
+            {#each setVariableNames as varName}
+              <div class="set-variable-row">
+                <code class="set-variable-name">{varName}</code>
+                <span class="set-variable-eq">=</span>
+                {#if varName in variableValues}
+                  {#if variableValues[varName] === null}
+                    <code class="set-variable-value set-variable-value--null">NULL</code>
+                  {:else}
+                    <code class="set-variable-value">{variableValues[varName]}</code>
+                  {/if}
+                {:else}
+                  <span class="set-variable-value set-variable-value--unknown">set</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <span class="empty-text">Query executed successfully</span>
+        {/if}
       </div>
       <div class="status-bar">
         {#if durationLabel}
@@ -738,6 +780,7 @@
           <span class="status-separator">·</span>
           <span class="status-item">{affectedLabel}</span>
         {/if}
+        <div class="status-spacer"></div>
       </div>
     {/if}
   {/if}
@@ -775,39 +818,57 @@
     overflow: hidden;
   }
 
-  .tab-list {
-    display: flex;
-    align-items: stretch;
-    flex-shrink: 0;
-    overflow-x: auto;
-  }
-
-  .tab-summary {
-    flex-shrink: 0;
+  .tab-counts {
     display: flex;
     align-items: center;
     gap: var(--spacing-1);
-    padding: 0 var(--spacing-2);
-    border-left: 1px solid var(--color-border);
+    padding: 0 var(--spacing-3);
+    flex-shrink: 0;
     border-right: 1px solid var(--color-border);
   }
 
-  .tab-summary-ok {
+  .tab-count-ok {
     font-size: var(--font-size-xs);
     color: var(--color-success, #22c55e);
     font-variant-numeric: tabular-nums;
   }
 
-  .tab-summary-err {
+  .tab-count-err {
+    font-size: var(--font-size-xs);
+    color: var(--color-danger);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tab-list {
+    display: flex;
+    align-items: stretch;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tab-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .status-ok {
+    font-size: var(--font-size-xs);
+    color: var(--color-success, #22c55e);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-err {
     font-size: var(--font-size-xs);
     color: var(--color-danger);
     font-variant-numeric: tabular-nums;
   }
 
   .tab-sql-wrap {
-    flex: 1;
-    min-width: 0;
+    flex: 0 0 auto;
+    max-width: 50%;
     overflow-x: auto;
+    overflow-y: hidden;
     scrollbar-width: none;
     border-left: 1px solid var(--color-border);
     display: flex;
@@ -818,10 +879,9 @@
     display: none;
   }
 
-  .tab-sql {
+  .tab-sql-wrap :global(.tab-sql) {
     padding: 0 var(--spacing-3);
     font-size: var(--font-size-xs);
-    font-family: var(--font-family-mono);
     color: var(--color-text-muted);
     white-space: nowrap;
   }
@@ -845,24 +905,29 @@
   }
 
   .tab-btn:hover {
-    background: var(--color-bg-hover);
+    filter: brightness(1.06);
     color: var(--color-text-primary);
+  }
+
+  .tab-btn--ok {
+    background: color-mix(in srgb, var(--color-success, #22c55e) 10%, transparent);
+  }
+
+  .tab-btn--error {
+    background: color-mix(in srgb, var(--color-danger) 12%, transparent);
   }
 
   .tab-btn--active {
     color: var(--color-text-primary);
-    background: var(--color-bg-primary);
     box-shadow: inset 0 -2px 0 var(--color-accent);
   }
 
-  .tab-btn--error .tab-error-dot {
-    color: var(--color-danger);
-    font-size: 8px;
+  .tab-btn--active.tab-btn--ok {
+    background: color-mix(in srgb, var(--color-success, #22c55e) 14%, var(--color-bg-primary));
   }
 
-  .tab-ok-dot {
-    color: var(--color-success, #22c55e);
-    font-size: 8px;
+  .tab-btn--active.tab-btn--error {
+    background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-primary));
   }
 
   .error-box {
@@ -937,6 +1002,51 @@
   .empty-text {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+  }
+
+  .set-variable-result {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    align-items: center;
+  }
+
+  .set-variable-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    font-size: var(--font-size-sm);
+  }
+
+  .set-variable-name {
+    font-family: var(--font-family-mono);
+    color: var(--color-editor-keyword, var(--color-accent));
+  }
+
+  .set-variable-eq {
+    color: var(--color-text-muted);
+  }
+
+  .set-variable-value {
+    font-family: var(--font-family-mono);
+    color: var(--color-editor-string, var(--color-text-primary));
+    background: var(--color-bg-tertiary);
+    padding: 1px var(--spacing-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+  }
+
+  .set-variable-value--null {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .set-variable-value--unknown {
+    font-family: var(--font-family-ui);
+    color: var(--color-text-muted);
+    background: transparent;
+    border-color: transparent;
+    font-size: var(--font-size-xs);
   }
 
   .status-bar {
@@ -1117,6 +1227,10 @@
     padding: var(--spacing-1) var(--spacing-3);
     background: var(--color-bg-secondary);
     border-top: 1px solid var(--color-border);
+  }
+
+  .flex-fill {
+    flex: 1;
   }
 
   .status-spacer {
