@@ -20,6 +20,8 @@ export interface SavedQueryInput {
   database?: string | null;
   name: string;
   sql: string;
+  description?: string | null;
+  annotations?: string | null;
   position?: number;
 }
 
@@ -63,6 +65,8 @@ export async function deleteSavedQuery(id: string): Promise<void> {
 export interface FileQueryInput {
   name: string;
   sql: string;
+  description?: string | null;
+  annotations?: string | null;
   connectionId?: string | null;
   folderId?: string | null;
   database?: string | null;
@@ -81,6 +85,8 @@ export async function fileCreateSavedQuery(input: FileQueryInput): Promise<FileQ
     folderId: input.folderId ?? null,
     name: input.name,
     sql: input.sql,
+    description: input.description ?? null,
+    annotations: input.annotations ?? null,
     connectionId: input.connectionId ?? null,
     database: input.database ?? null,
   });
@@ -94,6 +100,8 @@ export async function fileUpdateSavedQuery(
     id,
     name: input.name,
     sql: input.sql,
+    description: input.description ?? null,
+    annotations: input.annotations ?? null,
     connectionId: input.connectionId ?? null,
     folderId: input.folderId ?? null,
     database: input.database ?? null,

@@ -13,6 +13,9 @@
     dropCursor,
     rectangularSelection,
     crosshairCursor,
+    gutter,
+    GutterMarker,
+    WidgetType,
     type DecorationSet,
     type ViewUpdate,
   } from '@codemirror/view';
@@ -68,6 +71,8 @@
     connectionId: string;
     database?: string;
     initialSql?: string;
+    initialDescription?: string;
+    initialAnnotations?: string;
     editorId?: string;
     savedQueryId?: string;
     savedQueryName?: string;
@@ -78,6 +83,8 @@
     connectionId,
     database: initialDatabase,
     initialSql = '',
+    initialDescription = '',
+    initialAnnotations = undefined,
     editorId,
     savedQueryId: initialSavedQueryId,
     savedQueryName: initialSavedQueryName,
@@ -180,16 +187,33 @@
       selectedDatabase,
       activeResultTab,
       variableValues,
+      description: descriptionText,
+      annotations: annotationsJson ?? undefined,
     });
+  });
+
+  $effect(() => {
+    notesStructureVersion;
+    const view = editorView;
+    if (!view) return;
+    view.dispatch({ effects: setNotesEffect.of([...inlineNotes]) });
   });
 
   $effect(() => {
     if (!editorId) return;
     const dirtyKey = `query:${editorId}`;
     if (savedSql !== null) {
-      panelStore.setItemDirty(dirtyKey, sqlText !== savedSql);
+      panelStore.setItemDirty(
+        dirtyKey,
+        sqlText !== savedSql ||
+          descriptionText !== (savedDescription ?? '') ||
+          annotationsJson !== savedAnnotations,
+      );
     } else {
-      panelStore.setItemDirty(dirtyKey, sqlText.trim() !== '');
+      panelStore.setItemDirty(
+        dirtyKey,
+        sqlText.trim() !== '' || descriptionText.trim() !== '',
+      );
     }
   });
 
@@ -198,6 +222,189 @@
   let savedSql = $state<string | null>(
     untrack(() => (initialSavedQueryId ? initialSql : null)),
   );
+  let descriptionText = $state<string>(untrack(() => cached?.description ?? initialDescription ?? ''));
+  let savedDescription = $state<string | null>(untrack(() => (initialSavedQueryId ? (initialDescription ?? '') : null)));
+  let descriptionOpen = $state<boolean>(untrack(() => !!(cached?.description ?? initialDescription)));
+
+  // ── Inline Notes ──────────────────────────────────────────────────────────
+
+  interface InlineNote {
+    id: string;
+    lineNumber: number;
+    placement: 'above' | 'below';
+    text: string;
+  }
+
+  function parseAnnotations(json: string | null | undefined): InlineNote[] {
+    if (!json) return [];
+    try { return JSON.parse(json); } catch { return []; }
+  }
+
+  let inlineNotes = $state<InlineNote[]>(
+    untrack(() => parseAnnotations(cached?.annotations ?? initialAnnotations))
+  );
+  let savedAnnotations = $state<string | null>(
+    untrack(() => (initialSavedQueryId ? (initialAnnotations ?? null) : null))
+  );
+  let noteMenu = $state<{ lineNumber: number; x: number; y: number } | null>(null);
+  let notesStructureVersion = $state(0);
+
+  const annotationsJson = $derived(inlineNotes.length > 0 ? JSON.stringify(inlineNotes) : null);
+
+  const setNotesEffect = StateEffect.define<InlineNote[]>();
+
+  const notesField = StateField.define<InlineNote[]>({
+    create: () => [...inlineNotes],
+    update(notes, tr) {
+      for (const e of tr.effects) if (e.is(setNotesEffect)) return e.value;
+      return notes;
+    },
+  });
+
+  const noteCallbacksRef: {
+    onUpdate: (id: string, text: string) => void;
+    onRemove: (id: string) => void;
+  } = {
+    onUpdate: () => {},
+    onRemove: () => {},
+  };
+
+  class NoteWidget extends WidgetType {
+    private note: InlineNote;
+    constructor(note: InlineNote) { super(); this.note = note; }
+
+    eq(other: NoteWidget) {
+      return (
+        other.note.id === this.note.id &&
+        other.note.lineNumber === this.note.lineNumber &&
+        other.note.placement === this.note.placement
+      );
+    }
+
+    toDOM(view: EditorView) {
+      const wrap = document.createElement('div') as HTMLDivElement & { _ro?: ResizeObserver };
+      wrap.className = 'cm-inline-note';
+
+      const syncSize = () => {
+        const gutterEl = view.dom.querySelector<HTMLElement>('.cm-gutters');
+        const gutterWidth = gutterEl ? gutterEl.offsetWidth : 0;
+        wrap.style.left = (gutterWidth + 5) + 'px';
+        wrap.style.width = (view.scrollDOM.clientWidth - gutterWidth - 5) + 'px';
+      };
+      syncSize();
+      wrap._ro = new ResizeObserver(syncSize);
+      wrap._ro.observe(view.scrollDOM);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'cm-inline-note-delete';
+      deleteBtn.type = 'button';
+      deleteBtn.textContent = '×';
+      deleteBtn.setAttribute('aria-label', 'Delete note');
+      deleteBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        noteCallbacksRef.onRemove(this.note.id);
+      });
+
+      const textarea = document.createElement('textarea');
+      textarea.className = 'cm-inline-note-textarea';
+      textarea.value = this.note.text;
+      textarea.placeholder = 'Write a note…';
+      textarea.rows = 1;
+      textarea.addEventListener('input', () => {
+        noteCallbacksRef.onUpdate(this.note.id, textarea.value);
+      });
+      textarea.addEventListener('mousedown', (e) => e.stopPropagation());
+      textarea.addEventListener('click', (e) => e.stopPropagation());
+      textarea.addEventListener('keydown', (e) => e.stopPropagation());
+
+      wrap.appendChild(deleteBtn);
+      wrap.appendChild(textarea);
+      return wrap;
+    }
+
+    destroy(dom: HTMLElement) {
+      (dom as HTMLDivElement & { _ro?: ResizeObserver })._ro?.disconnect();
+    }
+
+    ignoreEvent() { return true; }
+  }
+
+  const gutterClickRef: { onClick: (lineNumber: number, x: number, y: number) => void } = {
+    onClick: () => {},
+  };
+
+  class PlusMarker extends GutterMarker {
+    private lineNumber: number;
+    constructor(lineNumber: number) { super(); this.lineNumber = lineNumber; }
+    eq(other: PlusMarker) { return other.lineNumber === this.lineNumber; }
+    toDOM() {
+      const btn = document.createElement('button');
+      btn.className = 'cm-note-plus-btn';
+      btn.type = 'button';
+      btn.textContent = '+';
+      btn.title = 'Add note';
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = btn.getBoundingClientRect();
+        gutterClickRef.onClick(this.lineNumber, rect.right + 6, rect.top);
+      });
+      return btn;
+    }
+  }
+
+  function buildNoteDecorations(state: EditorState): DecorationSet {
+    const notes = state.field(notesField);
+    if (notes.length === 0) return Decoration.none;
+    const docLines = state.doc.lines;
+    const entries: Array<{ pos: number; side: number; note: InlineNote }> = [];
+    for (const note of notes) {
+      if (note.lineNumber < 1 || note.lineNumber > docLines) continue;
+      const line = state.doc.line(note.lineNumber);
+      if (note.placement === 'above') {
+        entries.push({ pos: line.from, side: -1, note });
+      } else {
+        entries.push({ pos: line.to, side: 1, note });
+      }
+    }
+    entries.sort((a, b) => a.pos !== b.pos ? a.pos - b.pos : a.side - b.side);
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const { pos, side, note } of entries) {
+      builder.add(pos, pos, Decoration.widget({ widget: new NoteWidget(note), block: true, side }));
+    }
+    return builder.finish();
+  }
+
+  const notesDecoField = StateField.define<DecorationSet>({
+    create(state) { return buildNoteDecorations(state); },
+    update(deco, tr) {
+      if (tr.docChanged || tr.effects.some(e => e.is(setNotesEffect))) {
+        return buildNoteDecorations(tr.state);
+      }
+      return deco.map(tr.changes);
+    },
+    provide: f => EditorView.decorations.from(f),
+  });
+
+  function makeNotesGutter() {
+    return gutter({
+      class: 'cm-notes-gutter',
+      renderEmptyElements: true,
+      lineMarker(view, line) {
+        const lineNum = view.state.doc.lineAt(line.from).number;
+        return new PlusMarker(lineNum);
+      },
+      lineMarkerChange() { return false; },
+    });
+  }
+
+  function addNote(lineNumber: number, placement: 'above' | 'below') {
+    const id = crypto.randomUUID();
+    inlineNotes = [...inlineNotes, { id, lineNumber, placement, text: '' }];
+    notesStructureVersion++;
+    noteMenu = null;
+  }
 
   $effect(() => {
     if (initialSavedQueryName !== undefined) currentSavedQueryName = initialSavedQueryName;
@@ -322,6 +529,8 @@
         const updated: FileQuery = await savedQueriesApi.fileUpdateSavedQuery(currentSavedQueryId, {
           name: currentSavedQueryName ?? 'Query',
           sql: sqlText,
+          description: descriptionText || null,
+          annotations: annotationsJson,
           connectionId,
           database: selectedDatabase || null,
         });
@@ -331,6 +540,8 @@
           panelStore.updateQueryEditorMeta(editorId, { savedQueryId: updated.id });
         }
         savedSql = sqlText;
+        savedDescription = descriptionText;
+        savedAnnotations = annotationsJson;
         savedQueriesInvalidator.invalidate();
       } finally {
         isSaving = false;
@@ -353,12 +564,16 @@
       const saved: FileQuery = await savedQueriesApi.fileCreateSavedQuery({
         name: saveNameInput.trim(),
         sql: sqlText,
+        description: descriptionText || null,
+        annotations: annotationsJson,
         connectionId,
         database: selectedDatabase || null,
       });
       currentSavedQueryId = saved.id;
       currentSavedQueryName = saved.name;
       savedSql = sqlText;
+      savedDescription = descriptionText;
+      savedAnnotations = annotationsJson;
       saveDialogOpen = false;
       panelStore.updateQueryEditorMeta(editorId, {
         savedQueryId: saved.id,
@@ -1362,7 +1577,7 @@
                 if (flat) resultParts.push(flat);
               } else if (flat) {
                 sqlFlat.push(flat);
-                sqlOrig.push(origLine);
+                sqlOrig.push(origLine as string);
               }
             }
             return resultParts.join('\n');
@@ -1472,6 +1687,18 @@
   onMount(() => {
     if (!editorContainer) return;
 
+    // Set up note callbacks before creating the editor (widgets reference these via closure)
+    noteCallbacksRef.onUpdate = (id: string, text: string) => {
+      inlineNotes = inlineNotes.map((n) => (n.id === id ? { ...n, text } : n));
+    };
+    noteCallbacksRef.onRemove = (id: string) => {
+      inlineNotes = inlineNotes.filter((n) => n.id !== id);
+      notesStructureVersion++;
+    };
+    gutterClickRef.onClick = (lineNumber: number, x: number, y: number) => {
+      noteMenu = { lineNumber, x, y };
+    };
+
     document.addEventListener('shortcut-action', handleShortcutAction);
     unlistenShortcut = () => document.removeEventListener('shortcut-action', handleShortcutAction);
 
@@ -1574,6 +1801,9 @@
         ...makeTableHighlightExtensions(),
         lintGutter(),
         cmTooltips({ tooltipSpace: (view) => view.dom.getBoundingClientRect() }),
+        notesField,
+        notesDecoField,
+        makeNotesGutter(),
       ],
     });
 
@@ -1710,6 +1940,33 @@
         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
         <polyline points="17 21 17 13 7 13 7 21"></polyline>
         <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>
+    </button>
+
+    <button
+      class="toolbar-btn toolbar-btn--icon toolbar-btn--description"
+      class:toolbar-btn--description-active={descriptionOpen}
+      onclick={() => { descriptionOpen = !descriptionOpen; }}
+      title={descriptionOpen ? 'Hide description' : 'Show description'}
+      aria-label="Toggle description"
+      aria-pressed={descriptionOpen}
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
       </svg>
     </button>
 
@@ -1882,6 +2139,18 @@
     </div>
   {/if}
 
+  {#if descriptionOpen}
+    <div class="description-panel">
+      <textarea
+        class="description-textarea"
+        bind:value={descriptionText}
+        placeholder="Add a description for this query…"
+        spellcheck={false}
+        aria-label="Query description"
+      ></textarea>
+    </div>
+  {/if}
+
   <div class="editor-area" style="flex-basis: {editorHeightPct}%">
     <div class="editor-wrapper">
       <div class="editor-container" bind:this={editorContainer}></div>
@@ -1982,6 +2251,27 @@
     onselect={applyFkSelection}
     onclose={closeFkSearch}
   />
+{/if}
+
+{#if noteMenu !== null}
+  <div
+    class="note-menu-backdrop"
+    role="presentation"
+    onmousedown={() => { noteMenu = null; }}
+    use:portal
+  ></div>
+  <div
+    class="note-menu"
+    style="top:{noteMenu.y}px;left:{noteMenu.x}px"
+    use:portal
+  >
+    <button class="note-menu-item" onmousedown={() => addNote(noteMenu!.lineNumber, 'above')}>
+      Add note above line
+    </button>
+    <button class="note-menu-item" onmousedown={() => addNote(noteMenu!.lineNumber, 'below')}>
+      Add note below line
+    </button>
+  </div>
 {/if}
 
 <style>
@@ -2246,6 +2536,40 @@
     font-size: var(--font-size-xs);
   }
 
+  .toolbar-btn--description-active {
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
+
+  .description-panel {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    display: flex;
+    flex-direction: column;
+    max-height: 120px;
+  }
+
+  .description-textarea {
+    flex: 1;
+    resize: none;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    padding: var(--spacing-2) var(--spacing-3);
+    min-height: 60px;
+    scrollbar-width: thin;
+  }
+
+  .description-textarea::placeholder {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
   .editor-area {
     flex: 0 0 40%;
     min-height: 60px;
@@ -2413,5 +2737,142 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  /* ── Notes gutter ─────────────────────────────────────────────────────────── */
+
+  .editor-container :global(.cm-notes-gutter) {
+    width: 18px;
+  }
+
+  .editor-container :global(.cm-notes-gutter .cm-gutterElement) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .editor-container :global(.cm-note-plus-btn) {
+    opacity: 0;
+    background: none;
+    border: none;
+    color: var(--color-accent);
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity var(--transition-fast);
+  }
+
+  .editor-container :global(.cm-notes-gutter .cm-gutterElement:hover .cm-note-plus-btn) {
+    opacity: 1;
+  }
+
+  /* ── Inline note widgets ──────────────────────────────────────────────────── */
+
+  .editor-container :global(.cm-inline-note) {
+    position: sticky;
+    /* left and width are set dynamically in toDOM to match gutter width */
+    display: flex;
+    flex-direction: column;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    box-sizing: border-box;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    overflow: visible;
+    user-select: text;
+  }
+
+  .editor-container :global(.cm-inline-note-delete) {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity var(--transition-fast), color var(--transition-fast);
+  }
+
+  .editor-container :global(.cm-inline-note:hover .cm-inline-note-delete) {
+    opacity: 0.5;
+  }
+
+  .editor-container :global(.cm-inline-note-delete:hover) {
+    opacity: 1 !important;
+    color: var(--color-danger);
+  }
+
+  .editor-container :global(.cm-inline-note-textarea) {
+    width: 100%;
+    min-height: 0;
+    padding: 6px 28px 6px 8px;
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-sm);
+    resize: vertical;
+    outline: none;
+    line-height: var(--line-height-normal);
+    box-sizing: border-box;
+  }
+
+  .editor-container :global(.cm-inline-note-textarea:focus) {
+    background: var(--color-bg-input, var(--color-bg-primary));
+  }
+
+  /* ── Note menu popup ──────────────────────────────────────────────────────── */
+
+  .note-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 499;
+  }
+
+  .note-menu {
+    position: fixed;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    z-index: 500;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    min-width: 170px;
+    backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .note-menu-item {
+    padding: 6px 10px;
+    text-align: left;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-family: var(--font-family-ui);
+    transition: background var(--transition-fast);
+  }
+
+  .note-menu-item:hover {
+    background: var(--color-bg-hover);
   }
 </style>

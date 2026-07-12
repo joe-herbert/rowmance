@@ -179,6 +179,8 @@ export interface SavedQuery {
   database: string | null;
   name: string;
   sql: string;
+  description: string | null;
+  annotations: string | null;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -196,6 +198,8 @@ export interface FileQuery {
   folderId: string | null;
   name: string;
   sql: string;
+  description: string | null;
+  annotations: string | null;
   /** Resolved local connection ID (null when unresolved or none). */
   connectionId: string | null;
   /** How the connection was resolved. */
@@ -325,6 +329,8 @@ export type PanelKind =
       connectionId: string;
       database?: string;
       initialSql?: string;
+      initialDescription?: string;
+      initialAnnotations?: string;
       editorId?: string;
       savedQueryId?: string;
       savedQueryName?: string;

@@ -240,6 +240,8 @@
       connectionId: connId,
       database: query.database ?? undefined,
       initialSql: query.sql,
+      initialDescription: query.description ?? undefined,
+      initialAnnotations: query.annotations ?? undefined,
       savedQueryId: query.id,
       savedQueryName: query.name,
     });
@@ -379,6 +381,8 @@
       const updated = await savedQueriesApi.fileUpdateSavedQuery(query.id, {
         name,
         sql: query.sql,
+        description: query.description,
+        annotations: query.annotations,
         connectionId: query.fileConnectionId,
         folderId: query.folderId,
         database: query.database,
@@ -645,6 +649,8 @@
         const updated = await savedQueriesApi.fileUpdateSavedQuery(queryId, {
           name: query.name,
           sql: query.sql,
+          description: query.description,
+          annotations: query.annotations,
           connectionId: query.fileConnectionId,
           folderId: zone.folderId,
           database: query.database,
@@ -663,6 +669,8 @@
           const updated = await savedQueriesApi.fileUpdateSavedQuery(queryId, {
             name: query.name,
             sql: query.sql,
+            description: query.description,
+            annotations: query.annotations,
             connectionId: query.fileConnectionId,
             folderId: targetFolderId,
             database: query.database,
@@ -701,6 +709,8 @@
           const updated = await savedQueriesApi.fileUpdateSavedQuery(queryId, {
             name: query.name,
             sql: query.sql,
+            description: query.description,
+            annotations: query.annotations,
             connectionId: query.fileConnectionId,
             folderId: targetFolderId,
             database: query.database,

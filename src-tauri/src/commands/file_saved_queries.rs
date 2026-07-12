@@ -74,6 +74,8 @@ struct FileHeader {
     connection_fingerprint: Option<String>,
     database: Option<String>,
     position: Option<i64>,
+    description: Option<String>,
+    annotations: Option<String>,
 }
 
 fn parse_header(content: &str) -> (FileHeader, String) {
@@ -95,6 +97,12 @@ fn parse_header(content: &str) -> (FileHeader, String) {
                     "database" => header.database = opt,
                     "position" => {
                         header.position = opt.and_then(|v| v.parse().ok());
+                    }
+                    "description" => {
+                        header.description = opt.and_then(|v| serde_json::from_str::<String>(&v).ok());
+                    }
+                    "annotations" => {
+                        header.annotations = opt;
                     }
                     _ => {}
                 }
@@ -136,6 +144,19 @@ fn write_file_content(header: &FileHeader, sql: &str) -> String {
     if let Some(pos) = header.position {
         out.push_str(&format!("{HEADER_PREFIX}position: {pos}\n"));
         has_header = true;
+    }
+    if let Some(description) = &header.description {
+        if !description.is_empty() {
+            let encoded = serde_json::to_string(description).unwrap_or_default();
+            out.push_str(&format!("{HEADER_PREFIX}description: {encoded}\n"));
+            has_header = true;
+        }
+    }
+    if let Some(annotations) = &header.annotations {
+        if !annotations.is_empty() {
+            out.push_str(&format!("{HEADER_PREFIX}annotations: {annotations}\n"));
+            has_header = true;
+        }
     }
     if has_header {
         out.push('\n');
@@ -296,6 +317,8 @@ pub struct FileQuery {
     pub folder_id: Option<String>,
     pub name: String,
     pub sql: String,
+    pub description: Option<String>,
+    pub annotations: Option<String>,
     #[serde(rename = "connectionId")]
     pub connection_id: Option<String>,
     #[serde(rename = "connectionStatus")]
@@ -433,6 +456,8 @@ fn scan_dir(
                 folder_id,
                 name,
                 sql,
+                description: header.description,
+                annotations: header.annotations,
                 connection_id: conn_id,
                 connection_status: conn_status,
                 file_connection_id: header.connection_id,
@@ -508,6 +533,8 @@ pub async fn file_saved_queries_create(
     folder_id: Option<String>,
     name: String,
     sql: String,
+    description: Option<String>,
+    annotations: Option<String>,
     connection_id: Option<String>,
     database: Option<String>,
 ) -> Result<FileQuery, AppError> {
@@ -553,6 +580,8 @@ pub async fn file_saved_queries_create(
         connection_fingerprint: fingerprint.clone(),
         database: database.clone(),
         position: Some(position),
+        description: description.clone(),
+        annotations: annotations.clone(),
     };
 
     std::fs::write(&file_path, write_file_content(&header, &sql))
@@ -576,6 +605,8 @@ pub async fn file_saved_queries_create(
         folder_id,
         name: safe_name,
         sql,
+        description,
+        annotations,
         connection_id: connection_id.clone(),
         connection_status: conn_status,
         file_connection_id: connection_id,
@@ -593,6 +624,8 @@ pub async fn file_saved_queries_update(
     id: String,
     name: String,
     sql: String,
+    description: Option<String>,
+    annotations: Option<String>,
     connection_id: Option<String>,
     folder_id: Option<String>,
     database: Option<String>,
@@ -642,6 +675,8 @@ pub async fn file_saved_queries_update(
         connection_fingerprint: fingerprint.clone(),
         database: database.clone(),
         position: old_header.position,
+        description: description.clone(),
+        annotations: annotations.clone(),
     };
 
     // Write to the target path first.
@@ -672,6 +707,8 @@ pub async fn file_saved_queries_update(
         folder_id: actual_folder_id,
         name: safe_name,
         sql,
+        description,
+        annotations,
         connection_id: resolved_id,
         connection_status: conn_status,
         file_connection_id: connection_id,
