@@ -2,6 +2,9 @@
   import { onMount, onDestroy, untrack } from 'svelte';
   import {
     EditorView,
+    ViewPlugin,
+    tooltips as cmTooltips,
+    Decoration,
     keymap,
     lineNumbers,
     highlightActiveLine,
@@ -10,18 +13,25 @@
     dropCursor,
     rectangularSelection,
     crosshairCursor,
+    gutter,
+    GutterMarker,
+    WidgetType,
+    type DecorationSet,
+    type ViewUpdate,
   } from '@codemirror/view';
-  import { EditorState, type Extension } from '@codemirror/state';
+  import { EditorState, StateEffect, StateField, RangeSetBuilder, type Extension } from '@codemirror/state';
   import { highlightSelectionMatches } from '@codemirror/search';
-  import { defaultKeymap, indentWithTab } from '@codemirror/commands';
+  import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands';
   import { sql as sqlLang } from '@codemirror/lang-sql';
   import {
     HighlightStyle,
     syntaxHighlighting,
     bracketMatching,
     foldGutter,
+    syntaxTree,
   } from '@codemirror/language';
   import { tags } from '@lezer/highlight';
+  import type { SyntaxNode } from '@lezer/common';
   import {
     closeBrackets,
     closeBracketsKeymap,
@@ -31,7 +41,9 @@
     type CompletionResult,
     type CompletionSource,
   } from '@codemirror/autocomplete';
+  import { lintGutter, setDiagnostics } from '@codemirror/lint';
   import { format as sqlFormat } from 'sql-formatter';
+  import { buildDiagnosticsFromErrors } from '$lib/utils/sqlErrorHighlight';
   import type { QueryResult, ForeignKeyInfo, VirtualRelation } from '$lib/types';
   import { executeMultiQuery, explainQuery } from '$lib/tauri/query';
   import { listen } from '@tauri-apps/api/event';
@@ -42,7 +54,7 @@
   import FkSearchPopup from '$lib/components/editor/FkSearchPopup.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { listVirtualRelations } from '$lib/tauri/virtual_relations';
-  import { splitStatements, statementAtCursor, isMutatingStatement } from '$lib/utils/sql';
+  import { splitStatements, statementAtCursor, isMutatingStatement, stripLineComments } from '$lib/utils/sql';
   import { errorMessage } from '$lib/utils/errors';
   import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
@@ -50,6 +62,7 @@
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
+  import { sessionAcquire, sessionRelease } from '$lib/tauri/sessions';
   import type { FileQuery } from '$lib/types';
   import { useRecording } from '$lib/stores/recording.svelte';
   import { useRevert } from '$lib/stores/revert.svelte';
@@ -58,6 +71,8 @@
     connectionId: string;
     database?: string;
     initialSql?: string;
+    initialDescription?: string;
+    initialAnnotations?: string;
     editorId?: string;
     savedQueryId?: string;
     savedQueryName?: string;
@@ -68,6 +83,8 @@
     connectionId,
     database: initialDatabase,
     initialSql = '',
+    initialDescription = '',
+    initialAnnotations = undefined,
     editorId,
     savedQueryId: initialSavedQueryId,
     savedQueryName: initialSavedQueryName,
@@ -91,6 +108,7 @@
   let editorView = $state<EditorView | undefined>(undefined);
   let resultsWrapperEl = $state<HTMLDivElement | undefined>(undefined);
   let sqlText = $state(untrack(() => cached?.sql ?? initialSql));
+  let executedSql = $state('');
   let results = $state<QueryResult[]>(untrack(() => cached?.results ?? []));
   let executedStatements = $state<string[]>(untrack(() => cached?.executedStatements ?? []));
   let isRunning = $state(false);
@@ -106,6 +124,60 @@
   );
   let activeResultTab = $state(untrack(() => cached?.activeResultTab ?? 0));
 
+  // ── Editor session (pinned connection for variable persistence) ───────────
+
+  $effect(() => {
+    if (!editorId || !connections.isActive(connectionId)) return;
+    sessionAcquire(connectionId, editorId).catch(() => {});
+  });
+
+  // ── SQL variable tracking (MySQL/MariaDB @varname) ────────────────────────
+
+  let sqlVariableNames = $derived.by((): string[] => {
+    const dbType = connections.getById(connectionId)?.dbType;
+    if (dbType !== 'mysql' && dbType !== 'mariadb') return [];
+    const vars = new Set<string>();
+    const re = /@([a-zA-Z_]\w*)/g;
+    // Strip string literals and comments to avoid false positives
+    const cleaned = sqlText
+      .replace(/'(?:[^'\\]|\\.)*'/g, '')
+      .replace(/"(?:[^"\\]|\\.)*"/g, '')
+      .replace(/--[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    let m;
+    while ((m = re.exec(cleaned)) !== null) {
+      vars.add(`@${m[1]}`);
+    }
+    return [...vars].sort();
+  });
+
+  let variableValues = $state<Record<string, string | null>>(
+    untrack(() => cached?.variableValues ?? {}),
+  );
+
+  async function fetchVariableValues(): Promise<void> {
+    const vars = sqlVariableNames;
+    if (vars.length === 0) return;
+    try {
+      const res = await executeMultiQuery(
+        connectionId,
+        `SELECT ${vars.join(', ')}`,
+        selectedDatabase || null,
+        editorId,
+      );
+      if (res[0]?.error === null && res[0].rows.length > 0) {
+        const newValues: Record<string, string | null> = {};
+        res[0].columns.forEach((col, i) => {
+          const val = res[0].rows[0][i];
+          newValues[col.name] = val === null ? null : String(val);
+        });
+        variableValues = newValues;
+      }
+    } catch {
+      // Silently ignore — variables panel just won't update
+    }
+  }
+
   $effect(() => {
     if (!editorId) return;
     queryEditorCache.save(editorId, {
@@ -114,24 +186,225 @@
       executedStatements,
       selectedDatabase,
       activeResultTab,
+      variableValues,
+      description: descriptionText,
+      annotations: annotationsJson ?? undefined,
     });
+  });
+
+  $effect(() => {
+    notesStructureVersion;
+    const view = editorView;
+    if (!view) return;
+    view.dispatch({ effects: setNotesEffect.of([...inlineNotes]) });
   });
 
   $effect(() => {
     if (!editorId) return;
     const dirtyKey = `query:${editorId}`;
     if (savedSql !== null) {
-      panelStore.setItemDirty(dirtyKey, sqlText !== savedSql);
+      panelStore.setItemDirty(
+        dirtyKey,
+        sqlText !== savedSql ||
+          descriptionText !== (savedDescription ?? '') ||
+          annotationsJson !== savedAnnotations,
+      );
     } else {
-      panelStore.setItemDirty(dirtyKey, sqlText.trim() !== '');
+      panelStore.setItemDirty(
+        dirtyKey,
+        sqlText.trim() !== '' || descriptionText.trim() !== '',
+      );
     }
   });
 
   let currentSavedQueryId = $state<string | undefined>(untrack(() => initialSavedQueryId));
   let currentSavedQueryName = $state<string | undefined>(untrack(() => initialSavedQueryName));
   let savedSql = $state<string | null>(
-    untrack(() => (initialSavedQueryId ? (cached?.sql ?? initialSql) : null)),
+    untrack(() => (initialSavedQueryId ? initialSql : null)),
   );
+  let descriptionText = $state<string>(untrack(() => cached?.description ?? initialDescription ?? ''));
+  let savedDescription = $state<string | null>(untrack(() => (initialSavedQueryId ? (initialDescription ?? '') : null)));
+  let descriptionOpen = $state<boolean>(untrack(() => !!(cached?.description ?? initialDescription)));
+
+  // ── Inline Notes ──────────────────────────────────────────────────────────
+
+  interface InlineNote {
+    id: string;
+    lineNumber: number;
+    placement: 'above' | 'below';
+    text: string;
+  }
+
+  function parseAnnotations(json: string | null | undefined): InlineNote[] {
+    if (!json) return [];
+    try { return JSON.parse(json); } catch { return []; }
+  }
+
+  let inlineNotes = $state<InlineNote[]>(
+    untrack(() => parseAnnotations(cached?.annotations ?? initialAnnotations))
+  );
+  let savedAnnotations = $state<string | null>(
+    untrack(() => (initialSavedQueryId ? (initialAnnotations ?? null) : null))
+  );
+  let noteMenu = $state<{ lineNumber: number; x: number; y: number } | null>(null);
+  let notesStructureVersion = $state(0);
+
+  const annotationsJson = $derived(inlineNotes.length > 0 ? JSON.stringify(inlineNotes) : null);
+
+  const setNotesEffect = StateEffect.define<InlineNote[]>();
+
+  const notesField = StateField.define<InlineNote[]>({
+    create: () => [...inlineNotes],
+    update(notes, tr) {
+      for (const e of tr.effects) if (e.is(setNotesEffect)) return e.value;
+      return notes;
+    },
+  });
+
+  const noteCallbacksRef: {
+    onUpdate: (id: string, text: string) => void;
+    onRemove: (id: string) => void;
+  } = {
+    onUpdate: () => {},
+    onRemove: () => {},
+  };
+
+  class NoteWidget extends WidgetType {
+    private note: InlineNote;
+    constructor(note: InlineNote) { super(); this.note = note; }
+
+    eq(other: NoteWidget) {
+      return (
+        other.note.id === this.note.id &&
+        other.note.lineNumber === this.note.lineNumber &&
+        other.note.placement === this.note.placement
+      );
+    }
+
+    toDOM(view: EditorView) {
+      const wrap = document.createElement('div') as HTMLDivElement & { _ro?: ResizeObserver };
+      wrap.className = 'cm-inline-note';
+
+      const syncSize = () => {
+        const gutterEl = view.dom.querySelector<HTMLElement>('.cm-gutters');
+        const gutterWidth = gutterEl ? gutterEl.offsetWidth : 0;
+        wrap.style.left = (gutterWidth + 5) + 'px';
+        wrap.style.width = (view.scrollDOM.clientWidth - gutterWidth - 5) + 'px';
+      };
+      syncSize();
+      wrap._ro = new ResizeObserver(syncSize);
+      wrap._ro.observe(view.scrollDOM);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'cm-inline-note-delete';
+      deleteBtn.type = 'button';
+      deleteBtn.textContent = '×';
+      deleteBtn.setAttribute('aria-label', 'Delete note');
+      deleteBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        noteCallbacksRef.onRemove(this.note.id);
+      });
+
+      const textarea = document.createElement('textarea');
+      textarea.className = 'cm-inline-note-textarea';
+      textarea.value = this.note.text;
+      textarea.placeholder = 'Write a note…';
+      textarea.rows = 1;
+      textarea.addEventListener('input', () => {
+        noteCallbacksRef.onUpdate(this.note.id, textarea.value);
+      });
+      textarea.addEventListener('mousedown', (e) => e.stopPropagation());
+      textarea.addEventListener('click', (e) => e.stopPropagation());
+      textarea.addEventListener('keydown', (e) => e.stopPropagation());
+
+      wrap.appendChild(deleteBtn);
+      wrap.appendChild(textarea);
+      return wrap;
+    }
+
+    destroy(dom: HTMLElement) {
+      (dom as HTMLDivElement & { _ro?: ResizeObserver })._ro?.disconnect();
+    }
+
+    ignoreEvent() { return true; }
+  }
+
+  const gutterClickRef: { onClick: (lineNumber: number, x: number, y: number) => void } = {
+    onClick: () => {},
+  };
+
+  class PlusMarker extends GutterMarker {
+    private lineNumber: number;
+    constructor(lineNumber: number) { super(); this.lineNumber = lineNumber; }
+    eq(other: PlusMarker) { return other.lineNumber === this.lineNumber; }
+    toDOM() {
+      const btn = document.createElement('button');
+      btn.className = 'cm-note-plus-btn';
+      btn.type = 'button';
+      btn.textContent = '+';
+      btn.title = 'Add note';
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = btn.getBoundingClientRect();
+        gutterClickRef.onClick(this.lineNumber, rect.right + 6, rect.top);
+      });
+      return btn;
+    }
+  }
+
+  function buildNoteDecorations(state: EditorState): DecorationSet {
+    const notes = state.field(notesField);
+    if (notes.length === 0) return Decoration.none;
+    const docLines = state.doc.lines;
+    const entries: Array<{ pos: number; side: number; note: InlineNote }> = [];
+    for (const note of notes) {
+      if (note.lineNumber < 1 || note.lineNumber > docLines) continue;
+      const line = state.doc.line(note.lineNumber);
+      if (note.placement === 'above') {
+        entries.push({ pos: line.from, side: -1, note });
+      } else {
+        entries.push({ pos: line.to, side: 1, note });
+      }
+    }
+    entries.sort((a, b) => a.pos !== b.pos ? a.pos - b.pos : a.side - b.side);
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const { pos, side, note } of entries) {
+      builder.add(pos, pos, Decoration.widget({ widget: new NoteWidget(note), block: true, side }));
+    }
+    return builder.finish();
+  }
+
+  const notesDecoField = StateField.define<DecorationSet>({
+    create(state) { return buildNoteDecorations(state); },
+    update(deco, tr) {
+      if (tr.docChanged || tr.effects.some(e => e.is(setNotesEffect))) {
+        return buildNoteDecorations(tr.state);
+      }
+      return deco.map(tr.changes);
+    },
+    provide: f => EditorView.decorations.from(f),
+  });
+
+  function makeNotesGutter() {
+    return gutter({
+      class: 'cm-notes-gutter',
+      renderEmptyElements: true,
+      lineMarker(view, line) {
+        const lineNum = view.state.doc.lineAt(line.from).number;
+        return new PlusMarker(lineNum);
+      },
+      lineMarkerChange() { return false; },
+    });
+  }
+
+  function addNote(lineNumber: number, placement: 'above' | 'below') {
+    const id = crypto.randomUUID();
+    inlineNotes = [...inlineNotes, { id, lineNumber, placement, text: '' }];
+    notesStructureVersion++;
+    noteMenu = null;
+  }
 
   $effect(() => {
     if (initialSavedQueryName !== undefined) currentSavedQueryName = initialSavedQueryName;
@@ -151,6 +424,33 @@
   let saveDialogTop = $state(0);
   let saveDialogLeft = $state(0);
   let saveNameInputEl = $state<HTMLInputElement | undefined>(undefined);
+
+  let editorHeightPct = $state(40);
+  let isResizingEditor = $state(false);
+  let varsOpen = $state(true);
+  let editorPanelEl = $state<HTMLDivElement | undefined>(undefined);
+  let resizerStartY = 0;
+  let resizerStartPct = 0;
+
+  function onResizerPointerDown(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isResizingEditor = true;
+    resizerStartY = e.clientY;
+    resizerStartPct = editorHeightPct;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizerPointerMove(e: PointerEvent): void {
+    if (!isResizingEditor || !editorPanelEl) return;
+    const rect = editorPanelEl.getBoundingClientRect();
+    const deltaPct = ((e.clientY - resizerStartY) / rect.height) * 100;
+    editorHeightPct = Math.min(80, Math.max(15, resizerStartPct + deltaPct));
+  }
+
+  function onResizerPointerUp(): void {
+    isResizingEditor = false;
+  }
 
   let toolbarEl = $state<HTMLDivElement | undefined>(undefined);
   let toolbarWidth = $state(9999);
@@ -229,6 +529,8 @@
         const updated: FileQuery = await savedQueriesApi.fileUpdateSavedQuery(currentSavedQueryId, {
           name: currentSavedQueryName ?? 'Query',
           sql: sqlText,
+          description: descriptionText || null,
+          annotations: annotationsJson,
           connectionId,
           database: selectedDatabase || null,
         });
@@ -238,12 +540,19 @@
           panelStore.updateQueryEditorMeta(editorId, { savedQueryId: updated.id });
         }
         savedSql = sqlText;
+        savedDescription = descriptionText;
+        savedAnnotations = annotationsJson;
         savedQueriesInvalidator.invalidate();
       } finally {
         isSaving = false;
       }
       return;
     }
+    saveNameInput = currentSavedQueryName ?? '';
+    saveDialogOpen = true;
+  }
+
+  function saveQueryAs(): void {
     saveNameInput = currentSavedQueryName ?? '';
     saveDialogOpen = true;
   }
@@ -255,12 +564,16 @@
       const saved: FileQuery = await savedQueriesApi.fileCreateSavedQuery({
         name: saveNameInput.trim(),
         sql: sqlText,
+        description: descriptionText || null,
+        annotations: annotationsJson,
         connectionId,
         database: selectedDatabase || null,
       });
       currentSavedQueryId = saved.id;
       currentSavedQueryName = saved.name;
       savedSql = sqlText;
+      savedDescription = descriptionText;
+      savedAnnotations = annotationsJson;
       saveDialogOpen = false;
       panelStore.updateQueryEditorMeta(editorId, {
         savedQueryId: saved.id,
@@ -301,11 +614,140 @@
     name: string;
   }
 
+  interface SchemaColumn {
+    name: string;
+    dataType: string;
+  }
+
   const schemaRef: {
     connectionId: string;
     tables: SchemaTable[];
-    columns: Map<string, string[]>;
+    columns: Map<string, SchemaColumn[]>;
   } = { connectionId: '', tables: [], columns: new Map() };
+
+  // ── Table-link highlight extensions (Ctrl/Cmd hover) ─────────────────────
+
+  // Keywords that introduce a table name position in a SQL statement
+  const TABLE_INTRODUCERS = new Set(['FROM', 'JOIN', 'UPDATE', 'INTO', 'TABLE', 'TRUNCATE']);
+  // Keywords that change the clause context (used to track what governs each position)
+  const CLAUSE_KEYWORDS = new Set([
+    'SELECT', 'FROM', 'JOIN', 'WHERE', 'SET', 'UPDATE', 'INTO', 'TABLE',
+    'INSERT', 'DELETE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT', 'ON', 'WITH',
+    'TRUNCATE', 'CREATE', 'DROP', 'ALTER', 'BY', 'UNION', 'INTERSECT', 'EXCEPT',
+  ]);
+
+  function isTableNamePosition(view: EditorView, node: SyntaxNode): boolean {
+    // Find the nearest Statement ancestor
+    let stmt: SyntaxNode | null = node.parent;
+    while (stmt && stmt.name !== 'Statement') stmt = stmt.parent;
+    if (!stmt) return false;
+
+    // Node must be a direct child of that statement (not nested in an expression)
+    if (node.parent !== stmt) return false;
+
+    // Scan siblings that precede this node to find the governing clause keyword
+    let prevClauseKw: string | null = null;
+    let child = stmt.firstChild;
+    while (child && child.from < node.from) {
+      if (child.name === 'Keyword') {
+        const kw = view.state.sliceDoc(child.from, child.to).toUpperCase();
+        if (CLAUSE_KEYWORDS.has(kw)) prevClauseKw = kw;
+      }
+      child = child.nextSibling;
+    }
+
+    return prevClauseKw !== null && TABLE_INTRODUCERS.has(prevClauseKw);
+  }
+
+  function buildTableLinkDecorations(view: EditorView): DecorationSet {
+    const tableNames = new Set(schemaRef.tables.map((t) => t.name.toLowerCase()));
+    if (tableNames.size === 0) return Decoration.none;
+    const unq = (s: string) => s.replace(/^[`"'[]|[`"'\]]$/g, '');
+    const builder = new RangeSetBuilder<Decoration>();
+    const mark = Decoration.mark({ class: 'cm-table-link' });
+    syntaxTree(view.state).iterate({
+      enter(nodeRef) {
+        const node = nodeRef.node;
+        if (node.name === 'CompositeIdentifier') {
+          if (isTableNamePosition(view, node)) {
+            const parts = view.state.sliceDoc(node.from, node.to).split('.');
+            if (tableNames.has(unq(parts[parts.length - 1]).toLowerCase())) {
+              builder.add(node.from, node.to, mark);
+            }
+          }
+          return false;
+        }
+        if (node.name === 'Identifier' || node.name === 'QuotedIdentifier') {
+          if (
+            isTableNamePosition(view, node) &&
+            tableNames.has(unq(view.state.sliceDoc(node.from, node.to)).toLowerCase())
+          ) {
+            builder.add(node.from, node.to, mark);
+          }
+        }
+      },
+    });
+    return builder.finish();
+  }
+
+  function makeTableHighlightExtensions(): Extension[] {
+    const modifierEffect = StateEffect.define<boolean>();
+    const modifierField = StateField.define<boolean>({
+      create: () => false,
+      update(value, tr) {
+        for (const e of tr.effects) if (e.is(modifierEffect)) return e.value;
+        return value;
+      },
+    });
+
+    const plugin = ViewPlugin.fromClass(
+      class {
+        decorations: DecorationSet = Decoration.none;
+        private cmView: EditorView;
+        private boundKeyDown: (e: KeyboardEvent) => void;
+        private boundKeyUp: (e: KeyboardEvent) => void;
+
+        constructor(view: EditorView) {
+          this.cmView = view;
+          this.boundKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && !this.cmView.state.field(modifierField)) {
+              this.cmView.dispatch({ effects: modifierEffect.of(true) });
+            }
+          };
+          this.boundKeyUp = (e: KeyboardEvent) => {
+            if (!e.metaKey && !e.ctrlKey && this.cmView.state.field(modifierField)) {
+              this.cmView.dispatch({ effects: modifierEffect.of(false) });
+            }
+          };
+          window.addEventListener('keydown', this.boundKeyDown);
+          window.addEventListener('keyup', this.boundKeyUp);
+        }
+
+        update(update: ViewUpdate) {
+          const active = update.state.field(modifierField);
+          if (!active) {
+            this.decorations = Decoration.none;
+            return;
+          }
+          if (
+            update.docChanged ||
+            update.viewportChanged ||
+            update.transactions.some((tr) => tr.effects.some((e) => e.is(modifierEffect)))
+          ) {
+            this.decorations = buildTableLinkDecorations(update.view);
+          }
+        }
+
+        destroy() {
+          window.removeEventListener('keydown', this.boundKeyDown);
+          window.removeEventListener('keyup', this.boundKeyUp);
+        }
+      },
+      { decorations: (v) => v.decorations },
+    );
+
+    return [modifierField, plugin];
+  }
 
   // ── FK / virtual-relation cache ───────────────────────────────────────────
 
@@ -385,9 +827,139 @@
     }
   });
 
+  // ── SQL completion context detection ────────────────────────────────────────
+
+  type CompletionCtx =
+    | { kind: 'table' }
+    | { kind: 'column'; tables: string[] }
+    | { kind: 'database' }
+    | { kind: 'statement_start' }
+    | { kind: 'none' };
+
+  const TABLE_CTX_KEYWORDS = new Set([
+    'FROM', 'JOIN', 'UPDATE', 'TABLE', 'INTO',
+    'TRUNCATE', 'RENAME',
+  ]);
+  const COLUMN_CTX_KEYWORDS = new Set([
+    'SELECT', 'WHERE', 'HAVING', 'SET', 'ON', 'AND', 'OR', 'NOT',
+    'BY', 'WHEN', 'THEN', 'ELSE', 'RETURNING', 'DISTINCT',
+    'IF', 'CASE',
+  ]);
+  const SUPPRESS_CTX_KEYWORDS = new Set(['LIMIT', 'OFFSET', 'AS', 'FETCH', 'ROWS', 'ONLY', 'TIES']);
+  const DATABASE_CTX_KEYWORDS = new Set(['USE', 'DATABASE', 'SCHEMA']);
+
+  const SQL_STATEMENT_KEYWORDS = [
+    'SELECT', 'INSERT INTO', 'UPDATE', 'DELETE FROM', 'WITH',
+    'CREATE TABLE', 'CREATE VIEW', 'DROP TABLE', 'DROP VIEW', 'ALTER TABLE',
+    'EXPLAIN', 'BEGIN', 'COMMIT', 'ROLLBACK', 'TRUNCATE', 'SHOW', 'DESCRIBE', 'USE',
+  ];
+
+  function detectCompletionCtx(sqlBeforeCursor: string): CompletionCtx {
+    // Strip quoted identifiers, string literals, and comments so keywords
+    // inside them don't confuse the scanner.
+    const clean = sqlBeforeCursor
+      .replace(/`[^`]*`/g, ' _ID_ ')
+      .replace(/'(?:[^'\\]|\\.)*'/g, ' _STR_ ')
+      .replace(/"(?:[^"\\]|\\.)*"/g, ' _STR_ ')
+      .replace(/--[^\n]*/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+    if (!clean.trim()) return { kind: 'statement_start' };
+
+    // Tokenise into words and a few punctuation chars we care about
+    const tokens = [...clean.matchAll(/[A-Za-z_]\w*|[();,]/g)].map((m) => m[0]);
+
+    if (tokens.length === 0) return { kind: 'statement_start' };
+
+    // Walk backwards at depth 0 (depth increases inside parens)
+    let depth = 0;
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const tok = tokens[i].toUpperCase();
+      if (tok === ')') { depth++; continue; }
+      if (tok === '(') { depth = Math.max(0, depth - 1); continue; }
+      if (depth > 0) continue; // inside parenthesised expression — skip
+
+      if (tok === ',') continue; // comma: keep scanning to find which clause we're in
+      if (tok === ';') return { kind: 'statement_start' }; // hit previous statement
+
+      if (TABLE_CTX_KEYWORDS.has(tok)) return { kind: 'table' };
+      if (SUPPRESS_CTX_KEYWORDS.has(tok)) return { kind: 'none' };
+      if (DATABASE_CTX_KEYWORDS.has(tok)) return { kind: 'database' };
+      if (COLUMN_CTX_KEYWORDS.has(tok)) {
+        return { kind: 'column', tables: extractReferencedTables(sqlBeforeCursor) };
+      }
+      // Non-keyword token (identifier, operator placeholder) — keep scanning
+    }
+
+    return { kind: 'statement_start' };
+  }
+
+  function extractReferencedTables(sql: string): string[] {
+    const clean = sql
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/'[^']*'/g, '')
+      .replace(/"[^"]*"/g, '')
+      .replace(/--[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+
+    const tables = new Set<string>();
+    const re = /\b(?:FROM|JOIN|UPDATE)\s+(?:\w+\.)?(\w+)/gi;
+    let m;
+    while ((m = re.exec(clean)) !== null) {
+      // Skip subquery keyword "SELECT" which might follow "FROM ("
+      if (m[1].toUpperCase() !== 'SELECT') tables.add(m[1].toLowerCase());
+    }
+    return [...tables];
+  }
+
+  /** Load and return column completions for the given table names. */
+  async function columnCompletions(
+    tableNames: string[],
+  ): Promise<{ label: string; detail: string; type: string }[]> {
+    const options: { label: string; detail: string; type: string }[] = [];
+    const seen = new Set<string>(); // deduplicate column labels
+
+    for (const tableName of tableNames) {
+      const schemaTable =
+        schemaRef.tables.find(
+          (t) =>
+            t.name.toLowerCase() === tableName.toLowerCase() &&
+            (!selectedDatabase || t.database === selectedDatabase),
+        ) ?? schemaRef.tables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+
+      if (!schemaTable) continue;
+
+      const cacheKey = `${schemaTable.database}.${schemaTable.name}`;
+      let cols = schemaRef.columns.get(cacheKey);
+      if (!cols) {
+        try {
+          const colInfos = await schemaApi.listColumns(
+            schemaRef.connectionId,
+            schemaTable.database,
+            schemaTable.name,
+          );
+          cols = colInfos.map((c) => ({ name: c.name, dataType: c.dataType }));
+          schemaRef.columns.set(cacheKey, cols);
+        } catch {
+          cols = [];
+        }
+      }
+
+      for (const col of cols) {
+        if (!seen.has(col.name)) {
+          seen.add(col.name);
+          const detail = tableNames.length > 1 ? `${schemaTable.name} · ${col.dataType}` : col.dataType;
+          options.push({ label: col.name, detail, type: 'property' });
+        }
+      }
+    }
+
+    return options;
+  }
+
   function makeSchemaCompletionSource(): CompletionSource {
     return async (context: CompletionContext): Promise<CompletionResult | null> => {
-      // ── FK value search ──────────────────────────────────────────────────────
+      // ── FK value search (highest priority) ──────────────────────────────────
       const fkCtx = getFkValueContext(context.state, context.pos);
       if (fkCtx) {
         const fkCompletion = await buildFkCompletion(context, fkCtx.tableName, fkCtx.columnName);
@@ -411,7 +983,7 @@
                 schemaTable.database,
                 schemaTable.name,
               );
-              cols = colInfos.map((c) => c.name);
+              cols = colInfos.map((c) => ({ name: c.name, dataType: c.dataType }));
               schemaRef.columns.set(cacheKey, cols);
             } catch {
               cols = [];
@@ -419,17 +991,66 @@
           }
           return {
             from: dotMatch.from + rawTable.length + 1,
-            options: cols.map((col) => ({ label: col, type: 'property' })),
+            options: cols.map((col) => ({
+              label: col.name,
+              detail: col.dataType,
+              type: 'property',
+            })),
             validFor: /^[\w"`]*$/,
           };
         }
       }
 
-      // ── table-name completion ────────────────────────────────────────────────
+      // ── Context-aware word completion ────────────────────────────────────────
       const word = context.matchBefore(/\w*/);
       if (!word || (word.from === word.to && !context.explicit)) return null;
-      if (schemaRef.tables.length === 0) return null;
 
+      // Analyse the SQL before the current word to determine expected token kind
+      const textBeforeWord = context.state.doc.sliceString(0, word.from);
+      const ctx = detectCompletionCtx(textBeforeWord);
+
+      if (ctx.kind === 'none') return null;
+
+      if (ctx.kind === 'statement_start') {
+        return {
+          from: word.from,
+          options: SQL_STATEMENT_KEYWORDS.map((k) => ({ label: k, type: 'keyword' })),
+          validFor: /^\w*$/,
+        };
+      }
+
+      if (ctx.kind === 'database') {
+        return {
+          from: word.from,
+          options: databases.map((db) => ({ label: db, type: 'constant' })),
+          validFor: /^\w*$/,
+        };
+      }
+
+      if (ctx.kind === 'table') {
+        if (schemaRef.tables.length === 0) return null;
+        return {
+          from: word.from,
+          options: schemaRef.tables.map((t) => ({
+            label: t.name,
+            detail: t.database,
+            type: 'class',
+          })),
+          validFor: /^\w*$/,
+        };
+      }
+
+      // ctx.kind === 'column'
+      if (ctx.tables.length > 0) {
+        const cols = await columnCompletions(ctx.tables);
+        if (cols.length > 0) {
+          return { from: word.from, options: cols, validFor: /^\w*$/ };
+        }
+      }
+
+      // No referenced tables found or columns not loaded yet — fall back to
+      // showing all tables so the user at least sees something useful.
+      if (schemaRef.tables.length === 0) return null;
       return {
         from: word.from,
         options: schemaRef.tables.map((t) => ({
@@ -553,8 +1174,8 @@
 
   // ── Theme ─────────────────────────────────────────────────────────────────
 
-  function resolveCSSVar(name: string): string {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function resolveCSSVar(name: string, fallback = ''): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
 
   function buildHighlightStyle(): HighlightStyle {
@@ -616,17 +1237,148 @@
         overflow: 'auto',
         fontFamily: 'var(--font-family-mono)',
       },
-      '.cm-tooltip': {
-        backgroundColor: 'var(--color-bg-overlay)',
-        border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-md)',
-        borderRadius: 'var(--radius-sm)',
+      // Error highlighting
+      '.cm-lintRange-error': {
+        backgroundImage: 'none',
+        borderBottom: `2px solid ${resolveCSSVar('--color-danger')}`,
+        paddingBottom: '1px',
       },
+      '.cm-lintRange-warning': {
+        backgroundImage: 'none',
+        borderBottom: `2px solid ${resolveCSSVar('--color-warning')}`,
+        paddingBottom: '1px',
+      },
+      '.cm-gutter-lint': {
+        width: '16px',
+      },
+      '.cm-gutter-lint .cm-gutterElement': {
+        padding: '0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      '.cm-lint-marker': {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '8px',
+        height: '8px',
+      },
+      '.cm-lint-marker-error': {
+        content: '""',
+        display: 'block',
+        width: '8px',
+        height: '8px',
+        borderRadius: '50%',
+        backgroundColor: resolveCSSVar('--color-danger'),
+      },
+      '.cm-tooltip.cm-tooltip-lint': {
+        background: 'var(--color-bg-overlay)',
+        border: '1px solid var(--color-border-strong)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-overlay)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        maxWidth: '420px',
+      },
+      '.cm-diagnosticText': {
+        fontFamily: 'var(--font-family-mono)',
+        fontSize: 'var(--font-size-xs)',
+        color: 'var(--color-text-primary)',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        lineHeight: '1.5',
+        padding: '6px 8px',
+        display: 'block',
+      },
+      // Tooltip shell — matches .select-dropdown
+      '.cm-tooltip': {
+        background: 'var(--color-bg-overlay)',
+        border: '1px solid var(--color-border-strong)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-overlay)',
+      },
+      '.cm-tooltip.cm-tooltip-autocomplete': {
+        padding: '3px',
+        backdropFilter: 'blur(20px) saturate(160%)',
+      },
+      // List element — reset browser defaults
+      '.cm-tooltip-autocomplete ul': {
+        fontFamily: 'var(--font-family-ui)',
+        fontSize: 'var(--font-size-sm)',
+        padding: '0',
+        margin: '0',
+        listStyle: 'none',
+        maxHeight: '260px',
+        overflowY: 'auto',
+      },
+      // Each completion row — matches .option
+      '.cm-tooltip-autocomplete ul li': {
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 8px',
+        minHeight: '26px',
+        borderRadius: 'var(--radius-sm)',
+        color: 'var(--color-text-primary)',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'background var(--transition-fast)',
+        background: 'transparent',
+      },
+      // Focused/selected row — matches .option--focused
       '.cm-tooltip-autocomplete ul li[aria-selected]': {
-        backgroundColor: 'var(--color-bg-active)',
+        background: 'var(--color-accent-subtle)',
         color: 'var(--color-text-primary)',
       },
+      // Type icon — hidden; we rely on label+detail to convey type
+      '.cm-completionIcon': {
+        display: 'none',
+      },
+      // Main label — monospace since it's a SQL token
+      '.cm-completionLabel': {
+        fontFamily: 'var(--font-family-mono)',
+        fontSize: 'var(--font-size-xs)',
+        color: 'var(--color-text-primary)',
+        flex: '1',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      },
+      // Type / database hint — muted, ui font, right-aligned
+      '.cm-completionDetail': {
+        fontFamily: 'var(--font-family-ui)',
+        fontSize: '10px',
+        color: 'var(--color-text-muted)',
+        fontStyle: 'normal',
+        marginLeft: '8px',
+        flexShrink: '0',
+      },
     });
+  }
+
+  // ── Editor navigation ────────────────────────────────────────────────────
+
+  function findStatementStart(sql: string, statements: string[], targetIndex: number): number {
+    let searchFrom = 0;
+    for (let i = 0; i <= targetIndex; i++) {
+      const stmt = statements[i]?.trim();
+      if (!stmt) continue;
+      const pos = sql.indexOf(stmt, searchFrom);
+      if (pos === -1) return 0;
+      if (i === targetIndex) return pos;
+      searchFrom = pos + stmt.length;
+    }
+    return 0;
+  }
+
+  function scrollEditorToStatement(index: number): void {
+    if (!editorView || executedStatements.length === 0) return;
+    const pos = findStatementStart(sqlText, executedStatements, index);
+    editorView.dispatch({ selection: { anchor: pos } });
+    const coords = editorView.coordsAtPos(pos);
+    if (coords) {
+      const scrollDOM = editorView.scrollDOM;
+      const targetTop = scrollDOM.scrollTop + coords.top - scrollDOM.getBoundingClientRect().top;
+      scrollDOM.scrollTo({ top: targetTop, behavior: 'smooth' });
+    }
   }
 
   // ── Query execution ───────────────────────────────────────────────────────
@@ -637,14 +1389,19 @@
 
     isRunning = true;
     executedStatements = splitStatements(query);
+    executedSql = query;
     try {
-      results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, stripLineComments(query), selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
         revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
       }
       onExecute?.(query);
+      await fetchVariableValues();
+      if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
+        await saveQuery();
+      }
     } catch (err) {
       results = [
         {
@@ -672,14 +1429,19 @@
 
     isRunning = true;
     executedStatements = splitStatements(query);
+    executedSql = query;
     try {
-      results = await executeMultiQuery(connectionId, query, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, stripLineComments(query), selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
         revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
       }
       onExecute?.(query);
+      await fetchVariableValues();
+      if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
+        await saveQuery();
+      }
     } catch (err) {
       results = [
         {
@@ -705,14 +1467,19 @@
 
     isRunning = true;
     executedStatements = [stmt];
+    executedSql = stmt;
     try {
-      results = await executeMultiQuery(connectionId, stmt, selectedDatabase || null);
+      results = await executeMultiQuery(connectionId, stripLineComments(stmt), selectedDatabase || null, editorId);
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
       recording.add(stmt, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && isMutatingStatement(stmt)) {
         revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: stmt, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
       }
       onExecute?.(stmt);
+      await fetchVariableValues();
+      if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
+        await saveQuery();
+      }
     } catch (err) {
       results = [
         {
@@ -730,34 +1497,110 @@
     }
   }
 
+  // Returns true if the line contains a -- comment outside string literals.
+  // Used to avoid joining subsequent SQL onto the same line as a -- comment.
+  function lineHasLineComment(line: string): boolean {
+    const stripped = line
+      .replace(/'(?:[^'\\]|\\.)*'/g, '')
+      .replace(/"(?:[^"\\]|\\.)*"/g, '')
+      .replace(/`[^`]*/g, '');
+    return stripped.includes('--');
+  }
+
   function formatQuery(): void {
     if (!editorView) return;
     const dialect = sqlDialect();
     const s = settingsStore.settings;
+    const style = s.formatStyle ?? (s.formatCompact ? 'compact' : 'expanded');
+    const options: Parameters<typeof sqlFormat>[1] = {
+      language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'],
+      keywordCase: s.formatKeywordCase,
+      indentStyle: style === 'comfortable' ? 'standard' : s.formatIndentStyle,
+      linesBetweenQueries: s.formatLinesBetweenQueries,
+    };
     try {
-      let formatted = sqlFormat(sqlText, {
-        language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'],
-        keywordCase: s.formatKeywordCase,
-        indentStyle: s.formatIndentStyle,
-        linesBetweenQueries: s.formatLinesBetweenQueries,
-      });
-      if (s.formatCompact) {
-        // Collapse each statement to a single line, then re-insert the
-        // configured number of blank lines between statements.
+      let formatted = sqlFormat(sqlText, options);
+      if (style === 'compact') {
         const separator = ';\n' + '\n'.repeat(s.formatLinesBetweenQueries);
+        // Process line by line so -- comment lines are never joined with the
+        // following SQL (which would hide the SQL inside the comment).
+        const resultParts: string[] = [];
+        let sqlBuffer = '';
+        const flushBuffer = () => {
+          const trimmed = sqlBuffer.trim();
+          if (!trimmed) return;
+          resultParts.push(trimmed.replace(/\s*;\s*/g, separator).trimEnd());
+          sqlBuffer = '';
+        };
+        for (const rawLine of [...formatted.split(/\n/), null]) {
+          const line = rawLine !== null ? rawLine.trim() : null;
+          if (line === null) { flushBuffer(); break; }
+          if (!line) continue;
+          if (lineHasLineComment(line)) {
+            // Append comment line to buffer, then flush — nothing can follow on same line
+            sqlBuffer += (sqlBuffer ? ' ' : '') + line;
+            flushBuffer();
+          } else {
+            sqlBuffer += (sqlBuffer ? ' ' : '') + line;
+          }
+        }
+        formatted = resultParts.join('\n').trim();
+      } else if (style === 'comfortable') {
+        const THRESHOLD = 80;
+        const blankSep = '\n'.repeat(s.formatLinesBetweenQueries + 1);
         formatted = formatted
-          .split(/\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .join(' ')
-          .replace(/\s*;\s*/g, separator)
-          .trim();
+          .split(/\n{2,}/)
+          .map((stmt) => {
+            const trimmed = stmt.trim();
+            const origLines = trimmed.split('\n');
+            const flatLines = origLines.map((l) => l.trim()).filter(Boolean);
+            if (!flatLines.some(lineHasLineComment)) {
+              const oneLiner = flatLines.join(' ');
+              return oneLiner.length <= THRESHOLD ? oneLiner : trimmed;
+            }
+            // Block contains -- comments: process each SQL run between comments
+            // with the same threshold logic as the comment-free path.
+            const resultParts: string[] = [];
+            let sqlFlat: string[] = [];
+            let sqlOrig: string[] = [];
+            for (const origLine of [...origLines, null]) {
+              const flat = origLine !== null ? origLine.trim() : null;
+              if (flat === null || (flat && lineHasLineComment(flat))) {
+                if (sqlFlat.length > 0) {
+                  const oneLiner = sqlFlat.join(' ');
+                  resultParts.push(
+                    oneLiner.length <= THRESHOLD ? oneLiner : sqlOrig.join('\n').trim(),
+                  );
+                  sqlFlat = [];
+                  sqlOrig = [];
+                }
+                if (flat) resultParts.push(flat);
+              } else if (flat) {
+                sqlFlat.push(flat);
+                sqlOrig.push(origLine as string);
+              }
+            }
+            return resultParts.join('\n');
+          })
+          .join(blankSep);
       }
       editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
       });
     } catch {
-      // Formatting failed silently — leave content unchanged.
+      // sql-formatter can fail on certain comment styles. Strip block/line
+      // comments and retry — this preserves structure even if comments are lost.
+      try {
+        const stripped = sqlText
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/--[^\n]*/g, '');
+        const formatted = sqlFormat(stripped, options);
+        editorView.dispatch({
+          changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
+        });
+      } catch {
+        // If even the stripped version fails, leave content unchanged.
+      }
     }
   }
 
@@ -844,6 +1687,18 @@
   onMount(() => {
     if (!editorContainer) return;
 
+    // Set up note callbacks before creating the editor (widgets reference these via closure)
+    noteCallbacksRef.onUpdate = (id: string, text: string) => {
+      inlineNotes = inlineNotes.map((n) => (n.id === id ? { ...n, text } : n));
+    };
+    noteCallbacksRef.onRemove = (id: string) => {
+      inlineNotes = inlineNotes.filter((n) => n.id !== id);
+      notesStructureVersion++;
+    };
+    gutterClickRef.onClick = (lineNumber: number, x: number, y: number) => {
+      noteMenu = { lineNumber, x, y };
+    };
+
     document.addEventListener('shortcut-action', handleShortcutAction);
     unlistenShortcut = () => document.removeEventListener('shortcut-action', handleShortcutAction);
 
@@ -898,12 +1753,57 @@
         autocompletion({ override: [makeSchemaCompletionSource()] }),
         sqlLang(),
         runKeymap,
-        keymap.of([...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
+        history(),
+        keymap.of([...historyKeymap, ...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             sqlText = update.state.doc.toString();
           }
         }),
+        EditorView.domEventHandlers({
+          mousedown(event, view) {
+            if (!event.metaKey && !event.ctrlKey) return false;
+
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (pos === null) return false;
+
+            const unquoteIdent = (s: string) => s.replace(/^[`"'[]|[`"'\]]$/g, '');
+            let node = syntaxTree(view.state).resolveInner(pos, -1);
+
+            // Promote a child of CompositeIdentifier up to the CompositeIdentifier itself
+            if (node.parent?.name === 'CompositeIdentifier') node = node.parent;
+
+            let tableName: string | null = null;
+            if (node.name === 'CompositeIdentifier') {
+              const parts = view.state.sliceDoc(node.from, node.to).split('.');
+              tableName = unquoteIdent(parts[parts.length - 1]);
+            } else if (node.name === 'Identifier' || node.name === 'QuotedIdentifier') {
+              tableName = unquoteIdent(view.state.sliceDoc(node.from, node.to));
+            }
+
+            if (!tableName || !isTableNamePosition(view, node)) return false;
+
+            const matched = schemaRef.tables.find(
+              (t) => t.name.toLowerCase() === tableName!.toLowerCase(),
+            );
+            if (!matched) return false;
+
+            event.preventDefault();
+            panelStore.openInFocused({
+              kind: 'table_browser',
+              connectionId,
+              database: matched.database,
+              table: matched.name,
+            });
+            return true;
+          },
+        }),
+        ...makeTableHighlightExtensions(),
+        lintGutter(),
+        cmTooltips({ tooltipSpace: (view) => view.dom.getBoundingClientRect() }),
+        notesField,
+        notesDecoField,
+        makeNotesGutter(),
       ],
     });
 
@@ -919,10 +1819,64 @@
   onDestroy(() => {
     unlistenShortcut?.();
     unlistenQueryCount?.();
+    if (editorId) sessionRelease(editorId).catch(() => {});
+  });
+
+  // ── Error highlighting ────────────────────────────────────────────────────
+
+  $effect(() => {
+    // Clear diagnostics whenever the SQL text changes (user is editing)
+    sqlText;
+    const view = editorView;
+    if (!view) return;
+    view.dispatch(setDiagnostics(view.state, []));
+  });
+
+  $effect(() => {
+    const view = editorView;
+    if (!view || results.length === 0) return;
+
+    // If the SQL has changed since the last run (e.g. formatting, editing),
+    // positions would be wrong — clear and don't re-highlight.
+    if (sqlText !== executedSql) {
+      view.dispatch(setDiagnostics(view.state, []));
+      return;
+    }
+
+    const errorInputs = results
+      .map((result, i) => {
+        if (!result.error) return null;
+        const stmt = executedStatements[i] ?? executedStatements[0] ?? sqlText;
+        const offset = executedStatements[i]
+          ? findStatementStart(sqlText, executedStatements, i)
+          : 0;
+        return { error: result.error, statement: stmt, statementOffset: offset };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    if (errorInputs.length === 0) {
+      view.dispatch(setDiagnostics(view.state, []));
+      return;
+    }
+
+    const docLen = view.state.doc.length;
+    const diagnostics = buildDiagnosticsFromErrors(errorInputs).map((d) => ({
+      ...d,
+      from: Math.max(0, Math.min(d.from, docLen)),
+      to: Math.max(0, Math.min(d.to, docLen)),
+    }));
+
+    view.dispatch(setDiagnostics(view.state, diagnostics));
   });
 </script>
 
-<div class="query-editor-panel">
+<div
+  class="query-editor-panel"
+  bind:this={editorPanelEl}
+  onpointermove={onResizerPointerMove}
+  onpointerup={onResizerPointerUp}
+  onpointercancel={onResizerPointerUp}
+>
   <div class="toolbar" bind:this={toolbarEl}>
     <button
       class="run-button"
@@ -953,6 +1907,17 @@
 
     <div class="toolbar-spacer"></div>
 
+    {#if currentSavedQueryId && !compact}
+      <button
+        class="toolbar-btn"
+        onclick={saveQueryAs}
+        disabled={isSaving}
+        title="Save a copy with a new name"
+      >
+        Save As…
+      </button>
+    {/if}
+
     <button
       bind:this={saveDialogTriggerEl}
       class="toolbar-btn toolbar-btn--save"
@@ -975,6 +1940,33 @@
         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
         <polyline points="17 21 17 13 7 13 7 21"></polyline>
         <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>
+    </button>
+
+    <button
+      class="toolbar-btn toolbar-btn--icon toolbar-btn--description"
+      class:toolbar-btn--description-active={descriptionOpen}
+      onclick={() => { descriptionOpen = !descriptionOpen; }}
+      title={descriptionOpen ? 'Hide description' : 'Show description'}
+      aria-label="Toggle description"
+      aria-pressed={descriptionOpen}
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
       </svg>
     </button>
 
@@ -1091,6 +2083,20 @@
           >
             <span>Explain</span>
           </button>
+          {#if currentSavedQueryId}
+            <div class="actions-menu-sep" role="separator"></div>
+            <button
+              class="actions-menu-item"
+              role="menuitem"
+              onclick={() => {
+                saveQueryAs();
+                actionsMenuOpen = false;
+              }}
+              disabled={isSaving}
+            >
+              <span>Save As…</span>
+            </button>
+          {/if}
         </div>
       {/if}
     {:else}
@@ -1133,9 +2139,89 @@
     </div>
   {/if}
 
-  <div class="editor-wrapper">
-    <div class="editor-container" bind:this={editorContainer}></div>
+  {#if descriptionOpen}
+    <div class="description-panel">
+      <textarea
+        class="description-textarea"
+        bind:value={descriptionText}
+        placeholder="Add a description for this query…"
+        spellcheck={false}
+        aria-label="Query description"
+      ></textarea>
+    </div>
+  {/if}
+
+  <div class="editor-area" style="flex-basis: {editorHeightPct}%">
+    <div class="editor-wrapper">
+      <div class="editor-container" bind:this={editorContainer}></div>
+    </div>
+
+    {#if sqlVariableNames.length > 0}
+      <div class="vars-panel" class:vars-panel--open={varsOpen} role="region" aria-label="SQL variables">
+        <button
+          class="vars-panel-tab"
+          onclick={() => (varsOpen = !varsOpen)}
+          title={varsOpen ? 'Collapse variables panel' : 'Expand variables panel'}
+          aria-expanded={varsOpen}
+        >
+          <span class="vars-panel-tab-label">Vars</span>
+          <svg
+            class="vars-panel-chevron"
+            class:vars-panel-chevron--open={varsOpen}
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="6,2 2,5 6,8" />
+          </svg>
+        </button>
+
+        {#if varsOpen}
+          <div class="vars-panel-body">
+            {#each sqlVariableNames as varName}
+              <div class="var-row">
+                <code class="var-name" title="Session variables are connection-scoped. Values shown are from the last execution on the same connection.">{varName}</code>
+                <span class="var-eq">=</span>
+                <code
+                  class="var-value"
+                  class:var-value--null={variableValues[varName] === null}
+                  class:var-value--unset={!(varName in variableValues)}
+                >
+                  {#if !(varName in variableValues)}
+                    —
+                  {:else if variableValues[varName] === null}
+                    NULL
+                  {:else}
+                    {variableValues[varName]}
+                  {/if}
+                </code>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
+
+  <div
+    class="editor-resizer"
+    class:editor-resizer--active={isResizingEditor}
+    role="separator"
+    aria-label="Drag to resize editor"
+    aria-orientation="horizontal"
+    tabindex="0"
+    onpointerdown={onResizerPointerDown}
+    onkeydown={(e) => {
+      if (e.key === 'ArrowUp') { e.preventDefault(); editorHeightPct = Math.max(15, editorHeightPct - 2); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); editorHeightPct = Math.min(80, editorHeightPct + 2); }
+    }}
+  ></div>
 
   <div class="results-wrapper" bind:this={resultsWrapperEl} tabindex="-1">
     <ResultsPanel
@@ -1144,9 +2230,11 @@
       {connectionId}
       database={selectedDatabase || undefined}
       {isRunning}
+      {variableValues}
       initialActiveTab={activeResultTab}
       onActiveTabChange={(tab) => {
         activeResultTab = tab;
+        scrollEditorToStatement(tab);
       }}
     />
   </div>
@@ -1165,6 +2253,27 @@
   />
 {/if}
 
+{#if noteMenu !== null}
+  <div
+    class="note-menu-backdrop"
+    role="presentation"
+    onmousedown={() => { noteMenu = null; }}
+    use:portal
+  ></div>
+  <div
+    class="note-menu"
+    style="top:{noteMenu.y}px;left:{noteMenu.x}px"
+    use:portal
+  >
+    <button class="note-menu-item" onmousedown={() => addNote(noteMenu!.lineNumber, 'above')}>
+      Add note above line
+    </button>
+    <button class="note-menu-item" onmousedown={() => addNote(noteMenu!.lineNumber, 'below')}>
+      Add note below line
+    </button>
+  </div>
+{/if}
+
 <style>
   .query-editor-panel {
     display: flex;
@@ -1173,6 +2282,11 @@
     height: 100%;
     overflow: hidden;
     background: var(--color-editor-bg);
+  }
+
+  .query-editor-panel:has(.editor-resizer--active) {
+    cursor: row-resize;
+    user-select: none;
   }
 
   .toolbar {
@@ -1422,11 +2536,181 @@
     font-size: var(--font-size-xs);
   }
 
-  /* Transaction toolbar */
-  .editor-wrapper {
-    flex: 0 0 40%;
-    overflow: hidden;
+  .toolbar-btn--description-active {
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
+  }
+
+  .description-panel {
+    flex-shrink: 0;
     border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    display: flex;
+    flex-direction: column;
+    max-height: 120px;
+  }
+
+  .description-textarea {
+    flex: 1;
+    resize: none;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    padding: var(--spacing-2) var(--spacing-3);
+    min-height: 60px;
+    scrollbar-width: thin;
+  }
+
+  .description-textarea::placeholder {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .editor-area {
+    flex: 0 0 40%;
+    min-height: 60px;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+  }
+
+  .editor-wrapper {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* ── Variables panel ─────────────────────────────────────────────────────── */
+
+  .vars-panel {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: row;
+    border-left: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    overflow: hidden;
+    width: 28px;
+  }
+
+  .vars-panel--open {
+    width: 200px;
+  }
+
+  .vars-panel-tab {
+    flex-shrink: 0;
+    width: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: var(--spacing-3);
+    gap: var(--spacing-2);
+    border: none;
+    border-right: 1px solid var(--color-border);
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .vars-panel-tab:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .vars-panel-tab-label {
+    font-size: 10px;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-ui);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+  }
+
+  .vars-panel-chevron {
+    transform: rotate(0deg);
+    transition: transform var(--transition-fast);
+  }
+
+  .vars-panel-chevron--open {
+    transform: rotate(180deg);
+  }
+
+  .vars-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--spacing-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    scrollbar-width: thin;
+  }
+
+  .var-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .var-name {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-editor-keyword, var(--color-accent));
+  }
+
+  .var-eq {
+    display: none;
+  }
+
+  .var-value {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-editor-string, var(--color-text-primary));
+    word-break: break-all;
+    padding-left: var(--spacing-1);
+    border-left: 2px solid var(--color-border);
+  }
+
+  .var-value--null {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .var-value--unset {
+    color: var(--color-text-muted);
+  }
+
+  .editor-resizer {
+    flex-shrink: 0;
+    height: 1px;
+    background: var(--color-border);
+    cursor: row-resize;
+    position: relative;
+    transition: background var(--transition-fast);
+    z-index: 1;
+  }
+
+  .editor-resizer:hover,
+  .editor-resizer--active {
+    background: var(--color-accent);
+  }
+
+  .editor-resizer::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    left: 0;
+    right: 0;
   }
 
   .editor-container {
@@ -1442,10 +2726,153 @@
     overflow: auto;
   }
 
+  .editor-container :global(.cm-table-link) {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+  }
+
   .results-wrapper {
     flex: 1;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  /* ── Notes gutter ─────────────────────────────────────────────────────────── */
+
+  .editor-container :global(.cm-notes-gutter) {
+    width: 18px;
+  }
+
+  .editor-container :global(.cm-notes-gutter .cm-gutterElement) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .editor-container :global(.cm-note-plus-btn) {
+    opacity: 0;
+    background: none;
+    border: none;
+    color: var(--color-accent);
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity var(--transition-fast);
+  }
+
+  .editor-container :global(.cm-notes-gutter .cm-gutterElement:hover .cm-note-plus-btn) {
+    opacity: 1;
+  }
+
+  /* ── Inline note widgets ──────────────────────────────────────────────────── */
+
+  .editor-container :global(.cm-inline-note) {
+    position: sticky;
+    /* left and width are set dynamically in toDOM to match gutter width */
+    display: flex;
+    flex-direction: column;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    box-sizing: border-box;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    overflow: visible;
+    user-select: text;
+  }
+
+  .editor-container :global(.cm-inline-note-delete) {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity var(--transition-fast), color var(--transition-fast);
+  }
+
+  .editor-container :global(.cm-inline-note:hover .cm-inline-note-delete) {
+    opacity: 0.5;
+  }
+
+  .editor-container :global(.cm-inline-note-delete:hover) {
+    opacity: 1 !important;
+    color: var(--color-danger);
+  }
+
+  .editor-container :global(.cm-inline-note-textarea) {
+    width: 100%;
+    min-height: 0;
+    padding: 6px 28px 6px 8px;
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-family: var(--font-family-ui);
+    font-size: var(--font-size-sm);
+    resize: vertical;
+    outline: none;
+    line-height: var(--line-height-normal);
+    box-sizing: border-box;
+  }
+
+  .editor-container :global(.cm-inline-note-textarea:focus) {
+    background: var(--color-bg-input, var(--color-bg-primary));
+  }
+
+  /* ── Note menu popup ──────────────────────────────────────────────────────── */
+
+  .note-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 499;
+  }
+
+  .note-menu {
+    position: fixed;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    z-index: 500;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    min-width: 170px;
+    backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .note-menu-item {
+    padding: 6px 10px;
+    text-align: left;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-family: var(--font-family-ui);
+    transition: background var(--transition-fast);
+  }
+
+  .note-menu-item:hover {
+    background: var(--color-bg-hover);
   }
 </style>

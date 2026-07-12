@@ -389,12 +389,14 @@ pub async fn connections_test(
 
     let result = match row.db_type.as_str() {
         "mysql" | "mariadb" => {
-            let opts = sqlx::mysql::MySqlConnectOptions::new()
+            let mut opts = sqlx::mysql::MySqlConnectOptions::new()
                 .host(&connect_host)
                 .port(connect_port)
                 .username(&row.username)
-                .password(&password)
                 .database(&row.database);
+            if !password.is_empty() {
+                opts = opts.password(&password);
+            }
             sqlx::mysql::MySqlPoolOptions::new()
                 .max_connections(1)
                 .connect_with(opts)
@@ -402,12 +404,14 @@ pub async fn connections_test(
                 .map(|_| ())
         }
         "postgres" => {
-            let opts = sqlx::postgres::PgConnectOptions::new()
+            let mut opts = sqlx::postgres::PgConnectOptions::new()
                 .host(&connect_host)
                 .port(connect_port)
                 .username(&row.username)
-                .password(&password)
                 .database(&row.database);
+            if !password.is_empty() {
+                opts = opts.password(&password);
+            }
             sqlx::postgres::PgPoolOptions::new()
                 .max_connections(1)
                 .connect_with(opts)

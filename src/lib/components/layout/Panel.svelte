@@ -53,6 +53,8 @@
         connectionId={panel.content.connectionId}
         database={panel.content.database}
         initialSql={panel.content.initialSql}
+        initialDescription={panel.content.initialDescription}
+        initialAnnotations={panel.content.initialAnnotations}
         editorId={panel.content.editorId}
         savedQueryId={panel.content.savedQueryId}
         savedQueryName={panel.content.savedQueryName}

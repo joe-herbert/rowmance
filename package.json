@@ -21,6 +21,7 @@
     "@codemirror/commands": "^6",
     "@codemirror/lang-sql": "^6",
     "@codemirror/language": "^6",
+    "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6",
     "@codemirror/theme-one-dark": "^6",
     "@codemirror/view": "^6",

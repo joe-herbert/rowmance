@@ -21,7 +21,7 @@ dev:
 
 ## Build a production release for the current platform
 build:
-	bunx tauri build
+	TAURI_SIGNING_PRIVATE_KEY=$$(cat ~/.tauri/rowmance.key) TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$$(cat ~/.tauri/rowmance.password) bunx tauri build
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 

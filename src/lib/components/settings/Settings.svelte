@@ -494,12 +494,9 @@
               >Show a confirmation dialog when saving changes that include row deletions</span
             >
           </div>
-          <input
-            type="checkbox"
-            class="setting-checkbox"
+          <Checkbox
             checked={settings.confirmBeforeDelete}
-            onchange={(e) =>
-              update('confirmBeforeDelete', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(c) => update('confirmBeforeDelete', c)}
           />
         </div>
         <div class="setting-row">
@@ -507,12 +504,9 @@
             <span class="label-text">Highlight Local Search Matches</span>
             <span class="label-hint">Highlight matching text in cells when using table search</span>
           </div>
-          <input
-            type="checkbox"
-            class="setting-checkbox"
+          <Checkbox
             checked={settings.localSearchHighlight}
-            onchange={(e) =>
-              update('localSearchHighlight', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(c) => update('localSearchHighlight', c)}
           />
         </div>
       </div>
@@ -577,6 +571,21 @@
         </div>
       </div>
 
+      <h3 class="subsection-title">Saved Queries</h3>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Save on Run</span>
+            <span class="label-hint">Automatically save a saved query when it is run and has unsaved changes</span>
+          </div>
+          <Checkbox
+            checked={settings.saveOnRun}
+            onchange={(c) => update('saveOnRun', c)}
+          />
+        </div>
+      </div>
+
       <h3 class="subsection-title">Format</h3>
 
       <div class="setting-group">
@@ -598,16 +607,24 @@
 
         <div class="setting-row">
           <div class="setting-label">
-            <span class="label-text">Compact Mode</span>
-            <span class="label-hint">Keep each query on a single line when formatting</span>
+            <span class="label-text">Format Style</span>
+            <span class="label-hint">How much SQL is expanded when formatting</span>
           </div>
-          <Checkbox checked={settings.formatCompact} onchange={(c) => update('formatCompact', c)} />
+          <Select
+            value={settings.formatStyle ?? 'expanded'}
+            options={[
+              { value: 'expanded', label: 'Expanded' },
+              { value: 'comfortable', label: 'Comfortable' },
+              { value: 'compact', label: 'Compact' },
+            ]}
+            onchange={(v) => update('formatStyle', v as 'expanded' | 'comfortable' | 'compact')}
+          />
         </div>
 
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Indent Style</span>
-            <span class="label-hint">How clauses are indented in expanded format</span>
+            <span class="label-hint">How clauses are indented (expanded mode only)</span>
           </div>
           <Select
             value={settings.formatIndentStyle}

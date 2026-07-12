@@ -17,6 +17,7 @@ struct QueryCountPayload {
 
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::AppError;
+use crate::sessions::SessionManager;
 use crate::transactions::{HeldConnection, TransactionManager};
 
 /// Records granular timing for every query to the local SQLite DB, keeping only
@@ -1644,9 +1645,11 @@ pub async fn query_execute_multi(
     sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
+    sessions: State<'_, Arc<SessionManager>>,
     connection_id: String,
     sql: String,
     database: Option<String>,
+    session_id: Option<String>,
 ) -> Result<Vec<QueryResult>, AppError> {
     let statements = split_statements(&sql);
     if statements.is_empty() {
@@ -1696,7 +1699,60 @@ pub async fn query_execute_multi(
         return Ok(results);
     }
 
-    // No active transaction — wrap the whole batch in a DB-managed transaction so
+    // If an editor session is active, route through its pinned connection.
+    // This guarantees session-scoped state (e.g. MySQL @variables) persists
+    // across separate query executions from the same editor tab.
+    if let Some(sid) = &session_id {
+        if let Some(session) = sessions.get(sid) {
+            let mut guard = session.lock().await;
+            // Switch database once before executing the batch.
+            if let Some(db) = &database {
+                match &mut *guard {
+                    HeldConnection::MySql(conn) => {
+                        let db_esc = db.replace('`', "``");
+                        if !mysql_switch_db(conn, &format!("USE `{}`", db_esc)).await {
+                            return Err(AppError::new(
+                                "QUERY_ERROR",
+                                format!("Failed to switch to database `{}`", db),
+                            ));
+                        }
+                    }
+                    HeldConnection::Postgres(conn) => {
+                        sqlx::query(&format!("SET search_path = {}", quote_postgres(db)))
+                            .execute(&mut **conn)
+                            .await
+                            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+                    }
+                    HeldConnection::Sqlite(_) => {}
+                }
+            }
+            for stmt in &statements {
+                let query_id = uuid::Uuid::new_v4().to_string();
+                let start = std::time::Instant::now();
+                let exec_result = match &mut *guard {
+                    HeldConnection::MySql(conn) => execute_mysql(conn, stmt, 10_000, 0).await,
+                    HeldConnection::Postgres(conn) => {
+                        execute_postgres(conn, stmt, 10_000, 0).await
+                    }
+                    HeldConnection::Sqlite(conn) => execute_sqlite(conn, stmt, 10_000, 0).await,
+                };
+                let duration_us = start.elapsed().as_micros() as u64;
+                push_result(
+                    &mut results,
+                    exec_result,
+                    query_id,
+                    &connection_id,
+                    stmt,
+                    duration_us,
+                    sqlite.inner(),
+                )
+                .await;
+            }
+            return Ok(results);
+        }
+    }
+
+    // No active transaction or session — wrap the whole batch in a DB-managed transaction so
     // that a failure in any statement rolls back all prior statements in the batch.
     // Single-statement batches skip the explicit BEGIN/COMMIT overhead.
     let multi = statements.len() > 1;
@@ -2463,14 +2519,89 @@ const UNBOUNDED: u32 = 0;
 
 /// Build the paginated SQL string sent to the driver for a row-returning statement.
 /// `sql` must already have its trailing semicolon stripped.
-/// Returns the SQL unchanged when `page_size` is `UNBOUNDED` (0), otherwise appends
-/// `LIMIT {page_size} OFFSET {offset}`.
+/// Returns the SQL unchanged when `page_size` is `UNBOUNDED` (0) or when the query
+/// already contains a top-level LIMIT clause (respecting the user's explicit limit).
+/// Otherwise appends `LIMIT {page_size} OFFSET {offset}`.
 fn build_paginated_sql(sql: &str, page_size: u32, offset: u32) -> String {
-    if page_size == UNBOUNDED {
+    if page_size == UNBOUNDED || sql_has_top_level_limit(sql) {
         sql.to_string()
     } else {
         format!("{sql} LIMIT {page_size} OFFSET {offset}")
     }
+}
+
+/// Returns true if `sql` has a LIMIT keyword at the top level
+/// (i.e., not inside quoted strings, block comments, or nested parentheses).
+fn sql_has_top_level_limit(sql: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let len = bytes.len();
+    let mut i = 0usize;
+    let mut depth = 0i32;
+
+    while i < len {
+        match bytes[i] {
+            // Quoted identifiers / strings: skip to matching close quote
+            q @ (b'\'' | b'"' | b'`') => {
+                i += 1;
+                while i < len {
+                    if bytes[i] == q {
+                        i += 1;
+                        // doubled-quote escape ('' or "" or ``)
+                        if i < len && bytes[i] == q {
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            // Line comment --
+            b'-' if i + 1 < len && bytes[i + 1] == b'-' => {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            // Block comment /* ... */
+            b'/' if i + 1 < len && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < len {
+                    if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                        i += 2;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            _ => {
+                if depth == 0 && i + 5 <= len {
+                    let word = &sql[i..i + 5];
+                    if word.eq_ignore_ascii_case("limit") {
+                        let before_ok = i == 0
+                            || !bytes[i - 1].is_ascii_alphabetic()
+                                && bytes[i - 1] != b'_';
+                        let after_ok = bytes
+                            .get(i + 5)
+                            .map_or(true, |b| !b.is_ascii_alphanumeric() && *b != b'_');
+                        if before_ok && after_ok {
+                            return true;
+                        }
+                    }
+                }
+                i += 1;
+            }
+        }
+    }
+    false
 }
 
 type ExecuteResult = Result<
@@ -3271,5 +3402,60 @@ mod tests {
         assert!(!returns_rows_mysql(sql));
         assert!(!returns_rows_postgres(sql));
         assert!(!returns_rows_sqlite(sql));
+    }
+
+    // ── sql_has_top_level_limit ───────────────────────────────────────────────
+
+    #[test]
+    fn top_level_limit_detected() {
+        assert!(sql_has_top_level_limit("SELECT * FROM t LIMIT 10"));
+        assert!(sql_has_top_level_limit("SELECT * FROM t limit 10"));
+        assert!(sql_has_top_level_limit("SELECT * FROM t LIMIT 10 OFFSET 5"));
+        assert!(sql_has_top_level_limit("select * from t\nLIMIT\n20"));
+    }
+
+    #[test]
+    fn limit_in_subquery_not_detected_as_top_level() {
+        assert!(!sql_has_top_level_limit(
+            "SELECT * FROM (SELECT * FROM t LIMIT 5) sub"
+        ));
+    }
+
+    #[test]
+    fn limit_in_string_not_detected() {
+        assert!(!sql_has_top_level_limit("SELECT 'LIMIT 10' FROM t"));
+        assert!(!sql_has_top_level_limit("SELECT \"LIMIT 10\" FROM t"));
+    }
+
+    #[test]
+    fn limit_in_comment_not_detected() {
+        assert!(!sql_has_top_level_limit(
+            "SELECT * FROM t -- LIMIT 10\nWHERE id = 1"
+        ));
+        assert!(!sql_has_top_level_limit(
+            "SELECT * FROM t /* LIMIT 10 */ WHERE id = 1"
+        ));
+    }
+
+    #[test]
+    fn word_containing_limit_not_detected() {
+        assert!(!sql_has_top_level_limit("SELECT limited FROM t"));
+        assert!(!sql_has_top_level_limit("SELECT * FROM unlimited"));
+    }
+
+    #[test]
+    fn existing_limit_prevents_pagination() {
+        assert_eq!(
+            build_paginated_sql("SELECT * FROM users LIMIT 10", 10_000, 0),
+            "SELECT * FROM users LIMIT 10"
+        );
+    }
+
+    #[test]
+    fn no_limit_still_paginated() {
+        assert_eq!(
+            build_paginated_sql("SELECT * FROM users", 10_000, 0),
+            "SELECT * FROM users LIMIT 10000 OFFSET 0"
+        );
     }
 }

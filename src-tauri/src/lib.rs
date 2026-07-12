@@ -7,10 +7,12 @@ mod connections;
 mod db;
 mod error;
 mod lib_sql;
+mod sessions;
 mod transactions;
 
 use connections::pool_manager::ConnectionManager;
 use connections::ssh_tunnel::SshTunnelManager;
+use sessions::SessionManager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
 use transactions::TransactionManager;
@@ -308,11 +310,13 @@ pub fn run() {
             });
 
             let transaction_manager = TransactionManager::new();
+            let session_manager = SessionManager::new();
 
             app.manage(sqlite);
             app.manage(connection_manager);
             app.manage(ssh_tunnel_manager);
             app.manage(transaction_manager);
+            app.manage(session_manager);
 
             // Swizzle _NSTitlebarContainerView.setFrame: so macOS applies our custom
             // titlebar height/position synchronously on every resize (no JS round-trip,
@@ -431,6 +435,9 @@ pub fn run() {
             transactions::transaction_begin,
             transactions::transaction_commit,
             transactions::transaction_rollback,
+            // Editor sessions
+            sessions::session_acquire,
+            sessions::session_release,
             // Explain
             commands::query::query_explain,
             // Virtual relations

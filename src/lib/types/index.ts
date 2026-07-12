@@ -179,6 +179,8 @@ export interface SavedQuery {
   database: string | null;
   name: string;
   sql: string;
+  description: string | null;
+  annotations: string | null;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -196,6 +198,8 @@ export interface FileQuery {
   folderId: string | null;
   name: string;
   sql: string;
+  description: string | null;
+  annotations: string | null;
   /** Resolved local connection ID (null when unresolved or none). */
   connectionId: string | null;
   /** How the connection was resolved. */
@@ -325,6 +329,8 @@ export type PanelKind =
       connectionId: string;
       database?: string;
       initialSql?: string;
+      initialDescription?: string;
+      initialAnnotations?: string;
       editorId?: string;
       savedQueryId?: string;
       savedQueryName?: string;
@@ -400,6 +406,8 @@ export interface AppSettings {
   formatIndentStyle: 'standard' | 'tabularLeft' | 'tabularRight';
   formatLinesBetweenQueries: number;
   formatCompact: boolean;
+  /** Controls overall formatting density. Takes priority over formatCompact. */
+  formatStyle: 'expanded' | 'comfortable' | 'compact';
   openItemsLocation: 'sidebar' | 'top';
   maxHorizontalSplits: number;
   maxVerticalSplits: number;
@@ -410,6 +418,8 @@ export interface AppSettings {
   /** Absolute path to the saved queries directory. Empty string = use default. */
   savedQueriesDirectory: string;
   localSearchHighlight: boolean;
+  /** Automatically save a saved query when it is run and has unsaved changes. */
+  saveOnRun: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -438,6 +448,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formatIndentStyle: 'standard',
   formatLinesBetweenQueries: 1,
   formatCompact: false,
+  formatStyle: 'expanded',
   openItemsLocation: 'sidebar',
   maxHorizontalSplits: 2,
   maxVerticalSplits: 2,
@@ -447,6 +458,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   confirmBeforeDelete: true,
   savedQueriesDirectory: '',
   localSearchHighlight: true,
+  saveOnRun: false,
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

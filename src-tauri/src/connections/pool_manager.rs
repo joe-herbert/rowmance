@@ -86,8 +86,10 @@ impl ConnectionManager {
                     .host(host)
                     .port(port)
                     .database(database)
-                    .username(username)
-                    .password(password);
+                    .username(username);
+                if !password.is_empty() {
+                    opts = opts.password(password);
+                }
 
                 if ssl_enabled {
                     let ssl_mode = if ssl_ca_path.is_some() {
@@ -147,8 +149,10 @@ impl ConnectionManager {
                     .host(host)
                     .port(port)
                     .database(database)
-                    .username(username)
-                    .password(password);
+                    .username(username);
+                if !password.is_empty() {
+                    opts = opts.password(password);
+                }
 
                 if ssl_enabled {
                     let ssl_mode = if ssl_ca_path.is_some() {
