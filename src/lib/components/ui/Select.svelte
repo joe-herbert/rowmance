@@ -39,6 +39,7 @@
     mono?: boolean;
     searchable?: boolean;
     fuzzy?: boolean;
+    placeholder?: string;
     onchange?: (_value: string) => void;
     class?: string;
     style?: string;
@@ -54,6 +55,7 @@
     mono = false,
     searchable = false,
     fuzzy = true,
+    placeholder = '',
     onchange,
     class: className = '',
     style = '',
@@ -253,7 +255,7 @@
   onclick={toggle}
   onkeydown={handleTriggerKeydown}
 >
-  <span class="trigger-label">{selectedLabel}</span>
+  <span class="trigger-label" class:trigger-label--placeholder={!selectedLabel && !!placeholder}>{selectedLabel || placeholder}</span>
   <svg
     class="trigger-chevron"
     class:trigger-chevron--open={open}
@@ -437,6 +439,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     text-align: left;
+  }
+
+  .trigger-label--placeholder {
+    color: var(--color-text-muted);
   }
 
   .trigger-chevron {

@@ -58,6 +58,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
+  import QueryBuilderModal from '$lib/components/editor/QueryBuilderModal.svelte';
   import { portal } from '$lib/actions/portal';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
@@ -247,6 +248,7 @@
     untrack(() => (initialSavedQueryId ? (initialAnnotations ?? null) : null))
   );
   let noteMenu = $state<{ lineNumber: number; x: number; y: number } | null>(null);
+  let queryBuilderLine = $state<number | null>(null);
   let notesStructureVersion = $state(0);
 
   const annotationsJson = $derived(inlineNotes.length > 0 ? JSON.stringify(inlineNotes) : null);
@@ -404,6 +406,25 @@
     inlineNotes = [...inlineNotes, { id, lineNumber, placement, text: '' }];
     notesStructureVersion++;
     noteMenu = null;
+  }
+
+  function openQueryBuilder(lineNumber: number) {
+    queryBuilderLine = lineNumber;
+    noteMenu = null;
+  }
+
+  function insertSqlAtLine(lineNumber: number, sql: string) {
+    if (!editorView) return;
+    const doc = editorView.state.doc;
+    const line = doc.line(Math.min(lineNumber, doc.lines));
+    const insertPos = line.from;
+    const insertText = sql.endsWith('\n') ? sql : sql + '\n';
+    editorView.dispatch({
+      changes: { from: insertPos, to: insertPos, insert: insertText },
+      selection: { anchor: insertPos + insertText.length },
+    });
+    editorView.focus();
+    queryBuilderLine = null;
   }
 
   $effect(() => {
@@ -2265,6 +2286,10 @@
     style="top:{noteMenu.y}px;left:{noteMenu.x}px"
     use:portal
   >
+    <button class="note-menu-item note-menu-item--builder" onmousedown={() => openQueryBuilder(noteMenu!.lineNumber)}>
+      Build query…
+    </button>
+    <div class="note-menu-separator"></div>
     <button class="note-menu-item" onmousedown={() => addNote(noteMenu!.lineNumber, 'above')}>
       Add note above line
     </button>
@@ -2272,6 +2297,25 @@
       Add note below line
     </button>
   </div>
+{/if}
+
+{#if queryBuilderLine !== null}
+  {@const qbLine = queryBuilderLine}
+  <QueryBuilderModal
+    tables={schemaRef.tables}
+    loadColumns={async (db, table) => {
+      const key = `${db}.${table}`;
+      const cached = schemaRef.columns.get(key);
+      if (cached) return cached;
+      const colInfos = await schemaApi.listColumns(schemaRef.connectionId, db, table);
+      const cols = colInfos.map(c => ({ name: c.name, dataType: c.dataType }));
+      schemaRef.columns.set(key, cols);
+      return cols;
+    }}
+    defaultDatabase={selectedDatabase}
+    oninsert={(sql) => insertSqlAtLine(qbLine, sql)}
+    onclose={() => { queryBuilderLine = null; }}
+  />
 {/if}
 
 <style>
@@ -2874,5 +2918,20 @@
 
   .note-menu-item:hover {
     background: var(--color-bg-hover);
+  }
+
+  .note-menu-item--builder {
+    color: var(--color-accent);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .note-menu-item--builder:hover {
+    background: var(--color-accent-subtle);
+  }
+
+  .note-menu-separator {
+    height: 1px;
+    background: var(--color-border);
+    margin: 3px 4px;
   }
 </style>
