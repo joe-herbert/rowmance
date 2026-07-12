@@ -341,6 +341,11 @@
     saveDialogOpen = true;
   }
 
+  function saveQueryAs(): void {
+    saveNameInput = currentSavedQueryName ?? '';
+    saveDialogOpen = true;
+  }
+
   async function confirmSave(): Promise<void> {
     if (!editorId || !saveNameInput.trim()) return;
     isSaving = true;
@@ -1179,6 +1184,9 @@
       }
       onExecute?.(query);
       await fetchVariableValues();
+      if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
+        await saveQuery();
+      }
     } catch (err) {
       results = [
         {
@@ -1216,6 +1224,9 @@
       }
       onExecute?.(query);
       await fetchVariableValues();
+      if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
+        await saveQuery();
+      }
     } catch (err) {
       results = [
         {
@@ -1251,6 +1262,9 @@
       }
       onExecute?.(stmt);
       await fetchVariableValues();
+      if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
+        await saveQuery();
+      }
     } catch (err) {
       results = [
         {
@@ -1663,6 +1677,17 @@
 
     <div class="toolbar-spacer"></div>
 
+    {#if currentSavedQueryId && !compact}
+      <button
+        class="toolbar-btn"
+        onclick={saveQueryAs}
+        disabled={isSaving}
+        title="Save a copy with a new name"
+      >
+        Save As…
+      </button>
+    {/if}
+
     <button
       bind:this={saveDialogTriggerEl}
       class="toolbar-btn toolbar-btn--save"
@@ -1801,6 +1826,20 @@
           >
             <span>Explain</span>
           </button>
+          {#if currentSavedQueryId}
+            <div class="actions-menu-sep" role="separator"></div>
+            <button
+              class="actions-menu-item"
+              role="menuitem"
+              onclick={() => {
+                saveQueryAs();
+                actionsMenuOpen = false;
+              }}
+              disabled={isSaving}
+            >
+              <span>Save As…</span>
+            </button>
+          {/if}
         </div>
       {/if}
     {:else}

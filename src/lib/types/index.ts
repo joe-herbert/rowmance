@@ -412,6 +412,8 @@ export interface AppSettings {
   /** Absolute path to the saved queries directory. Empty string = use default. */
   savedQueriesDirectory: string;
   localSearchHighlight: boolean;
+  /** Automatically save a saved query when it is run and has unsaved changes. */
+  saveOnRun: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -450,6 +452,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   confirmBeforeDelete: true,
   savedQueriesDirectory: '',
   localSearchHighlight: true,
+  saveOnRun: false,
 };
 
 // ── Errors ───────────────────────────────────────────────────────────────────

@@ -577,6 +577,21 @@
         </div>
       </div>
 
+      <h3 class="subsection-title">Saved Queries</h3>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Save on Run</span>
+            <span class="label-hint">Automatically save a saved query when it is run and has unsaved changes</span>
+          </div>
+          <Checkbox
+            checked={settings.saveOnRun}
+            onchange={(c) => update('saveOnRun', c)}
+          />
+        </div>
+      </div>
+
       <h3 class="subsection-title">Format</h3>
 
       <div class="setting-group">
