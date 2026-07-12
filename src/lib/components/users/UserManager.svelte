@@ -1003,39 +1003,30 @@
           />
         </div>
         {#if isPostgres}
-          <div class="form-check-row">
-            <input
-              type="checkbox"
-              id="add-superuser"
+          <label class="form-check-row">
+            <Checkbox
+              size="sm"
               checked={form.isSuperuser}
-              onchange={(e) => {
-                addUserForm!.isSuperuser = (e.target as HTMLInputElement).checked;
-              }}
+              onchange={(c) => { addUserForm!.isSuperuser = c; }}
             />
-            <label for="add-superuser" class="form-check-label">Superuser</label>
-          </div>
-          <div class="form-check-row">
-            <input
-              type="checkbox"
-              id="add-createdb"
+            <span class="form-check-label">Superuser</span>
+          </label>
+          <label class="form-check-row">
+            <Checkbox
+              size="sm"
               checked={form.canCreateDb}
-              onchange={(e) => {
-                addUserForm!.canCreateDb = (e.target as HTMLInputElement).checked;
-              }}
+              onchange={(c) => { addUserForm!.canCreateDb = c; }}
             />
-            <label for="add-createdb" class="form-check-label">Can Create DB</label>
-          </div>
-          <div class="form-check-row">
-            <input
-              type="checkbox"
-              id="add-createrole"
+            <span class="form-check-label">Can Create DB</span>
+          </label>
+          <label class="form-check-row">
+            <Checkbox
+              size="sm"
               checked={form.canCreateRole}
-              onchange={(e) => {
-                addUserForm!.canCreateRole = (e.target as HTMLInputElement).checked;
-              }}
+              onchange={(c) => { addUserForm!.canCreateRole = c; }}
             />
-            <label for="add-createrole" class="form-check-label">Can Create Role</label>
-          </div>
+            <span class="form-check-label">Can Create Role</span>
+          </label>
         {/if}
         {#if addUserError}
           <div class="modal-error">{addUserError}</div>
@@ -1819,14 +1810,6 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-2);
-  }
-
-  .form-check-row input[type='checkbox'] {
-    width: 14px;
-    height: 14px;
-    accent-color: var(--color-accent);
-    cursor: pointer;
-    flex-shrink: 0;
   }
 
   .form-check-label {

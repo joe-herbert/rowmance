@@ -494,12 +494,9 @@
               >Show a confirmation dialog when saving changes that include row deletions</span
             >
           </div>
-          <input
-            type="checkbox"
-            class="setting-checkbox"
+          <Checkbox
             checked={settings.confirmBeforeDelete}
-            onchange={(e) =>
-              update('confirmBeforeDelete', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(c) => update('confirmBeforeDelete', c)}
           />
         </div>
         <div class="setting-row">
@@ -507,12 +504,9 @@
             <span class="label-text">Highlight Local Search Matches</span>
             <span class="label-hint">Highlight matching text in cells when using table search</span>
           </div>
-          <input
-            type="checkbox"
-            class="setting-checkbox"
+          <Checkbox
             checked={settings.localSearchHighlight}
-            onchange={(e) =>
-              update('localSearchHighlight', (e.currentTarget as HTMLInputElement).checked)}
+            onchange={(c) => update('localSearchHighlight', c)}
           />
         </div>
       </div>

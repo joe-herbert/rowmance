@@ -45,6 +45,7 @@
   import { untrack, tick } from 'svelte';
   import { executeQuery, executeSelection, saveTableChanges } from '$lib/tauri/query';
   import Loader from '$lib/components/ui/Loader.svelte';
+  import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
   import { listen } from '@tauri-apps/api/event';
@@ -2520,17 +2521,15 @@
             ? 's'
             : ''}. This cannot be undone.
         </p>
-        <label class="delete-confirm-dont-show">
-          <input
-            type="checkbox"
-            onchange={async (e) => {
-              if ((e.currentTarget as HTMLInputElement).checked) {
-                await settings.set('confirmBeforeDelete', false);
-              }
+        <div class="delete-confirm-dont-show">
+          <Checkbox
+            size="sm"
+            onchange={async (c) => {
+              if (c) await settings.set('confirmBeforeDelete', false);
             }}
           />
-          Don't show this again
-        </label>
+          <span>Don't show this again</span>
+        </div>
       </div>
       <div class="delete-confirm-footer">
         <button class="dc-btn" onclick={() => (showDeleteConfirm = false)}>Cancel</button>
@@ -2621,8 +2620,6 @@
     gap: var(--spacing-2);
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
-    cursor: pointer;
-    -webkit-user-select: none;
     user-select: none;
   }
 
