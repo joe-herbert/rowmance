@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/components/Modal.svelte';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { useRecording } from '$lib/stores/recording.svelte';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
@@ -60,7 +61,7 @@
       {#each recording.statements as stmt, i (i)}
         <div class="statement-item">
           <span class="stmt-number">{i + 1}</span>
-          <pre class="stmt-sql">{stmt.sql.trim()}</pre>
+          <pre class="stmt-sql"><SqlHighlight sql={stmt.sql.trim()} /></pre>
         </div>
       {/each}
     </div>

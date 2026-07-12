@@ -7,6 +7,7 @@
   import * as importApi from '$lib/tauri/import';
   import Modal from '$lib/components/Modal.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { errorMessage } from '$lib/utils/errors';
 
@@ -191,7 +192,7 @@
               </div>
             {/if}
 
-            <pre class="statement-preview">{progress.statement}</pre>
+            <pre class="statement-preview"><SqlHighlight sql={progress.statement} /></pre>
           {:else}
             <div class="spinner-row">
               <div class="spinner" aria-label="Running…"></div>

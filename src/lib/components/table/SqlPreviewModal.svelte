@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/components/Modal.svelte';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
 
   interface Props {
     statements: string[];
@@ -63,7 +64,7 @@
     </div>
 
     <div class="sql-body">
-      <pre class="sql-pre">{allSql}</pre>
+      <pre class="sql-pre"><SqlHighlight sql={allSql} /></pre>
     </div>
 
     <div class="modal-footer">

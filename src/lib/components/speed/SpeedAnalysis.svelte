@@ -5,6 +5,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as api from '$lib/tauri/speed_analysis';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import type { SpeedAnalysisEntry } from '$lib/tauri/speed_analysis';
 
   let entries = $state<SpeedAnalysisEntry[]>([]);
@@ -117,7 +118,7 @@
             <span class="entry-time">{formatTime(entry.executedAt)}</span>
             <span class="entry-total">{formatUs(entry.totalUs)}</span>
           </div>
-          <div class="entry-sql">{formatSql(entry.sql)}</div>
+          <div class="entry-sql"><SqlHighlight sql={formatSql(entry.sql)} /></div>
           <div class="bar-container">
             {#if entry.poolAcquireUs > 0}
               <div

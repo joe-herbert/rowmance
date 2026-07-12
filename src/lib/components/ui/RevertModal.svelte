@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/components/Modal.svelte';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { useRevert, type RevertEntry, type RevertRowChange } from '$lib/stores/revert.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { executeMultiQuery } from '$lib/tauri/query';
@@ -189,11 +190,11 @@
                 {/if}
 
                 <div class="section-label">Executed SQL</div>
-                <pre class="sql-block">{entry.sql.trim()}</pre>
+                <pre class="sql-block"><SqlHighlight sql={entry.sql.trim()} /></pre>
 
                 {#if entry.revertSql}
                   <div class="section-label">Revert SQL</div>
-                  <pre class="sql-block sql-block--revert">{entry.revertSql.trim()}</pre>
+                  <pre class="sql-block sql-block--revert"><SqlHighlight sql={entry.revertSql.trim()} /></pre>
                 {/if}
 
                 {#if revertErrors[entry.id]}

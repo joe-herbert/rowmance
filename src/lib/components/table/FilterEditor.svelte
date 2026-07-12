@@ -314,6 +314,7 @@
   import TimePicker from '$lib/components/ui/TimePicker.svelte';
   import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
   import { portal } from '$lib/actions/portal';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
 
   interface Props {
     columns: ColumnMeta[];
@@ -922,7 +923,7 @@
           : quoteIdentifier(tableName)}
         <div class="sql-preview-hint">
           Executed as: <code class="sql-preview-code"
-            >SELECT * FROM {tableRef} WHERE {draft.sql.trim() || '…'}</code
+            ><SqlHighlight sql={`SELECT * FROM ${tableRef} WHERE ${draft.sql.trim() || '…'}`} /></code
           >
         </div>
       {/if}

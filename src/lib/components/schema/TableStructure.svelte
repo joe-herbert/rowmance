@@ -21,6 +21,7 @@
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
   import PolymorphicVirtualRelationModal from '$lib/components/relations/PolymorphicVirtualRelationModal.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
 
   interface Props {
@@ -1369,7 +1370,7 @@
       <div class="modal-title">{drop.label}</div>
       <div class="modal-body">
         <p class="confirm-text">This action cannot be undone.</p>
-        <div class="preview-sql mono">{drop.sqls[0]}</div>
+        <div class="preview-sql mono"><SqlHighlight sql={drop.sqls[0]} /></div>
         {#if saveError}
           <div class="modal-error">{saveError}</div>
         {/if}
