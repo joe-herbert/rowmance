@@ -344,9 +344,17 @@
   let tableKey = $state(0);
 
   const pendingRowCount = $derived(pendingChanges.size + pendingDeletedRows.size);
+  const pendingNewRowCount = $derived(
+    [...pendingChanges.keys()].filter((k) => k.startsWith('__new__')).length,
+  );
   const pendingCellCount = $derived(
     [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) +
       pendingDeletedRows.size,
+  );
+  const onlyNewRowsPending = $derived(
+    pendingNewRowCount > 0 &&
+      pendingNewRowCount === pendingChanges.size &&
+      pendingDeletedRows.size === 0,
   );
 
   function handleChangePending(
@@ -1753,11 +1761,17 @@
             onclick={saveChanges}
             disabled={isSaving}
             title="Save pending changes to the database"
-            aria-label="Save {pendingCellCount} pending changes"
+            aria-label={onlyNewRowsPending
+              ? `Save ${pendingNewRowCount} new ${pendingNewRowCount !== 1 ? 'lines' : 'line'}`
+              : `Save ${pendingCellCount} pending changes`}
           >
-            {isSaving
-              ? 'Saving…'
-              : `Save ${pendingCellCount} change${pendingCellCount !== 1 ? 's' : ''}`}
+            {#if isSaving}
+              Saving…
+            {:else if onlyNewRowsPending}
+              Save {pendingNewRowCount} new {pendingNewRowCount !== 1 ? 'lines' : 'line'}
+            {:else}
+              Save {pendingCellCount} change{pendingCellCount !== 1 ? 's' : ''}
+            {/if}
           </button>
           <button
             class="toolbar-btn save-btn save-split-arrow"
