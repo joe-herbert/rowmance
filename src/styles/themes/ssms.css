@@ -1,0 +1,89 @@
+/* SSMS Retro theme — classic SQL Server Management Studio 2005–2012 aesthetic.
+   No glass, no gradients, tight panel layout, sharp corners, Windows XP chrome. */
+
+[data-theme='ssms'] {
+  --app-background: #d4d0c8;
+  --glass-blur: none;
+  --modal-backdrop-blur: 0px;
+
+  /* Tight Windows-like panel layout */
+  --panel-spacing: 0px;
+  --panel-radius: 0px;
+
+  /* All radius tokens zeroed — square everything that uses them */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  /* Solid opaque backgrounds — no semi-transparency */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f0f0f0;
+  --color-bg-tertiary: #e4e4e4;
+  --color-bg-overlay: #f5f5f5;
+  --color-bg-hover: #c5d9f1;
+  --color-bg-active: #9ab5d6;
+
+  /* Classic inset/raised Windows borders */
+  --color-border: #808080;
+  --color-border-strong: #404040;
+
+  --color-text-primary: #000000;
+  --color-text-secondary: #333333;
+  --color-text-muted: #666666;
+  --color-text-disabled: #aaaaaa;
+  --color-text-on-accent: #ffffff;
+
+  /* Windows XP button-face blue */
+  --color-accent: #316ac5;
+  --color-accent-hover: #1e4da8;
+  --color-accent-subtle: rgba(49, 106, 197, 0.12);
+
+  --color-danger: #cc0000;
+  --color-danger-subtle: rgba(204, 0, 0, 0.1);
+  --color-warning: #cc6600;
+  --color-warning-subtle: rgba(204, 102, 0, 0.1);
+  --color-success: #006600;
+  --color-success-subtle: rgba(0, 102, 0, 0.1);
+  --color-null: #800080;
+
+  /* ── Editor — authentic SSMS default colour scheme ─────────────────────── */
+  --color-editor-bg: #ffffff;
+  --color-editor-text: #000000;
+  --color-editor-gutter-bg: #f0f0f0;
+  --color-editor-gutter-text: #888888;
+  --color-editor-selection: rgba(49, 106, 197, 0.28);
+  --color-editor-active-line: rgba(49, 106, 197, 0.05);
+  --color-editor-cursor: #000000;
+  --color-editor-keyword: #0000ff;   /* bright blue — T-SQL reserved words */
+  --color-editor-string: #800000;    /* dark red — string literals */
+  --color-editor-number: #000000;    /* plain black — numbers */
+  --color-editor-comment: #008000;   /* green — line and block comments */
+  --color-editor-operator: #808080;
+  --color-editor-function: #000000;  /* black — user/system functions */
+  --color-editor-type: #000080;      /* dark navy — types */
+  --color-editor-bracket-match: rgba(49, 106, 197, 0.2);
+
+  /* Flat scrollbars */
+  --color-scrollbar-thumb: #c0c0c0;
+  --color-scrollbar-thumb-hover: #808080;
+  --color-scrollbar-track: #f0f0f0;
+
+  /* Results grid — alternating light blue rows like SSMS */
+  --color-table-row-alt: #eef4fb;
+  --color-table-row-hover: #c5d9f1;
+  --color-table-row-selected: rgba(49, 106, 197, 0.28);
+  --color-table-header-bg: linear-gradient(180deg, #e3eaf5 0%, #cdd9ee 100%);
+
+  /* Flat raised-window shadows */
+  --shadow-sm: 1px 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 2px 2px 5px rgba(0, 0, 0, 0.2);
+  --shadow-overlay: 4px 4px 10px rgba(0, 0, 0, 0.3);
+
+  /* Courier New — the classic SSMS editor default */
+  --font-family-mono: 'Courier New', Courier, monospace;
+  /* Tahoma was the SSMS/Windows XP UI font */
+  --font-family-ui: Tahoma, 'Segoe UI', system-ui, sans-serif;
+}
+

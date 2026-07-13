@@ -860,7 +860,7 @@
     color: var(--color-text-muted);
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 0 6px;
     line-height: 18px;
     flex-shrink: 0;
@@ -959,7 +959,7 @@
     padding: 1px 5px;
     background: var(--color-accent-subtle);
     color: var(--color-accent);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     font-weight: var(--font-weight-semibold);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -1008,7 +1008,7 @@
     color: var(--color-text-muted);
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 0 5px;
     line-height: 16px;
     align-self: center;
@@ -1028,7 +1028,7 @@
 
   .table-scroll::-webkit-scrollbar-thumb {
     background: var(--color-border);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
   }
 
   .data-table {

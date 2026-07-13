@@ -68,6 +68,13 @@
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
     --shadow-overlay: 0 24px 60px rgba(0, 0, 0, 0.72);
+
+    --radius-xs: 2px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 9px;
+    --radius-xl: 13px;
+    --panel-radius: 13px;
   }
 }
 
@@ -138,4 +145,11 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-overlay: 0 24px 60px rgba(0, 0, 0, 0.72);
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --radius-xl: 13px;
+  --panel-radius: 13px;
 }

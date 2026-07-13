@@ -584,7 +584,7 @@
     flex-shrink: 0;
     color: var(--color-text-muted);
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     background: transparent;
     transition: background var(--transition-fast), color var(--transition-fast);
   }
@@ -679,7 +679,7 @@
     padding: 0 4px;
     background: var(--color-accent-subtle);
     color: var(--color-accent);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     font-weight: var(--font-weight-semibold);
     text-transform: uppercase;
     letter-spacing: 0.04em;

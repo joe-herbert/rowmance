@@ -427,7 +427,7 @@
     height: 2px;
     margin: -1px var(--spacing-2);
     background: var(--color-accent);
-    border-radius: 1px;
+    border-radius: var(--radius-xs);
     pointer-events: none;
     flex-shrink: 0;
   }

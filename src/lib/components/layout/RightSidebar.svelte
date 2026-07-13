@@ -1862,7 +1862,7 @@
     font-weight: var(--font-weight-medium);
     color: var(--color-text-disabled);
     background: var(--color-bg-tertiary);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 1px 6px;
     flex-shrink: 0;
   }

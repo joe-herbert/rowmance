@@ -30,7 +30,7 @@
   .grid-loader div {
     width: 18px;
     height: 18px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: currentColor;
     animation: grid-pulse 1.2s ease-in-out infinite;
   }

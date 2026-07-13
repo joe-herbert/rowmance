@@ -1061,7 +1061,7 @@
     place-items: center;
     width: 24px;
     height: 24px;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
@@ -1074,7 +1074,7 @@
   .icon-btn--sm {
     width: 20px;
     height: 20px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
   }
 
   .icon-btn:hover {
@@ -1158,7 +1158,7 @@
     font-size: 13px;
     color: var(--color-text-secondary);
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     -webkit-user-select: none;
     user-select: none;
     outline: none;
@@ -1185,7 +1185,7 @@
     height: 2px;
     margin: -1px 18px;
     background: var(--color-accent);
-    border-radius: 1px;
+    border-radius: var(--radius-xs);
     flex-shrink: 0;
     pointer-events: none;
   }

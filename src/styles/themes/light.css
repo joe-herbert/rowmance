@@ -63,6 +63,13 @@
   --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
   --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
   --shadow-overlay: 0 24px 60px rgba(60, 40, 120, 0.22);
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --radius-xl: 13px;
+  --panel-radius: 13px;
 }
 
 /* System theme following OS light preference */
@@ -129,5 +136,12 @@
     --shadow-sm: 0 1px 3px rgba(60, 40, 120, 0.08);
     --shadow-md: 0 4px 16px rgba(60, 40, 120, 0.12);
     --shadow-overlay: 0 24px 60px rgba(60, 40, 120, 0.22);
+
+    --radius-xs: 2px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 9px;
+    --radius-xl: 13px;
+    --panel-radius: 13px;
   }
 }

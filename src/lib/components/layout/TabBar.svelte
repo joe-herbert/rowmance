@@ -807,7 +807,7 @@
     width: 2px;
     height: 24px;
     background: var(--color-accent);
-    border-radius: 1px;
+    border-radius: var(--radius-xs);
     flex-shrink: 0;
     pointer-events: none;
   }

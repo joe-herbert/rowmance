@@ -187,7 +187,7 @@
 
   .conn-list {
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     overflow: hidden;
   }
 
@@ -283,7 +283,7 @@
     padding: 8px 10px;
     background: color-mix(in srgb, var(--color-warning, #f59e0b) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 40%, transparent);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     font-size: 12px;
     color: var(--color-text);
     line-height: 1.5;
@@ -304,7 +304,7 @@
   .btn-primary,
   .btn-secondary {
     padding: 6px 14px;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     font-size: 13px;
     cursor: pointer;
     border: 1px solid transparent;

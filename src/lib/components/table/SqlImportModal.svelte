@@ -402,14 +402,14 @@
   .progress-bar-track {
     height: 4px;
     background: var(--color-border);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     overflow: hidden;
   }
 
   .progress-bar-fill {
     height: 100%;
     background: var(--color-accent);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     transition: width 0.2s ease;
   }
 

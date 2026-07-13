@@ -2116,7 +2116,7 @@
     color: var(--color-text-muted);
     text-transform: uppercase;
     text-align: left;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     transition: background var(--transition-fast);
     -webkit-user-select: none;
@@ -2153,7 +2153,7 @@
     align-items: center;
     gap: 8px;
     padding: 7px 8px;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     cursor: pointer;
     transition: background var(--transition-fast);
     position: relative;
@@ -2178,7 +2178,7 @@
     height: 16px;
     flex-shrink: 0;
     color: var(--color-text-muted);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition:
       transform var(--transition-fast),
@@ -2273,7 +2273,7 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     color: var(--color-text-muted);
     cursor: pointer;
     transition:
@@ -2320,7 +2320,7 @@
     font-size: 12px;
     color: var(--color-text-secondary);
     text-align: left;
-    border-radius: 7px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
@@ -2355,7 +2355,7 @@
     font-size: 12.5px;
     color: var(--color-text-secondary);
     text-align: left;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
@@ -2430,7 +2430,7 @@
     width: 100%;
     padding: 8px;
     margin-top: 4px;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     font-size: 12.5px;
     font-weight: 500;
     color: var(--color-text-muted);

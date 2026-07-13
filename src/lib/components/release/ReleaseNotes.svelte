@@ -67,7 +67,7 @@
     flex-shrink: 0;
     width: 52px;
     height: 52px;
-    border-radius: 12px;
+    border-radius: var(--radius-xl);
     background: var(--color-accent, #4f46e5);
     color: #fff;
     display: flex;
@@ -153,7 +153,7 @@
     font-size: 0.85em;
     padding: 0.2em 0.4em;
     background: var(--color-surface-raised, rgba(128, 128, 128, 0.1));
-    border-radius: 6px;
+    border-radius: var(--radius-md);
   }
 
   :global(.release-body.markdown-body pre) {
@@ -161,7 +161,7 @@
     overflow: auto;
     font-size: 0.85em;
     background: var(--color-surface-raised, rgba(128, 128, 128, 0.1));
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     margin: 0 0 1rem;
   }
 

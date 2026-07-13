@@ -68,6 +68,7 @@
   --shadow-overlay: 0 8px 32px rgba(255, 255, 255, 0.2);
 
   /* Bold borders everywhere */
+  --radius-xs: 0px;
   --radius-sm: 0px;
   --radius-md: 0px;
   --radius-lg: 2px;

@@ -4342,7 +4342,7 @@
 
   .table-scroll::-webkit-scrollbar-thumb {
     background: var(--color-scrollbar-thumb);
-    border-radius: 9px;
+    border-radius: var(--radius-lg);
     border: 3px solid transparent;
     background-clip: content-box;
   }
@@ -4789,7 +4789,7 @@
   :global(.search-highlight) {
     background: color-mix(in srgb, var(--color-accent) 40%, transparent);
     color: var(--color-text-primary);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     padding: 0 1px;
   }
 

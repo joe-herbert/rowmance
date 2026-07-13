@@ -2113,7 +2113,7 @@
     width: 2px;
     transform: translateX(-50%);
     background: var(--color-accent);
-    border-radius: 1px;
+    border-radius: var(--radius-xs);
     opacity: 0;
     transition: opacity var(--transition-fast);
   }

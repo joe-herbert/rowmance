@@ -108,6 +108,7 @@
   --line-height-normal: 1.5;
 
   /* ── Border radius ──────────────────────────────────────────────────────── */
+  --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 9px;

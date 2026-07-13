@@ -207,7 +207,7 @@
     color: var(--color-warning);
     background: var(--color-warning-subtle);
     border: 1px solid var(--color-warning);
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
     padding: 1px 5px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -304,7 +304,7 @@
     display: inline-block;
     width: 8px;
     height: 8px;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     flex-shrink: 0;
   }
 
@@ -358,7 +358,7 @@
   .bar-container {
     display: flex;
     height: 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
     background: var(--color-border);
     gap: 1px;
@@ -384,7 +384,7 @@
   .phase {
     font-size: var(--font-size-xs);
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
     font-variant-numeric: tabular-nums;
   }
 

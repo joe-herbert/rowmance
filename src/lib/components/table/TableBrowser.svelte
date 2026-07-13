@@ -2745,7 +2745,7 @@
   .page-nav-group {
     display: flex;
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -2786,7 +2786,7 @@
     padding: 0 var(--spacing-2);
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     font-size: var(--font-size-xs);
     font-family: var(--font-family-ui);
     color: var(--color-text-secondary);
@@ -2871,7 +2871,7 @@
     padding: 0;
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     color: var(--color-text-secondary);
     cursor: pointer;
     transition:
