@@ -1280,6 +1280,8 @@
     if (!focusedCell) return;
     const cell = focusedCell;
     requestAnimationFrame(() => {
+      // If the user clicked another cell between scheduling and now, don't override it.
+      if (focusedCell?.row !== cell.row || focusedCell?.col !== cell.col) return;
       focusedCell = cell;
       skipNextFocusReset = true;
       const el = getFocusedCellEl(cell.row, cell.col);
