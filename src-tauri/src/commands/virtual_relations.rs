@@ -357,6 +357,30 @@ pub async fn virtual_relations_create(
     sqlite: State<'_, SqlitePool>,
     input: VirtualRelationInput,
 ) -> Result<VirtualRelation, AppError> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM virtual_relations \
+         WHERE from_connection_id = ? AND from_database = ? AND from_table = ? AND from_column = ? \
+           AND to_connection_id = ?   AND to_database = ?   AND to_table = ?   AND to_column = ?",
+    )
+    .bind(&input.from.connection_id)
+    .bind(&input.from.database)
+    .bind(&input.from.table)
+    .bind(&input.from.column)
+    .bind(&input.to.connection_id)
+    .bind(&input.to.database)
+    .bind(&input.to.table)
+    .bind(&input.to.column)
+    .fetch_one(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    if count > 0 {
+        return Err(AppError::new(
+            "DUPLICATE_RELATION",
+            "A virtual relation between these two columns already exists",
+        ));
+    }
+
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
 

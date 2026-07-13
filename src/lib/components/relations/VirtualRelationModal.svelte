@@ -150,10 +150,15 @@
       table: toTable,
       column: toColumn,
     };
-    if (editId) await vrStore.remove(editId);
-    await vrStore.add({ from, to: toRef, label: label.trim() || undefined });
-    onCreated?.();
-    onClose();
+    error = null;
+    try {
+      if (editId) await vrStore.remove(editId);
+      await vrStore.add({ from, to: toRef, label: label.trim() || undefined });
+      onCreated?.();
+      onClose();
+    } catch (err) {
+      error = errorMessage(err);
+    }
   }
 
   const canSave = $derived(!!toConnectionId && !!toDatabase && !!toTable && !!toColumn);
