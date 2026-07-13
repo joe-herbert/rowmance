@@ -325,7 +325,8 @@
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-overlay);
     min-width: 220px;
-    max-width: 320px;
+    max-width: 500px;
+    width: max-content;
     max-height: 400px;
     display: flex;
     flex-direction: column;
@@ -499,8 +500,6 @@
     font-family: var(--font-family-mono);
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
