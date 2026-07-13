@@ -1125,6 +1125,20 @@
   <div class="tree-header no-select" oncontextmenu={showPanelCtx}>
     <span class="header-label">CONNECTIONS</span>
     <span class="header-count">{connectionStore.profiles.length}</span>
+    <div class="spacer"></div>
+    <button
+      class="header-icon-btn"
+      onclick={() => panelStore.openInFocused({ kind: 'connections' })}
+      title="Manage all connections"
+      aria-label="Manage connections"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+      </svg>
+    </button>
   </div>
 
   <!-- Filter bar -->
@@ -2278,6 +2292,30 @@
   .header-count {
     font-size: 10.5px;
     color: var(--color-text-disabled);
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .header-icon-btn {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .header-icon-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 
   /* ── Scroll container ── */

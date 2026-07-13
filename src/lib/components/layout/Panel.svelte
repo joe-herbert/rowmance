@@ -18,6 +18,7 @@
   import UserManager from '$lib/components/users/UserManager.svelte';
   import SpeedAnalysis from '$lib/components/speed/SpeedAnalysis.svelte';
   import ReleaseNotes from '$lib/components/release/ReleaseNotes.svelte';
+  import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
 
   interface Props {
     panel: PanelState;
@@ -101,6 +102,8 @@
     <SpeedAnalysis />
   {:else if panel.content.kind === 'release_notes'}
     <ReleaseNotes version={panel.content.version} notes={panel.content.notes} />
+  {:else if panel.content.kind === 'connections'}
+    <ConnectionsPage />
   {:else}
     <!-- Empty panel placeholder -->
     <div class="empty-panel">

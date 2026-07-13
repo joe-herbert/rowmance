@@ -67,6 +67,8 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
       return true;
     case 'release_notes':
       return b.kind === 'release_notes' && a.version === b.version;
+    case 'connections':
+      return true;
     case 'empty':
       return true;
   }
