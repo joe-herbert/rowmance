@@ -51,6 +51,8 @@ pub struct ConnectionProfile {
     pub ssl_key_path: Option<String>,
     #[serde(rename = "poolMax")]
     pub pool_max: i64,
+    #[serde(rename = "pingInterval")]
+    pub ping_interval: Option<i64>,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "updatedAt")]
@@ -81,6 +83,7 @@ impl From<ConnectionProfileRow> for ConnectionProfile {
             ssl_cert_path: r.ssl_cert_path,
             ssl_key_path: r.ssl_key_path,
             pool_max: r.pool_max,
+            ping_interval: r.ping_interval,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -154,6 +157,8 @@ pub struct ConnectionProfileInput {
     pub ssl_key_path: Option<String>,
     #[serde(rename = "poolMax")]
     pub pool_max: Option<i64>,
+    #[serde(rename = "pingInterval")]
+    pub ping_interval: Option<i64>,
 }
 
 fn retrieve_keychain_password(connection_id: &str) -> String {
@@ -200,12 +205,12 @@ pub async fn connections_create(
             id, group_id, name, db_type, host, port, database, username, color,
             read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
             ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-            pool_max, created_at, updated_at
+            pool_max, ping_interval, created_at, updated_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?
+            ?, ?, ?, ?
         )
         "#,
     )
@@ -230,6 +235,7 @@ pub async fn connections_create(
     .bind(&input.ssl_cert_path)
     .bind(&input.ssl_key_path)
     .bind(pool_max)
+    .bind(input.ping_interval)
     .bind(&now)
     .bind(&now)
     .execute(sqlite.inner())
@@ -267,7 +273,7 @@ pub async fn connections_update(
             ssh_enabled = ?, ssh_host = ?, ssh_port = ?, ssh_user = ?,
             ssh_auth_type = ?, ssh_key_path = ?,
             ssl_enabled = ?, ssl_ca_path = ?, ssl_cert_path = ?, ssl_key_path = ?,
-            pool_max = ?, updated_at = ?
+            pool_max = ?, ping_interval = ?, updated_at = ?
         WHERE id = ?
         "#,
     )
@@ -291,6 +297,7 @@ pub async fn connections_update(
     .bind(&input.ssl_cert_path)
     .bind(&input.ssl_key_path)
     .bind(pool_max)
+    .bind(input.ping_interval)
     .bind(&now)
     .bind(&id)
     .execute(sqlite.inner())
@@ -658,6 +665,7 @@ pub async fn connections_connect(
             let connections_clone = connections.inner().clone();
             let transactions_clone = transactions.inner().clone();
             let tunnels_clone = tunnels.inner().clone();
+            let app_clone = app.clone();
             tokio::spawn(async move {
                 if exit_rx.changed().await.is_err() {
                     return;
@@ -667,10 +675,37 @@ pub async fn connections_connect(
                 if tunnels_clone.destroy_tunnel(&id_clone) {
                     transactions_clone.remove(&id_clone);
                     connections_clone.disconnect(&id_clone).await;
-                    let _ = app.emit("connection:ssh-dropped", &id_clone);
+                    let _ = app_clone.emit("connection:ssh-dropped", &id_clone);
                 }
             });
         }
+    }
+
+    // Spawn a background task to periodically ping the connection and disconnect
+    // if it becomes unreachable, notifying the frontend so it can update UI state.
+    if let Some(interval_secs) = row.ping_interval.filter(|&s| s > 0) {
+        let id_clone = id.clone();
+        let connections_clone = connections.inner().clone();
+        let transactions_clone = transactions.inner().clone();
+        let tunnels_clone = tunnels.inner().clone();
+        let app_clone = app.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
+                if !connections_clone.is_active(&id_clone) {
+                    break;
+                }
+                if !connections_clone.ping(&id_clone).await {
+                    if connections_clone.is_active(&id_clone) {
+                        transactions_clone.remove(&id_clone);
+                        tunnels_clone.destroy_tunnel(&id_clone);
+                        connections_clone.disconnect(&id_clone).await;
+                        let _ = app_clone.emit("connection:ping-failed", &id_clone);
+                    }
+                    break;
+                }
+            }
+        });
     }
 
     Ok(())
@@ -850,12 +885,12 @@ pub async fn connections_duplicate(
             id, group_id, name, db_type, host, port, database, username, color,
             read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
             ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-            pool_max, created_at, updated_at
+            pool_max, ping_interval, created_at, updated_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?
+            ?, ?, ?, ?
         )
         "#,
     )
@@ -880,6 +915,7 @@ pub async fn connections_duplicate(
     .bind(&row.ssl_cert_path)
     .bind(&row.ssl_key_path)
     .bind(row.pool_max)
+    .bind(row.ping_interval)
     .bind(&now)
     .bind(&now)
     .execute(sqlite.inner())
@@ -954,6 +990,8 @@ pub struct ConnectionExportEntry {
     pub ssl_key_path: Option<String>,
     #[serde(rename = "poolMax")]
     pub pool_max: i64,
+    #[serde(rename = "pingInterval")]
+    pub ping_interval: Option<i64>,
     /// Present only when exported with include_sensitive = true.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passwords: Option<ConnectionExportPasswords>,
@@ -1023,6 +1061,7 @@ pub async fn connections_export(
                 ssl_cert_path: row.ssl_cert_path,
                 ssl_key_path: row.ssl_key_path,
                 pool_max: row.pool_max,
+                ping_interval: row.ping_interval,
                 passwords,
             });
         }
@@ -1127,12 +1166,12 @@ pub async fn connections_import(
                 id, group_id, name, db_type, host, port, database, username, color,
                 read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
                 ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-                pool_max, created_at, updated_at
+                pool_max, ping_interval, created_at, updated_at
             ) VALUES (
                 ?, NULL, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?
+                ?, ?, ?, ?
             )
             "#,
         )
@@ -1156,6 +1195,7 @@ pub async fn connections_import(
         .bind(&entry.ssl_cert_path)
         .bind(&entry.ssl_key_path)
         .bind(entry.pool_max)
+        .bind(entry.ping_interval)
         .bind(&now)
         .bind(&now)
         .execute(sqlite.inner())

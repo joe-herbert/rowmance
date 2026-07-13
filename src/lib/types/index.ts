@@ -29,6 +29,7 @@ export interface ConnectionProfile {
   sslCertPath: string | null;
   sslKeyPath: string | null;
   poolMax: number;
+  pingInterval: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -56,6 +57,7 @@ export interface ConnectionProfileInput {
   sslCertPath?: string | null;
   sslKeyPath?: string | null;
   poolMax?: number;
+  pingInterval?: number | null;
 }
 
 export interface ConnectionGroup {

@@ -248,6 +248,20 @@ impl ConnectionManager {
         }
     }
 
+    /// Send a lightweight ping to check the connection is still alive.
+    /// Returns false if no pool exists or the query fails.
+    /// SQLite is always considered alive (local file, no network to lose).
+    pub async fn ping(&self, id: &str) -> bool {
+        let Ok(pool) = self.get(id) else {
+            return false;
+        };
+        match pool.value() {
+            RemotePool::MySql(p, _) => sqlx::query("SELECT 1").execute(p).await.is_ok(),
+            RemotePool::Postgres(p) => sqlx::query("SELECT 1").execute(p).await.is_ok(),
+            RemotePool::Sqlite(_) => true,
+        }
+    }
+
     /// Returns true if a pool exists for the given id.
     pub fn is_active(&self, id: &str) -> bool {
         self.pools.contains_key(id)

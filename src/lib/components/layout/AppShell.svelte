@@ -343,6 +343,13 @@
         const name = profile?.name ?? 'Connection';
         toast.addToast(`SSH tunnel lost for "${name}". Disconnected.`, 'error');
       }),
+      listen<string>('connection:ping-failed', (event) => {
+        const id = event.payload;
+        const profile = connectionsStore.getById(id);
+        connectionsStore.markDisconnected(id);
+        const name = profile?.name ?? 'Connection';
+        toast.addToast(`Lost connection to "${name}". Disconnected.`, 'error');
+      }),
     ]).then((unlisteners) => {
       unlistenFn = () => unlisteners.forEach((u) => u());
     });

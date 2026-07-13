@@ -74,6 +74,7 @@
   // ── Advanced fields ───────────────────────────────────────────────────────────
 
   let poolMax = $state(untrack(() => profile?.poolMax ?? 5));
+  let pingInterval = $state(untrack(() => profile?.pingInterval ?? null));
 
   // ── URL import ────────────────────────────────────────────────────────────────
 
@@ -179,6 +180,7 @@
         sslCertPath: null,
         sslKeyPath: null,
         poolMax,
+        pingInterval: pingInterval || null,
       };
     }
     return {
@@ -202,6 +204,7 @@
       sslCertPath: sslEnabled ? sslCertPath.trim() || null : null,
       sslKeyPath: sslEnabled ? sslKeyPath.trim() || null : null,
       poolMax,
+      pingInterval: pingInterval || null,
     };
   }
 
@@ -858,6 +861,21 @@
             max="100"
             autocomplete="off"
           />
+        </div>
+
+        <div class="field">
+          <label for="ping-interval" class="label">Ping Interval (seconds)</label>
+          <input
+            id="ping-interval"
+            class="input"
+            type="number"
+            bind:value={pingInterval}
+            min="5"
+            max="3600"
+            placeholder="Disabled"
+            autocomplete="off"
+          />
+          <p class="tab-hint">Periodically checks the connection is still alive. Leave empty to disable.</p>
         </div>
 
         <div class="field field--inline">
