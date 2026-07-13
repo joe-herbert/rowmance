@@ -131,6 +131,13 @@ export function useConnections() {
       transactionIds = new Set([...transactionIds].filter((i) => i !== id));
     },
 
+    /** Update local state when the backend has already disconnected (e.g. SSH dropped). */
+    markDisconnected(id: string): void {
+      activeIds = new Set([...activeIds].filter((i) => i !== id));
+      connectedAt = new Map([...connectedAt].filter(([k]) => k !== id));
+      transactionIds = new Set([...transactionIds].filter((i) => i !== id));
+    },
+
     /** Check whether a given profile ID is currently connected. */
     isActive(id: string): boolean {
       return activeIds.has(id);

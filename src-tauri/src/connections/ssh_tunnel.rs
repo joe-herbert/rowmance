@@ -9,12 +9,16 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::sync::{oneshot, watch};
 
 use crate::error::RowmanceError;
 
 pub struct TunnelHandle {
     pub local_port: u16,
-    process: tokio::process::Child,
+    /// Dropping kill_tx signals the background watcher to kill the process.
+    kill_tx: oneshot::Sender<()>,
+    /// Becomes true when the SSH process has exited (expected or not).
+    pub exited_rx: watch::Receiver<bool>,
 }
 
 impl std::fmt::Debug for TunnelHandle {
@@ -82,7 +86,12 @@ impl SshTunnelManager {
             .arg("-o")
             .arg("ExitOnForwardFailure=yes")
             .arg("-o")
-            .arg("ServerAliveInterval=30");
+            // Detect broken connections after ~15s (5s × 3 missed keepalives).
+            .arg("ServerAliveInterval=5")
+            .arg("-o")
+            .arg("ServerAliveCountMax=3")
+            .arg("-o")
+            .arg("ConnectTimeout=10");
 
         if ssh_password.is_none() {
             cmd.arg("-o").arg("BatchMode=yes");
@@ -99,7 +108,7 @@ impl SshTunnelManager {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
 
-        let child = cmd.spawn().map_err(RowmanceError::Io)?;
+        let mut child = cmd.spawn().map_err(RowmanceError::Io)?;
 
         // Poll until ssh binds the local port (up to 15 seconds).
         let ready = tokio::time::timeout(Duration::from_secs(15), async {
@@ -116,25 +125,48 @@ impl SshTunnelManager {
         .await;
 
         if ready.is_err() {
+            let _ = child.start_kill();
             return Err(RowmanceError::Ssh(format!(
                 "SSH tunnel to {ssh_host} did not become ready within 15 seconds"
             )));
         }
 
+        let (kill_tx, kill_rx) = oneshot::channel::<()>();
+        let (exited_tx, exited_rx) = watch::channel(false);
+
+        // Background task: wait for the SSH process to exit (naturally or via kill signal).
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = child.wait() => {}
+                _ = kill_rx => {
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
+                }
+            }
+            let _ = exited_tx.send(true);
+        });
+
         self.tunnels.insert(
             connection_id.to_owned(),
             TunnelHandle {
                 local_port,
-                process: child,
+                kill_tx,
+                exited_rx,
             },
         );
         Ok(local_port)
     }
 
-    pub fn destroy_tunnel(&self, connection_id: &str) {
-        if let Some((_, mut handle)) = self.tunnels.remove(connection_id) {
-            let _ = handle.process.start_kill();
-        }
+    /// Remove the tunnel and signal its background task to kill the process.
+    /// Returns true if a tunnel was found and removed, false if none existed.
+    pub fn destroy_tunnel(&self, connection_id: &str) -> bool {
+        // Removing the handle drops kill_tx, which signals the background task.
+        self.tunnels.remove(connection_id).is_some()
+    }
+
+    /// Clone the exit receiver for a tunnel, used to watch for unexpected exits.
+    pub fn exit_receiver(&self, connection_id: &str) -> Option<watch::Receiver<bool>> {
+        self.tunnels.get(connection_id).map(|h| h.exited_rx.clone())
     }
 
     pub fn local_port(&self, connection_id: &str) -> Option<u16> {
@@ -158,9 +190,9 @@ mod tests {
     }
 
     #[test]
-    fn destroy_nonexistent_tunnel_is_noop() {
+    fn destroy_nonexistent_tunnel_returns_false() {
         let manager = SshTunnelManager::new();
-        manager.destroy_tunnel("ghost");
+        assert!(!manager.destroy_tunnel("ghost"));
         assert!(!manager.is_active("ghost"));
     }
 }

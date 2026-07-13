@@ -115,7 +115,9 @@ impl ConnectionManager {
 
                 let mut pool_opts = MySqlPoolOptions::new()
                     .min_connections(1)
-                    .max_connections(pool_max);
+                    .max_connections(pool_max)
+                    .acquire_timeout(std::time::Duration::from_secs(10))
+                    .test_before_acquire(true);
                 // SET SESSION TRANSACTION READ ONLY on every connection so the
                 // server enforces read-only regardless of what SQL is sent.
                 if read_only {
@@ -188,6 +190,8 @@ impl ConnectionManager {
                 let p = PgPoolOptions::new()
                     .min_connections(1)
                     .max_connections(pool_max)
+                    .acquire_timeout(std::time::Duration::from_secs(10))
+                    .test_before_acquire(true)
                     .after_release(move |conn, _meta| {
                         Box::pin(async move { Ok(pg_reset_schema(conn, set_path_sql).await) })
                     })

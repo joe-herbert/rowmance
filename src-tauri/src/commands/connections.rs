@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Emitter, State};
 use uuid::Uuid;
 
 use crate::connections::pool_manager::ConnectionManager;
@@ -569,8 +569,10 @@ pub async fn connections_test_unsaved(
 /// Open a connection pool for the given profile.
 #[tauri::command]
 pub async fn connections_connect(
+    app: tauri::AppHandle,
     sqlite: State<'_, SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<crate::transactions::TransactionManager>>,
     tunnels: State<'_, Arc<SshTunnelManager>>,
     id: String,
 ) -> Result<(), AppError> {
@@ -589,9 +591,9 @@ pub async fn connections_connect(
 
     let password = retrieve_keychain_password(&id);
 
-    let (connect_host, connect_port) = if row.ssh_enabled {
-        let local_port = if let Some(port) = tunnels.local_port(&id) {
-            port
+    let (connect_host, connect_port, new_tunnel) = if row.ssh_enabled {
+        if let Some(port) = tunnels.local_port(&id) {
+            ("127.0.0.1".to_owned(), port, false)
         } else {
             let ssh_host = row
                 .ssh_host
@@ -608,7 +610,7 @@ pub async fn connections_connect(
                 .then(|| retrieve_keychain_secret(&id, "ssh_key_passphrase"))
                 .flatten();
 
-            tunnels
+            let port = tunnels
                 .create_tunnel(
                     &id,
                     &ssh_host,
@@ -621,11 +623,11 @@ pub async fn connections_connect(
                     row.port as u16,
                 )
                 .await
-                .map_err(AppError::from)?
-        };
-        ("127.0.0.1".to_owned(), local_port)
+                .map_err(AppError::from)?;
+            ("127.0.0.1".to_owned(), port, true)
+        }
     } else {
-        (row.host.clone(), row.port as u16)
+        (row.host.clone(), row.port as u16, false)
     };
 
     connections
@@ -647,6 +649,29 @@ pub async fn connections_connect(
         )
         .await
         .map_err(AppError::from)?;
+
+    // When a new SSH tunnel was created, watch for unexpected exits so we can
+    // clean up the pool and notify the frontend without waiting for a failed query.
+    if new_tunnel {
+        if let Some(mut exit_rx) = tunnels.exit_receiver(&id) {
+            let id_clone = id.clone();
+            let connections_clone = connections.inner().clone();
+            let transactions_clone = transactions.inner().clone();
+            let tunnels_clone = tunnels.inner().clone();
+            tokio::spawn(async move {
+                if exit_rx.changed().await.is_err() {
+                    return;
+                }
+                // destroy_tunnel returns true only if the tunnel was still
+                // registered, meaning the exit was unexpected (not a user disconnect).
+                if tunnels_clone.destroy_tunnel(&id_clone) {
+                    transactions_clone.remove(&id_clone);
+                    connections_clone.disconnect(&id_clone).await;
+                    let _ = app.emit("connection:ssh-dropped", &id_clone);
+                }
+            });
+        }
+    }
 
     Ok(())
 }

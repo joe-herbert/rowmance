@@ -336,6 +336,13 @@
         panelStore.splitFocused('down', settings.maxHorizontalSplits, settings.maxVerticalSplits),
       ),
       listen('menu:split-close', () => panelStore.closeSplit(panelStore.focusedSplitId)),
+      listen<string>('connection:ssh-dropped', (event) => {
+        const id = event.payload;
+        const profile = connectionsStore.getById(id);
+        connectionsStore.markDisconnected(id);
+        const name = profile?.name ?? 'Connection';
+        toast.addToast(`SSH tunnel lost for "${name}". Disconnected.`, 'error');
+      }),
     ]).then((unlisteners) => {
       unlistenFn = () => unlisteners.forEach((u) => u());
     });
