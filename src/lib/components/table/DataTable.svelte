@@ -1274,6 +1274,11 @@
   let rowAnchor = $state<number | null>(null);
   let rowFocus = $state<number | null>(null);
   let additionalSelectedRowIndices = $state<Set<number>>(new Set());
+  let newRowRowSelectionMode = $state(false);
+  let newRowRowAnchor = $state<number | null>(null);
+  let newRowRowFocus = $state<number | null>(null);
+  let additionalSelectedNewRowIndices = $state<Set<number>>(new Set());
+  let isDraggingNewRowRowSelect = $state(false);
   // Non-reactive flag: prevents onfocus from resetting anchor during programmatic focus
   let skipNextFocusReset = false;
   // Non-contiguous cells selected via option/alt+click, keyed as "row,col"
@@ -1916,6 +1921,37 @@
     }
   });
 
+  let selectedNewRowKeys = $state<Set<string>>(new Set());
+
+  $effect(() => {
+    if (newRowRowSelectionMode) {
+      if (newRowRowAnchor === null) {
+        selectedNewRowKeys = new Set();
+        return;
+      }
+      const focus = newRowRowFocus ?? newRowRowAnchor;
+      if (additionalSelectedNewRowIndices.size > 0) {
+        const newKeys = new Set<string>();
+        for (const idx of additionalSelectedNewRowIndices) {
+          const nr = pendingNewRows[idx];
+          if (nr) newKeys.add(nr.key);
+        }
+        selectedNewRowKeys = newKeys;
+      } else {
+        const minRow = Math.min(newRowRowAnchor, focus);
+        const maxRow = Math.max(newRowRowAnchor, focus);
+        const newKeys = new Set<string>();
+        for (let r = minRow; r <= maxRow; r++) {
+          const nr = pendingNewRows[r];
+          if (nr) newKeys.add(nr.key);
+        }
+        selectedNewRowKeys = newKeys;
+      }
+    } else {
+      selectedNewRowKeys = new Set();
+    }
+  });
+
   function toggleRowSelection(rowKey: string): void {
     const next = new Set(selectedRowKeys);
     if (next.has(rowKey)) next.delete(rowKey);
@@ -1995,6 +2031,7 @@
   let contextMenuSnapshotIsMultiCell = $state(false);
   let contextMenuSnapshotIsMultiCol = $state(false);
   let contextMenuSnapshotIsRowSelection = $state(false);
+  let contextMenuSnapshotIsNewRowRowSelection = $state(false);
   let contextMenuSnapshotAllCellsDatetime = $state(false);
 
   function checkCurrentSelectionAllDatetime(colName: string | null): boolean {
@@ -2431,6 +2468,20 @@
     dismissContextMenu();
   }
 
+  function discardSelectedNewRows(): void {
+    const keysToDelete = new Set(selectedNewRowKeys);
+    pendingNewRows = pendingNewRows.filter((r) => !keysToDelete.has(r.key));
+    const updated = new Map(pendingChanges);
+    for (const key of keysToDelete) updated.delete(key);
+    pendingChanges = updated;
+    onChangePending?.(pendingChanges, originalRows);
+    newRowRowSelectionMode = false;
+    newRowRowAnchor = null;
+    newRowRowFocus = null;
+    additionalSelectedNewRowIndices = new Set();
+    dismissContextMenu();
+  }
+
   // ── Copy / Cut / Paste ───────────────────────────────────────────────────
 
   function getSelectionRange(): {
@@ -2795,6 +2846,22 @@
     dismissContextMenu();
   }
 
+  function copySelectedNewRowsTabSeparated(): void {
+    const lines: string[] = [];
+    for (const key of selectedNewRowKeys) {
+      const text = visibleColumns
+        .map(({ originalIndex }) => {
+          const col = columns[originalIndex];
+          const val = pendingChanges.get(key)?.get(col.name) ?? null;
+          return val === null ? '' : String(val);
+        })
+        .join('\t');
+      lines.push(text);
+    }
+    navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+    dismissContextMenu();
+  }
+
   function setSelectionNull(): void {
     if (!editable || readOnly) return;
     if (newRowFocusedCell && !focusedCell) {
@@ -2857,6 +2924,14 @@
   }
 
   function getContextRows(): { row: CellValue[]; rowKey: string }[] {
+    if (contextMenuSnapshotIsNewRowRowSelection && selectedNewRowKeys.size > 1) {
+      return pendingNewRows
+        .filter((r) => selectedNewRowKeys.has(r.key))
+        .map((r) => ({
+          row: columns.map((col) => pendingChanges.get(r.key)?.get(col.name) ?? null),
+          rowKey: r.key,
+        }));
+    }
     if (selectedRowKeys.size > 1) {
       return pageRows
         .map((r, i) => ({ row: r, rowKey: buildRowKey(r, columns, pageOffset + i) }))
@@ -3003,7 +3078,13 @@
       updated.set(key, rowMap);
     };
 
-    if (contextMenuSnapshotIsRowSelection && selectedRowKeys.size > 1) {
+    if (contextMenuSnapshotIsNewRowRowSelection && selectedNewRowKeys.size > 1) {
+      for (const nr of pendingNewRows) {
+        if (!selectedNewRowKeys.has(nr.key)) continue;
+        const srcRow = columns.map((col) => updated.get(nr.key)?.get(col.name) ?? null);
+        cloneOneRow(nr.key, srcRow);
+      }
+    } else if (contextMenuSnapshotIsRowSelection && selectedRowKeys.size > 1) {
       for (let r = 0; r < pageRows.length; r++) {
         const rowData = pageRows[r];
         const key = buildRowKey(rowData, columns, pageOffset + r);
@@ -3065,6 +3146,10 @@
       rowAnchor = null;
       rowFocus = null;
       additionalSelectedRowIndices = new Set();
+      newRowRowSelectionMode = false;
+      newRowRowAnchor = null;
+      newRowRowFocus = null;
+      additionalSelectedNewRowIndices = new Set();
     }
   }
 </script>
@@ -3076,6 +3161,7 @@
     isDraggingNewRowSelection = false;
     if (isDraggingRowSelect) justFinishedRowDrag = true;
     isDraggingRowSelect = false;
+    isDraggingNewRowRowSelect = false;
   }}
 />
 
@@ -3245,11 +3331,70 @@
       <tbody>
         {#if settings.newRowPosition === 'top'}
           {#each pendingNewRows as newRow}
-            <tr class="data-row new-row" data-new-row-key={newRow.key}>
+            <tr
+              class="data-row new-row"
+              class:row-selected={newRowRowSelectionMode && selectedNewRowKeys.has(newRow.key)}
+              data-new-row-key={newRow.key}
+            >
               <td
                 class="rownum-cell"
+                tabindex="-1"
+                onmousedown={(e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  const newRowIndex = newRowPositionIndex(newRow.key);
+                  anchorCell = null;
+                  focusedCell = null;
+                  additionalSelectedCells = new Set();
+                  newRowFocusedCell = null;
+                  newRowAnchorCell = null;
+                  rowSelectionMode = false;
+                  rowAnchor = null;
+                  rowFocus = null;
+                  additionalSelectedRowIndices = new Set();
+                  if (e.altKey) {
+                    if (!newRowRowSelectionMode) {
+                      newRowRowSelectionMode = true;
+                      additionalSelectedNewRowIndices = new Set([newRowIndex]);
+                      newRowRowAnchor = newRowIndex;
+                      newRowRowFocus = newRowIndex;
+                    } else {
+                      const next = new Set(additionalSelectedNewRowIndices);
+                      if (next.size === 0 && newRowRowAnchor !== null) {
+                        const lo = Math.min(newRowRowAnchor, newRowRowFocus ?? newRowRowAnchor);
+                        const hi = Math.max(newRowRowAnchor, newRowRowFocus ?? newRowRowAnchor);
+                        for (let i = lo; i <= hi; i++) next.add(i);
+                      }
+                      if (next.has(newRowIndex)) next.delete(newRowIndex);
+                      else next.add(newRowIndex);
+                      additionalSelectedNewRowIndices = next;
+                    }
+                  } else if (e.shiftKey && newRowRowSelectionMode && newRowRowAnchor !== null) {
+                    additionalSelectedNewRowIndices = new Set();
+                    newRowRowFocus = newRowIndex;
+                  } else {
+                    newRowRowSelectionMode = true;
+                    newRowRowAnchor = newRowIndex;
+                    newRowRowFocus = newRowIndex;
+                    additionalSelectedNewRowIndices = new Set();
+                    isDraggingNewRowRowSelect = true;
+                  }
+                  (e.currentTarget as HTMLElement).focus();
+                }}
+                onmouseenter={() => {
+                  if (isDraggingNewRowRowSelect && newRowRowAnchor !== null) {
+                    newRowRowFocus = newRowPositionIndex(newRow.key);
+                  }
+                }}
+                onclick={(e) => e.stopPropagation()}
                 oncontextmenu={(e) => {
                   e.preventDefault();
+                  const newRowIndex = newRowPositionIndex(newRow.key);
+                  if (newRowRowSelectionMode && !selectedNewRowKeys.has(newRow.key)) {
+                    newRowRowAnchor = newRowIndex;
+                    newRowRowFocus = newRowIndex;
+                    additionalSelectedNewRowIndices = new Set();
+                  }
                   activeMenuDismiss?.();
                   contextMenu = {
                     x: e.clientX,
@@ -3259,12 +3404,10 @@
                     colName: null,
                     isNewRow: true,
                   };
+                  contextMenuSnapshotIsNewRowRowSelection = newRowRowSelectionMode;
                   contextMenuSnapshotHasFocus = newRowFocusedCell !== null;
                   contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
-                  contextMenuSnapshotIsMultiCol =
-                    newRowSelectionIsMultiCell() &&
-                    (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !==
-                      (newRowFocusedCell?.col ?? 0);
+                  contextMenuSnapshotIsMultiCol = false;
                   contextMenuSnapshotAllCellsDatetime = false;
                   activeMenuDismiss = () => {
                     contextMenu = null;
@@ -3314,6 +3457,7 @@
                       colName: col.name,
                       isNewRow: true,
                     };
+                    contextMenuSnapshotIsNewRowRowSelection = false;
                     contextMenuSnapshotHasFocus = true;
                     contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
                     const _minCol = Math.min(
@@ -3345,6 +3489,10 @@
                     focusedCell = null;
                     anchorCell = null;
                     rowSelectionMode = false;
+                    newRowRowSelectionMode = false;
+                    newRowRowAnchor = null;
+                    newRowRowFocus = null;
+                    additionalSelectedNewRowIndices = new Set();
                     skipNextFocusReset = true;
                     if (e.shiftKey && newRowFocusedCell) {
                       newRowFocusedCell = { rowKey: newRow.key, col: colIndex };
@@ -3443,6 +3591,10 @@
                 anchorCell = null;
                 focusedCell = null;
                 additionalSelectedCells = new Set();
+                newRowRowSelectionMode = false;
+                newRowRowAnchor = null;
+                newRowRowFocus = null;
+                additionalSelectedNewRowIndices = new Set();
                 if (e.altKey) {
                   if (!rowSelectionMode) {
                     rowSelectionMode = true;
@@ -3581,6 +3733,10 @@
                     rowAnchor = null;
                     rowFocus = null;
                     additionalSelectedRowIndices = new Set();
+                    newRowRowSelectionMode = false;
+                    newRowRowAnchor = null;
+                    newRowRowFocus = null;
+                    additionalSelectedNewRowIndices = new Set();
                     skipNextFocusReset = true;
                     focusedCell = { row: rowIndex, col: colIndex };
                   } else {
@@ -3589,6 +3745,10 @@
                     rowAnchor = null;
                     rowFocus = null;
                     additionalSelectedRowIndices = new Set();
+                    newRowRowSelectionMode = false;
+                    newRowRowAnchor = null;
+                    newRowRowFocus = null;
+                    additionalSelectedNewRowIndices = new Set();
                     skipNextFocusReset = true;
                     anchorCell = { row: rowIndex, col: colIndex };
                     focusedCell = { row: rowIndex, col: colIndex };
@@ -3829,11 +3989,70 @@
 
         {#if settings.newRowPosition !== 'top'}
           {#each pendingNewRows as newRow}
-            <tr class="data-row new-row" data-new-row-key={newRow.key}>
+            <tr
+              class="data-row new-row"
+              class:row-selected={newRowRowSelectionMode && selectedNewRowKeys.has(newRow.key)}
+              data-new-row-key={newRow.key}
+            >
               <td
                 class="rownum-cell"
+                tabindex="-1"
+                onmousedown={(e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  const newRowIndex = newRowPositionIndex(newRow.key);
+                  anchorCell = null;
+                  focusedCell = null;
+                  additionalSelectedCells = new Set();
+                  newRowFocusedCell = null;
+                  newRowAnchorCell = null;
+                  rowSelectionMode = false;
+                  rowAnchor = null;
+                  rowFocus = null;
+                  additionalSelectedRowIndices = new Set();
+                  if (e.altKey) {
+                    if (!newRowRowSelectionMode) {
+                      newRowRowSelectionMode = true;
+                      additionalSelectedNewRowIndices = new Set([newRowIndex]);
+                      newRowRowAnchor = newRowIndex;
+                      newRowRowFocus = newRowIndex;
+                    } else {
+                      const next = new Set(additionalSelectedNewRowIndices);
+                      if (next.size === 0 && newRowRowAnchor !== null) {
+                        const lo = Math.min(newRowRowAnchor, newRowRowFocus ?? newRowRowAnchor);
+                        const hi = Math.max(newRowRowAnchor, newRowRowFocus ?? newRowRowAnchor);
+                        for (let i = lo; i <= hi; i++) next.add(i);
+                      }
+                      if (next.has(newRowIndex)) next.delete(newRowIndex);
+                      else next.add(newRowIndex);
+                      additionalSelectedNewRowIndices = next;
+                    }
+                  } else if (e.shiftKey && newRowRowSelectionMode && newRowRowAnchor !== null) {
+                    additionalSelectedNewRowIndices = new Set();
+                    newRowRowFocus = newRowIndex;
+                  } else {
+                    newRowRowSelectionMode = true;
+                    newRowRowAnchor = newRowIndex;
+                    newRowRowFocus = newRowIndex;
+                    additionalSelectedNewRowIndices = new Set();
+                    isDraggingNewRowRowSelect = true;
+                  }
+                  (e.currentTarget as HTMLElement).focus();
+                }}
+                onmouseenter={() => {
+                  if (isDraggingNewRowRowSelect && newRowRowAnchor !== null) {
+                    newRowRowFocus = newRowPositionIndex(newRow.key);
+                  }
+                }}
+                onclick={(e) => e.stopPropagation()}
                 oncontextmenu={(e) => {
                   e.preventDefault();
+                  const newRowIndex = newRowPositionIndex(newRow.key);
+                  if (newRowRowSelectionMode && !selectedNewRowKeys.has(newRow.key)) {
+                    newRowRowAnchor = newRowIndex;
+                    newRowRowFocus = newRowIndex;
+                    additionalSelectedNewRowIndices = new Set();
+                  }
                   activeMenuDismiss?.();
                   contextMenu = {
                     x: e.clientX,
@@ -3843,12 +4062,10 @@
                     colName: null,
                     isNewRow: true,
                   };
+                  contextMenuSnapshotIsNewRowRowSelection = newRowRowSelectionMode;
                   contextMenuSnapshotHasFocus = newRowFocusedCell !== null;
                   contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
-                  contextMenuSnapshotIsMultiCol =
-                    newRowSelectionIsMultiCell() &&
-                    (newRowAnchorCell?.col ?? newRowFocusedCell?.col ?? 0) !==
-                      (newRowFocusedCell?.col ?? 0);
+                  contextMenuSnapshotIsMultiCol = false;
                   contextMenuSnapshotAllCellsDatetime = false;
                   activeMenuDismiss = () => {
                     contextMenu = null;
@@ -3898,6 +4115,7 @@
                       colName: col.name,
                       isNewRow: true,
                     };
+                    contextMenuSnapshotIsNewRowRowSelection = false;
                     contextMenuSnapshotHasFocus = true;
                     contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
                     const _minCol = Math.min(
@@ -3929,6 +4147,10 @@
                     focusedCell = null;
                     anchorCell = null;
                     rowSelectionMode = false;
+                    newRowRowSelectionMode = false;
+                    newRowRowAnchor = null;
+                    newRowRowFocus = null;
+                    additionalSelectedNewRowIndices = new Set();
                     skipNextFocusReset = true;
                     if (e.shiftKey && newRowFocusedCell) {
                       newRowFocusedCell = { rowKey: newRow.key, col: colIndex };
@@ -4024,20 +4246,50 @@
   >
     {#if contextMenu !== null}
       {#if contextMenu.isNewRow}
-        {#if contextMenu.colName !== null}
-          {#if editable && !readOnly && !contextMenuSnapshotIsMultiCell}
-            <CtxItem onclick={() => openNewRowInlineEditFromContextMenu()}>Edit</CtxItem>
-            <CtxItem onclick={() => openNewRowModalFromContextMenu()}>Edit in modal</CtxItem>
+        {#if contextMenuSnapshotIsNewRowRowSelection}
+          {#if selectedNewRowKeys.size > 1}
+            <CtxItem onclick={() => copySelectedNewRowsTabSeparated()}>
+              Copy {selectedNewRowKeys.size} rows (tab-separated)
+            </CtxItem>
+          {:else}
+            <CtxItem onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}>
+              Copy row (tab-separated)
+            </CtxItem>
           {/if}
-          {#if !contextMenuSnapshotIsMultiCell}
-            <CtxItem onclick={() => openNewRowViewModalFromContextMenu()}>View in modal</CtxItem>
+          <CtxItem onclick={() => copyAsJson()}>
+            {selectedNewRowKeys.size > 1 ? `Copy ${selectedNewRowKeys.size} rows as JSON` : 'Copy row as JSON'}
+          </CtxItem>
+          <CtxItem onclick={() => copyAsCsv()}>
+            {selectedNewRowKeys.size > 1 ? `Copy ${selectedNewRowKeys.size} rows as CSV` : 'Copy row as CSV'}
+          </CtxItem>
+          {#if editable && !readOnly}
+            <CtxSep />
+            <CtxItem onclick={() => cloneRow()}>
+              {selectedNewRowKeys.size > 1 ? `Clone ${selectedNewRowKeys.size} rows` : 'Clone row'}
+            </CtxItem>
           {/if}
           <CtxSep />
+          <CtxItem danger onclick={() => discardSelectedNewRows()}>
+            {selectedNewRowKeys.size > 1 ? `Discard ${selectedNewRowKeys.size} new rows` : 'Discard new row'}
+          </CtxItem>
+        {:else}
+          {#if (contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell) || (contextMenu.colName && !contextMenuSnapshotIsMultiCell)}
+            {#if contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell}
+              <CtxItem onclick={() => openNewRowInlineEditFromContextMenu()}>Edit</CtxItem>
+              <CtxItem onclick={() => openNewRowModalFromContextMenu()}>Edit in modal</CtxItem>
+            {/if}
+            {#if contextMenu.colName && !contextMenuSnapshotIsMultiCell}
+              <CtxItem onclick={() => openNewRowViewModalFromContextMenu()}>View in modal</CtxItem>
+            {/if}
+            <CtxSep />
+          {/if}
           {#if editable && !readOnly}
             <CtxItem onclick={() => setSelectionNull()}>Set to NULL</CtxItem>
-            {#if (!contextMenuSnapshotIsMultiCell && contextMenuColIsDatetime) || (contextMenuSnapshotIsMultiCell && contextMenuSnapshotAllCellsDatetime)}
-              <CtxItem onclick={setNowFromContextMenu}>Set to NOW</CtxItem>
-            {/if}
+          {/if}
+          {#if editable && !readOnly && ((!contextMenuSnapshotIsMultiCell && contextMenu.colName && contextMenuColIsDatetime) || (contextMenuSnapshotIsMultiCell && contextMenuSnapshotAllCellsDatetime))}
+            <CtxItem onclick={setNowFromContextMenu}>Set to NOW</CtxItem>
+          {/if}
+          {#if editable && !readOnly}
             <CtxSep />
           {/if}
           {#if contextMenuSnapshotHasFocus}
@@ -4080,7 +4332,7 @@
           <CtxItem onclick={() => copyColumnNames()}>
             {contextMenuSnapshotIsMultiCol ? 'Copy column names' : 'Copy column name'}
           </CtxItem>
-          {#if (onConnectColumn || onConnectPolymorphic) && !contextMenuSnapshotIsMultiCell}
+          {#if contextMenu.colName && (onConnectColumn || onConnectPolymorphic) && !contextMenuSnapshotIsMultiCell}
             <CtxSep />
             {#if onConnectColumn}
               <CtxItem
@@ -4104,18 +4356,16 @@
             {/if}
           {/if}
           <CtxSep />
+          <CtxItem onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}>
+            Copy row (tab-separated)
+          </CtxItem>
+          {#if editable && !readOnly}
+            <CtxSep />
+            <CtxItem onclick={() => cloneRow()}>Clone row</CtxItem>
+            <CtxSep />
+            <CtxItem danger onclick={() => deleteNewRow(contextMenu!.rowKey)}>Discard new row</CtxItem>
+          {/if}
         {/if}
-        <CtxItem onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}>
-          Copy row (tab-separated)
-        </CtxItem>
-        <CtxItem onclick={() => copyAsJson()}>Copy row as JSON</CtxItem>
-        <CtxItem onclick={() => copyAsCsv()}>Copy row as CSV</CtxItem>
-        {#if editable && !readOnly}
-          <CtxSep />
-          <CtxItem onclick={() => cloneRow()}>Clone row</CtxItem>
-        {/if}
-        <CtxSep />
-        <CtxItem danger onclick={() => deleteNewRow(contextMenu!.rowKey)}>Discard new row</CtxItem>
       {:else if contextMenuSnapshotIsRowSelection || contextMenu.colName === null}
         {#if selectedRowKeys.size > 1}
           <CtxItem onclick={() => copySelectedRowsTabSeparated()}>
