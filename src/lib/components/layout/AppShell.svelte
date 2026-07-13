@@ -255,6 +255,10 @@
     Promise.all([
       listen('menu:open-settings', openSettings),
       listen('menu:new-query', () => {
+        if (!isConnected) {
+          toast.addToast('No active connection. Connect to a database first.', 'error');
+          return;
+        }
         const focused = panelStore.focusedPanel.content;
         const connectionId = 'connectionId' in focused ? focused.connectionId : null;
         if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
@@ -296,8 +300,20 @@
           await handleFileOpen(p);
         }
       }),
-      listen('menu:import-csv', () => document.dispatchEvent(new CustomEvent('menu-import-csv'))),
-      listen('menu:import-sql', () => document.dispatchEvent(new CustomEvent('menu-import-sql'))),
+      listen('menu:import-csv', () => {
+        if (!isConnected) {
+          toast.addToast('No active connection. Connect to a database first.', 'error');
+          return;
+        }
+        document.dispatchEvent(new CustomEvent('menu-import-csv'));
+      }),
+      listen('menu:import-sql', () => {
+        if (!isConnected) {
+          toast.addToast('No active connection. Connect to a database first.', 'error');
+          return;
+        }
+        document.dispatchEvent(new CustomEvent('menu-import-sql'));
+      }),
       listen('menu:speed-analysis', () => panelStore.openInFocused({ kind: 'speed_analysis' })),
       listen('menu:whats-new', async () => {
         const version = await getVersion();
