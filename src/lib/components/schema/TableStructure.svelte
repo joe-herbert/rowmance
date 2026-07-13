@@ -131,6 +131,9 @@
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
 
+  // Name, Type, Key, Null, Uniq, Default, [Actions], [Drag handle]
+  const colTableColCount = $derived(6 + (editMode ? 1 : 0) + (editMode && isMysql ? 1 : 0));
+
   interface ColForm {
     mode: 'add' | 'edit';
     original: ColumnInfo | null;
@@ -451,6 +454,104 @@
     return arr.includes(col) ? arr.filter((c) => c !== col) : [...arr, col];
   }
 
+  // ── Column reorder (MySQL/MariaDB only) ────────────────────────────────────
+
+  let colDragFromIdx = $state<number | null>(null);
+  let colIsDragging = $state(false);
+  let colDragDropTarget = $state<{ index: number; position: 'before' | 'after' } | null>(null);
+  let colDragPointerStartY = 0;
+
+  const colInsertAt = $derived.by(() => {
+    if (!colDragDropTarget || !colIsDragging) return null;
+    return colDragDropTarget.position === 'after'
+      ? colDragDropTarget.index + 1
+      : colDragDropTarget.index;
+  });
+
+  $effect(() => {
+    if (colDragFromIdx === null) return;
+    function onMove(e: PointerEvent) {
+      if (!colIsDragging && Math.abs(e.clientY - colDragPointerStartY) > 4) {
+        colIsDragging = true;
+      }
+      if (!colIsDragging) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const row = el?.closest<HTMLElement>('[data-col-drag-idx]');
+      const targetStr = row?.dataset.colDragIdx;
+      if (targetStr === undefined) {
+        colDragDropTarget = null;
+        return;
+      }
+      const targetIndex = parseInt(targetStr, 10);
+      if (targetIndex === colDragFromIdx) {
+        colDragDropTarget = null;
+        return;
+      }
+      const rect = row!.getBoundingClientRect();
+      const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      colDragDropTarget = { index: targetIndex, position };
+    }
+    function onUp() {
+      if (colIsDragging && colDragDropTarget !== null && colDragFromIdx !== null) {
+        const from = colDragFromIdx;
+        const { index: toIndex, position } = colDragDropTarget;
+        let toIdx = position === 'after' ? toIndex + 1 : toIndex;
+        if (from < toIndex) toIdx -= 1;
+        if (toIdx !== from) {
+          const newCols = [...columns];
+          const [moved] = newCols.splice(from, 1);
+          newCols.splice(toIdx, 0, moved);
+          applyColReorder(newCols, moved);
+        }
+      }
+      colDragFromIdx = null;
+      colIsDragging = false;
+      colDragDropTarget = null;
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  });
+
+  function onColDragHandlePointerDown(e: PointerEvent, index: number) {
+    if (e.button !== 0) return;
+    colDragPointerStartY = e.clientY;
+    colDragFromIdx = index;
+    e.preventDefault();
+  }
+
+  function colDefFromInfo(col: ColumnInfo): string {
+    let s = `${qi(col.name)} ${col.dataType}`;
+    if (!col.nullable) s += ' NOT NULL';
+    if (isMysql && col.isAutoIncrement) s += ' AUTO_INCREMENT';
+    if (col.defaultValue !== null && col.defaultValue !== '') s += ` DEFAULT ${col.defaultValue}`;
+    if (isMysql && col.comment) s += ` COMMENT ${escStr(col.comment)}`;
+    return s;
+  }
+
+  async function applyColReorder(newCols: ColumnInfo[], movedCol: ColumnInfo) {
+    const movedIdx = newCols.indexOf(movedCol);
+    const sql =
+      movedIdx === 0
+        ? `ALTER TABLE ${tRef()} MODIFY COLUMN ${colDefFromInfo(movedCol)} FIRST`
+        : `ALTER TABLE ${tRef()} MODIFY COLUMN ${colDefFromInfo(movedCol)} AFTER ${qi(newCols[movedIdx - 1].name)}`;
+    columns = newCols;
+    isSaving = true;
+    saveError = null;
+    try {
+      await execSqls([sql]);
+      loadData();
+    } catch (err) {
+      saveError = errorMessage(err);
+      loadData();
+    } finally {
+      isSaving = false;
+    }
+  }
+
   // ── Virtual Relations ──────────────────────────────────────────────────────
 
   interface VrModal {
@@ -576,9 +677,14 @@
               <button class="add-btn" onclick={openAddCol}>+ Add Column</button>
             {/if}
           </div>
-          <table class="col-table" class:col-table--editing={editMode}>
+          <table
+            class="col-table"
+            class:col-table--editing={editMode}
+            class:col-table--dragging={colIsDragging}
+          >
             <thead>
               <tr>
+                {#if editMode && isMysql}<th class="th-drag"></th>{/if}
                 <th>Name</th>
                 <th>Type</th>
                 <th class="th-narrow">Key</th>
@@ -589,8 +695,43 @@
               </tr>
             </thead>
             <tbody>
-              {#each columns as col (col.name)}
-                <tr class:pk-row={col.isPrimaryKey}>
+              {#each columns as col, i (col.name)}
+                {#if colInsertAt === i}
+                  <tr class="col-drop-line" aria-hidden="true"
+                    ><td colspan={colTableColCount}></td></tr
+                  >
+                {/if}
+                <tr
+                  class:pk-row={col.isPrimaryKey}
+                  class:col-row-dragging={colDragFromIdx === i && colIsDragging}
+                  data-col-drag-idx={i}
+                >
+                  {#if editMode && isMysql}
+                    <td class="col-drag-cell">
+                      <span
+                        class="col-drag-handle"
+                        aria-hidden="true"
+                        onpointerdown={(e) => onColDragHandlePointerDown(e, i)}
+                      >
+                        <svg
+                          width="10"
+                          height="14"
+                          viewBox="0 0 10 14"
+                          fill="currentColor"
+                          aria-hidden="true"
+                          ><circle cx="3" cy="2.5" r="1.2" /><circle cx="7" cy="2.5" r="1.2" /><circle
+                            cx="3"
+                            cy="7"
+                            r="1.2"
+                          /><circle cx="7" cy="7" r="1.2" /><circle
+                            cx="3"
+                            cy="11.5"
+                            r="1.2"
+                          /><circle cx="7" cy="11.5" r="1.2" /></svg
+                        >
+                      </span>
+                    </td>
+                  {/if}
                   <td class="col-name mono">{col.name}</td>
                   <td class="col-type mono">{col.dataType}</td>
                   <td class="col-keys">
@@ -703,10 +844,15 @@
                 </tr>
                 {#if col.comment}
                   <tr class="comment-row">
-                    <td colspan={editMode ? 7 : 6} class="col-comment">{col.comment}</td>
+                    <td colspan={colTableColCount} class="col-comment">{col.comment}</td>
                   </tr>
                 {/if}
               {/each}
+              {#if colInsertAt === columns.length}
+                <tr class="col-drop-line" aria-hidden="true"
+                  ><td colspan={colTableColCount}></td></tr
+                >
+              {/if}
             </tbody>
           </table>
         </section>
@@ -1616,9 +1762,62 @@
     width: 52px;
   }
 
+  .th-drag {
+    width: 20px;
+    padding: 0 !important;
+  }
+
   .col-table--editing .th-actions,
   .col-table--editing .col-actions {
     width: 74px;
+  }
+
+  .col-table--dragging {
+    user-select: none;
+  }
+
+  .col-table--dragging td {
+    pointer-events: none;
+  }
+
+  .col-table--dragging .col-drag-cell {
+    pointer-events: auto;
+  }
+
+  .col-row-dragging td {
+    opacity: 0.4;
+  }
+
+  .col-drop-line td {
+    height: 2px;
+    padding: 0 !important;
+    background: var(--color-accent);
+    border: none !important;
+  }
+
+  .col-drag-cell {
+    padding: 0 var(--spacing-1) !important;
+    width: 20px;
+  }
+
+  .col-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 2px;
+    color: var(--color-text-muted);
+    cursor: grab;
+    opacity: 0.6;
+    transition: opacity var(--transition-fast);
+    touch-action: none;
+  }
+
+  .col-table--dragging .col-drag-handle {
+    cursor: grabbing;
+  }
+
+  .col-table tbody tr:hover .col-drag-handle {
+    opacity: 1;
   }
 
   .col-table td {
