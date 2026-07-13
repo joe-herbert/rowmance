@@ -92,6 +92,7 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import { loadColPrefs, saveColPrefs } from '$lib/utils/table-prefs';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
+  import { isMac } from '$lib/stores/shortcuts.svelte';
 
   interface Props {
     connectionId: string;
@@ -1992,6 +1993,7 @@
               >
                 <RefreshIcon />
                 <span>Refresh</span>
+                <kbd>{isMac ? '⌘R' : 'Ctrl+R'}</kbd>
               </button>
 
               <!-- Fetch row count -->
@@ -3481,6 +3483,16 @@
     transition:
       background var(--transition-fast),
       color var(--transition-fast);
+    font-family: var(--font-family-ui);
+  }
+
+  .export-menu-row kbd {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
     font-family: var(--font-family-ui);
   }
 
