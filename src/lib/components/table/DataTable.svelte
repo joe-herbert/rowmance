@@ -766,6 +766,7 @@
   }
 
   let editTarget = $state<EditTarget | null>(null);
+  let liveEditValue = $state<CellValue>(null);
   let modalTarget = $state<EditTarget | null>(null);
 
   interface ViewTarget {
@@ -959,7 +960,58 @@
       }
     }
 
+    // Apply the same value to all other selected cells (multi-cell assignment)
+    if (!isNewRow && selectionIsMultiCell()) {
+      const applyToCell = (r: number, c: number) => {
+        const rowData = pageRows[r];
+        if (!rowData) return;
+        const rKey = buildRowKey(rowData, columns, pageOffset + r);
+        if (rKey === rowKey) return; // already handled above
+        const { originalIndex } = visibleColumns[c];
+        const col = columns[originalIndex];
+        if (!col) return;
+        if (!originalRows.has(rKey)) {
+          const next = new Map(originalRows);
+          next.set(rKey, [...rowData]);
+          originalRows = next;
+        }
+        const origVal = rowData[originalIndex];
+        if (cellValuesEqual(newValue, origVal)) {
+          const rowMap = updated.get(rKey);
+          if (rowMap) {
+            rowMap.delete(col.name);
+            if (rowMap.size === 0) {
+              updated.delete(rKey);
+              const nextOrig = new Map(originalRows);
+              nextOrig.delete(rKey);
+              originalRows = nextOrig;
+            }
+          }
+        } else {
+          if (!updated.has(rKey)) updated.set(rKey, new Map());
+          updated.get(rKey)!.set(col.name, newValue);
+        }
+      };
+
+      if (additionalSelectedCells.size > 0) {
+        for (const { row: r, col: c } of getAltSelectedCells()) {
+          applyToCell(r, c);
+        }
+      } else {
+        const range = getSelectionRange();
+        if (range) {
+          const { minRow, maxRow, minCol, maxCol } = range;
+          for (let r = minRow; r <= maxRow; r++) {
+            for (let c = minCol; c <= maxCol; c++) {
+              applyToCell(r, c);
+            }
+          }
+        }
+      }
+    }
+
     pendingChanges = updated;
+    liveEditValue = null;
     onChangePending?.(pendingChanges, originalRows);
     editTarget = null;
     if (isNewRow) refocusNewRowCell();
@@ -970,6 +1022,7 @@
     const wasEditing = editTarget !== null;
     const wasNewRow = editTarget?.rowKey.startsWith('__new__') ?? false;
     editTarget = null;
+    liveEditValue = null;
     if (wasEditing) {
       if (wasNewRow) refocusNewRowCell();
       else refocusCell();
@@ -3680,8 +3733,19 @@
             </td>
 
             {#each visibleColumns as { col, originalIndex }, colIndex}
-              {@const cellValue = getPendingValue(rowKey, col.name, row[originalIndex])}
-              {@const isPending = hasPendingChange(rowKey, col.name)}
+              {@const isLivePreview =
+                editTarget !== null &&
+                isCellInSelection(rowIndex, colIndex) &&
+                !(
+                  editTarget.rowKey === rowKey &&
+                  editTarget.colIndex === originalIndex
+                )}
+              {@const cellValue = isLivePreview
+                ? liveEditValue
+                : getPendingValue(rowKey, col.name, row[originalIndex])}
+              {@const isPending = isLivePreview
+                ? true
+                : hasPendingChange(rowKey, col.name)}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
               {@const isRequiredEmpty =
                 isPending &&
@@ -3785,6 +3849,10 @@
                     additionalSelectedNewRowIndices = new Set();
                     skipNextFocusReset = true;
                     focusedCell = { row: rowIndex, col: colIndex };
+                  } else if (isCellInSelection(rowIndex, colIndex) && selectionIsMultiCell()) {
+                    // Clicking inside an existing multi-cell selection: preserve it so a
+                    // subsequent double-click can open the editor with the selection intact.
+                    skipNextFocusReset = true;
                   } else {
                     additionalSelectedCells = new Set();
                     rowSelectionMode = false;
@@ -4637,6 +4705,7 @@
       onTab={handleTabFromEditor}
       onTabConfirm={handleTabConfirm}
       onOpenModal={openInlineAsModal}
+      onLiveValue={(v) => { liveEditValue = v; }}
       {connectionId}
       {database}
     />

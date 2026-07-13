@@ -30,6 +30,7 @@
     onTab?: (_shiftKey: boolean) => void;
     onTabConfirm?: (_newValue: CellValue, _shiftKey: boolean) => void;
     onOpenModal?: (_currentValue: CellValue) => void;
+    onLiveValue?: (_currentValue: CellValue) => void;
     connectionId?: string;
     database?: string | null;
   }
@@ -50,6 +51,7 @@
     onTab,
     onTabConfirm,
     onOpenModal,
+    onLiveValue,
     connectionId,
     database,
   }: Props = $props();
@@ -106,6 +108,10 @@
 
   // For text/date: string representation
   let textValue = $state<string>(untrack(() => (value === null ? '' : String(value))));
+
+  $effect(() => {
+    onLiveValue?.(getConfirmedValue());
+  });
 
   let inputEl = $state<HTMLInputElement | null>(null);
   let cellEditorEl = $state<HTMLDivElement | null>(null);
