@@ -82,6 +82,7 @@
     columnRenames?: Record<string, string>;
     onRenameColumn?: (_colName: string, _label: string) => void;
     onQuickFilter?: (_colName: string, _operator: FilterOperator) => void;
+    onHideColumn?: (_colName: string) => void;
     searchTerm?: string;
     highlightEnabled?: boolean;
   }
@@ -187,6 +188,7 @@
     columnRenames = {},
     onRenameColumn,
     onQuickFilter,
+    onHideColumn,
     searchTerm = '',
     highlightEnabled = true,
   }: Props = $props();
@@ -3278,7 +3280,7 @@
                 if (!isRenamingThis) onColHeaderPointerDown(e, col.name);
               }}
               oncontextmenu={(e) => {
-                if (onRenameColumn || onQuickFilter) openHeaderContextMenu(e, col.name);
+                if (onRenameColumn || onQuickFilter || onHideColumn) openHeaderContextMenu(e, col.name);
               }}
             >
               {#if isRenamingThis}
@@ -4546,8 +4548,11 @@
         >
       {/if}
     {/if}
+    {#if onHideColumn}
+      <CtxItem onclick={() => { onHideColumn!(headerContextMenuColName); headerContextMenu = null; }}>Hide column</CtxItem>
+    {/if}
     {#if onQuickFilter}
-      {#if onRenameColumn}
+      {#if onRenameColumn || onHideColumn}
         <CtxSep />
       {/if}
       <CtxSubmenuItem label="Add filter…">

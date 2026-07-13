@@ -2543,6 +2543,7 @@
           {columnRenames}
           onRenameColumn={handleRenameColumn}
           onQuickFilter={handleQuickFilter}
+          onHideColumn={toggleColumn}
         />
       {/key}
     {:else}
