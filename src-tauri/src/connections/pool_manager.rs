@@ -114,7 +114,7 @@ impl ConnectionManager {
                 }
 
                 let mut pool_opts = MySqlPoolOptions::new()
-                    .min_connections(1)
+                    .min_connections(0)
                     .max_connections(pool_max)
                     .acquire_timeout(std::time::Duration::from_secs(10))
                     .test_before_acquire(true);
@@ -144,6 +144,9 @@ impl ConnectionManager {
                     Box::pin(async move { Ok(mysql_reset_db(conn, use_sql).await) })
                 });
                 let p = pool_opts.connect_with(opts).await?;
+                // Verify credentials and warm up one idle connection.
+                // With min_connections(0) the pool is otherwise fully lazy.
+                p.acquire().await?;
                 RemotePool::MySql(p, read_only)
             }
             "postgres" => {
@@ -188,7 +191,7 @@ impl ConnectionManager {
                 let set_path_sql: &'static str =
                     Box::leak(format!("SET search_path = '{}'", schema_esc).into_boxed_str());
                 let p = PgPoolOptions::new()
-                    .min_connections(1)
+                    .min_connections(0)
                     .max_connections(pool_max)
                     .acquire_timeout(std::time::Duration::from_secs(10))
                     .test_before_acquire(true)
@@ -197,6 +200,8 @@ impl ConnectionManager {
                     })
                     .connect_with(opts)
                     .await?;
+                // Verify credentials and warm up one idle connection.
+                p.acquire().await?;
                 RemotePool::Postgres(p)
             }
             "sqlite" => {
@@ -209,7 +214,7 @@ impl ConnectionManager {
                     .read_only(read_only)
                     .create_if_missing(!read_only);
                 let p = SqlitePoolOptions::new()
-                    .min_connections(1)
+                    .min_connections(0)
                     .max_connections(pool_max)
                     .connect_with(opts)
                     .await?;
