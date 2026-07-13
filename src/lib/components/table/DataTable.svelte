@@ -1301,21 +1301,29 @@
     });
   }
 
-  // ── Shortcut: TABLE_EDIT_IN_MODAL ────────────────────────────────────────
+  // ── Shortcut: TABLE_EDIT_IN_MODAL / TABLE_CLONE_ROW ─────────────────────
 
   onMount(() => {
     function handleShortcutAction(e: Event): void {
       const action = (e as CustomEvent<{ action: string }>).detail?.action;
-      if (action !== 'TABLE_EDIT_IN_MODAL') return;
-      if (!editable || readOnly) return;
-      if (!focusedCell) return;
       if (!tableContainerEl?.contains(document.activeElement)) return;
 
-      const { row, col } = focusedCell;
-      const { originalIndex } = visibleColumns[col] ?? {};
-      if (originalIndex === undefined) return;
-      const row_data = pageRows[row];
-      if (row_data) openModalEditor(row_data, row, originalIndex);
+      if (action === 'TABLE_EDIT_IN_MODAL') {
+        if (!editable || readOnly) return;
+        if (!focusedCell) return;
+
+        const { row, col } = focusedCell;
+        const { originalIndex } = visibleColumns[col] ?? {};
+        if (originalIndex === undefined) return;
+        const row_data = pageRows[row];
+        if (row_data) openModalEditor(row_data, row, originalIndex);
+        return;
+      }
+
+      if (action === 'TABLE_CLONE_ROW') {
+        cloneRowFromSelection();
+        return;
+      }
     }
 
     window.addEventListener('shortcut-action', handleShortcutAction);
@@ -3257,6 +3265,57 @@
     pendingChanges = updated;
     onChangePending?.(pendingChanges, originalRows);
     dismissContextMenu();
+  }
+
+  function cloneRowFromSelection(): void {
+    const updated = new Map(pendingChanges);
+    const newRows: { key: string }[] = [];
+
+    const cloneOneRow = (srcKey: string, row: CellValue[]) => {
+      const id = nextNewRowId++;
+      const key = `__new__${id}`;
+      newRows.push({ key });
+      const rowMap = new Map<string, CellValue>();
+      const isSrcNewRow = srcKey.startsWith('__new__');
+      columns.forEach((col, i) => {
+        const sourceValue = isSrcNewRow
+          ? (updated.get(srcKey)?.get(col.name) ?? null)
+          : (row[i] ?? null);
+        rowMap.set(col.name, col.isPrimaryKey || col.isUnique ? null : sourceValue);
+      });
+      updated.set(key, rowMap);
+    };
+
+    if (selectedNewRowKeys.size > 0) {
+      for (const nr of pendingNewRows) {
+        if (!selectedNewRowKeys.has(nr.key)) continue;
+        const srcRow = columns.map((col) => updated.get(nr.key)?.get(col.name) ?? null);
+        cloneOneRow(nr.key, srcRow);
+      }
+    } else if (selectedRowKeys.size > 0) {
+      for (let r = 0; r < pageRows.length; r++) {
+        const rowData = pageRows[r];
+        const key = buildRowKey(rowData, columns, pageOffset + r);
+        if (!selectedRowKeys.has(key)) continue;
+        cloneOneRow(key, rowData);
+      }
+    } else if (newRowFocusedCell) {
+      const srcKey = newRowFocusedCell.rowKey;
+      const srcRow = columns.map((col) => updated.get(srcKey)?.get(col.name) ?? null);
+      cloneOneRow(srcKey, srcRow);
+    } else if (focusedCell) {
+      const rowData = pageRows[focusedCell.row];
+      if (!rowData) return;
+      const key = buildRowKey(rowData, columns, pageOffset + focusedCell.row);
+      cloneOneRow(key, rowData);
+    } else {
+      return;
+    }
+
+    if (newRows.length === 0) return;
+    pendingNewRows = [...pendingNewRows, ...newRows];
+    pendingChanges = updated;
+    onChangePending?.(pendingChanges, originalRows);
   }
 
   function deleteRow(): void {

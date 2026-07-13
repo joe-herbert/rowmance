@@ -57,7 +57,8 @@ export type ShortcutAction =
   | 'SPLIT_DOWN'
   | 'SPLIT_CLOSE'
   | 'SPLIT_FOCUS_NEXT'
-  | 'SPLIT_FOCUS_PREV';
+  | 'SPLIT_FOCUS_PREV'
+  | 'TABLE_CLONE_ROW';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 export type ShortcutLocation = 'global' | 'query-editor' | 'table-view';
@@ -455,6 +456,16 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+Shift+Enter',
     jetbrains: 'Mod+Shift+Enter',
     vim: 'Mod+Shift+Enter',
+  },
+  {
+    action: 'TABLE_CLONE_ROW',
+    label: 'Clone Row',
+    group: 'Table View',
+    global: false,
+    location: 'table-view',
+    vscode: 'Mod+D',
+    jetbrains: 'Mod+D',
+    vim: 'y r',
   },
   // ── General ──────────────────────────────────────────────────────────────────
   // All general shortcuts are global: handled by AppShell with no focus guard.
