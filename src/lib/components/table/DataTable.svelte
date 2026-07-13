@@ -2107,6 +2107,39 @@
   let contextMenuSnapshotIsRowSelection = $state(false);
   let contextMenuSnapshotIsNewRowRowSelection = $state(false);
   let contextMenuSnapshotAllCellsDatetime = $state(false);
+  let contextMenuSnapshotHasAnyPendingChange = $state(false);
+
+  function checkSelectionHasAnyPendingChange(colName: string | null): boolean {
+    if (additionalSelectedCells.size > 0) {
+      return getAltSelectedCells().some(({ row: r, col: c }) => {
+        const rowData = pageRows[r];
+        if (!rowData) return false;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        const { originalIndex } = visibleColumns[c];
+        const colDef = columns[originalIndex];
+        return colDef ? hasPendingChange(rowKey, colDef.name) : false;
+      });
+    }
+    const range = getSelectionRange();
+    if (range) {
+      const { minRow, maxRow, minCol, maxCol } = range;
+      for (let r = minRow; r <= maxRow; r++) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        for (let c = minCol; c <= maxCol; c++) {
+          const { originalIndex } = visibleColumns[c];
+          const colDef = columns[originalIndex];
+          if (colDef && hasPendingChange(rowKey, colDef.name)) return true;
+        }
+      }
+      return false;
+    }
+    if (colName) {
+      return hasPendingChange(contextMenu?.rowKey ?? '', colName);
+    }
+    return false;
+  }
 
   function checkCurrentSelectionAllDatetime(colName: string | null): boolean {
     if (additionalSelectedCells.size > 0) {
@@ -2151,6 +2184,7 @@
     const range = getSelectionRange();
     contextMenuSnapshotIsMultiCol = range ? range.minCol !== range.maxCol : false;
     contextMenuSnapshotAllCellsDatetime = checkCurrentSelectionAllDatetime(colName);
+    contextMenuSnapshotHasAnyPendingChange = checkSelectionHasAnyPendingChange(colName);
     activeMenuDismiss = () => {
       contextMenu = null;
     };
@@ -2336,6 +2370,52 @@
       }
     }
     pendingChanges = updated;
+    onChangePending?.(pendingChanges, originalRows);
+    dismissContextMenu();
+  }
+
+  function discardSelectedEdits(): void {
+    const updated = new Map(pendingChanges);
+    const updatedOrig = new Map(originalRows);
+
+    function removeCellEdit(rowKey: string, colName: string): void {
+      const rowMap = updated.get(rowKey);
+      if (!rowMap) return;
+      rowMap.delete(colName);
+      if (rowMap.size === 0) {
+        updated.delete(rowKey);
+        updatedOrig.delete(rowKey);
+      }
+    }
+
+    if (additionalSelectedCells.size > 0) {
+      for (const { row: r, col: c } of getAltSelectedCells()) {
+        const rowData = pageRows[r];
+        if (!rowData) continue;
+        const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+        const { originalIndex } = visibleColumns[c];
+        const colDef = columns[originalIndex];
+        if (colDef) removeCellEdit(rowKey, colDef.name);
+      }
+    } else {
+      const range = getSelectionRange();
+      if (range) {
+        const { minRow, maxRow, minCol, maxCol } = range;
+        for (let r = minRow; r <= maxRow; r++) {
+          const rowData = pageRows[r];
+          if (!rowData) continue;
+          const rowKey = buildRowKey(rowData, columns, pageOffset + r);
+          for (let c = minCol; c <= maxCol; c++) {
+            const { originalIndex } = visibleColumns[c];
+            const colDef = columns[originalIndex];
+            if (colDef) removeCellEdit(rowKey, colDef.name);
+          }
+        }
+      }
+    }
+
+    pendingChanges = updated;
+    originalRows = updatedOrig;
     onChangePending?.(pendingChanges, originalRows);
     dismissContextMenu();
   }
@@ -3502,6 +3582,7 @@
                   contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
                   contextMenuSnapshotIsMultiCol = false;
                   contextMenuSnapshotAllCellsDatetime = false;
+                  contextMenuSnapshotHasAnyPendingChange = false;
                   activeMenuDismiss = () => {
                     contextMenu = null;
                   };
@@ -3569,6 +3650,7 @@
                       }
                       return true;
                     })();
+                    contextMenuSnapshotHasAnyPendingChange = false;
                     activeMenuDismiss = () => {
                       contextMenu = null;
                     };
@@ -4195,6 +4277,7 @@
                   contextMenuSnapshotIsMultiCell = newRowSelectionIsMultiCell();
                   contextMenuSnapshotIsMultiCol = false;
                   contextMenuSnapshotAllCellsDatetime = false;
+                  contextMenuSnapshotHasAnyPendingChange = false;
                   activeMenuDismiss = () => {
                     contextMenu = null;
                   };
@@ -4262,6 +4345,7 @@
                       }
                       return true;
                     })();
+                    contextMenuSnapshotHasAnyPendingChange = false;
                     activeMenuDismiss = () => {
                       contextMenu = null;
                     };
@@ -4550,7 +4634,10 @@
         {#if editable && !readOnly}
           <CtxSep />
         {/if}
-        {#if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
+        {#if contextMenuSnapshotIsMultiCell && contextMenuSnapshotHasAnyPendingChange}
+          <CtxItem danger onclick={() => discardSelectedEdits()}>Discard selected edits</CtxItem>
+          <CtxSep />
+        {:else if contextMenu.colName && hasPendingChange(contextMenu.rowKey, contextMenu.colName)}
           <CtxItem danger onclick={() => discardCellEdit()}>Discard edit</CtxItem>
           <CtxSep />
         {/if}
