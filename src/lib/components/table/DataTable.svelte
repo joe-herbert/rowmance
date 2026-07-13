@@ -2985,23 +2985,40 @@
 
   function cloneRow(): void {
     if (!contextMenu) return;
-    const { row, rowKey: srcKey } = contextMenu;
-    const id = nextNewRowId++;
-    const key = `__new__${id}`;
-    pendingNewRows = [...pendingNewRows, { key }];
-    const rowMap = new Map<string, CellValue>();
-    const isSrcNewRow = srcKey.startsWith('__new__');
-    columns.forEach((col, i) => {
-      const sourceValue = isSrcNewRow
-        ? (pendingChanges.get(srcKey)?.get(col.name) ?? null)
-        : (row[i] ?? null);
-      rowMap.set(col.name, col.isPrimaryKey || col.isUnique ? null : sourceValue);
-    });
     const updated = new Map(pendingChanges);
-    updated.set(key, rowMap);
+    const newRows: { key: string }[] = [];
+
+    const cloneOneRow = (srcKey: string, row: CellValue[]) => {
+      const id = nextNewRowId++;
+      const key = `__new__${id}`;
+      newRows.push({ key });
+      const rowMap = new Map<string, CellValue>();
+      const isSrcNewRow = srcKey.startsWith('__new__');
+      columns.forEach((col, i) => {
+        const sourceValue = isSrcNewRow
+          ? (updated.get(srcKey)?.get(col.name) ?? null)
+          : (row[i] ?? null);
+        rowMap.set(col.name, col.isPrimaryKey || col.isUnique ? null : sourceValue);
+      });
+      updated.set(key, rowMap);
+    };
+
+    if (contextMenuSnapshotIsRowSelection && selectedRowKeys.size > 1) {
+      for (let r = 0; r < pageRows.length; r++) {
+        const rowData = pageRows[r];
+        const key = buildRowKey(rowData, columns, pageOffset + r);
+        if (!selectedRowKeys.has(key)) continue;
+        cloneOneRow(key, rowData);
+      }
+    } else {
+      const { row, rowKey: srcKey } = contextMenu;
+      cloneOneRow(srcKey, row);
+      onCloneRow?.(row);
+    }
+
+    pendingNewRows = [...pendingNewRows, ...newRows];
     pendingChanges = updated;
     onChangePending?.(pendingChanges, originalRows);
-    onCloneRow?.(row);
     dismissContextMenu();
   }
 
@@ -4121,10 +4138,10 @@
         </CtxItem>
         {#if editable && !readOnly}
           <CtxSep />
-          {#if selectedRowKeys.size <= 1}
-            <CtxItem onclick={() => cloneRow()}>Clone row</CtxItem>
-            <CtxSep />
-          {/if}
+          <CtxItem onclick={() => cloneRow()}>
+            {selectedRowKeys.size > 1 ? `Clone ${selectedRowKeys.size} rows` : 'Clone row'}
+          </CtxItem>
+          <CtxSep />
           <CtxItem danger onclick={() => deleteRow()}>
             {selectedRowKeys.size > 1
               ? [...selectedRowKeys].every((k) => pendingDeletedRows.has(k))
