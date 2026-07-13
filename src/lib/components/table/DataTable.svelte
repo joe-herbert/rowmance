@@ -680,6 +680,7 @@
       for (const col of columns) {
         if (col.isAutoIncrement) continue;
         if (col.defaultValue != null) {
+          if (isDefaultExpression(col.defaultValue)) continue;
           newRowMap.set(col.name, parseDefaultValue(col.defaultValue, col.dataType));
         } else if (!col.nullable) {
           newRowMap.set(col.name, '');
@@ -1845,6 +1846,13 @@
     if (/^bool/.test(dt) || dt === 'tinyint(1)') return 'boolean';
     if (/^json/.test(dt)) return 'json';
     return 'text';
+  }
+
+  function isDefaultExpression(value: string): boolean {
+    if (value.startsWith("'")) return false;
+    if (/\(/.test(value)) return true;
+    const upper = value.trim().toUpperCase();
+    return ['CURRENT_TIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_USER', 'CURRENT_ROLE', 'CURRENT_SCHEMA'].includes(upper);
   }
 
   function parseDefaultValue(value: string, dataType: string): CellValue {
