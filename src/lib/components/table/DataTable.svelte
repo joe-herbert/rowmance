@@ -1290,6 +1290,10 @@
   let skipNextFocusReset = false;
   // Non-contiguous cells selected via option/alt+click, keyed as "row,col"
   let additionalSelectedCells = $state<Set<string>>(new Set());
+  let isDraggingAdditionalSelection = $state(false);
+  let altDragAnchorCell: { row: number; col: number } | null = null;
+  let altDragBaseSelection = new Set<string>();
+  let altDragMoved = false;
 
   function cellKey(row: number, col: number): string {
     return `${row},${col}`;
@@ -3179,6 +3183,25 @@
     if (isDraggingRowSelect) justFinishedRowDrag = true;
     isDraggingRowSelect = false;
     isDraggingNewRowRowSelect = false;
+    if (isDraggingAdditionalSelection) {
+      isDraggingAdditionalSelection = false;
+      if (altDragAnchorCell) {
+        if (!altDragMoved) {
+          // Was a click, not a drag — toggle the cell
+          const key = cellKey(altDragAnchorCell.row, altDragAnchorCell.col);
+          const next = new Set(altDragBaseSelection);
+          if (next.has(key)) {
+            next.delete(key);
+          } else {
+            next.add(key);
+          }
+          additionalSelectedCells = next;
+        }
+        anchorCell = altDragAnchorCell;
+        focusedCell = altDragAnchorCell;
+        altDragAnchorCell = null;
+      }
+    }
   }}
 />
 
@@ -3729,19 +3752,25 @@
                   }
                   if (e.button !== 0) return;
                   if (e.altKey && !e.shiftKey && !e.metaKey) {
-                    const key = cellKey(rowIndex, colIndex);
-                    const next = new Set(additionalSelectedCells);
-                    if (next.size === 0 && anchorCell)
-                      next.add(cellKey(anchorCell.row, anchorCell.col));
-                    if (next.has(key)) {
-                      next.delete(key);
-                    } else {
-                      next.add(key);
+                    const base = new Set(additionalSelectedCells);
+                    if (base.size === 0 && anchorCell && focusedCell) {
+                      const minRow = Math.min(anchorCell.row, focusedCell.row);
+                      const maxRow = Math.max(anchorCell.row, focusedCell.row);
+                      const minCol = Math.min(anchorCell.col, focusedCell.col);
+                      const maxCol = Math.max(anchorCell.col, focusedCell.col);
+                      for (let r = minRow; r <= maxRow; r++) {
+                        for (let c = minCol; c <= maxCol; c++) {
+                          base.add(cellKey(r, c));
+                        }
+                      }
+                    } else if (base.size === 0 && anchorCell) {
+                      base.add(cellKey(anchorCell.row, anchorCell.col));
                     }
-                    additionalSelectedCells = next;
+                    altDragBaseSelection = base;
+                    altDragAnchorCell = { row: rowIndex, col: colIndex };
+                    altDragMoved = false;
+                    isDraggingAdditionalSelection = true;
                     skipNextFocusReset = true;
-                    anchorCell = { row: rowIndex, col: colIndex };
-                    focusedCell = { row: rowIndex, col: colIndex };
                     return;
                   }
                   if (e.shiftKey && focusedCell) {
@@ -3775,6 +3804,20 @@
                 onmouseenter={() => {
                   if (isDraggingSelection) focusedCell = { row: rowIndex, col: colIndex };
                   if (isDraggingRowSelect) rowFocus = rowIndex;
+                  if (isDraggingAdditionalSelection && altDragAnchorCell) {
+                    altDragMoved = true;
+                    const next = new Set(altDragBaseSelection);
+                    const minRow = Math.min(altDragAnchorCell.row, rowIndex);
+                    const maxRow = Math.max(altDragAnchorCell.row, rowIndex);
+                    const minCol = Math.min(altDragAnchorCell.col, colIndex);
+                    const maxCol = Math.max(altDragAnchorCell.col, colIndex);
+                    for (let r = minRow; r <= maxRow; r++) {
+                      for (let c = minCol; c <= maxCol; c++) {
+                        next.add(cellKey(r, c));
+                      }
+                    }
+                    additionalSelectedCells = next;
+                  }
                 }}
                 onfocus={() => {
                   newRowFocusedCell = null;
