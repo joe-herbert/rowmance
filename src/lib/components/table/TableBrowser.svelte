@@ -221,6 +221,8 @@
   );
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
+  type FkNavigationInfo = { referencingTable: string; filterSql: string };
+  let fkNavigationInfo = $state<FkNavigationInfo | null>(null);
   let showSqlPreview = $state(false);
   let showDeleteConfirm = $state(false);
 
@@ -587,9 +589,11 @@
       addRowTrigger = 0;
       tableKey++;
       await load();
+      fkNavigationInfo = null;
       toast.addToast('Changes saved', 'success', 2000);
     } catch (err) {
       saveError = errorMessage(err);
+      fkNavigationInfo = parseFkError(err, pendingDeletedRows, result?.columns ?? []);
     } finally {
       isSaving = false;
     }
@@ -654,6 +658,63 @@
   function quoteIdentifier(name: string): string {
     if (dbType === 'postgres' || dbType === 'sqlite') return `"${name.replace(/"/g, '""')}"`;
     return `\`${name.replace(/`/g, '``')}\``;
+  }
+
+  function parseFkError(
+    err: unknown,
+    deletedRows: Map<string, CellValue[]>,
+    cols: ColumnMeta[],
+  ): FkNavigationInfo | null {
+    const errObj = typeof err === 'object' && err !== null ? (err as Record<string, unknown>) : null;
+    const message = errObj ? String(errObj.message ?? '') : String(err);
+    const detail = errObj ? String(errObj.detail ?? '') : '';
+
+    const isFkError =
+      /foreign key constraint/i.test(message) ||
+      /foreign key constraint/i.test(detail);
+    if (!isFkError) return null;
+
+    // MySQL: constraint fails (`db`.`table`, CONSTRAINT `name` FOREIGN KEY (`fk_col`) REFERENCES `ref_table` (`ref_col`))
+    const mysqlMatch = message.match(
+      /constraint fails \(`[^`]*`\.`([^`]+)`,\s*CONSTRAINT\s*`[^`]*`\s*FOREIGN KEY \(`([^`]+)`\)\s*REFERENCES\s*`[^`]+`\s*\(`([^`]+)`\)/i,
+    );
+    if (mysqlMatch) {
+      const [, referencingTable, fkCol, referencedCol] = mysqlMatch;
+      const colIdx = cols.findIndex((c) => c.name === referencedCol);
+      const rowValues = [...deletedRows.values()][0];
+      const value = colIdx >= 0 ? rowValues?.[colIdx] : undefined;
+      const quotedFkCol = `\`${fkCol.replace(/`/g, '``')}\``;
+      let filterSql = '';
+      if (value !== undefined && value !== null) {
+        filterSql =
+          typeof value === 'number' || typeof value === 'boolean'
+            ? `${quotedFkCol} = ${value}`
+            : `${quotedFkCol} = '${String(value).replace(/'/g, "''")}'`;
+      }
+      return { referencingTable, filterSql };
+    }
+
+    // Postgres: "violates foreign key constraint ... on table "orders""
+    const pgTableMatch =
+      message.match(/violates foreign key constraint "[^"]*" on table "([^"]+)"/i) ||
+      message.match(/on table "([^"]+)"$/i);
+    if (pgTableMatch) {
+      const referencingTable = pgTableMatch[1];
+      // DETAIL: Key (ref_col)=(value) is still referenced from table "orders".
+      const fullText = `${message}\n${detail}`;
+      const pgDetailMatch = fullText.match(/Key \(([^)]+)\)=\(([^)]+)\) is still referenced from/i);
+      if (pgDetailMatch) {
+        const [, referencedCol, rawValue] = pgDetailMatch;
+        const quotedCol = `"${referencedCol.replace(/"/g, '""')}"`;
+        const filterSql = /^\d+$/.test(rawValue)
+          ? `${quotedCol} = ${rawValue}`
+          : `${quotedCol} = '${rawValue.replace(/'/g, "''")}'`;
+        return { referencingTable, filterSql };
+      }
+      return { referencingTable, filterSql: '' };
+    }
+
+    return null;
   }
 
   function buildSql(): string {
@@ -2256,6 +2317,38 @@
     <div class="save-error-bar" role="alert">
       <span class="save-error-label">Save failed:</span>
       <span class="save-error-message">{saveError}</span>
+      {#if fkNavigationInfo !== null}
+        <button
+          class="save-error-fk-nav"
+          onclick={() => {
+            const info = fkNavigationInfo!;
+            panelStore.openInFocused({
+              kind: 'table_browser',
+              connectionId,
+              database,
+              table: info.referencingTable,
+              initialFilter: info.filterSql || undefined,
+            });
+          }}
+          title="Open referencing table"
+        >
+          View {fkNavigationInfo.referencingTable}
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            ><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline
+              points="15 3 21 3 21 9"
+            /><line x1="10" y1="14" x2="21" y2="3" /></svg
+          >
+        </button>
+      {/if}
       <button
         class="save-error-copy"
         onclick={() =>
@@ -2280,7 +2373,13 @@
           /></svg
         >
       </button>
-      <button class="save-error-close" onclick={() => (saveError = null)} aria-label="Dismiss"
+      <button
+        class="save-error-close"
+        onclick={() => {
+          saveError = null;
+          fkNavigationInfo = null;
+        }}
+        aria-label="Dismiss"
         ><svg
           width="11"
           height="11"
@@ -3077,6 +3176,29 @@
   .save-error-copy:hover {
     opacity: 1;
     background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+  }
+
+  .save-error-fk-nav {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px var(--spacing-2);
+    background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+    color: var(--color-danger);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition:
+      background var(--transition-fast),
+      border-color var(--transition-fast);
+  }
+
+  .save-error-fk-nav:hover {
+    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
+    border-color: var(--color-danger);
   }
 
   .save-error-close {
