@@ -44,7 +44,8 @@
     });
 
     function onMousedown(e: MouseEvent) {
-      if (!menuEl?.contains(e.target as Node)) onclose();
+      const target = e.target as Element;
+      if (!menuEl?.contains(target) && !target.closest?.('[data-ctx-submenu]')) onclose();
     }
     function onKeydown(e: KeyboardEvent) {
       if (e.key === 'Escape') {

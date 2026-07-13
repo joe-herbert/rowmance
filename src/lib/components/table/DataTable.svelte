@@ -9,6 +9,8 @@
   import CtxMenuContainer from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
+  import CtxSubmenuItem from '$lib/components/ui/CtxSubmenuItem.svelte';
+  import type { FilterOperator } from '$lib/components/table/FilterEditor.svelte';
   import CellEditor from './CellEditor.svelte';
   import CellEditorModal from './CellEditorModal.svelte';
   import CellViewModal from './CellViewModal.svelte';
@@ -79,6 +81,7 @@
     database?: string | null;
     columnRenames?: Record<string, string>;
     onRenameColumn?: (_colName: string, _label: string) => void;
+    onQuickFilter?: (_colName: string, _operator: FilterOperator) => void;
     searchTerm?: string;
     highlightEnabled?: boolean;
   }
@@ -183,6 +186,7 @@
     database,
     columnRenames = {},
     onRenameColumn,
+    onQuickFilter,
     searchTerm = '',
     highlightEnabled = true,
   }: Props = $props();
@@ -1979,6 +1983,8 @@
   // ── Header context menu / rename ─────────────────────────────────────────
 
   let headerContextMenu = $state<{ x: number; y: number; colName: string } | null>(null);
+  // Survives headerContextMenu being nulled by the close handler before click fires.
+  let headerContextMenuColName = $state<string>('');
   let renamingHeader = $state<{ colName: string; value: string } | null>(null);
   let renameHeaderInputEl = $state<HTMLInputElement | null>(null);
 
@@ -1986,6 +1992,7 @@
     e.preventDefault();
     e.stopPropagation();
     activeMenuDismiss?.();
+    headerContextMenuColName = colName;
     headerContextMenu = { x: e.clientX, y: e.clientY, colName };
     activeMenuDismiss = () => {
       headerContextMenu = null;
@@ -3271,7 +3278,7 @@
                 if (!isRenamingThis) onColHeaderPointerDown(e, col.name);
               }}
               oncontextmenu={(e) => {
-                if (onRenameColumn) openHeaderContextMenu(e, col.name);
+                if (onRenameColumn || onQuickFilter) openHeaderContextMenu(e, col.name);
               }}
             >
               {#if isRenamingThis}
@@ -4528,14 +4535,38 @@
     minWidth={160}
     zIndex={400}
   >
-    <CtxItem onclick={() => startHeaderRename(headerContextMenu!.colName)}>Rename column</CtxItem>
-    {#if headerContextMenu !== null && columnRenames[headerContextMenu.colName] !== undefined && columnRenames[headerContextMenu.colName] !== headerContextMenu.colName}
-      <CtxItem
-        onclick={() => {
-          onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName);
-          headerContextMenu = null;
-        }}>Reset name</CtxItem
-      >
+    {#if onRenameColumn}
+      <CtxItem onclick={() => startHeaderRename(headerContextMenu!.colName)}>Rename column</CtxItem>
+      {#if headerContextMenu !== null && columnRenames[headerContextMenu.colName] !== undefined && columnRenames[headerContextMenu.colName] !== headerContextMenu.colName}
+        <CtxItem
+          onclick={() => {
+            onRenameColumn?.(headerContextMenu!.colName, headerContextMenu!.colName);
+            headerContextMenu = null;
+          }}>Reset name</CtxItem
+        >
+      {/if}
+    {/if}
+    {#if onQuickFilter}
+      {#if onRenameColumn}
+        <CtxSep />
+      {/if}
+      <CtxSubmenuItem label="Add filter…">
+        {#snippet children()}
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '='); headerContextMenu = null; }}>= Equals</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '!='); headerContextMenu = null; }}>≠ Not equals</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '>'); headerContextMenu = null; }}>&gt; Greater than</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '<'); headerContextMenu = null; }}>&lt; Less than</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '>='); headerContextMenu = null; }}>≥ Greater than or equal</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '<='); headerContextMenu = null; }}>≤ Less than or equal</CtxItem>
+          <CtxSep />
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'LIKE'); headerContextMenu = null; }}>LIKE</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'NOT LIKE'); headerContextMenu = null; }}>NOT LIKE</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'IN'); headerContextMenu = null; }}>IN (list)</CtxItem>
+          <CtxSep />
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'IS NULL'); headerContextMenu = null; }}>IS NULL</CtxItem>
+          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'IS NOT NULL'); headerContextMenu = null; }}>IS NOT NULL</CtxItem>
+        {/snippet}
+      </CtxSubmenuItem>
     {/if}
   </CtxMenuContainer>
 

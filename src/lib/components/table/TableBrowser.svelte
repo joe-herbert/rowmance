@@ -67,6 +67,8 @@
   import FilterEditor, {
     type FilterEditorState,
     type FilterRule,
+    type FilterGroup,
+    type FilterOperator,
     emptyFilterState,
     filterStateIsActive,
     activeRuleCount,
@@ -814,6 +816,29 @@
       filterEditorLeft = Math.max(4, rect.right - 360);
     }
     showFilterEditor = true;
+  }
+
+  function handleQuickFilter(colName: string, operator: FilterOperator): void {
+    const valueless = operator === 'IS NULL' || operator === 'IS NOT NULL';
+    const existingGroups =
+      filterEditorState.mode === 'builder' ? filterEditorState.groups : [];
+    const newGroup: FilterGroup = {
+      id: crypto.randomUUID(),
+      conjunction: 'AND',
+      rules: [{ id: crypto.randomUUID(), column: colName, operator, value: '' }],
+    };
+    filterEditorState = {
+      mode: 'builder',
+      groupJunction: existingGroups.length > 0 ? filterEditorState.groupJunction : 'AND',
+      groups: [...existingGroups, newGroup],
+      sql: '',
+    };
+    if (valueless) {
+      page = 1;
+      load();
+    } else {
+      openFilterEditor();
+    }
   }
 
   function portal(node: HTMLElement): { destroy(): void } {
@@ -2517,6 +2542,7 @@
           {database}
           {columnRenames}
           onRenameColumn={handleRenameColumn}
+          onQuickFilter={handleQuickFilter}
         />
       {/key}
     {:else}
