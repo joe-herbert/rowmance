@@ -27,12 +27,14 @@
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
   import { listen } from '@tauri-apps/api/event';
+  import { useGlobalSearchCache } from '$lib/stores/globalSearchCache.svelte';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
   const settingsStore = useSettings();
   const toast = useToast();
   const tabDrag = useTabDrag();
+  const globalSearchCache = useGlobalSearchCache();
 
   let treeScrollEl = $state<HTMLDivElement | undefined>(undefined);
 
@@ -86,6 +88,11 @@
   let renameValue = $state('');
   let renameError = $state('');
   let renameLoading = $state(false);
+
+  // ── Filter state ──────────────────────────────────────────────────────────
+
+  let filterQuery = $state('');
+  let filterInputEl = $state<HTMLInputElement | undefined>(undefined);
 
   // ── Context menus ─────────────────────────────────────────────────────────
 
@@ -988,6 +995,7 @@
   function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       renamingGroupId = null;
+      filterQuery = '';
     }
   }
 
@@ -1005,6 +1013,92 @@
   }
   function checkSystemTable(name: string) {
     return isSystemTable(name, settingsStore.settings.systemTablePatterns);
+  }
+
+  // ── Filter helpers ────────────────────────────────────────────────────────
+
+  $effect(() => {
+    if (!filterQuery) return;
+    const connectedProfiles = connectionStore.profiles.filter((p) =>
+      connectionStore.activeIds.has(p.id),
+    );
+    globalSearchCache.populate(connectedProfiles);
+  });
+
+  function profileMatchesFilter(profile: ConnectionProfile): boolean {
+    if (!filterQuery) return true;
+    const q = filterQuery.toLowerCase();
+    if (profile.name.toLowerCase().includes(q)) return true;
+    if (!isConnected(profile.id)) return false;
+    return (
+      globalSearchCache.databaseEntries.some(
+        (e) => e.connectionId === profile.id && e.database.toLowerCase().includes(q),
+      ) ||
+      globalSearchCache.tableEntries.some(
+        (e) => e.connectionId === profile.id && e.name.toLowerCase().includes(q),
+      )
+    );
+  }
+
+  function dbMatchesFilter(profileId: string, database: string): boolean {
+    if (!filterQuery) return true;
+    const q = filterQuery.toLowerCase();
+    if (database.toLowerCase().includes(q)) return true;
+    return globalSearchCache.tableEntries.some(
+      (e) => e.connectionId === profileId && e.database === database && e.name.toLowerCase().includes(q),
+    );
+  }
+
+  // Builds a merged Map<db, TableInfo[]> from the global search cache for filter mode,
+  // preferring schemaCache entries (which have rowCount).
+  function buildFilterMap(
+    profileId: string,
+    schemaDb: Map<string, TableInfo[]> | undefined,
+  ): Map<string, TableInfo[]> | undefined {
+    const result = new Map<string, TableInfo[]>();
+    for (const e of globalSearchCache.databaseEntries) {
+      if (e.connectionId === profileId) result.set(e.database, []);
+    }
+    for (const e of globalSearchCache.tableEntries) {
+      if (e.connectionId === profileId) {
+        result.get(e.database)?.push({ name: e.name, tableType: e.tableType, rowCount: null });
+      }
+    }
+    if (schemaDb) {
+      for (const [db, tables] of schemaDb) {
+        if (tables.length > 0) result.set(db, tables);
+        else if (!result.has(db)) result.set(db, []);
+      }
+    }
+    return result.size > 0 ? result : schemaDb;
+  }
+
+  function handleTreeKeydown(e: KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (
+      (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
+      target !== filterInputEl
+    )
+      return;
+    if (renamingGroupId || createGroupModal || createDbModal || createTableModal || confirmState)
+      return;
+
+    if (e.key === 'Escape' && filterQuery) {
+      filterQuery = '';
+      treeScrollEl?.focus();
+      return;
+    }
+
+    if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && target !== filterInputEl) {
+      filterQuery += e.key;
+      requestAnimationFrame(() => filterInputEl?.focus());
+      return;
+    }
+
+    if (e.key === 'Backspace' && target !== filterInputEl && filterQuery) {
+      e.preventDefault();
+      filterQuery = filterQuery.slice(0, -1);
+    }
   }
 
   // ── Derived groupings ─────────────────────────────────────────────────────
@@ -1025,13 +1119,75 @@
 <svelte:window onkeydown={handleWindowKeydown} onpointerup={handleWindowPointerUp} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="connection-tree">
+<div class="connection-tree" onkeydown={handleTreeKeydown}>
   <!-- Section header -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="tree-header no-select" oncontextmenu={showPanelCtx}>
     <span class="header-label">CONNECTIONS</span>
     <span class="header-count">{connectionStore.profiles.length}</span>
   </div>
+
+  <!-- Filter bar -->
+  {#if filterQuery}
+    <div class="filter-bar">
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        class="filter-icon"
+      >
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input
+        bind:this={filterInputEl}
+        bind:value={filterQuery}
+        class="filter-input"
+        type="text"
+        autocomplete="off"
+        autocapitalize="off"
+        autocorrect="off"
+        spellcheck={false}
+        oninput={() => {
+          if (!filterQuery) treeScrollEl?.focus();
+        }}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') {
+            filterQuery = '';
+            treeScrollEl?.focus();
+          }
+        }}
+      />
+      <button
+        class="filter-clear"
+        onclick={() => {
+          filterQuery = '';
+          treeScrollEl?.focus();
+        }}
+        aria-label="Clear filter"
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  {/if}
 
   <!-- Scrollable list -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1051,31 +1207,34 @@
     {:else}
       <!-- Ungrouped profiles -->
       {#if connectionStore.groups.length > 0 && grouped().ungrouped.length > 0}
-        <div class="group-section">
-          <button class="group-row" onclick={() => (ungroupedExpanded = !ungroupedExpanded)}>
-            <span class="chevron" class:open={ungroupedExpanded} aria-hidden="true">
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-                stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
-              >
-            </span>
-            <span class="group-name">Ungrouped</span>
-            <span class="group-count">{grouped().ungrouped.length}</span>
-          </button>
-          {#if ungroupedExpanded}
-            {#each grouped().ungrouped as profile (profile.id)}
-              {@render connectionRow(profile)}
-            {/each}
-          {/if}
-        </div>
+        {@const filteredUngrouped = grouped().ungrouped.filter(profileMatchesFilter)}
+        {#if filteredUngrouped.length > 0}
+          <div class="group-section">
+            <button class="group-row" onclick={() => (ungroupedExpanded = !ungroupedExpanded)}>
+              <span class="chevron" class:open={ungroupedExpanded || !!filterQuery} aria-hidden="true">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
+                >
+              </span>
+              <span class="group-name">Ungrouped</span>
+              <span class="group-count">{filteredUngrouped.length}</span>
+            </button>
+            {#if ungroupedExpanded || filterQuery}
+              {#each filteredUngrouped as profile (profile.id)}
+                {@render connectionRow(profile)}
+              {/each}
+            {/if}
+          </div>
+        {/if}
       {:else}
-        {#each grouped().ungrouped as profile (profile.id)}
+        {#each grouped().ungrouped.filter(profileMatchesFilter) as profile (profile.id)}
           {@render connectionRow(profile)}
         {/each}
       {/if}
@@ -1083,32 +1242,40 @@
       <!-- Named groups -->
       {#each grouped().groups as group (group.id)}
         {@const isExpanded = expandedGroups.has(group.id)}
-        {@const groupProfiles = grouped().byGroup.get(group.id) ?? []}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
-          <button class="group-row" onclick={() => toggleGroup(group.id)}>
-            <span class="chevron" class:open={isExpanded} aria-hidden="true">
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-                stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
-              >
-            </span>
-            <span class="group-name">{group.name}</span>
-            <span class="group-count">{groupProfiles.length}</span>
-          </button>
-          {#if isExpanded}
-            {#each groupProfiles as profile (profile.id)}
-              {@render connectionRow(profile)}
-            {/each}
-          {/if}
-        </div>
+        {@const groupProfiles = (grouped().byGroup.get(group.id) ?? []).filter(profileMatchesFilter)}
+        {#if !filterQuery || groupProfiles.length > 0}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
+            <button class="group-row" onclick={() => toggleGroup(group.id)}>
+              <span class="chevron" class:open={isExpanded || !!filterQuery} aria-hidden="true">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
+                >
+              </span>
+              <span class="group-name">{group.name}</span>
+              <span class="group-count">{groupProfiles.length}</span>
+            </button>
+            {#if isExpanded || filterQuery}
+              {#each groupProfiles as profile (profile.id)}
+                {@render connectionRow(profile)}
+              {/each}
+            {/if}
+          </div>
+        {/if}
       {/each}
+
+      {#if filterQuery && grouped().ungrouped.filter(profileMatchesFilter).length === 0 && grouped().groups.every((g) => (grouped().byGroup.get(g.id) ?? []).filter(profileMatchesFilter).length === 0)}
+        <div class="empty-state">
+          <p>No matches for "{filterQuery}".</p>
+        </div>
+      {/if}
     {/if}
 
     <!-- Add connection inline row -->
@@ -1268,8 +1435,9 @@
     </div>
 
     <!-- Schema tree when expanded -->
-    {#if expanded && connected}
-      {@const databases = schemaCache.get(profile.id)}
+    {#if (expanded || filterQuery) && connected}
+      {@const schemaDb = schemaCache.get(profile.id)}
+      {@const databases = filterQuery ? buildFilterMap(profile.id, schemaDb) : schemaDb}
       {@const isLoadingConn = loadingKeys.has(profile.id)}
 
       <div class="schema-children">
@@ -1278,7 +1446,7 @@
             <span class="loading-dots" aria-label="Loading">Loading…</span>
           </div>
         {:else if databases}
-          {#each [...databases.keys()].filter((db) => settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) as database}
+          {#each [...databases.keys()].filter((db) => (settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) && dbMatchesFilter(profile.id, db)) as database}
             {@const dbKey = `${profile.id}/${database}`}
             {@const isDbExpanded = expandedDatabases.has(dbKey)}
             {@const isDbLoading = loadingKeys.has(dbKey)}
@@ -1288,12 +1456,12 @@
             <div class="db-item" class:system-item={isDbSystem}>
               <button
                 class="db-row"
-                class:open={isDbExpanded}
+                class:open={isDbExpanded || !!filterQuery}
                 onclick={() => toggleDatabase(profile.id, database)}
                 oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
                 aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
               >
-                <span class="chevron" class:open={isDbExpanded} aria-hidden="true">
+                <span class="chevron" class:open={isDbExpanded || !!filterQuery} aria-hidden="true">
                   <svg
                     width="10"
                     height="10"
@@ -1312,9 +1480,9 @@
                 {/if}
               </button>
 
-              {#if isDbExpanded && tables.length > 0}
+              {#if (isDbExpanded || filterQuery) && tables.length > 0}
                 <div class="table-list">
-                  {#each tables.filter((t) => settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) as table}
+                  {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) && (!filterQuery || t.name.toLowerCase().includes(filterQuery.toLowerCase()))) as table}
                     {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                     <button
                       class="table-row"
@@ -2817,5 +2985,59 @@
     font-weight: 600;
     color: var(--color-text-muted);
     letter-spacing: 0.03em;
+  }
+
+  /* ── Filter bar ── */
+
+  .filter-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px 4px 12px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+  }
+
+  .filter-icon {
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+  }
+
+  .filter-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 12px;
+    font-family: var(--font-family-ui);
+    color: var(--color-text-primary);
+    padding: 0;
+  }
+
+  .filter-input::placeholder {
+    color: var(--color-text-disabled);
+  }
+
+  .filter-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .filter-clear:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 </style>
