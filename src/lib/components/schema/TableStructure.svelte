@@ -160,6 +160,30 @@
     onUpdate: string;
   }
   let fkForm = $state<FkForm | null>(null);
+  let fkRefTableOptions = $state<{ value: string; label: string }[]>([]);
+  let fkRefColumnOptions = $state<{ value: string; label: string }[]>([]);
+
+  async function loadFkRefTables() {
+    try {
+      const tables = await schemaApi.listTables(connectionId, database);
+      fkRefTableOptions = tables.map((t) => ({ value: t.name, label: t.name }));
+    } catch {
+      fkRefTableOptions = [];
+    }
+  }
+
+  async function loadFkRefColumns(tableName: string) {
+    if (!tableName) {
+      fkRefColumnOptions = [];
+      return;
+    }
+    try {
+      const cols = await schemaApi.listColumns(connectionId, database, tableName);
+      fkRefColumnOptions = cols.map((c) => ({ value: c.name, label: c.name }));
+    } catch {
+      fkRefColumnOptions = [];
+    }
+  }
 
   interface ConfirmDrop {
     label: string;
@@ -369,7 +393,10 @@
       onDelete: 'NO ACTION',
       onUpdate: 'NO ACTION',
     };
+    fkRefTableOptions = [];
+    fkRefColumnOptions = [];
     saveError = null;
+    loadFkRefTables();
   }
 
   async function submitFk() {
@@ -1300,28 +1327,33 @@
         </div>
         <div class="form-row">
           <label class="form-label" for="fk-ref-table">Referenced Table</label>
-          <input
+          <Select
             id="fk-ref-table"
-            class="form-input"
+            options={fkRefTableOptions}
             value={form.referencedTable}
-            oninput={(e) => {
-              fkForm!.referencedTable = (e.target as HTMLInputElement).value;
+            onchange={(v) => {
+              fkForm!.referencedTable = v;
+              fkForm!.referencedColumns = '';
+              loadFkRefColumns(v);
             }}
+            size="md"
+            searchable
             placeholder="other_table"
           />
         </div>
         <div class="form-row">
-          <label class="form-label" for="fk-ref-cols">
-            Referenced Columns <span class="form-hint">(comma-separated)</span>
-          </label>
-          <input
+          <label class="form-label" for="fk-ref-cols">Referenced Column</label>
+          <Select
             id="fk-ref-cols"
-            class="form-input"
+            options={fkRefColumnOptions}
             value={form.referencedColumns}
-            oninput={(e) => {
-              fkForm!.referencedColumns = (e.target as HTMLInputElement).value;
+            onchange={(v) => {
+              fkForm!.referencedColumns = v;
             }}
+            size="md"
+            searchable
             placeholder="id"
+            disabled={!form.referencedTable}
           />
         </div>
         <div class="form-row-pair">

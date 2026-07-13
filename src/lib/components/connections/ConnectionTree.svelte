@@ -171,6 +171,18 @@
   let createTableFks = $state<CreateTableFk[]>([]);
   let createTableError = $state('');
   let createTableLoading = $state(false);
+  let fkRefColumns = $state<Map<number, string[]>>(new Map());
+
+  async function loadFkRefColumns(fkIndex: number, refTable: string) {
+    if (!createTableModal || !refTable) return;
+    const { connectionId, database } = createTableModal;
+    try {
+      const cols = await schemaApi.listColumns(connectionId, database, refTable);
+      fkRefColumns = new Map([...fkRefColumns, [fkIndex, cols.map((c) => c.name)]]);
+    } catch {
+      fkRefColumns = new Map([...fkRefColumns, [fkIndex, []]]);
+    }
+  }
 
   const refActions = [
     { value: 'NO ACTION', label: 'NO ACTION' },
@@ -873,6 +885,7 @@
       { name: 'id', type: defaultColumnType(profile.dbType), nullable: false, primaryKey: true },
     ];
     createTableFks = [];
+    fkRefColumns = new Map();
     createTableModal = { connectionId, database, dbType: profile.dbType };
   }
 
@@ -1906,30 +1919,41 @@
                     searchable
                   />
                   <span class="fk-arrow">→</span>
-                  <input
-                    class="field-input fk-input"
-                    type="text"
+                  <Select
                     bind:value={fk.refTable}
+                    options={(schemaCache
+                      .get(createTableModal!.connectionId)
+                      ?.get(createTableModal!.database) ?? []).map((t) => ({
+                      value: t.name,
+                      label: t.name,
+                    }))}
+                    size="sm"
+                    aria-label="Referenced table"
+                    style="flex:1;min-width:0"
+                    searchable
                     placeholder="ref_table"
-                    autocomplete="off"
-                    autocapitalize="off"
-                    autocorrect="off"
-                    spellcheck={false}
+                    onchange={() => {
+                      fk.refColumn = '';
+                      loadFkRefColumns(i, fk.refTable);
+                    }}
                   />
-                  <input
-                    class="field-input fk-input"
-                    type="text"
+                  <Select
                     bind:value={fk.refColumn}
+                    options={(fkRefColumns.get(i) ?? []).map((c) => ({ value: c, label: c }))}
+                    size="sm"
+                    aria-label="Referenced column"
+                    style="flex:1;min-width:0"
+                    searchable
                     placeholder="ref_col"
-                    autocomplete="off"
-                    autocapitalize="off"
-                    autocorrect="off"
-                    spellcheck={false}
+                    disabled={!fk.refTable}
                   />
                   <button
                     class="col-del-btn"
                     onclick={() => {
                       createTableFks = createTableFks.filter((_, idx) => idx !== i);
+                      const updated = new Map(fkRefColumns);
+                      updated.delete(i);
+                      fkRefColumns = updated;
                     }}
                     aria-label="Remove foreign key"
                   >
