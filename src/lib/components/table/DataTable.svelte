@@ -17,6 +17,10 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useShortcuts, keyEventToString } from '$lib/stores/shortcuts.svelte';
   import { executeQuery } from '$lib/tauri/query';
+  import KeyIcon from '$lib/components/icons/KeyIcon.svelte';
+  import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import ArrowIcon from '$lib/components/icons/ArrowIcon.svelte';
 
   type CellValue = string | number | boolean | null;
   type SortDir = 'asc' | 'desc' | 'none';
@@ -3545,19 +3549,7 @@
                   title="Sort by {colLabel}"
                 >
                   {#if col.isPrimaryKey}
-                    <svg
-                      class="pk-icon"
-                      width="11"
-                      height="11"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <circle cx="8" cy="9" r="4"></circle>
-                      <path d="M11 12l7 7"></path>
-                      <path d="M16 17l2-2"></path>
-                    </svg>
+                    <KeyIcon class="pk-icon" width={11} height={11} />
                   {/if}
                   <span class="header-label">
                     <span class="header-name" class:header-name--renamed={colIsRenamed}
@@ -3792,32 +3784,7 @@
                           class:bool-true={currentValue}
                           class:bool-false={!currentValue}
                         >
-                          {#if currentValue}<svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-width="2.5"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
-                            >{:else}<svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-width="2.5"
-                              stroke-linecap="round"
-                              aria-hidden="true"
-                              ><line x1="18" y1="6" x2="6" y2="18" /><line
-                                x1="6"
-                                y1="6"
-                                x2="18"
-                                y2="18"
-                              /></svg
-                            >{/if}
+                          {#if currentValue}<CheckIcon width={12} height={12} strokeWidth={2.5} />{:else}<CloseIcon width={12} height={12} strokeWidth={2.5} />{/if}
                         </span>
                       {:else}
                         {formatCell(currentValue)}
@@ -4092,34 +4059,9 @@
                         {:else if settings.booleanDisplay === 'as-saved'}
                           {String(cellValue)}
                         {:else if cellValue}
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2.5"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
-                          >
+                          <CheckIcon width={12} height={12} strokeWidth={2.5} />
                         {:else}
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2.5"
-                            stroke-linecap="round"
-                            aria-hidden="true"
-                            ><line x1="18" y1="6" x2="6" y2="18" /><line
-                              x1="6"
-                              y1="6"
-                              x2="18"
-                              y2="18"
-                            /></svg
-                          >
+                          <CloseIcon width={12} height={12} strokeWidth={2.5} />
                         {/if}
                       </span>
                     {:else if cellMatches}
@@ -4147,22 +4089,7 @@
                         class="quick-view-close"
                         onclick={() => (quickViewState = null)}
                         aria-label="Close quick view"
-                        ><svg
-                          width="11"
-                          height="11"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2.5"
-                          stroke-linecap="round"
-                          aria-hidden="true"
-                          ><line x1="18" y1="6" x2="6" y2="18" /><line
-                            x1="6"
-                            y1="6"
-                            x2="18"
-                            y2="18"
-                          /></svg
-                        ></button
+                        ><CloseIcon width={11} height={11} strokeWidth={2.5} /></button
                       >
                     </div>
                   </div>
@@ -4188,18 +4115,7 @@
                               quickViewState = null;
                             }}
                             aria-label="Go to row in table"
-                            ><svg
-                              width="11"
-                              height="11"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-width="2.5"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              aria-hidden="true"
-                              ><path d="M5 12h14" /><path d="M13 6l6 6-6 6" /></svg
-                            ></button
+                            ><ArrowIcon direction="right" width={11} height={11} /></button
                           >
                         {/if}
                         <!-- svelte-ignore a11y_autofocus -->
@@ -4208,22 +4124,7 @@
                           autofocus
                           onclick={() => (quickViewState = null)}
                           aria-label="Close quick view"
-                          ><svg
-                            width="11"
-                            height="11"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2.5"
-                            stroke-linecap="round"
-                            aria-hidden="true"
-                            ><line x1="18" y1="6" x2="6" y2="18" /><line
-                              x1="6"
-                              y1="6"
-                              x2="18"
-                              y2="18"
-                            /></svg
-                          ></button
+                          ><CloseIcon width={11} height={11} strokeWidth={2.5} /></button
                         >
                       </div>
                     </div>
@@ -4240,18 +4141,7 @@
                                   class:quick-view-th-pk={qcol.isPrimaryKey}
                                 >
                                   {#if qcol.isPrimaryKey}
-                                    <svg
-                                      class="quick-view-pk"
-                                      width="9"
-                                      height="9"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      stroke-width="2"
-                                    >
-                                      <circle cx="8" cy="9" r="4"></circle><path d="M11 12l7 7"
-                                      ></path><path d="M16 17l2-2"></path>
-                                    </svg>
+                                    <KeyIcon class="quick-view-pk" width={9} height={9} />
                                   {/if}
                                   {qcol.name}
                                 </th>
@@ -4490,32 +4380,7 @@
                           class:bool-true={currentValue}
                           class:bool-false={!currentValue}
                         >
-                          {#if currentValue}<svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-width="2.5"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
-                            >{:else}<svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              stroke-width="2.5"
-                              stroke-linecap="round"
-                              aria-hidden="true"
-                              ><line x1="18" y1="6" x2="6" y2="18" /><line
-                                x1="6"
-                                y1="6"
-                                x2="18"
-                                y2="18"
-                              /></svg
-                            >{/if}
+                          {#if currentValue}<CheckIcon width={12} height={12} strokeWidth={2.5} />{:else}<CloseIcon width={12} height={12} strokeWidth={2.5} />{/if}
                         </span>
                       {:else}
                         {formatCell(currentValue)}
@@ -5036,7 +4901,7 @@
     background: var(--color-bg-hover);
   }
 
-  .pk-icon {
+  :global(.pk-icon) {
     color: var(--color-accent);
     flex-shrink: 0;
   }
@@ -5541,7 +5406,7 @@
     color: var(--color-accent);
   }
 
-  .quick-view-pk {
+  :global(.quick-view-pk) {
     display: inline;
     vertical-align: middle;
     margin-right: 3px;

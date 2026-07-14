@@ -3,6 +3,7 @@
 -->
 <script lang="ts">
   import { marked } from 'marked';
+  import ActivityIcon from '$lib/components/icons/ActivityIcon.svelte';
 
   interface Props {
     version: string;
@@ -17,18 +18,7 @@
 <div class="release-notes">
   <div class="release-header">
     <div class="release-icon" aria-hidden="true">
-      <svg
-        width="28"
-        height="28"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-      </svg>
+      <ActivityIcon size={28} />
     </div>
     <div>
       <h1 class="release-title">What's New in {version}</h1>

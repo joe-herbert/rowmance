@@ -21,6 +21,8 @@
   import AiModal from '$lib/components/ai/AiModal.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
+  import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
 
   const toast = useToast();
   const connections = useConnections();
@@ -563,20 +565,7 @@
             aria-label="Copy error message"
             title="Copy error"
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              ><rect x="9" y="9" width="13" height="13" rx="2" /><path
-                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-              /></svg
-            >
+            <CopyIcon width={12} height={12} />
           </button>
         </div>
         <span class="error-message">{result.error}</span>
@@ -595,17 +584,7 @@
               addRowTrigger++;
             }}
           >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              aria-hidden="true"
-              ><line x1="5" y1="1" x2="5" y2="9" /><line x1="1" y1="5" x2="9" y2="5" /></svg
-            >
+            <PlusIcon width={10} height={10} strokeWidth={1.8} />
             Add Row
           </button>
         {/if}
@@ -731,20 +710,7 @@
               aria-label="Copy error message"
               title="Copy"
             >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                ><rect x="9" y="9" width="13" height="13" rx="2" /><path
-                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                /></svg
-              >
+              <CopyIcon width={11} height={11} />
             </button>
           </div>
         </div>

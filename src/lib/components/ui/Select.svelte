@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { portal } from '$lib/actions/portal';
+  import SmallChevronIcon from '$lib/components/icons/SmallChevronIcon.svelte';
 
   type Option = { value: string; label: string };
   type OptionGroup = { group: string; options: Option[] };
@@ -256,23 +257,7 @@
   onkeydown={handleTriggerKeydown}
 >
   <span class="trigger-label" class:trigger-label--placeholder={!selectedLabel && !!placeholder}>{selectedLabel || placeholder}</span>
-  <svg
-    class="trigger-chevron"
-    class:trigger-chevron--open={open}
-    width="10"
-    height="6"
-    viewBox="0 0 10 6"
-    fill="none"
-    aria-hidden="true"
-  >
-    <path
-      d="M1 1l4 4 4-4"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
-  </svg>
+  <SmallChevronIcon class="trigger-chevron{open ? ' trigger-chevron--open' : ''}" />
 </button>
 
 {#if open}

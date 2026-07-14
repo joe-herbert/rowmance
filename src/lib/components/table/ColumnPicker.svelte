@@ -8,6 +8,8 @@
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import DragHandleIcon from '$lib/components/icons/DragHandleIcon.svelte';
 
   interface Props {
     columns: ColumnMeta[];
@@ -209,17 +211,7 @@
         >
       {/if}
       <button class="close-btn" onclick={onClose} aria-label="Close column picker"
-        ><svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-        ></button
+        ><CloseIcon width={12} height={12} strokeWidth={2.5} /></button
       >
     </div>
   </div>
@@ -247,11 +239,7 @@
             aria-hidden="true"
             onpointerdown={(e) => onDragHandlePointerDown(e, index)}
           >
-            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
-              <circle cx="3" cy="2.5" r="1.2" /><circle cx="7" cy="2.5" r="1.2" />
-              <circle cx="3" cy="7" r="1.2" /><circle cx="7" cy="7" r="1.2" />
-              <circle cx="3" cy="11.5" r="1.2" /><circle cx="7" cy="11.5" r="1.2" />
-            </svg>
+            <DragHandleIcon />
           </span>
         {/if}
         {#if isRenaming}

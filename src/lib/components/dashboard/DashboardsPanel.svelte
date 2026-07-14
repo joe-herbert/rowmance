@@ -13,6 +13,9 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import IconPicker from './IconPicker.svelte';
   import { importDashboard, exportDashboard } from '$lib/utils/dashboard-io';
+  import UploadIcon from '$lib/components/icons/UploadIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+  import PinIcon from '$lib/components/icons/PinIcon.svelte';
 
   const dashboardsStore = useDashboards();
   const panelStore = usePanels();
@@ -127,11 +130,7 @@
       aria-label="Import dashboard from file"
       type="button"
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/>
-        <line x1="12" y1="3" x2="12" y2="15"/>
-      </svg>
+      <UploadIcon width={14} height={14} />
     </button>
     <button
       class="icon-btn"
@@ -140,10 +139,7 @@
       aria-label="New dashboard"
       type="button"
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <line x1="12" y1="5" x2="12" y2="19"/>
-        <line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
+      <PlusIcon width={14} height={14} strokeWidth={1.9} />
     </button>
   </div>
 
@@ -217,10 +213,7 @@
                 aria-label={isPinned ? 'Unpin' : 'Pin to title bar'}
                 type="button"
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill={isPinned ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <line x1="12" y1="17" x2="12" y2="22"></line>
-                  <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
-                </svg>
+                <PinIcon width={11} height={11} filled={isPinned} />
               </button>
             </div>
           {/if}

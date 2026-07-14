@@ -11,6 +11,13 @@
   import { focusTrap } from '$lib/utils/focus-trap';
   import { useGlobalSearchCache } from '$lib/stores/globalSearchCache.svelte';
   import type { DbType } from '$lib/types';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
+  import SpinnerIcon from '$lib/components/icons/SpinnerIcon.svelte';
+  import FilterIcon from '$lib/components/icons/FilterIcon.svelte';
+  import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
+  import DbIcon from '$lib/components/icons/DbIcon.svelte';
+  import TableIcon from '$lib/components/icons/TableIcon.svelte';
+  import ListIcon from '$lib/components/icons/ListIcon.svelte';
 
   interface Props {
     onclose: () => void;
@@ -474,18 +481,7 @@
   <div class="palette" use:focusTrap>
     <div class="search-row">
       <span class="search-icon" aria-hidden="true">
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-        >
-          <circle cx="11" cy="11" r="7"></circle>
-          <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
-        </svg>
+        <SearchIcon width={15} height={15} strokeWidth={1.8} />
       </span>
       <input
         class="search-input"
@@ -501,18 +497,7 @@
       />
       {#if isLoading}
         <span class="loading-indicator" aria-label="Loading schema…">
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            class="spin"
-          >
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
-          </svg>
+          <SpinnerIcon width={13} height={13} strokeWidth={2} class="spin" />
         </span>
       {/if}
       {#if isFiltersActive}
@@ -537,18 +522,7 @@
         title={filtersExpanded ? 'Hide filters' : 'Show filters'}
         aria-expanded={filtersExpanded}
       >
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-        </svg>
+        <FilterIcon width={13} height={13} strokeWidth={2} />
       </button>
     </div>
 
@@ -731,59 +705,13 @@
           <li class="category-label" role="presentation">
             <span class="category-icon" aria-hidden="true">
               {#if item.kind === 'connection'}
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                >
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                </svg>
+                <LinkIcon width={10} height={10} strokeWidth={2} />
               {:else if item.kind === 'database'}
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                >
-                  <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                  <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path>
-                  <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"></path>
-                </svg>
+                <DbIcon size={10} />
               {:else if item.kind === 'table'}
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                  <line x1="3" y1="9.5" x2="21" y2="9.5"></line>
-                  <line x1="9" y1="9.5" x2="9" y2="20"></line>
-                </svg>
+                <TableIcon size={10} />
               {:else}
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                >
-                  <line x1="3" y1="6" x2="21" y2="6"></line>
-                  <line x1="3" y1="12" x2="21" y2="12"></line>
-                  <line x1="3" y1="18" x2="21" y2="18"></line>
-                </svg>
+                <ListIcon width={10} height={10} strokeWidth={2} />
               {/if}
             </span>
             {itemCategory(item)}
@@ -948,7 +876,7 @@
     }
   }
 
-  .spin {
+  :global(.spin) {
     animation: spin 0.8s linear infinite;
   }
 

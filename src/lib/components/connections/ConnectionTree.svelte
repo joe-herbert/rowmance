@@ -11,6 +11,13 @@
   import ConnectionForm from './ConnectionForm.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
+  import ShareIcon from '$lib/components/icons/ShareIcon.svelte';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+  import LockIcon from '$lib/components/icons/LockIcon.svelte';
+  import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
@@ -1132,34 +1139,14 @@
       title="Manage all connections"
       aria-label="Manage connections"
     >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="18" cy="5" r="3"></circle>
-        <circle cx="6" cy="12" r="3"></circle>
-        <circle cx="18" cy="19" r="3"></circle>
-        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-      </svg>
+      <ShareIcon width={13} height={13} />
     </button>
   </div>
 
   <!-- Filter bar -->
   {#if filterQuery}
     <div class="filter-bar">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        class="filter-icon"
-      >
-        <circle cx="11" cy="11" r="8"></circle>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-      </svg>
+      <SearchIcon width={12} height={12} class="filter-icon" />
       <input
         bind:this={filterInputEl}
         bind:value={filterQuery}
@@ -1187,19 +1174,7 @@
         }}
         aria-label="Clear filter"
       >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
+        <CloseIcon width={12} height={12} strokeWidth={2.5} />
       </button>
     </div>
   {/if}
@@ -1227,16 +1202,7 @@
           <div class="group-section">
             <button class="group-row" onclick={() => (ungroupedExpanded = !ungroupedExpanded)}>
               <span class="chevron" class:open={ungroupedExpanded || !!filterQuery} aria-hidden="true">
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
-                >
+                <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
               </span>
               <span class="group-name">Ungrouped</span>
               <span class="group-count">{filteredUngrouped.length}</span>
@@ -1263,16 +1229,7 @@
           <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
             <button class="group-row" onclick={() => toggleGroup(group.id)}>
               <span class="chevron" class:open={isExpanded || !!filterQuery} aria-hidden="true">
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
-                >
+                <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
               </span>
               <span class="group-name">{group.name}</span>
               <span class="group-count">{groupProfiles.length}</span>
@@ -1301,18 +1258,7 @@
         showAddForm = true;
       }}
     >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-      >
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
+      <PlusIcon width={14} height={14} strokeWidth={1.8} />
       Add connection
     </button>
   </div>
@@ -1356,18 +1302,7 @@
           {#if connecting}
             <span class="spin-ring" aria-hidden="true"></span>
           {:else}
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
+            <ChevronIcon direction="right" width={12} height={12} strokeWidth={2.2} />
           {/if}
         </button>
 
@@ -1405,18 +1340,7 @@
             aria-label="Disable read-only for {profile.name}"
             aria-pressed={true}
           >
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              aria-hidden="true"
-            >
-              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
-              <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
-            </svg>
+            <LockIcon width={11} height={11} />
           </button>
         {/if}
       </div>
@@ -1432,19 +1356,7 @@
           title="Edit connection"
           aria-label="Edit {profile.name}"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
+          <EditIcon width={13} height={13} strokeWidth={1.8} />
         </button>
       </div>
     </div>
@@ -1477,16 +1389,7 @@
                 aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
               >
                 <span class="chevron" class:open={isDbExpanded || !!filterQuery} aria-hidden="true">
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
-                  >
+                  <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
                 </span>
                 <DbIcon system={isDbSystem} aria-hidden="true" />
                 <span class="db-name">{database}</span>
@@ -1790,17 +1693,7 @@
         }}
       >
         Move to Group
-        <svg
-          class="ctx-caret"
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg
-        >
+        <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.5} class="ctx-caret" />
         {#if moveToGroupSubmenuOpen}
           <div
             class="ctx-submenu"
@@ -2052,17 +1945,7 @@
                 disabled={createTableColumns.length <= 1}
                 aria-label="Remove column"
               >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                  ><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"
-                  ></line></svg
-                >
+                <CloseIcon width={11} height={11} strokeWidth={2.2} />
               </button>
             </div>
           {/each}
@@ -2140,21 +2023,7 @@
                     }}
                     aria-label="Remove foreign key"
                   >
-                    <svg
-                      width="11"
-                      height="11"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.2"
-                      stroke-linecap="round"
-                      ><line x1="18" y1="6" x2="6" y2="18"></line><line
-                        x1="6"
-                        y1="6"
-                        x2="18"
-                        y2="18"
-                      ></line></svg
-                    >
+                    <CloseIcon width={11} height={11} strokeWidth={2.2} />
                   </button>
                 </div>
                 <div class="fk-actions-row">
@@ -2417,11 +2286,11 @@
     background: transparent;
   }
 
-  .conn-chevron.open svg {
+  .conn-chevron.open :global(svg) {
     transform: rotate(90deg);
   }
 
-  .conn-chevron svg {
+  .conn-chevron :global(svg) {
     transition: transform var(--transition-fast);
   }
 
@@ -2645,10 +2514,10 @@
     align-items: center;
   }
 
-  .chevron svg {
+  .chevron :global(svg) {
     transition: transform var(--transition-fast);
   }
-  .chevron.open svg {
+  .chevron.open :global(svg) {
     transform: rotate(90deg);
   }
 
@@ -2735,7 +2604,7 @@
     background: var(--color-bg-active);
   }
 
-  .ctx-caret {
+  :global(.ctx-caret) {
     flex-shrink: 0;
     opacity: 0.6;
   }
@@ -3038,7 +2907,7 @@
     background: var(--color-bg-secondary);
   }
 
-  .filter-icon {
+  :global(.filter-icon) {
     flex-shrink: 0;
     color: var(--color-text-muted);
   }

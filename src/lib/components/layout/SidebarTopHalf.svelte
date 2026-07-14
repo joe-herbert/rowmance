@@ -18,6 +18,8 @@
   import { panelLabel } from '$lib/utils/panel-label';
   import PanelIcon from '$lib/components/layout/PanelIcon.svelte';
   import TabContextMenu from '$lib/components/layout/TabContextMenu.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
 
   const panelStore = usePanels();
   const tabDrag = useTabDrag();
@@ -217,18 +219,7 @@
           title="New Query Editor (⌘N)"
           aria-label="New query editor"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.9"
-            stroke-linecap="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+          <PlusIcon width={14} height={14} />
         </button>
       {/if}
     </div>
@@ -320,18 +311,7 @@
                   }
                 }}
               >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                >
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                </svg>
+                <CloseIcon width={13} height={13} strokeWidth={1.8} />
               </button>
             </li>
             {#if dropTarget?.id === item.id && dropTarget.position === 'after'}
@@ -359,18 +339,7 @@
                   title="New Query Editor in {splitLabel}"
                   aria-label="New query editor in {splitLabel}"
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.9"
-                    stroke-linecap="round"
-                  >
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
+                  <PlusIcon width={12} height={12} />
                 </button>
               {/if}
               <button
@@ -379,18 +348,7 @@
                 title="Close {splitLabel}"
                 aria-label="Close {splitLabel}"
               >
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                >
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                </svg>
+                <CloseIcon width={11} height={11} strokeWidth={2} />
               </button>
             </div>
 
@@ -484,18 +442,7 @@
                         }
                       }}
                     >
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                      >
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                      </svg>
+                      <CloseIcon width={13} height={13} strokeWidth={1.8} />
                     </button>
                   </li>
                   {#if dropTarget?.id === item.id && dropTarget.position === 'after'}

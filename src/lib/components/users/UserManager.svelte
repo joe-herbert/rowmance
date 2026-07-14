@@ -12,6 +12,7 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
+  import LockIcon from '$lib/components/icons/LockIcon.svelte';
   import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
 
@@ -612,19 +613,7 @@
   {#if isSqlite}
     <div class="unsupported-notice">
       <div class="unsupported-icon" aria-hidden="true">
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          ><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path
-            d="M7 11V7a5 5 0 0 1 10 0v4"
-          /></svg
-        >
+        <LockIcon width={48} height={48} />
       </div>
       <p class="unsupported-title">Not supported for SQLite</p>
       <p class="unsupported-desc">User management is not supported for SQLite connections.</p>
@@ -680,20 +669,7 @@
                   {/if}
                   {#if user.isLocked}
                     <span class="lock-icon" title="Account locked" aria-label="Locked">
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                      >
-                        <rect x="3" y="8" width="10" height="7" rx="1" />
-                        <path d="M5 8V5a3 3 0 0 1 6 0v3" />
-                      </svg>
+                      <LockIcon width={10} height={10} />
                     </span>
                   {/if}
                 </div>

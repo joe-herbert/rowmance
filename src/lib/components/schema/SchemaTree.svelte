@@ -10,6 +10,7 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import * as schemaApi from '$lib/tauri/schema';
   import type { TableInfo } from '$lib/types';
@@ -279,17 +280,7 @@
     />
     {#if searchQuery}
       <button class="search-clear" onclick={() => (searchQuery = '')} aria-label="Clear search"
-        ><svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-        ></button
+        ><CloseIcon width={10} height={10} strokeWidth={2.5} /></button
       >
     {/if}
   </div>

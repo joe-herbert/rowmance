@@ -17,6 +17,7 @@
 
   import { untrack } from 'svelte';
   import Select from './Select.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
 
   const parsed = $derived(parseValue(value));
   const today = new Date();
@@ -119,17 +120,7 @@
 <div class="date-picker">
   <div class="dp-header">
     <button class="dp-nav" onclick={prevMonth} aria-label="Previous month">
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg
-      >
+      <ChevronIcon direction="left" width={14} height={14} />
     </button>
     <div class="dp-dropdowns">
       <Select
@@ -150,17 +141,7 @@
       />
     </div>
     <button class="dp-nav" onclick={nextMonth} aria-label="Next month">
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg
-      >
+      <ChevronIcon direction="right" width={14} height={14} />
     </button>
   </div>
 

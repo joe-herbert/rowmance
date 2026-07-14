@@ -68,6 +68,11 @@
   import type { FileQuery } from '$lib/types';
   import { useRecording } from '$lib/stores/recording.svelte';
   import { useRevert } from '$lib/stores/revert.svelte';
+  import SaveIcon from '$lib/components/icons/SaveIcon.svelte';
+  import FileDocIcon from '$lib/components/icons/FileDocIcon.svelte';
+  import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
+  import WarningIcon from '$lib/components/icons/WarningIcon.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
 
   interface Props {
     connectionId: string;
@@ -1971,21 +1976,7 @@
       title={currentSavedQueryId ? 'Save query' : 'Save query as…'}
       aria-label="Save query"
     >
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-        <polyline points="7 3 7 8 15 8"></polyline>
-      </svg>
+      <SaveIcon width={13} height={13} />
     </button>
 
     <button
@@ -1996,23 +1987,7 @@
       aria-label="Toggle description"
       aria-pressed={descriptionOpen}
     >
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-        <polyline points="14 2 14 8 20 8"></polyline>
-        <line x1="16" y1="13" x2="8" y2="13"></line>
-        <line x1="16" y1="17" x2="8" y2="17"></line>
-        <polyline points="10 9 9 9 8 9"></polyline>
-      </svg>
+      <FileDocIcon size={13} />
     </button>
 
     {#if saveDialogOpen}
@@ -2066,11 +2041,7 @@
         aria-expanded={actionsMenuOpen}
         aria-haspopup="menu"
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="2" cy="7" r="1.25" fill="currentColor" />
-          <circle cx="7" cy="7" r="1.25" fill="currentColor" />
-          <circle cx="12" cy="7" r="1.25" fill="currentColor" />
-        </svg>
+        <DotsIcon width={14} height={14} />
       </button>
 
       {#if actionsMenuOpen}
@@ -2175,11 +2146,7 @@
 
   {#if txDatabaseMismatch}
     <div class="tx-db-warning" role="alert">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-        <line x1="12" y1="9" x2="12" y2="13"></line>
-        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-      </svg>
+      <WarningIcon width={13} height={13} />
       Transaction started on <code>{txDatabaseMismatch}</code> — query will run on <code>{txDatabaseMismatch}</code>, not <code>{selectedDatabase}</code>
     </div>
   {/if}
@@ -2210,21 +2177,7 @@
           aria-expanded={varsOpen}
         >
           <span class="vars-panel-tab-label">Vars</span>
-          <svg
-            class="vars-panel-chevron"
-            class:vars-panel-chevron--open={varsOpen}
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="6,2 2,5 6,8" />
-          </svg>
+          <ChevronIcon class="vars-panel-chevron{varsOpen ? ' vars-panel-chevron--open' : ''}" direction="left" width={10} height={10} strokeWidth={1.8} />
         </button>
 
         {#if varsOpen}
@@ -2794,12 +2747,12 @@
     transform: rotate(180deg);
   }
 
-  .vars-panel-chevron {
+  :global(.vars-panel-chevron) {
     transform: rotate(0deg);
     transition: transform var(--transition-fast);
   }
 
-  .vars-panel-chevron--open {
+  :global(.vars-panel-chevron--open) {
     transform: rotate(180deg);
   }
 

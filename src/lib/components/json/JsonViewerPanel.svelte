@@ -12,6 +12,12 @@
   import type { ForeignKeyInfo, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
+  import JsonIcon from '$lib/components/icons/JsonIcon.svelte';
+  import ExpandIcon from '$lib/components/icons/ExpandIcon.svelte';
+  import CollapseIcon from '$lib/components/icons/CollapseIcon.svelte';
+  import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+  import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
+  import PointerIcon from '$lib/components/icons/PointerIcon.svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -275,9 +281,7 @@
 <div class="json-panel">
   {#if !sel}
     <div class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
-      </svg>
+      <JsonIcon class="empty-icon" />
       <p>Select a table row to view it as JSON</p>
     </div>
   {:else}
@@ -286,23 +290,17 @@
       <div class="toolbar-gap"></div>
       {#if hasFkColumns}
         <button class="icon-btn" onclick={expandAll} title="Expand all">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="15,3 21,3 21,9" /><polyline points="9,21 3,21 3,15" />
-            <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
-          </svg>
+          <ExpandIcon width={13} height={13} strokeWidth={2} />
         </button>
         <button class="icon-btn" onclick={collapseAll} title="Collapse all">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="4,14 10,14 10,20" /><polyline points="20,10 14,10 14,4" />
-            <line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" />
-          </svg>
+          <CollapseIcon width={13} height={13} strokeWidth={2} />
         </button>
       {/if}
       <button class="copy-btn" onclick={copyAsJson} title="Copy row as JSON">
         {#if copied}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+          <CheckIcon width={13} height={13} strokeWidth={2} />
         {:else}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+          <CopyIcon width={13} height={13} />
         {/if}
         <span>{copied ? 'Copied' : 'Copy'}</span>
       </button>
@@ -344,9 +342,7 @@
                   title={isExpanded ? 'Collapse' : 'Expand referenced row'}
                   aria-label={isExpanded ? 'Collapse' : 'Expand'}
                 >
-                  <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true">
-                    <polygon points="1,1 7,4 1,7" />
-                  </svg>
+                  <PointerIcon />
                 </button>
               {:else}
                 <span class="expand-spacer"></span>
@@ -596,12 +592,12 @@
 
   .expand-btn:disabled { cursor: default; }
 
-  .expand-btn svg {
+  .expand-btn :global(svg) {
     transition: transform 150ms ease;
     transform-origin: center;
   }
 
-  .expand-btn.expanded svg {
+  .expand-btn.expanded :global(svg) {
     transform: rotate(90deg);
   }
 

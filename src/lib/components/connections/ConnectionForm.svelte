@@ -15,6 +15,11 @@
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
+  import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import EyeIcon from '$lib/components/icons/EyeIcon.svelte';
+  import EyeOffIcon from '$lib/components/icons/EyeOffIcon.svelte';
+  import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
 
   interface Props {
     profile?: ConnectionProfile;
@@ -320,35 +325,12 @@
             if (!showUrlInput) connectionUrl = '';
           }}
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            ><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path
-              d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-            /></svg
-          >
+          <LinkIcon width={12} height={12} />
           From URL
         </button>
       {/if}
       <button class="close-btn" aria-label="Close" onclick={onclose}
-        ><svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-        ></button
+        ><CloseIcon width={12} height={12} strokeWidth={2.5} /></button
       >
     </header>
 
@@ -568,35 +550,7 @@
                   class="btn btn--ghost btn--sm btn--icon"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onclick={() => (showPassword = !showPassword)}
-                  >{#if showPassword}<svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                      ><path
-                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-                      /><line x1="1" y1="1" x2="23" y2="23" /></svg
-                    >{:else}<svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                      ><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
-                        cx="12"
-                        cy="12"
-                        r="3"
-                      /></svg
-                    >{/if}</button
+                  >{#if showPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon width={14} height={14} />{/if}</button
                 >
               </div>
             </div>
@@ -696,35 +650,7 @@
                     class="btn btn--ghost btn--sm btn--icon"
                     aria-label={showSshPassword ? 'Hide password' : 'Show password'}
                     onclick={() => (showSshPassword = !showSshPassword)}
-                    >{#if showSshPassword}<svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                        ><path
-                          d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-                        /><line x1="1" y1="1" x2="23" y2="23" /></svg
-                      >{:else}<svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                        ><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
-                          cx="12"
-                          cy="12"
-                          r="3"
-                        /></svg
-                      >{/if}</button
+                    >{#if showSshPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon width={14} height={14} />{/if}</button
                   >
                 </div>
               </div>
@@ -891,27 +817,7 @@
           class:test-result--success={testResult.success}
           class:test-result--fail={!testResult.success}
         >
-          {#if testResult.success}<svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
-            >{:else}<svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              aria-hidden="true"
-              ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-            >{/if}
+          {#if testResult.success}<CheckIcon width={13} height={13} strokeWidth={2.5} />{:else}<CloseIcon width={13} height={13} strokeWidth={2.5} />{/if}
           {testResult.message}
           {#if testResult.latencyMs !== null}
             <span class="latency">{testResult.latencyMs}ms</span>

@@ -88,6 +88,20 @@
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
   import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
+  import FilterIcon from '$lib/components/icons/FilterIcon.svelte';
+  import ChevronDoubleIcon from '$lib/components/icons/ChevronDoubleIcon.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
+  import HashIcon from '$lib/components/icons/HashIcon.svelte';
+  import TableColumnsIcon from '$lib/components/icons/TableColumnsIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+  import SpinnerIcon from '$lib/components/icons/SpinnerIcon.svelte';
+  import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
+  import PencilIcon from '$lib/components/icons/PencilIcon.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
+  import ExternalLinkIcon from '$lib/components/icons/ExternalLinkIcon.svelte';
+  import WarningIcon from '$lib/components/icons/WarningIcon.svelte';
   import { useToast } from '$lib/stores/toast.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { loadColPrefs, saveColPrefs } from '$lib/utils/table-prefs';
@@ -1726,18 +1740,7 @@
       aria-label="Filters"
       aria-expanded={showFilterEditor}
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg
-      >
+      <FilterIcon width={14} height={14} />
       {#if filterStateIsActive(filterEditorState)}
         <span class="badge">
           {activeRuleCount(filterEditorState)}
@@ -1771,19 +1774,7 @@
                 disabled={page === 1}
                 aria-label="First page"
               >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="11 18 5 12 11 6"></polyline>
-                  <polyline points="19 18 13 12 19 6"></polyline>
-                </svg>
+                <ChevronDoubleIcon direction="left" width={13} height={13} />
               </button>
             {/if}
             <button
@@ -1792,18 +1783,7 @@
               disabled={page === 1}
               aria-label="Previous page"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <polyline points="15 18 9 12 15 6"></polyline>
-              </svg>
+              <ChevronIcon direction="left" width={13} height={13} />
             </button>
             <button
               class="page-nav-btn page-nav-btn--bordered"
@@ -1811,18 +1791,7 @@
               disabled={dtPageInfo.pageCount !== null && page >= dtPageInfo.pageCount}
               aria-label="Next page"
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
+              <ChevronIcon direction="right" width={13} height={13} />
             </button>
             {#if dtPageInfo.pageCount === null || dtPageInfo.pageCount > 2}
               <button
@@ -1831,19 +1800,7 @@
                 disabled={dtPageInfo.pageCount === null || page >= dtPageInfo.pageCount}
                 aria-label="Last page"
               >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <polyline points="5 18 11 12 5 6"></polyline>
-                  <polyline points="13 18 19 12 13 6"></polyline>
-                </svg>
+                <ChevronDoubleIcon direction="right" width={13} height={13} />
               </button>
             {/if}
           </div>
@@ -1878,17 +1835,7 @@
             title="Preview SQL"
             aria-label="Preview SQL"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg
-            >
+            <ChevronIcon direction="down" width={10} height={10} strokeWidth={2.5} />
           </button>
         </div>
 
@@ -1911,38 +1858,13 @@
           title="Insert new row"
           aria-label="Insert new row"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            ><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
-          >
+          <PlusIcon width={14} height={14} />
         </button>
       {/if}
 
       {#if isRefreshing}
         <span class="refreshing-indicator" title="Refreshing data in background…">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="spin"
-            aria-hidden="true"
-          >
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
+          <SpinnerIcon class="spin" width={13} height={13} />
         </span>
       {/if}
 
@@ -1964,23 +1886,7 @@
           aria-label="Table actions"
           title="Actions"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            ><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle
-              cx="19"
-              cy="12"
-              r="1.2"
-            /></svg
-          >
+          <DotsIcon width={14} height={14} />
         </button>
 
         {#if showActionsMenu}
@@ -2016,29 +1922,7 @@
                   }}
                   disabled={isFetchingCount}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                    ><line x1="4" y1="9" x2="20" y2="9" /><line
-                      x1="4"
-                      y1="15"
-                      x2="20"
-                      y2="15"
-                    /><line x1="10" y1="3" x2="8" y2="21" /><line
-                      x1="16"
-                      y1="3"
-                      x2="14"
-                      y2="21"
-                    /></svg
-                  >
+                  <HashIcon width={13} height={13} />
                   <span>Fetch total row count</span>
                 </button>
               {/if}
@@ -2053,24 +1937,7 @@
                     openColumnPicker();
                   }}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                    ><rect x="3" y="3" width="18" height="18" rx="2" /><line
-                      x1="9"
-                      y1="3"
-                      x2="9"
-                      y2="21"
-                    /><line x1="15" y1="3" x2="15" y2="21" /></svg
-                  >
+                  <TableColumnsIcon size={13} />
                   <span>Columns</span>
                   {#if hiddenColumns.size > 0}
                     <span class="badge actions-menu-badge">{hiddenColumns.size} hidden</span>
@@ -2212,18 +2079,7 @@
 
   {#if showLocalSearch}
     <div class="local-search-bar">
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        ><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg
-      >
+      <SearchIcon width={13} height={13} />
       <input
         bind:this={localSearchInputEl}
         bind:value={localSearchTerm}
@@ -2253,19 +2109,7 @@
         aria-pressed={settings.settings.localSearchHighlight}
         title={settings.settings.localSearchHighlight ? 'Highlighting on' : 'Highlighting off'}
       >
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          ><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
-          /></svg
-        >
+        <PencilIcon width={13} height={13} />
       </button>
       <button
         class="local-search-close"
@@ -2273,17 +2117,7 @@
         aria-label="Close search"
         title="Close (Esc)"
       >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-        >
+        <CloseIcon width={12} height={12} strokeWidth={2.5} />
       </button>
     </div>
   {/if}
@@ -2318,33 +2152,10 @@
         aria-label="Copy error message"
         title="Copy"
       >
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          ><rect x="9" y="9" width="13" height="13" rx="2" /><path
-            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-          /></svg
-        >
+        <CopyIcon width={11} height={11} />
       </button>
       <button class="save-error-close" onclick={() => (exportError = null)} aria-label="Dismiss"
-        ><svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-        ></button
+        ><CloseIcon width={11} height={11} strokeWidth={2.5} /></button
       >
     </div>
   {/if}
@@ -2369,20 +2180,7 @@
           title="Open referencing table"
         >
           View {fkNavigationInfo.referencingTable}
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            ><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline
-              points="15 3 21 3 21 9"
-            /><line x1="10" y1="14" x2="21" y2="3" /></svg
-          >
+          <ExternalLinkIcon width={10} height={10} />
         </button>
       {/if}
       <button
@@ -2394,20 +2192,7 @@
         aria-label="Copy error message"
         title="Copy"
       >
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          ><rect x="9" y="9" width="13" height="13" rx="2" /><path
-            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-          /></svg
-        >
+        <CopyIcon width={11} height={11} />
       </button>
       <button
         class="save-error-close"
@@ -2416,39 +2201,14 @@
           fkNavigationInfo = null;
         }}
         aria-label="Dismiss"
-        ><svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-        ></button
+        ><CloseIcon width={11} height={11} strokeWidth={2.5} /></button
       >
     </div>
   {/if}
 
   {#if showNoPkWarning}
     <div class="no-pk-warning-bar" role="alert">
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path
-          d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-        />
-        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-      </svg>
+      <WarningIcon width={13} height={13} />
       <span class="no-pk-warning-text">
         This table has no primary key. Edits are matched by all column values — avoid editing tables
         with duplicate rows.
@@ -2477,20 +2237,7 @@
             aria-label="Copy error message"
             title="Copy error"
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              ><rect x="9" y="9" width="13" height="13" rx="2" /><path
-                d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-              /></svg
-            >
+            <CopyIcon width={12} height={12} />
           </button>
         </div>
         <span class="error-message">{error}</span>
@@ -3269,7 +3016,7 @@
     color: color-mix(in srgb, var(--color-warning, #f59e0b) 80%, var(--color-text-primary));
   }
 
-  .no-pk-warning-bar svg {
+  .no-pk-warning-bar :global(svg) {
     flex-shrink: 0;
     color: var(--color-warning, #f59e0b);
   }
@@ -3320,7 +3067,7 @@
     opacity: 0.7;
   }
 
-  .spin {
+  :global(.spin) {
     animation: spin 1s linear infinite;
   }
 

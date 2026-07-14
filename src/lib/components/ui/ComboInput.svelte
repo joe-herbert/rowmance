@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { portal } from '$lib/actions/portal';
+  import SmallChevronIcon from '$lib/components/icons/SmallChevronIcon.svelte';
 
   interface Props {
     value?: string;
@@ -147,27 +148,17 @@
     onfocus={openDropdown}
     onkeydown={handleKeydown}
   />
-  <svg
-    class="combo-chevron"
-    class:combo-chevron--open={open}
-    width="10"
-    height="6"
-    viewBox="0 0 10 6"
-    fill="none"
-    aria-hidden="true"
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <span
+    class="combo-chevron{open ? ' combo-chevron--open' : ''}"
     onmousedown={(e) => {
       e.preventDefault();
       if (open) { close(); inputEl?.focus(); } else { inputEl?.focus(); openDropdown(); }
     }}
+    aria-hidden="true"
   >
-    <path
-      d="M1 1l4 4 4-4"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
-  </svg>
+    <SmallChevronIcon />
+  </span>
 </div>
 
 {#if open && filtered.length > 0}

@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
+  import CheckboxCheckIcon from '$lib/components/icons/CheckboxCheckIcon.svelte';
 
   interface Props {
     checked?: boolean;
@@ -49,15 +50,7 @@
     onchange={handleChange}
   />
   <span class="checkbox-box" class:checkbox-box--checked={checked} aria-hidden="true">
-    <svg class="checkbox-check" viewBox="0 0 10 8" fill="none">
-      <path
-        d="M1 4l3 3 5-6"
-        stroke="currentColor"
-        stroke-width="1.75"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
+    <CheckboxCheckIcon class="checkbox-check" />
   </span>
 </label>
 

@@ -31,6 +31,14 @@
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
   import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
+  import LockIcon from '$lib/components/icons/LockIcon.svelte';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
+  import GearIcon from '$lib/components/icons/GearIcon.svelte';
+  import ClockIcon from '$lib/components/icons/ClockIcon.svelte';
+  import CodeOpenIcon from '$lib/components/icons/CodeOpenIcon.svelte';
+  import SidebarLeftIcon from '$lib/components/icons/SidebarLeftIcon.svelte';
+  import SidebarRightIcon from '$lib/components/icons/SidebarRightIcon.svelte';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import { listen } from '@tauri-apps/api/event';
   import { getVersion } from '@tauri-apps/api/app';
@@ -764,19 +772,7 @@
           {#if recordingStore.isRecordingConnection(activeConnection.id)}
             <span class="conn-chip-rec-dot" class:conn-chip-rec-dot--paused={recordingStore.isPaused} aria-label="Recording active"></span>
           {/if}
-          <svg
-            class="conn-chip-chevron"
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-            stroke-linecap="round"
-            aria-hidden="true"
-          >
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
+          <ChevronIcon class="conn-chip-chevron" direction="down" width={10} height={10} strokeWidth={2.2} />
         </button>
         <button
           class="read-only-toggle"
@@ -791,37 +787,9 @@
           aria-pressed={activeConnection.readOnly}
         >
           {#if activeConnection.readOnly}
-            <!-- Locked padlock -->
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
-              <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
-            </svg>
+            <LockIcon open={false} width={12} height={12} />
           {:else}
-            <!-- Unlocked padlock -->
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="5" y="11" width="14" height="9" rx="2"></rect>
-              <path d="M8 11V8a4 4 0 0 1 7.5-3.9"></path>
-            </svg>
+            <LockIcon open={true} width={12} height={12} />
           {/if}
         </button>
       </div>
@@ -876,18 +844,7 @@
       title="Search (⌘F)"
       aria-label="Open global search"
     >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.7"
-        stroke-linecap="round"
-      >
-        <circle cx="11" cy="11" r="7"></circle>
-        <line x1="21" y1="21" x2="16.5" y2="16.5"></line>
-      </svg>
+      <SearchIcon width={14} height={14} strokeWidth={1.7} />
       <span class="titlebar-btn-label">Search</span>
       <kbd>⌘F</kbd>
     </button>
@@ -897,21 +854,7 @@
       title="Settings"
       aria-label="Open settings"
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.7"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <circle cx="12" cy="12" r="3"></circle>
-        <path
-          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-        ></path>
-      </svg>
+      <GearIcon width={15} height={15} />
     </button>
   </div>
 
@@ -1023,11 +966,7 @@
       aria-label="{leftVisible ? 'Hide' : 'Show'} left sidebar"
       title="{leftVisible ? 'Hide' : 'Show'} left sidebar"
     >
-      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2" />
-        <line x1="5" y1="1" x2="5" y2="14" stroke="currentColor" stroke-width="1.2" />
-        <rect x="1.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5" />
-      </svg>
+      <SidebarLeftIcon />
     </button>
     <StatusBar />
     <button
@@ -1037,11 +976,7 @@
       aria-label="{rightVisible ? 'Hide' : 'Show'} right sidebar"
       title="{rightVisible ? 'Hide' : 'Show'} right sidebar"
     >
-      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-        <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2" />
-        <line x1="10" y1="1" x2="10" y2="14" stroke="currentColor" stroke-width="1.2" />
-        <rect x="10.6" y="1.6" width="2.8" height="11.8" rx="1" fill="currentColor" opacity="0.5" />
-      </svg>
+      <SidebarRightIcon />
     </button>
   </div>
 </div>
@@ -1064,18 +999,7 @@
       <span class="conn-chip-tag">{activeConnection.dbType}</span>
     </div>
     <div class="conn-popup-time">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="10"></circle>
-        <polyline points="12 6 12 12 16 14"></polyline>
-      </svg>
+      <ClockIcon width={12} height={12} strokeWidth={1.8} />
       {#if isConnected}
         Connected {elapsedDisplay}
       {:else}
@@ -1125,9 +1049,9 @@
                 onclick={() => (txQueriesExpanded = !txQueriesExpanded)}
                 aria-expanded={txQueriesExpanded}
               >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="transform: rotate({txQueriesExpanded ? 180 : 0}deg); transition: transform 150ms">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
+                <span style="display:flex;transform: rotate({txQueriesExpanded ? 180 : 0}deg); transition: transform 150ms">
+                  <ChevronIcon direction="down" width={10} height={10} strokeWidth={2.2} />
+                </span>
                 {txQueryList.length}
                 {txQueryList.length === 1 ? 'query' : 'queries'} in transaction
               </button>
@@ -1144,11 +1068,7 @@
                         title="Open in editor"
                         aria-label="Open query in editor"
                       >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <polyline points="16 18 22 12 16 6"></polyline>
-                          <polyline points="8 6 2 12 8 18"></polyline>
-                          <line x1="14" y1="5" x2="10" y2="19"></line>
-                        </svg>
+                        <CodeOpenIcon width={11} height={11} />
                       </button>
                     </div>
                   {/each}

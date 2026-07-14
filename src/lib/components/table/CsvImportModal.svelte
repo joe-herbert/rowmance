@@ -12,6 +12,8 @@
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import type { InferredColumn } from '$lib/tauri/import';
   import { errorMessage } from '$lib/utils/errors';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
 
   interface Props {
     connectionId: string;
@@ -166,17 +168,7 @@
     <header class="modal-header">
       <h2 class="modal-title">Import CSV</h2>
       <button class="close-btn" onclick={onclose} aria-label="Close"
-        ><svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-          aria-hidden="true"
-          ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-        ></button
+        ><CloseIcon width={12} height={12} strokeWidth={2.5} /></button
       >
     </header>
 
@@ -281,16 +273,7 @@
       {:else if step === 'done'}
         <div class="done-step">
           <span class="success-icon" aria-hidden="true"
-            ><svg
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
-            ></span
+            ><CheckIcon width={28} height={28} strokeWidth={2} /></span
           >
           <p>
             Successfully imported <strong>{importedCount}</strong> rows into

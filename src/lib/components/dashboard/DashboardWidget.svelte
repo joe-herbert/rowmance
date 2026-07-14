@@ -8,6 +8,13 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import * as queryApi from '$lib/tauri/query';
   import { onMount } from 'svelte';
+  import DragHandleIcon from '$lib/components/icons/DragHandleIcon.svelte';
+  import EditIcon from '$lib/components/icons/EditIcon.svelte';
+  import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
+  import ExternalLinkIcon from '$lib/components/icons/ExternalLinkIcon.svelte';
+  import RotateCcwIcon from '$lib/components/icons/RotateCcwIcon.svelte';
+  import CloseCircleIcon from '$lib/components/icons/CloseCircleIcon.svelte';
+  import ResizeIcon from '$lib/components/icons/ResizeIcon.svelte';
 
   interface Props {
     widget: DashboardWidget;
@@ -286,28 +293,24 @@
         aria-label="Drag to reorder"
         onpointerdown={onDragStart}
       >
-        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-          <circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/>
-          <circle cx="2" cy="7" r="1.3"/><circle cx="8" cy="7" r="1.3"/>
-          <circle cx="2" cy="12" r="1.3"/><circle cx="8" cy="12" r="1.3"/>
-        </svg>
+        <DragHandleIcon />
       </button>
     {/if}
     <span class="widget-title">{widget.title}</span>
     <div class="widget-actions">
       {#if editMode}
         <button class="action-btn" onclick={onEdit} title="Edit widget" type="button">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <EditIcon width={12} height={12} strokeWidth={2} />
         </button>
         <button class="action-btn action-btn--danger" onclick={onDelete} title="Delete widget" type="button">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          <TrashIcon width={12} height={12} strokeWidth={2} />
         </button>
       {:else}
         <button class="action-btn" onclick={openInEditor} title="Open in query editor" type="button">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+          <ExternalLinkIcon width={12} height={12} strokeWidth={2} />
         </button>
         <button class="refresh-btn" onclick={fetchData} title="Refresh" type="button">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <RotateCcwIcon width={11} height={11} strokeWidth={2} />
         </button>
       {/if}
     </div>
@@ -320,7 +323,7 @@
       </div>
     {:else if error}
       <div class="state-placeholder state-placeholder--error">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <CloseCircleIcon width={16} height={16} />
         <span>{error}</span>
       </div>
     {:else if widget.displayType === 'count'}
@@ -466,11 +469,7 @@
       onpointerdown={onResizeStart}
       type="button"
     >
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-        <line x1="3" y1="10" x2="10" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="6" y1="10" x2="10" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        <line x1="9" y1="10" x2="10" y2="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
+      <ResizeIcon />
     </button>
   {/if}
 </div>

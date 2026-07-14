@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/components/Modal.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { useRevert, type RevertEntry, type RevertRowChange } from '$lib/stores/revert.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
@@ -108,20 +109,7 @@
           {@const isExpanded = expandedIds.has(entry.id)}
           <div class="entry" class:entry--reverted={entry.reverted}>
             <button class="entry-header" onclick={() => toggleExpand(entry.id)}>
-              <svg
-                class="chevron"
-                class:chevron--open={isExpanded}
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
+              <ChevronIcon class="chevron{isExpanded ? ' chevron--open' : ''}" direction="down" width={10} height={10} strokeWidth={2.5} />
               <span class="entry-table">
                 {#if entry.source === 'query'}
                   <span class="source-badge source-badge--query">Query</span>

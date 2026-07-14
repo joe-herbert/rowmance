@@ -25,6 +25,7 @@
   import { getVersion } from '@tauri-apps/api/app';
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
 
   type Section = 'general' | 'table-view' | 'editor' | 'keyboard' | 'connections' | 'appearance' | 'ai';
 
@@ -1104,17 +1105,7 @@
       <header class="modal-header">
         <h2 class="modal-title">New Theme</h2>
         <button class="close-btn" onclick={cancelCreateTheme} aria-label="Close"
-          ><svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            aria-hidden="true"
-            ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-          ></button
+          ><CloseIcon width={12} height={12} strokeWidth={2.5} /></button
         >
       </header>
 
@@ -1164,17 +1155,7 @@
       <header class="modal-header">
         <h2 class="modal-title">Delete Theme</h2>
         <button class="close-btn" onclick={() => (confirmingDelete = false)} aria-label="Close"
-          ><svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            aria-hidden="true"
-            ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-          ></button
+          ><CloseIcon width={12} height={12} strokeWidth={2.5} /></button
         >
       </header>
       <div class="modal-body">

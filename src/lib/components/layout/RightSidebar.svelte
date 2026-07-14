@@ -5,6 +5,18 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
+  import ClockIcon from '$lib/components/icons/ClockIcon.svelte';
+  import BookmarkIcon from '$lib/components/icons/BookmarkIcon.svelte';
+  import SearchPlusIcon from '$lib/components/icons/SearchPlusIcon.svelte';
+  import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
+  import JsonIcon from '$lib/components/icons/JsonIcon.svelte';
+  import GridIcon from '$lib/components/icons/GridIcon.svelte';
+  import FolderPlusIcon from '$lib/components/icons/FolderPlusIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+  import SavedQueryIcon from '$lib/components/icons/SavedQueryIcon.svelte';
+  import DragHandleIcon from '$lib/components/icons/DragHandleIcon.svelte';
+  import FolderIcon from '$lib/components/icons/FolderIcon.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
@@ -879,18 +891,7 @@
         selectPanel('history');
       }}
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        ><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg
-      >
+      <ClockIcon width={15} height={15} />
     </button>
 
     <button
@@ -905,17 +906,7 @@
         selectPanel('saved');
       }}
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg
-      >
+      <BookmarkIcon width={15} height={15} />
     </button>
 
     <button
@@ -930,23 +921,7 @@
         selectPanel('column');
       }}
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        ><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line
-          x1="8"
-          y1="11"
-          x2="14"
-          y2="11"
-        /><line x1="11" y1="8" x2="11" y2="14" /></svg
-      >
+      <SearchPlusIcon width={15} height={15} />
     </button>
 
     <button
@@ -961,20 +936,7 @@
         selectPanel('relations');
       }}
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        ><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path
-          d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-        /></svg
-      >
+      <LinkIcon width={15} height={15} />
     </button>
 
     <button
@@ -989,19 +951,7 @@
         selectPanel('json');
       }}
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
-      </svg>
+      <JsonIcon width={15} height={15} />
     </button>
 
     <button
@@ -1016,12 +966,7 @@
         selectPanel('dashboards');
       }}
     >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
-        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
-        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
-        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
-      </svg>
+      <GridIcon width={13} height={13} />
     </button>
   </div>
 
@@ -1103,23 +1048,7 @@
             title="New folder"
             aria-label="New folder"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.9"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path
-                d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-              />
-              <line x1="12" y1="11" x2="12" y2="17" />
-              <line x1="9" y1="14" x2="15" y2="14" />
-            </svg>
+            <FolderPlusIcon width={14} height={14} />
           </button>
           <button
             class="icon-btn"
@@ -1129,20 +1058,7 @@
             title="New query"
             aria-label="New query"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.9"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
+            <PlusIcon width={14} height={14} />
           </button>
         </div>
 
@@ -1234,20 +1150,7 @@
                     : `Open ${query.name}`}
                 >
                   <span class="query-icon" aria-hidden="true"
-                    ><svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.7"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      ><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                      ></path><polyline points="14 2 14 8 20 8"></polyline><polyline
-                        points="9.5 13 8 15 9.5 17"
-                      ></polyline><polyline points="14.5 13 16 15 14.5 17"></polyline></svg
-                    ></span
+                    ><SavedQueryIcon width={13} height={13} /></span
                   >
                   <span class="query-name">{query.name}</span>
                   {#if query.connectionStatus === 'unresolved'}
@@ -1268,17 +1171,7 @@
                     {/if}
                   {/if}
                   <span class="drag-handle" aria-hidden="true"
-                    ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
-                      ><circle cx="2" cy="2" r="1.2" /><circle cx="6" cy="2" r="1.2" /><circle
-                        cx="2"
-                        cy="6"
-                        r="1.2"
-                      /><circle cx="6" cy="6" r="1.2" /><circle cx="2" cy="10" r="1.2" /><circle
-                        cx="6"
-                        cy="10"
-                        r="1.2"
-                      /></svg
-                    ></span
+                    ><DragHandleIcon /></span
                   >
                 </button>
               {/if}
@@ -1319,46 +1212,15 @@
                     aria-label="{isOpen ? 'Collapse' : 'Expand'} folder {folder.name}"
                   >
                     <span class="folder-icon" aria-hidden="true"
-                      ><svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        ><path
-                          d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-                        /></svg
-                      ></span
+                      ><FolderIcon width={13} height={13} /></span
                     >
                     <span class="folder-name">{folder.name}</span>
                     <span class="count-badge">{folderDirectQueries.length}</span>
                     <span class="chevron" class:open={isOpen} aria-hidden="true"
-                      ><svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg
-                      ></span
+                      ><ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} /></span
                     >
                     <span class="drag-handle" aria-hidden="true"
-                      ><svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor"
-                        ><circle cx="2" cy="2" r="1.2" /><circle cx="6" cy="2" r="1.2" /><circle
-                          cx="2"
-                          cy="6"
-                          r="1.2"
-                        /><circle cx="6" cy="6" r="1.2" /><circle cx="2" cy="10" r="1.2" /><circle
-                          cx="6"
-                          cy="10"
-                          r="1.2"
-                        /></svg
-                      ></span
+                      ><DragHandleIcon /></span
                     >
                   </button>
 
@@ -1900,11 +1762,11 @@
     flex-shrink: 0;
   }
 
-  .chevron svg {
+  .chevron :global(svg) {
     transition: transform var(--transition-fast);
   }
 
-  .chevron.open svg {
+  .chevron.open :global(svg) {
     transform: rotate(90deg);
   }
 

@@ -9,6 +9,7 @@
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import TabBar from './TabBar.svelte';
   import Panel from './Panel.svelte';
+  import ArrowIcon from '$lib/components/icons/ArrowIcon.svelte';
 
   interface Props {
     splitId: string;
@@ -128,19 +129,7 @@
       aria-label="Drop here to split left"
     >
       <span class="drop-zone-label drop-zone-label--vertical">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="11 18 5 12 11 6"></polyline>
-        </svg>
+        <ArrowIcon direction="left" width={13} height={13} />
         Split left
       </span>
     </div>
@@ -155,19 +144,7 @@
       aria-label="Drop here to split right"
     >
       <span class="drop-zone-label drop-zone-label--vertical">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-          <polyline points="13 6 19 12 13 18"></polyline>
-        </svg>
+        <ArrowIcon direction="right" width={13} height={13} />
         Split right
       </span>
     </div>
@@ -184,19 +161,7 @@
       aria-label="Drop here to split up"
     >
       <span class="drop-zone-label">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <line x1="12" y1="19" x2="12" y2="5"></line>
-          <polyline points="18 11 12 5 6 11"></polyline>
-        </svg>
+        <ArrowIcon direction="up" width={13} height={13} />
         Split up
       </span>
     </div>
@@ -211,19 +176,7 @@
       aria-label="Drop here to split down"
     >
       <span class="drop-zone-label">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <polyline points="6 13 12 19 18 13"></polyline>
-        </svg>
+        <ArrowIcon direction="down" width={13} height={13} />
         Split down
       </span>
     </div>

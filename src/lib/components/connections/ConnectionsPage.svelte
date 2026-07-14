@@ -21,6 +21,19 @@
   import Modal from '$lib/components/Modal.svelte';
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import type { ConnectionProfile } from '$lib/types';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import FolderPlusIcon from '$lib/components/icons/FolderPlusIcon.svelte';
+  import DbIcon from '$lib/components/icons/DbIcon.svelte';
+  import UploadIcon from '$lib/components/icons/UploadIcon.svelte';
+  import DownloadIcon from '$lib/components/icons/DownloadIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+  import TerminalIcon from '$lib/components/icons/TerminalIcon.svelte';
+  import EditIcon from '$lib/components/icons/EditIcon.svelte';
+  import LockIcon from '$lib/components/icons/LockIcon.svelte';
+  import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
+  import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
+  import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
@@ -362,20 +375,7 @@
 
     <div class="header-actions">
       <div class="search-wrap">
-        <svg
-          class="search-icon"
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
+        <SearchIcon class="search-icon" width={13} height={13} />
         <input
           class="search-input"
           type="text"
@@ -389,10 +389,7 @@
         />
         {#if filterQuery}
           <button class="search-clear" onclick={() => (filterQuery = '')} aria-label="Clear filter">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+            <CloseIcon width={11} height={11} strokeWidth={2.5} />
           </button>
         {/if}
       </div>
@@ -402,19 +399,11 @@
         onclick={() => { newGroupName = ''; newGroupError = ''; showCreateGroupModal = true; }}
         title="New folder"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-          <line x1="12" y1="11" x2="12" y2="17"></line>
-          <line x1="9" y1="14" x2="15" y2="14"></line>
-        </svg>
+        <FolderPlusIcon width={13} height={13} />
         New Folder
       </button>
       <button class="action-btn" onclick={handleImport} title="Import connections from JSON">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="17 8 12 3 7 8"></polyline>
-          <line x1="12" y1="3" x2="12" y2="15"></line>
-        </svg>
+        <UploadIcon width={13} height={13} />
         Import
       </button>
       <button
@@ -423,21 +412,14 @@
         title="Export connections to JSON"
         disabled={connectionStore.profiles.length === 0}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
+        <DownloadIcon width={13} height={13} />
         Export
       </button>
       <button
         class="action-btn action-btn--primary"
         onclick={() => { editingProfile = undefined; newConnectionGroupId = null; showAddForm = true; }}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
+        <PlusIcon width={13} height={13} />
         Add Connection
       </button>
     </div>
@@ -448,11 +430,7 @@
     {#if connectionStore.profiles.length === 0}
       <div class="empty-state">
         <div class="empty-icon" aria-hidden="true">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-          </svg>
+          <DbIcon size={40} />
         </div>
         <p class="empty-title">No connections yet</p>
         <p class="empty-subtitle">Add your first connection to get started</p>
@@ -751,10 +729,7 @@
           title="New query editor"
           aria-label="New query editor"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="4 17 10 11 4 5"></polyline>
-            <line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg>
+          <TerminalIcon width={13} height={13} />
         </button>
         <button
           class="card-icon-btn"
@@ -762,10 +737,7 @@
           title="Edit"
           aria-label="Edit connection"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
+          <EditIcon width={13} height={13} />
         </button>
         <button
           class="card-icon-btn"
@@ -774,15 +746,9 @@
           aria-label={profile.readOnly ? 'Disable read only' : 'Enable read only'}
         >
           {#if profile.readOnly}
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-            </svg>
+            <LockIcon open={false} width={13} height={13} />
           {:else}
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
+            <LockIcon open={true} width={13} height={13} />
           {/if}
         </button>
         <button
@@ -791,10 +757,7 @@
           title="Copy as database URL"
           aria-label="Copy as database URL"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
+          <CopyIcon width={13} height={13} />
         </button>
         <button
           class="card-icon-btn"
@@ -802,11 +765,7 @@
           title="Export"
           aria-label="Export connection"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
+          <DownloadIcon width={13} height={13} />
         </button>
         <button
           class="card-icon-btn card-icon-btn--danger"
@@ -814,13 +773,7 @@
           title="Delete"
           aria-label="Delete connection"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-            <path d="M10 11v6"></path>
-            <path d="M14 11v6"></path>
-            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-          </svg>
+          <TrashIcon width={13} height={13} />
         </button>
         <button
           class="card-icon-btn card-more-btn"
@@ -828,11 +781,7 @@
           title="More actions"
           aria-label="More actions"
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <circle cx="5" cy="12" r="2"></circle>
-            <circle cx="12" cy="12" r="2"></circle>
-            <circle cx="19" cy="12" r="2"></circle>
-          </svg>
+          <DotsIcon width={13} height={13} />
         </button>
       </div>
     </div>
@@ -898,7 +847,7 @@
     flex: 1;
   }
 
-  .search-icon {
+  :global(.search-icon) {
     position: absolute;
     left: 9px;
     color: var(--color-text-muted);

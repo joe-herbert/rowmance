@@ -13,6 +13,11 @@
   import IconPicker from './IconPicker.svelte';
   import { portal } from '$lib/actions/portal';
   import { exportDashboard } from '$lib/utils/dashboard-io';
+  import EditIcon from '$lib/components/icons/EditIcon.svelte';
+  import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+  import DownloadIcon from '$lib/components/icons/DownloadIcon.svelte';
+  import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+  import GridIcon from '$lib/components/icons/GridIcon.svelte';
 
   interface Props {
     dashboardId: string;
@@ -266,7 +271,7 @@
         >
           {@html dashboard.icon}
           <span class="icon-edit-hint">
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <EditIcon width={9} height={9} strokeWidth={2.5} />
           </span>
         </button>
         {#if showIconPicker}
@@ -321,7 +326,7 @@
             title="Export dashboard to file"
             type="button"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <DownloadIcon width={13} height={13} />
             Export
           </button>
         {/if}
@@ -333,13 +338,10 @@
           type="button"
         >
           {#if editMode}
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <CheckIcon width={13} height={13} strokeWidth={2} />
             Done
           {:else}
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
+            <EditIcon width={13} height={13} strokeWidth={2} />
             Edit
           {/if}
         </button>
@@ -350,7 +352,7 @@
             title="Add widget"
             type="button"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <PlusIcon width={13} height={13} strokeWidth={2.2} />
             Add Widget
           </button>
         {/if}
@@ -361,7 +363,7 @@
     <div bind:this={gridEl} class="widget-grid">
       {#if dashboard.widgets.length === 0}
         <div class="empty-grid">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <GridIcon width={40} height={40} strokeWidth={1.2} />
           <p>No widgets yet.</p>
           <button
             class="empty-add-btn"

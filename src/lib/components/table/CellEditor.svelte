@@ -11,6 +11,9 @@
   import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
   import BooleanPicker from '$lib/components/ui/BooleanPicker.svelte';
   import { executeQuery } from '$lib/tauri/query';
+  import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+  import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import ExpandIcon from '$lib/components/icons/ExpandIcon.svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -468,17 +471,7 @@
   use:portal
 >
   <button class="action-btn confirm-btn" onclick={confirmEdit} title="Confirm (Enter)"
-    ><svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
-    ></button
+    ><CheckIcon width={12} height={12} strokeWidth={2.5} /></button
   >
   {#if onOpenModal}
     <button
@@ -486,23 +479,7 @@
       onclick={() => onOpenModal!(getConfirmedValue())}
       title="Open in modal"
       aria-label="Open in modal"
-      ><svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-        ><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line
-          x1="21"
-          y1="3"
-          x2="14"
-          y2="10"
-        /><line x1="3" y1="21" x2="10" y2="14" /></svg
-      ></button
+      ><ExpandIcon width={12} height={12} /></button
     >
   {/if}
   {#if inputType !== 'boolean' && showPicker}
@@ -524,17 +501,7 @@
     </button>
   {/if}
   <button class="action-btn cancel-btn" onclick={onCancel} title="Cancel (Escape)"
-    ><svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2.5"
-      stroke-linecap="round"
-      aria-hidden="true"
-      ><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
-    ></button
+    ><CloseIcon width={12} height={12} strokeWidth={2.5} /></button
   >
 </div>
 

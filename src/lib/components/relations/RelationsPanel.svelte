@@ -17,6 +17,12 @@
   import Loader from '$lib/components/ui/Loader.svelte';
   import { listen } from '@tauri-apps/api/event';
   import { portal } from '$lib/actions/portal';
+  import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
+  import CloseCircleIcon from '$lib/components/icons/CloseCircleIcon.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
+  import TableSmIcon from '$lib/components/icons/TableSmIcon.svelte';
+  import OpenInPanelIcon from '$lib/components/icons/OpenInPanelIcon.svelte';
+  import RelArrowIcon from '$lib/components/icons/RelArrowIcon.svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -313,33 +319,12 @@
 <div class="relations-panel" bind:this={panelEl}>
   {#if !sel || !sel.columnName}
     <div class="empty-state">
-      <svg
-        class="empty-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
-        />
-      </svg>
+      <LinkIcon class="empty-icon" />
       <p>Select a table cell to explore its relations</p>
     </div>
   {:else if sel.cellValue === null || sel.cellValue === undefined}
     <div class="empty-state">
-      <svg
-        class="empty-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round" />
-      </svg>
+      <CloseCircleIcon class="empty-icon" />
       <p>Cell is NULL — no relations to show</p>
     </div>
   {:else}
@@ -359,18 +344,7 @@
       <div class="global-state"><Loader /><span>Loading relations…</span></div>
     {:else if relations.length === 0}
       <div class="empty-state">
-        <svg
-          class="empty-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-        </svg>
+        <LinkIcon class="empty-icon" />
         <p>No relations found for <span class="inline-col">{sel.columnName}</span></p>
       </div>
     {:else}
@@ -396,25 +370,14 @@
                 onclick={() => (forwardExpanded = !forwardExpanded)}
               >
                 <div class="section-icon forward-icon">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M3 8h10M9 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
+                  <RelArrowIcon direction="forward" />
                 </div>
                 <div class="section-info">
                   <span class="section-label">References</span>
                   <span class="section-desc">{sel.table} → foreign key targets</span>
                 </div>
                 <span class="section-count">{forwardRelations.length}</span>
-                <svg
-                  class="section-chevron"
-                  class:collapsed={!forwardExpanded}
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
-                  <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <ChevronIcon class="section-chevron {!forwardExpanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
               </button>
             {/if}
 
@@ -430,16 +393,7 @@
                       onclick={() => (rel.expanded = !rel.expanded)}
                       onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}
                     >
-                      <svg
-                        class="table-icon"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                      >
-                        <rect x="2" y="3" width="12" height="10" rx="1" />
-                        <path d="M2 7h12M6 7v6" />
-                      </svg>
+                      <TableSmIcon class="table-icon" />
                       <span class="card-header-text">
                         <span class="card-table">{rel.targetTable}</span>
                         <span class="card-filter">{rel.filterColumn}</span>
@@ -462,29 +416,9 @@
                           openRelation(sel, rel);
                         }}
                       >
-                        <svg
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                        >
-                          <path
-                            d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          />
-                        </svg>
+                        <OpenInPanelIcon />
                       </button>
-                      <svg
-                        class="card-chevron"
-                        class:collapsed={!rel.expanded}
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                      >
-                        <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-                      </svg>
+                      <ChevronIcon class="card-chevron {!rel.expanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
                     </div>
 
                     <div class="card-collapse" class:collapsed={!rel.expanded}>
@@ -557,25 +491,14 @@
                 onclick={() => (reverseExpanded = !reverseExpanded)}
               >
                 <div class="section-icon reverse-icon">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M13 8H3M7 4L3 8l4 4" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
+                  <RelArrowIcon direction="back" />
                 </div>
                 <div class="section-info">
                   <span class="section-label">Referenced by</span>
                   <span class="section-desc">tables pointing to {sel.table}</span>
                 </div>
                 <span class="section-count">{reverseRelations.length}</span>
-                <svg
-                  class="section-chevron"
-                  class:collapsed={!reverseExpanded}
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
-                  <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <ChevronIcon class="section-chevron {!reverseExpanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
               </button>
             {/if}
 
@@ -591,16 +514,7 @@
                       onclick={() => (rel.expanded = !rel.expanded)}
                       onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}
                     >
-                      <svg
-                        class="table-icon"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                      >
-                        <rect x="2" y="3" width="12" height="10" rx="1" />
-                        <path d="M2 7h12M6 7v6" />
-                      </svg>
+                      <TableSmIcon class="table-icon" />
                       <span class="card-header-text">
                         <span class="card-table">{rel.targetTable}</span>
                         <span class="card-filter">{rel.filterColumn}</span>
@@ -623,29 +537,9 @@
                           openRelation(sel, rel);
                         }}
                       >
-                        <svg
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                        >
-                          <path
-                            d="M10 3h3v3M13 3l-5.5 5.5M7 4H4a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V9"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                          />
-                        </svg>
+                        <OpenInPanelIcon />
                       </button>
-                      <svg
-                        class="card-chevron"
-                        class:collapsed={!rel.expanded}
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                      >
-                        <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-                      </svg>
+                      <ChevronIcon class="card-chevron {!rel.expanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
                     </div>
 
                     <div class="card-collapse" class:collapsed={!rel.expanded}>
@@ -913,7 +807,7 @@
     flex-shrink: 0;
   }
 
-  .section-icon svg {
+  .section-icon :global(svg) {
     width: 12px;
     height: 12px;
   }
@@ -1058,7 +952,7 @@
     color: var(--color-text-primary);
   }
 
-  .card-open-btn svg {
+  .card-open-btn :global(svg) {
     width: 11px;
     height: 11px;
   }

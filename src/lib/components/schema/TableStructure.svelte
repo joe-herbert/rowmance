@@ -23,6 +23,11 @@
   import Loader from '$lib/components/ui/Loader.svelte';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
+  import DragHandleIcon from '$lib/components/icons/DragHandleIcon.svelte';
+  import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+  import PencilSmIcon from '$lib/components/icons/PencilSmIcon.svelte';
+  import TrashSmIcon from '$lib/components/icons/TrashSmIcon.svelte';
+  import LinkSmIcon from '$lib/components/icons/LinkSmIcon.svelte';
 
   interface Props {
     connectionId: string;
@@ -713,22 +718,7 @@
                         aria-hidden="true"
                         onpointerdown={(e) => onColDragHandlePointerDown(e, i)}
                       >
-                        <svg
-                          width="10"
-                          height="14"
-                          viewBox="0 0 10 14"
-                          fill="currentColor"
-                          aria-hidden="true"
-                          ><circle cx="3" cy="2.5" r="1.2" /><circle cx="7" cy="2.5" r="1.2" /><circle
-                            cx="3"
-                            cy="7"
-                            r="1.2"
-                          /><circle cx="7" cy="7" r="1.2" /><circle
-                            cx="3"
-                            cy="11.5"
-                            r="1.2"
-                          /><circle cx="7" cy="11.5" r="1.2" /></svg
-                        >
+                        <DragHandleIcon />
                       </span>
                     </td>
                   {/if}
@@ -744,31 +734,11 @@
                       >{/if}
                   </td>
                   <td class="col-null center-cell"
-                    >{#if col.nullable}<svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
-                      >{/if}</td
+                    >{#if col.nullable}<CheckIcon width={12} height={12} strokeWidth={2.5} />{/if}</td
                   >
                   <td class="col-unique center-cell">
                     {#if uniqueColumns.has(col.name) || col.isPrimaryKey}
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
-                      >
+                      <CheckIcon width={12} height={12} strokeWidth={2.5} />
                     {/if}
                   </td>
                   <td class="col-default mono">{col.defaultValue ?? ''}</td>
@@ -780,19 +750,7 @@
                           title="Edit column"
                           onclick={() => openEditCol(col)}
                         >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"
-                          >
-                            <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z" />
-                          </svg>
+                          <PencilSmIcon />
                         </button>
                         <button
                           class="act-btn act-btn--danger"
@@ -800,43 +758,14 @@
                           onclick={() =>
                             requestDrop(`Drop column "${col.name}"?`, [buildDropColSql(col.name)])}
                         >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"
-                          >
-                            <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9" />
-                          </svg>
+                          <TrashSmIcon />
                         </button>
                         <button
                           class="act-btn act-btn--connect"
                           title="Add virtual relation"
                           onclick={() => openAddVr(col.name)}
                         >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M6.5 9.5a3.5 3.5 0 0 0 4.95 0l2-2a3.5 3.5 0 0 0-4.95-4.95l-1 1"
-                            />
-                            <path
-                              d="M9.5 6.5a3.5 3.5 0 0 0-4.95 0l-2 2a3.5 3.5 0 0 0 4.95 4.95l1-1"
-                            />
-                          </svg>
+                          <LinkSmIcon />
                         </button>
                       </div>
                     </td>
@@ -885,19 +814,7 @@
                         onclick={() =>
                           requestDrop(`Drop index "${idx.name}"?`, [buildDropIdxSql(idx.name)])}
                       >
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9" />
-                        </svg>
+                        <TrashSmIcon />
                       </button>
                     </div>
                   {/if}
@@ -928,19 +845,7 @@
                           buildDropFkSql(fk.constraintName),
                         ])}
                     >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9" />
-                      </svg>
+                      <TrashSmIcon />
                     </button>
                   {/if}
                   <div class="fk-name mono">{fk.constraintName}</div>
@@ -994,19 +899,7 @@
                 <div class="fk-card vr-card">
                   <div class="vr-actions">
                     <button class="act-btn" title="Edit connection" onclick={() => openEditVr(vr)}>
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z" />
-                      </svg>
+                      <PencilSmIcon />
                     </button>
                     <button
                       class="act-btn act-btn--danger"
@@ -1015,19 +908,7 @@
                         vrStore.remove(vr.id);
                       }}
                     >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9" />
-                      </svg>
+                      <TrashSmIcon />
                     </button>
                   </div>
                   {#if vr.label}
@@ -1078,14 +959,10 @@
                 <div class="fk-card vr-card">
                   <div class="vr-actions">
                     <button class="act-btn" title="Edit relation" onclick={() => { pvrEditModal = pvr; }}>
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M11 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11 2.5z" />
-                      </svg>
+                      <PencilSmIcon />
                     </button>
                     <button class="act-btn act-btn--danger" title="Remove relation" onclick={() => vrStore.removePolymorphic(pvr.id)}>
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M6 2h4M2 5h12M4 5l1 9h6l1-9" />
-                      </svg>
+                      <TrashSmIcon />
                     </button>
                   </div>
                   {#if pvr.label}

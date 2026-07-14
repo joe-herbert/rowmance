@@ -16,6 +16,7 @@
   }
 
   import { untrack } from 'svelte';
+  import SmallChevronIcon from '$lib/components/icons/SmallChevronIcon.svelte';
 
   const [initH, initM, initS] = untrack(() => parseTime(value));
   let h = $state(initH);
@@ -166,17 +167,7 @@
 <div class="time-picker">
   <div class="tp-col">
     <button class="tp-arrow" onclick={() => adjustH(1)} aria-label="Increment hours" tabindex="-1">
-      <svg
-        width="10"
-        height="6"
-        viewBox="0 0 10 6"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="1 5 5 1 9 5" /></svg
-      >
+      <SmallChevronIcon direction="up" />
     </button>
     <input
       class="tp-input"
@@ -192,17 +183,7 @@
       aria-label="Hours"
     />
     <button class="tp-arrow" onclick={() => adjustH(-1)} aria-label="Decrement hours" tabindex="-1">
-      <svg
-        width="10"
-        height="6"
-        viewBox="0 0 10 6"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="1 1 5 5 9 1" /></svg
-      >
+      <SmallChevronIcon direction="down" />
     </button>
     <span class="tp-label">HH</span>
   </div>
@@ -216,17 +197,7 @@
       aria-label="Increment minutes"
       tabindex="-1"
     >
-      <svg
-        width="10"
-        height="6"
-        viewBox="0 0 10 6"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="1 5 5 1 9 5" /></svg
-      >
+      <SmallChevronIcon direction="up" />
     </button>
     <input
       class="tp-input"
@@ -247,17 +218,7 @@
       aria-label="Decrement minutes"
       tabindex="-1"
     >
-      <svg
-        width="10"
-        height="6"
-        viewBox="0 0 10 6"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="1 1 5 5 9 1" /></svg
-      >
+      <SmallChevronIcon direction="down" />
     </button>
     <span class="tp-label">MM</span>
   </div>
@@ -271,17 +232,7 @@
       aria-label="Increment seconds"
       tabindex="-1"
     >
-      <svg
-        width="10"
-        height="6"
-        viewBox="0 0 10 6"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="1 5 5 1 9 5" /></svg
-      >
+      <SmallChevronIcon direction="up" />
     </button>
     <input
       class="tp-input"
@@ -302,17 +253,7 @@
       aria-label="Decrement seconds"
       tabindex="-1"
     >
-      <svg
-        width="10"
-        height="6"
-        viewBox="0 0 10 6"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"><polyline points="1 1 5 5 9 1" /></svg
-      >
+      <SmallChevronIcon direction="down" />
     </button>
     <span class="tp-label">SS</span>
   </div>
