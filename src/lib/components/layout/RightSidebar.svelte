@@ -22,6 +22,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
+  import DashboardsPanel from '$lib/components/dashboard/DashboardsPanel.svelte';
   import JsonViewerPanel from '$lib/components/json/JsonViewerPanel.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -31,7 +32,7 @@
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
 
-  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | 'json' | null;
+  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | 'json' | 'dashboards' | null;
 
   interface Props {
     initialPanel?: ActivePanel;
@@ -1002,6 +1003,26 @@
         <path d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
       </svg>
     </button>
+
+    <button
+      class="tab-btn"
+      class:active={activePanel === 'dashboards'}
+      role="tab"
+      aria-selected={activePanel === 'dashboards'}
+      aria-controls="panel-dashboards"
+      title="Dashboards"
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('dashboards');
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+      </svg>
+    </button>
   </div>
 
   <!-- Panel content -->
@@ -1462,6 +1483,10 @@
           <span class="panel-title">JSON Viewer</span>
         </div>
         <JsonViewerPanel />
+      </div>
+    {:else if activePanel === 'dashboards'}
+      <div id="panel-dashboards" role="tabpanel" aria-label="Dashboards" class="relations-tabpanel">
+        <DashboardsPanel />
       </div>
     {/if}
   </div>

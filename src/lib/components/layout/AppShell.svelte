@@ -26,6 +26,7 @@
   import RevertModal from '$lib/components/ui/RevertModal.svelte';
   import { useRecording } from '$lib/stores/recording.svelte';
   import { useRevert } from '$lib/stores/revert.svelte';
+  import { useDashboards } from '$lib/stores/dashboards.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
@@ -61,6 +62,7 @@
   const panelStore = usePanels();
   const shortcutsStore = useShortcuts();
   const connectionsStore = useConnections();
+  const dashboardsStore = useDashboards();
   const toast = useToast();
   const recordingStore = useRecording();
   const revertStore = useRevert();
@@ -849,6 +851,23 @@
     {/if}
 
     <div class="titlebar-spacer" data-tauri-drag-region></div>
+
+    {#if dashboardsStore.pinned.length > 0}
+      <div class="pinned-dashboards" data-tauri-drag-region="false">
+        {#each dashboardsStore.pinned as dashboard (dashboard.id)}
+          <button
+            class="pinned-dash-btn"
+            onclick={() => panelStore.openInFocused({ kind: 'dashboard', dashboardId: dashboard.id })}
+            title={dashboard.name}
+            type="button"
+          >
+            <span class="pinned-dash-icon" aria-hidden="true">{@html dashboard.icon}</span>
+            <span class="pinned-dash-name">{dashboard.name}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+    
     <button
       class="titlebar-btn"
       onclick={openGlobalSearch}
@@ -1934,6 +1953,51 @@
   .view-btn:disabled {
     opacity: 0.35;
     cursor: default;
+  }
+
+  .pinned-dashboards {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .pinned-dash-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    cursor: pointer;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+    max-width: 130px;
+  }
+
+  .pinned-dash-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .pinned-dash-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    color: var(--color-accent);
+  }
+
+  .pinned-dash-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .titlebar-btn {

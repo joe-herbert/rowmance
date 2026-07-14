@@ -19,11 +19,14 @@
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
+  import { useDashboards } from '$lib/stores/dashboards.svelte';
 
   const panelStore = usePanels();
   const tabDrag = useTabDrag();
   const connectionStore = useConnections();
   const settingsStore = useSettings();
+  const dashboardsStore = useDashboards();
+  const dashboardsById = $derived(new Map(dashboardsStore.dashboards.map((d) => [d.id, d])));
 
   function panelLabel(content: PanelKind): string {
     switch (content.kind) {
@@ -49,6 +52,8 @@
         return `What's New in ${content.version}`;
       case 'connections':
         return 'Connections';
+      case 'dashboard':
+        return dashboardsById.get(content.dashboardId)?.name ?? 'Dashboard';
       case 'empty':
         return 'Empty';
     }
@@ -532,6 +537,8 @@
                     <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
                     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
                   </svg>
+                {:else if item.content.kind === 'dashboard'}
+                  <span class="item-dash-icon">{@html dashboardsById.get(item.content.dashboardId)?.icon ?? ''}</span>
                 {:else}
                   <svg
                     width="14"
@@ -835,6 +842,8 @@
                           <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
                           <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
                         </svg>
+                      {:else if item.content.kind === 'dashboard'}
+                        <span class="item-dash-icon">{@html dashboardsById.get(item.content.dashboardId)?.icon ?? ''}</span>
                       {:else}
                         <svg
                           width="14"
@@ -1234,6 +1243,18 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
+  }
+
+  .item-dash-icon {
+    display: flex;
+    align-items: center;
+    width: 14px;
+    height: 14px;
+  }
+
+  .item-dash-icon :global(svg) {
+    width: 14px;
+    height: 14px;
   }
 
   .panel-label {

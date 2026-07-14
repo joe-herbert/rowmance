@@ -19,6 +19,7 @@
   import SpeedAnalysis from '$lib/components/speed/SpeedAnalysis.svelte';
   import ReleaseNotes from '$lib/components/release/ReleaseNotes.svelte';
   import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
+  import DashboardPanel from '$lib/components/dashboard/DashboardPanel.svelte';
 
   interface Props {
     panel: PanelState;
@@ -104,6 +105,10 @@
     <ReleaseNotes version={panel.content.version} notes={panel.content.notes} />
   {:else if panel.content.kind === 'connections'}
     <ConnectionsPage />
+  {:else if panel.content.kind === 'dashboard'}
+    {#key panel.content.dashboardId}
+      <DashboardPanel dashboardId={panel.content.dashboardId} />
+    {/key}
   {:else}
     <!-- Empty panel placeholder -->
     <div class="empty-panel">

@@ -83,7 +83,7 @@
   const colNames = $derived(columns.map(c => c.name));
   const colOptions = $derived(columns.map(c => ({ value: c.name, label: c.name })));
   const allTableOptions = $derived(
-    tables.sort((a, b) => a.name.localeCompare(b.name)).map(t => ({
+    [...tables].sort((a, b) => a.name.localeCompare(b.name)).map(t => ({
       value: `${t.database}.${t.name}`,
       label: multiDb ? `${t.database}.${t.name}` : t.name,
     }))
@@ -98,8 +98,8 @@
   let selectJoins = $state<JoinRow[]>([]);
   let selectGroupBy = $state<string[]>([]);
   let selectOrderBy = $state<{ id: string; column: string; dir: SortDir }[]>([]);
-  let selectLimit = $state('');
-  let selectOffset = $state('');
+  let selectLimit = $state<number | ''>('');
+  let selectOffset = $state<number | ''>('');
   let selectHaving = $state('');
 
   // ── INSERT / REPLACE state ────────────────────────────────────────────────
@@ -315,8 +315,8 @@
     }
     const validOrder = selectOrderBy.filter(o => o.column);
     if (validOrder.length > 0) sql += `\nORDER BY ${validOrder.map(o => `${o.column} ${o.dir}`).join(', ')}`;
-    if (selectLimit.trim()) sql += `\nLIMIT ${selectLimit.trim()}`;
-    if (selectOffset.trim()) sql += `\nOFFSET ${selectOffset.trim()}`;
+    if (selectLimit !== '' && selectLimit !== null) sql += `\nLIMIT ${selectLimit}`;
+    if (selectOffset !== '' && selectOffset !== null) sql += `\nOFFSET ${selectOffset}`;
     return sql + ';';
   }
 

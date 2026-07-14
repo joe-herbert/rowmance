@@ -18,6 +18,7 @@
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
+  import { useDashboards } from '$lib/stores/dashboards.svelte';
 
   interface Props {
     splitId: string;
@@ -29,6 +30,8 @@
   const tabDrag = useTabDrag();
   const connectionStore = useConnections();
   const settingsStore = useSettings();
+  const dashboardsStore = useDashboards();
+  const dashboardsById = $derived(new Map(dashboardsStore.dashboards.map((d) => [d.id, d])));
 
   function panelLabel(content: PanelKind): string {
     switch (content.kind) {
@@ -54,6 +57,8 @@
         return `What's New in ${content.version}`;
       case 'connections':
         return 'Connections';
+      case 'dashboard':
+        return dashboardsById.get(content.dashboardId)?.name ?? 'Dashboard';
       case 'empty':
         return 'Empty';
     }
@@ -527,6 +532,8 @@
               <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
               <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
             </svg>
+          {:else if item.content.kind === 'dashboard'}
+            <span class="tab-dash-icon">{@html dashboardsById.get(item.content.dashboardId)?.icon ?? ''}</span>
           {:else}
             <svg
               width="13"
@@ -840,6 +847,18 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
+  }
+
+  .tab-dash-icon {
+    display: flex;
+    align-items: center;
+    width: 13px;
+    height: 13px;
+  }
+
+  .tab-dash-icon :global(svg) {
+    width: 13px;
+    height: 13px;
   }
 
   .tab-label {

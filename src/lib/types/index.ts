@@ -359,6 +359,7 @@ export type PanelKind =
   | { kind: 'speed_analysis' }
   | { kind: 'release_notes'; version: string; notes: string }
   | { kind: 'connections' }
+  | { kind: 'dashboard'; dashboardId: string }
   | { kind: 'empty' };
 
 export interface PanelState {
@@ -463,6 +464,54 @@ export const DEFAULT_SETTINGS: AppSettings = {
   localSearchHighlight: true,
   saveOnRun: false,
 };
+
+// ── Dashboards ───────────────────────────────────────────────────────────────
+
+export type WidgetDisplayType = 'count' | 'table' | 'bar_chart' | 'line_chart' | 'countdown';
+
+export type SingleValueFormat =
+  | 'auto'
+  | 'number'
+  | 'number_compact'
+  | 'currency'
+  | 'percent'
+  | 'date'
+  | 'datetime'
+  | 'boolean'
+  | 'text';
+
+export interface DashboardWidget {
+  id: string;
+  title: string;
+  /** Width in 12-column grid (1–12) */
+  w: number;
+  /** Height in row units (each 80px) */
+  h: number;
+  /** Column start, 1-indexed */
+  x: number;
+  /** Row start, 1-indexed */
+  y: number;
+  connectionId: string;
+  database: string | null;
+  sql: string;
+  displayType: WidgetDisplayType;
+  /** Format for single-value (count) display type */
+  singleValueFormat?: SingleValueFormat;
+  /** ISO 4217 currency code, used when singleValueFormat === 'currency' */
+  singleValueCurrency?: string;
+}
+
+export interface Dashboard {
+  id: string;
+  name: string;
+  /** SVG string for the icon */
+  icon: string;
+  pinned: boolean;
+  pinnedOrder: number | null;
+  widgets: DashboardWidget[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 // ── Errors ───────────────────────────────────────────────────────────────────
 
