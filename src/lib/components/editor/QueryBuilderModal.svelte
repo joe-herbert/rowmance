@@ -1,9 +1,14 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import Modal from '$lib/components/Modal.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import DatePicker from '$lib/components/ui/DatePicker.svelte';
+  import TimePicker from '$lib/components/ui/TimePicker.svelte';
+  import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
+  import { portal } from '$lib/actions/portal';
 
   type Operation =
     // DML
@@ -46,6 +51,63 @@
   }
 
   let { tables, loadColumns, defaultDatabase = '', oninsert, onclose }: Props = $props();
+
+  const settings = useSettings();
+
+  let openPickerRowId = $state<string | null>(null);
+  let pickerDateCategory = $state<'datetime' | 'date' | 'time' | null>(null);
+  let pickerTriggerEl = $state<HTMLElement | null>(null);
+  let pickerPopupEl = $state<HTMLDivElement | null>(null);
+  let pickerTop = $state(0);
+  let pickerLeft = $state(0);
+  let pickerOpenUp = $state(false);
+
+  function positionPicker(): void {
+    if (!pickerTriggerEl) return;
+    const rect = pickerTriggerEl.getBoundingClientRect();
+    const h = pickerPopupEl ? pickerPopupEl.offsetHeight : 300;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    pickerOpenUp = spaceBelow < h && rect.top > h;
+    pickerTop = pickerOpenUp ? rect.top - h - 4 : rect.bottom + 4;
+    pickerLeft = rect.left;
+  }
+
+  function openPicker(rowId: string, category: 'datetime' | 'date' | 'time', triggerEl: HTMLElement): void {
+    openPickerRowId = rowId;
+    pickerDateCategory = category;
+    pickerTriggerEl = triggerEl;
+    requestAnimationFrame(() => {
+      positionPicker();
+      requestAnimationFrame(positionPicker);
+    });
+  }
+
+  function closePicker(): void {
+    openPickerRowId = null;
+    pickerTriggerEl = null;
+  }
+
+  onMount(() => {
+    function handleClick(e: MouseEvent): void {
+      const target = e.target as Node;
+      if (!target.isConnected) return;
+      if (openPickerRowId !== null) {
+        if (!pickerTriggerEl?.contains(target) && !pickerPopupEl?.contains(target)) closePicker();
+      }
+    }
+    const timer = setTimeout(() => document.addEventListener('click', handleClick), 0);
+    return () => { clearTimeout(timer); document.removeEventListener('click', handleClick); };
+  });
+
+  function pickerOnChange(v: string): void {
+    if (!openPickerRowId) return;
+    const si = selectWhere.findIndex(r => r.id === openPickerRowId);
+    if (si >= 0) { selectWhere[si] = { ...selectWhere[si], value: v }; return; }
+    const ui = updateWhere.findIndex(r => r.id === openPickerRowId);
+    if (ui >= 0) { updateWhere[ui] = { ...updateWhere[ui], value: v }; return; }
+    const di = deleteWhere.findIndex(r => r.id === openPickerRowId);
+    if (di >= 0) { deleteWhere[di] = { ...deleteWhere[di], value: v }; }
+  }
 
   function uid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -606,12 +668,140 @@
     return op === 'IS NULL' || op === 'IS NOT NULL';
   }
 
+  function isBooleanColumn(columnName: string): boolean {
+    const col = columns.find(c => c.name === columnName);
+    if (!col) return false;
+    const dt = col.dataType.toLowerCase();
+    return /^bool/.test(dt) || dt === 'tinyint(1)';
+  }
+
+  function getEnumValues(columnName: string): string[] | null {
+    const col = columns.find(c => c.name === columnName);
+    if (!col) return null;
+    const match = col.dataType.match(/^enum\((.+)\)$/i);
+    if (!match) return null;
+    const raw = match[1];
+    const values: string[] = [];
+    let i = 0;
+    while (i < raw.length) {
+      if (raw[i] === "'") {
+        let j = i + 1;
+        while (j < raw.length && raw[j] !== "'") j++;
+        values.push(raw.slice(i + 1, j));
+        i = j + 2;
+      } else {
+        i++;
+      }
+    }
+    return values.length > 0 ? values : null;
+  }
+
+  function getDateCategory(columnName: string): 'datetime' | 'date' | 'time' | null {
+    const col = columns.find(c => c.name === columnName);
+    if (!col) return null;
+    const dt = col.dataType.toLowerCase();
+    if (dt.includes('datetime') || dt.includes('timestamp')) return 'datetime';
+    if (dt.startsWith('time')) return 'time';
+    if (dt.startsWith('date')) return 'date';
+    return null;
+  }
+
+  function booleanTrueLabel(): string {
+    const fmt = settings.settings.booleanDisplay ?? 'tick-cross';
+    if (fmt === 'true-false') return 'True';
+    if (fmt === '1-0') return '1';
+    if (fmt === 'as-saved') return 'true';
+    return '✓';
+  }
+
+  function booleanFalseLabel(): string {
+    const fmt = settings.settings.booleanDisplay ?? 'tick-cross';
+    if (fmt === 'true-false') return 'False';
+    if (fmt === '1-0') return '0';
+    if (fmt === 'as-saved') return 'false';
+    return '✗';
+  }
+
+  function wherePlaceholder(row: WhereRow): string {
+    if (row.valueIsExpression) return 'NOW()';
+    const dateCategory = getDateCategory(row.column);
+    if (dateCategory === 'datetime') return 'YYYY-MM-DD HH:MM:SS';
+    if (dateCategory === 'date') return 'YYYY-MM-DD';
+    if (dateCategory === 'time') return 'HH:MM:SS';
+    if (row.operator === 'BETWEEN') return 'a, b';
+    if (row.operator === 'IN' || row.operator === 'NOT IN') return 'a, b, c';
+    return 'value';
+  }
+
   function togglePrivilege(list: string[], priv: string, checked: boolean): string[] {
     if (priv === 'ALL PRIVILEGES') return checked ? ['ALL PRIVILEGES'] : [];
     const without = list.filter(p => p !== priv && p !== 'ALL PRIVILEGES');
     return checked ? [...without, priv] : without;
   }
 </script>
+
+{#snippet whereValue(row: WhereRow, update: (patch: Partial<WhereRow>) => void)}
+  {#if !valueInputHidden(row.operator)}
+    {#if !row.valueIsExpression && isBooleanColumn(row.column)}
+      <div class="qb-bool-picker">
+        <button class="qb-bool-btn qb-bool-btn--true"
+          class:qb-bool-btn--selected={row.value === 'true' || row.value === '1'}
+          type="button"
+          onclick={() => update({ value: settings.settings.booleanDisplay === '1-0' ? '1' : 'true' })}>
+          {booleanTrueLabel()}
+        </button>
+        <button class="qb-bool-btn qb-bool-btn--false"
+          class:qb-bool-btn--selected={row.value === 'false' || row.value === '0'}
+          type="button"
+          onclick={() => update({ value: settings.settings.booleanDisplay === '1-0' ? '0' : 'false' })}>
+          {booleanFalseLabel()}
+        </button>
+      </div>
+    {:else if !row.valueIsExpression && getEnumValues(row.column) !== null}
+      <Select
+        value={row.value || undefined}
+        options={[{ value: '', label: '— pick value —' }, ...(getEnumValues(row.column) ?? []).map(v => ({ value: v, label: v }))]}
+        size="sm" searchable mono style="flex:1; min-width:0"
+        onchange={v => update({ value: v })} />
+      <button class="qb-expr-toggle" type="button"
+        title="Switch to expression mode"
+        onclick={() => update({ valueIsExpression: true, value: '' })}>f()</button>
+    {:else}
+      {@const dateCategory = !row.valueIsExpression ? getDateCategory(row.column) : null}
+      {#if dateCategory !== null}
+        <div class="qb-date-input-wrap">
+          <input class="qb-input qb-input--flex qb-date-input" type="text"
+            placeholder={wherePlaceholder(row)}
+            value={row.value}
+            oninput={e => update({ value: (e.currentTarget as HTMLInputElement).value })} />
+          <button class="qb-date-picker-btn" type="button" aria-label="Open date picker"
+            onclick={e => openPicker(row.id, dateCategory, e.currentTarget.closest('.qb-date-input-wrap') as HTMLElement)}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          </button>
+        </div>
+      {:else}
+        <input class="qb-input qb-input--flex" type="text"
+          placeholder={wherePlaceholder(row)}
+          value={row.value}
+          oninput={e => update({ value: (e.currentTarget as HTMLInputElement).value })} />
+      {/if}
+      <button class="qb-expr-toggle" class:qb-expr-toggle--active={row.valueIsExpression}
+        type="button"
+        title={row.valueIsExpression ? 'Expression mode: value inserted as-is' : 'String mode: value wrapped in quotes'}
+        onclick={() => update({ valueIsExpression: !row.valueIsExpression })}>
+        {row.valueIsExpression ? 'f()' : "'…'"}
+      </button>
+    {/if}
+  {:else}
+    <span class="qb-input-spacer"></span>
+  {/if}
+{/snippet}
 
 <Modal label="Query Builder" onbackdropclick={onclose}>
   <div class="qb-card" role="dialog" tabindex="-1" onkeydown={e => e.key === 'Escape' && onclose()}>
@@ -729,19 +919,7 @@
                 onchange={v => { selectWhere[i] = { ...selectWhere[i], column: v }; }} />
               <Select value={row.operator} options={WHERE_OPS.map(o => ({ value: o, label: o }))} size="sm"
                 onchange={v => { selectWhere[i] = { ...selectWhere[i], operator: v as WhereOp }; }} />
-              {#if !valueInputHidden(row.operator)}
-                <input class="qb-input qb-input--flex" type="text"
-                  placeholder={row.valueIsExpression ? 'NOW()' : row.operator === 'BETWEEN' ? 'a, b' : row.operator === 'IN' || row.operator === 'NOT IN' ? 'a, b, c' : 'value'}
-                  value={row.value}
-                  oninput={e => { selectWhere[i] = { ...selectWhere[i], value: (e.currentTarget as HTMLInputElement).value }; }} />
-                <button class="qb-expr-toggle" class:qb-expr-toggle--active={row.valueIsExpression}
-                  type="button"
-                  title={row.valueIsExpression ? 'Expression mode: value inserted as-is' : 'String mode: value wrapped in quotes'}
-                  onclick={() => { selectWhere[i] = { ...selectWhere[i], valueIsExpression: !row.valueIsExpression }; }}
-                >{row.valueIsExpression ? 'f()' : "'…'"}</button>
-              {:else}
-                <span class="qb-input-spacer"></span>
-              {/if}
+              {@render whereValue(row, patch => { selectWhere[i] = { ...selectWhere[i], ...patch }; })}
               <button class="qb-remove-btn" onclick={() => { selectWhere = selectWhere.filter((_, j) => j !== i); }}>✕</button>
             </div>
           {/each}
@@ -891,19 +1069,7 @@
                 onchange={v => { updateWhere[i] = { ...updateWhere[i], column: v }; }} />
               <Select value={row.operator} options={WHERE_OPS.map(o => ({ value: o, label: o }))} size="sm"
                 onchange={v => { updateWhere[i] = { ...updateWhere[i], operator: v as WhereOp }; }} />
-              {#if !valueInputHidden(row.operator)}
-                <input class="qb-input qb-input--flex" type="text"
-                  placeholder={row.valueIsExpression ? 'NOW()' : row.operator === 'BETWEEN' ? 'a, b' : 'value'}
-                  value={row.value}
-                  oninput={e => { updateWhere[i] = { ...updateWhere[i], value: (e.currentTarget as HTMLInputElement).value }; }} />
-                <button class="qb-expr-toggle" class:qb-expr-toggle--active={row.valueIsExpression}
-                  type="button"
-                  title={row.valueIsExpression ? 'Expression mode: value inserted as-is' : 'String mode: value wrapped in quotes'}
-                  onclick={() => { updateWhere[i] = { ...updateWhere[i], valueIsExpression: !row.valueIsExpression }; }}
-                >{row.valueIsExpression ? 'f()' : "'…'"}</button>
-              {:else}
-                <span class="qb-input-spacer"></span>
-              {/if}
+              {@render whereValue(row, patch => { updateWhere[i] = { ...updateWhere[i], ...patch }; })}
               <button class="qb-remove-btn" onclick={() => { updateWhere = updateWhere.filter((_, j) => j !== i); }}>✕</button>
             </div>
           {/each}
@@ -931,19 +1097,7 @@
                 onchange={v => { deleteWhere[i] = { ...deleteWhere[i], column: v }; }} />
               <Select value={row.operator} options={WHERE_OPS.map(o => ({ value: o, label: o }))} size="sm"
                 onchange={v => { deleteWhere[i] = { ...deleteWhere[i], operator: v as WhereOp }; }} />
-              {#if !valueInputHidden(row.operator)}
-                <input class="qb-input qb-input--flex" type="text"
-                  placeholder={row.valueIsExpression ? 'NOW()' : row.operator === 'BETWEEN' ? 'a, b' : 'value'}
-                  value={row.value}
-                  oninput={e => { deleteWhere[i] = { ...deleteWhere[i], value: (e.currentTarget as HTMLInputElement).value }; }} />
-                <button class="qb-expr-toggle" class:qb-expr-toggle--active={row.valueIsExpression}
-                  type="button"
-                  title={row.valueIsExpression ? 'Expression mode: value inserted as-is' : 'String mode: value wrapped in quotes'}
-                  onclick={() => { deleteWhere[i] = { ...deleteWhere[i], valueIsExpression: !row.valueIsExpression }; }}
-                >{row.valueIsExpression ? 'f()' : "'…'"}</button>
-              {:else}
-                <span class="qb-input-spacer"></span>
-              {/if}
+              {@render whereValue(row, patch => { deleteWhere[i] = { ...deleteWhere[i], ...patch }; })}
               <button class="qb-remove-btn" onclick={() => { deleteWhere = deleteWhere.filter((_, j) => j !== i); }}>✕</button>
             </div>
           {/each}
@@ -1419,6 +1573,32 @@
   </div>
 </Modal>
 
+{#if openPickerRowId !== null}
+  {@const allRows = [...selectWhere, ...updateWhere, ...deleteWhere]}
+  {@const activeRow = allRows.find(r => r.id === openPickerRowId)}
+  {#if activeRow && pickerDateCategory}
+    <div
+      bind:this={pickerPopupEl}
+      class="picker-popup"
+      class:picker-popup--up={pickerOpenUp}
+      style="top:{pickerTop}px; left:{pickerLeft}px"
+      use:portal
+      onkeydown={e => { if (e.key === 'Escape') closePicker(); }}
+      role="dialog"
+      aria-label="Pick {pickerDateCategory === 'datetime' ? 'date and time' : pickerDateCategory}"
+      tabindex="-1"
+    >
+      {#if pickerDateCategory === 'date'}
+        <DatePicker value={activeRow.value} onchange={pickerOnChange} />
+      {:else if pickerDateCategory === 'time'}
+        <TimePicker value={activeRow.value} onchange={pickerOnChange} />
+      {:else}
+        <DateTimePicker value={activeRow.value} onchange={pickerOnChange} />
+      {/if}
+    </div>
+  {/if}
+{/if}
+
 <style>
   .qb-card {
     background: var(--color-bg-overlay);
@@ -1888,5 +2068,85 @@
   .qb-expr-toggle--active:hover {
     background: var(--color-accent);
     color: var(--color-text-on-accent);
+  }
+
+  /* ── WHERE date picker ──────────────────────────────────────────────────── */
+
+  .qb-date-input-wrap {
+    flex: 1;
+    min-width: 80px;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .qb-date-input {
+    flex: 1;
+    min-width: 0;
+    padding-right: calc(var(--spacing-1) + 18px);
+  }
+
+  .qb-date-picker-btn {
+    position: absolute;
+    right: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .qb-date-picker-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  /* ── WHERE bool picker ──────────────────────────────────────────────────── */
+
+  .qb-bool-picker {
+    display: flex;
+    flex: 1;
+    gap: var(--spacing-1);
+    min-width: 0;
+  }
+
+  .qb-bool-btn {
+    flex: 1;
+    padding: 3px var(--spacing-2);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .qb-bool-btn--true { color: var(--color-success); }
+  .qb-bool-btn--false { color: var(--color-danger); }
+
+  .qb-bool-btn:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border-strong);
+  }
+
+  .qb-bool-btn--true.qb-bool-btn--selected {
+    background: var(--color-success-subtle);
+    border-color: var(--color-success);
+  }
+
+  .qb-bool-btn--false.qb-bool-btn--selected {
+    background: var(--color-danger-subtle);
+    border-color: var(--color-danger);
   }
 </style>
