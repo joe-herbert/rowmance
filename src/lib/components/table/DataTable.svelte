@@ -2231,6 +2231,32 @@
     );
   }
 
+  function checkSoftDeleted(row: CellValue[], cols: ColumnMeta[]): boolean {
+    for (const cond of settings.softDeleteConditions) {
+      const idx = cols.findIndex((c) => c.name.toLowerCase() === cond.column.toLowerCase());
+      if (idx === -1) continue;
+      const val = row[idx];
+      switch (cond.type) {
+        case 'not-null':
+          if (val !== null) return true;
+          break;
+        case 'is-null':
+          if (val === null) return true;
+          break;
+        case 'true':
+          if (val === true || val === 1 || val === '1' || val === 't' || String(val).toLowerCase() === 'true' || String(val).toLowerCase() === 'yes') return true;
+          break;
+        case 'false':
+          if (val === false || val === 0 || val === '0' || val === 'f' || String(val).toLowerCase() === 'false' || String(val).toLowerCase() === 'no') return true;
+          break;
+        case 'equals':
+          if (cond.value != null && val !== null && String(val).toLowerCase() === cond.value.toLowerCase()) return true;
+          break;
+      }
+    }
+    return false;
+  }
+
   function getDatetimeInputType(dt: string): 'date' | 'time' | 'datetime-local' {
     const lower = dt.toLowerCase();
     if ((lower.includes('date') && lower.includes('time')) || lower.includes('timestamp'))
@@ -3810,10 +3836,13 @@
           {@const isSelected = selectedRowKeys.has(rowKey)}
           {@const rowDirty = isRowPending(rowKey)}
           {@const isDeleted = pendingDeletedRows.has(rowKey)}
+          {@const isSoftDeleted = !isDeleted && (settings.softDeleteHighlight || settings.softDeleteStrikethrough) && checkSoftDeleted(row, columns)}
           <tr
             class="data-row"
             class:row-selected={isSelected}
             class:row-deleted={isDeleted}
+            class:row-soft-deleted={isSoftDeleted && settings.softDeleteHighlight}
+            class:row-soft-deleted-strike={isSoftDeleted && settings.softDeleteStrikethrough}
             onclick={(e) => handleRowClick(e, rowKey)}
             oncontextmenu={(e) => handleRowContextMenu(e, row, processedRowIndex)}
           >
@@ -5185,6 +5214,24 @@
     -webkit-user-select: none;
     user-select: none;
     line-height: 1;
+  }
+
+  .data-row.row-soft-deleted {
+    background: var(--color-soft-deleted-bg);
+    opacity: var(--opacity-soft-deleted);
+  }
+
+  .data-row.row-soft-deleted .rownum-cell {
+    border-left: 2px solid var(--color-soft-deleted-border);
+  }
+
+  .data-row.row-soft-deleted:hover {
+    background: color-mix(in srgb, var(--color-soft-deleted-border) 10%, transparent);
+    opacity: 1;
+  }
+
+  .data-row.row-soft-deleted-strike .data-cell {
+    text-decoration: line-through;
   }
 
   /* ── Data cells ─────────────────────────────────────────────────────────── */

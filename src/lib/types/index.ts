@@ -384,6 +384,15 @@ export interface SplitChild {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
+export type SoftDeleteConditionType = 'not-null' | 'is-null' | 'true' | 'false' | 'equals';
+
+export interface SoftDeleteCondition {
+  column: string;
+  type: SoftDeleteConditionType;
+  /** Only used when type is 'equals'. */
+  value?: string;
+}
+
 export interface AppSettings {
   theme: string;
   pageSize: number;
@@ -424,6 +433,12 @@ export interface AppSettings {
   localSearchHighlight: boolean;
   /** Automatically save a saved query when it is run and has unsaved changes. */
   saveOnRun: boolean;
+  /** Highlight rows that appear to be soft-deleted based on column values. */
+  softDeleteHighlight: boolean;
+  /** Strike through text in soft-deleted rows. */
+  softDeleteStrikethrough: boolean;
+  /** Column conditions used to detect soft-deleted rows. */
+  softDeleteConditions: SoftDeleteCondition[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -463,6 +478,29 @@ export const DEFAULT_SETTINGS: AppSettings = {
   savedQueriesDirectory: '',
   localSearchHighlight: true,
   saveOnRun: false,
+  softDeleteHighlight: true,
+  softDeleteStrikethrough: true,
+  softDeleteConditions: [
+    { column: 'deleted_at', type: 'not-null' },
+    { column: 'removed_at', type: 'not-null' },
+    { column: 'discarded_at', type: 'not-null' },
+    { column: 'archived_at', type: 'not-null' },
+    { column: 'disabled_at', type: 'not-null' },
+    { column: 'deactivated_at', type: 'not-null' },
+    { column: 'deleted_on', type: 'not-null' },
+    { column: 'expired_at', type: 'not-null' },
+    { column: 'retired_at', type: 'not-null' },
+    { column: 'purged_at', type: 'not-null' },
+    { column: 'deletion_date', type: 'not-null' },
+    { column: 'deletion_timestamp', type: 'not-null' },
+    { column: 'soft_deleted_at', type: 'not-null' },
+    { column: 'trashed_at', type: 'not-null' },
+    { column: 'deleted', type: 'true' },
+    { column: 'is_deleted', type: 'true' },
+    { column: 'active', type: 'false' },
+    { column: 'is_active', type: 'false' },
+    { column: 'status', type: 'equals', value: 'deleted' },
+  ],
 };
 
 // ── Dashboards ───────────────────────────────────────────────────────────────

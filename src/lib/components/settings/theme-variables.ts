@@ -66,6 +66,9 @@ export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
       '--color-table-row-hover',
       '--color-table-row-selected',
       '--color-table-header-bg',
+      '--color-soft-deleted-border',
+      '--color-soft-deleted-bg',
+      '--opacity-soft-deleted',
     ],
   },
   {

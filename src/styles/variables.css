@@ -154,4 +154,7 @@
     rgba(237, 218, 255, 0.95) 0%,
     rgba(214, 241, 255, 0.95) 100%
   );
+  --color-soft-deleted-border: transparent;
+  --color-soft-deleted-bg: transparent;
+  --opacity-soft-deleted: 0.6;
 }

@@ -15,7 +15,7 @@
   import ThemeEditor from '$lib/components/settings/ThemeEditor.svelte';
   import * as themesApi from '$lib/tauri/themes';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
-  import type { AppSettings, ThemeMeta } from '$lib/types';
+  import type { AppSettings, ThemeMeta, SoftDeleteCondition, SoftDeleteConditionType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -511,7 +511,101 @@
             onchange={(c) => update('localSearchHighlight', c)}
           />
         </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Highlight Soft-Deleted Rows</span>
+            <span class="label-hint"
+              >Apply a coloured left border and background to rows that appear to be soft-deleted. You can set these colours in your Theme Editor.</span
+            >
+          </div>
+          <Checkbox
+            checked={settings.softDeleteHighlight}
+            onchange={(c) => update('softDeleteHighlight', c)}
+          />
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Strike Through Soft-Deleted Rows</span>
+            <span class="label-hint">Apply strikethrough text to rows that appear to be soft-deleted</span>
+          </div>
+          <Checkbox
+            checked={settings.softDeleteStrikethrough}
+            onchange={(c) => update('softDeleteStrikethrough', c)}
+          />
+        </div>
       </div>
+
+      {#if settings.softDeleteHighlight || settings.softDeleteStrikethrough}
+        <h3 class="subsection-title">Soft-Delete Conditions</h3>
+        <p class="section-description">
+          A row is treated as soft-deleted if any condition matches. Colours can be customised in
+          the theme editor (Table → Soft Deleted).
+        </p>
+        <div class="setting-group">
+          {#each settings.softDeleteConditions as condition, i}
+            <div class="setting-row soft-delete-row">
+              <input
+                class="setting-input soft-delete-col"
+                type="text"
+                placeholder="column"
+                value={condition.column}
+                onchange={(e) => {
+                  const updated = [...settings.softDeleteConditions];
+                  updated[i] = { ...updated[i], column: (e.currentTarget as HTMLInputElement).value.trim() };
+                  update('softDeleteConditions', updated);
+                }}
+              />
+              <Select
+                value={condition.type}
+                options={[
+                  { value: 'not-null', label: 'is not null' },
+                  { value: 'is-null', label: 'is null' },
+                  { value: 'true', label: '= true' },
+                  { value: 'false', label: '= false' },
+                  { value: 'equals', label: 'equals' },
+                ]}
+                onchange={(v) => {
+                  const updated = [...settings.softDeleteConditions];
+                  updated[i] = { ...updated[i], type: v as SoftDeleteConditionType };
+                  if (v !== 'equals') delete updated[i].value;
+                  update('softDeleteConditions', updated);
+                }}
+              />
+              {#if condition.type === 'equals'}
+                <input
+                  class="setting-input soft-delete-val"
+                  type="text"
+                  placeholder="value"
+                  value={condition.value ?? ''}
+                  onchange={(e) => {
+                    const updated = [...settings.softDeleteConditions];
+                    updated[i] = { ...updated[i], value: (e.currentTarget as HTMLInputElement).value };
+                    update('softDeleteConditions', updated);
+                  }}
+                />
+              {/if}
+              <button
+                class="action-btn action-btn--danger soft-delete-remove"
+                aria-label="Remove condition"
+                onclick={() => {
+                  const updated = settings.softDeleteConditions.filter((_, idx) => idx !== i);
+                  update('softDeleteConditions', updated);
+                }}>×</button
+              >
+            </div>
+          {/each}
+        </div>
+        <button
+          class="action-btn"
+          style="margin-top: var(--spacing-2);"
+          onclick={() => {
+            update('softDeleteConditions', [
+              ...settings.softDeleteConditions,
+              { column: '', type: 'not-null' },
+            ]);
+          }}>+ Add condition</button
+        >
+      {/if}
     {:else if activeSection === 'editor'}
       <h2 class="section-title">Editor</h2>
 
@@ -1336,5 +1430,32 @@
   .tag-input::placeholder {
     font-family: var(--font-family-ui);
     color: var(--color-text-muted);
+  }
+
+  .soft-delete-row {
+    justify-content: flex-start;
+    gap: var(--spacing-2);
+  }
+
+  .soft-delete-col {
+    width: 180px;
+    flex-shrink: 0;
+    font-family: var(--font-family-mono, monospace);
+    font-size: var(--font-size-xs);
+  }
+
+  .soft-delete-val {
+    width: 120px;
+    flex-shrink: 0;
+    font-family: var(--font-family-mono, monospace);
+    font-size: var(--font-size-xs);
+  }
+
+  .soft-delete-remove {
+    margin-left: auto;
+    padding: 0 var(--spacing-2);
+    font-size: var(--font-size-md);
+    line-height: 1;
+    flex-shrink: 0;
   }
 </style>
