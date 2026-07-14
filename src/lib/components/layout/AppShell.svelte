@@ -750,9 +750,11 @@
         >
           <span
             class="conn-chip-dot"
+            class:conn-chip-dot--dim={!isConnected}
             style="background: {activeConnection.color ??
-              'var(--color-accent)'}; box-shadow: 0 0 0 3px color-mix(in srgb, {activeConnection.color ??
-              'var(--color-accent)'} 26%, transparent)"
+              'var(--color-accent)'}; {isConnected
+              ? `box-shadow: 0 0 0 3px color-mix(in srgb, ${activeConnection.color ?? 'var(--color-accent)'} 26%, transparent)`
+              : ''}"
           ></span>
           <span class="conn-chip-name">{activeConnection.name}</span>
           <span class="conn-chip-tag">{activeConnection.dbType}</span>
@@ -1853,6 +1855,11 @@
     height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
+    transition: opacity var(--transition-fast);
+  }
+
+  .conn-chip-dot--dim {
+    opacity: 0.4;
   }
 
   .conn-chip-name {
