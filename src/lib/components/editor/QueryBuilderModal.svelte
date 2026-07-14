@@ -30,7 +30,7 @@
   export interface SchemaTable { database: string; name: string; }
   export interface SchemaColumn { name: string; dataType: string; }
 
-  interface WhereRow { id: string; column: string; operator: WhereOp; value: string; connector: Connector; }
+  interface WhereRow { id: string; column: string; operator: WhereOp; value: string; connector: Connector; valueIsExpression?: boolean; }
   interface JoinRow { id: string; type: JoinType; table: string; onLeft: string; onRight: string; }
   interface SelectCol { name: string; aggregate: Aggregate; alias: string; checked: boolean; }
   interface InsertCol { name: string; dataType: string; value: string; checked: boolean; useNull: boolean; }
@@ -282,6 +282,8 @@
       } else if (r.operator === 'BETWEEN') {
         const [a, b = ''] = r.value.split(',');
         expr = `${r.column} BETWEEN ${quoteVal(a.trim())} AND ${quoteVal(b.trim())}`;
+      } else if (r.valueIsExpression) {
+        expr = `${r.column} ${r.operator} ${r.value.trim()}`;
       } else {
         expr = `${r.column} ${r.operator} ${quoteVal(r.value, r.operator)}`;
       }
@@ -729,9 +731,14 @@
                 onchange={v => { selectWhere[i] = { ...selectWhere[i], operator: v as WhereOp }; }} />
               {#if !valueInputHidden(row.operator)}
                 <input class="qb-input qb-input--flex" type="text"
-                  placeholder={row.operator === 'BETWEEN' ? 'a, b' : row.operator === 'IN' || row.operator === 'NOT IN' ? 'a, b, c' : 'value'}
+                  placeholder={row.valueIsExpression ? 'NOW()' : row.operator === 'BETWEEN' ? 'a, b' : row.operator === 'IN' || row.operator === 'NOT IN' ? 'a, b, c' : 'value'}
                   value={row.value}
                   oninput={e => { selectWhere[i] = { ...selectWhere[i], value: (e.currentTarget as HTMLInputElement).value }; }} />
+                <button class="qb-expr-toggle" class:qb-expr-toggle--active={row.valueIsExpression}
+                  type="button"
+                  title={row.valueIsExpression ? 'Expression mode: value inserted as-is' : 'String mode: value wrapped in quotes'}
+                  onclick={() => { selectWhere[i] = { ...selectWhere[i], valueIsExpression: !row.valueIsExpression }; }}
+                >{row.valueIsExpression ? 'f()' : "'…'"}</button>
               {:else}
                 <span class="qb-input-spacer"></span>
               {/if}
@@ -885,8 +892,15 @@
               <Select value={row.operator} options={WHERE_OPS.map(o => ({ value: o, label: o }))} size="sm"
                 onchange={v => { updateWhere[i] = { ...updateWhere[i], operator: v as WhereOp }; }} />
               {#if !valueInputHidden(row.operator)}
-                <input class="qb-input qb-input--flex" type="text" placeholder={row.operator === 'BETWEEN' ? 'a, b' : 'value'} value={row.value}
+                <input class="qb-input qb-input--flex" type="text"
+                  placeholder={row.valueIsExpression ? 'NOW()' : row.operator === 'BETWEEN' ? 'a, b' : 'value'}
+                  value={row.value}
                   oninput={e => { updateWhere[i] = { ...updateWhere[i], value: (e.currentTarget as HTMLInputElement).value }; }} />
+                <button class="qb-expr-toggle" class:qb-expr-toggle--active={row.valueIsExpression}
+                  type="button"
+                  title={row.valueIsExpression ? 'Expression mode: value inserted as-is' : 'String mode: value wrapped in quotes'}
+                  onclick={() => { updateWhere[i] = { ...updateWhere[i], valueIsExpression: !row.valueIsExpression }; }}
+                >{row.valueIsExpression ? 'f()' : "'…'"}</button>
               {:else}
                 <span class="qb-input-spacer"></span>
               {/if}
@@ -918,8 +932,15 @@
               <Select value={row.operator} options={WHERE_OPS.map(o => ({ value: o, label: o }))} size="sm"
                 onchange={v => { deleteWhere[i] = { ...deleteWhere[i], operator: v as WhereOp }; }} />
               {#if !valueInputHidden(row.operator)}
-                <input class="qb-input qb-input--flex" type="text" placeholder={row.operator === 'BETWEEN' ? 'a, b' : 'value'} value={row.value}
+                <input class="qb-input qb-input--flex" type="text"
+                  placeholder={row.valueIsExpression ? 'NOW()' : row.operator === 'BETWEEN' ? 'a, b' : 'value'}
+                  value={row.value}
                   oninput={e => { deleteWhere[i] = { ...deleteWhere[i], value: (e.currentTarget as HTMLInputElement).value }; }} />
+                <button class="qb-expr-toggle" class:qb-expr-toggle--active={row.valueIsExpression}
+                  type="button"
+                  title={row.valueIsExpression ? 'Expression mode: value inserted as-is' : 'String mode: value wrapped in quotes'}
+                  onclick={() => { deleteWhere[i] = { ...deleteWhere[i], valueIsExpression: !row.valueIsExpression }; }}
+                >{row.valueIsExpression ? 'f()' : "'…'"}</button>
               {:else}
                 <span class="qb-input-spacer"></span>
               {/if}
@@ -1837,4 +1858,35 @@
 
   .qb-btn--primary:hover:not(:disabled) { opacity: 0.88; }
   .qb-btn--primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .qb-expr-toggle {
+    flex-shrink: 0;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-family: var(--font-family-mono);
+    font-size: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  }
+
+  .qb-expr-toggle:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-secondary);
+  }
+
+  .qb-expr-toggle--active {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .qb-expr-toggle--active:hover {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+  }
 </style>
