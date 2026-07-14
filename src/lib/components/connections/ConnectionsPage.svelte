@@ -736,9 +736,6 @@
     <!-- Actions -->
     <div class="card-actions">
       {#if connected}
-        <button class="card-btn card-btn--open" onclick={() => handleNewQueryEditor(profile)}>
-          Query Editor
-        </button>
         <button class="card-btn card-btn--disconnect" onclick={() => handleDisconnect(profile)}>
           Disconnect
         </button>
@@ -1021,7 +1018,7 @@
 
   .cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: var(--spacing-3);
   }
 
