@@ -35,6 +35,7 @@
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
   import { listen } from '@tauri-apps/api/event';
   import { useGlobalSearchCache } from '$lib/stores/globalSearchCache.svelte';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
@@ -1300,7 +1301,7 @@
           disabled={connecting}
         >
           {#if connecting}
-            <span class="spin-ring" aria-hidden="true"></span>
+            <Spinner />
           {:else}
             <ChevronIcon direction="right" width={12} height={12} strokeWidth={2.2} />
           {/if}
@@ -1394,7 +1395,7 @@
                 <DbIcon system={isDbSystem} aria-hidden="true" />
                 <span class="db-name">{database}</span>
                 {#if isDbLoading}
-                  <span class="spin-ring" aria-label="Loading"></span>
+                  <Spinner label="Loading" />
                 {/if}
               </button>
 
@@ -2555,23 +2556,6 @@
     color: var(--color-text-muted);
   }
 
-  /* ── Spinning indicator ── */
-
-  .spin-ring {
-    display: block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    border: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
-    border-top-color: var(--color-accent);
-    animation: spin 0.7s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
 
   @keyframes pulse {
     0%,

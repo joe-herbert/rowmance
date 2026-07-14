@@ -15,6 +15,7 @@
   import RotateCcwIcon from '$lib/components/icons/RotateCcwIcon.svelte';
   import CloseCircleIcon from '$lib/components/icons/CloseCircleIcon.svelte';
   import ResizeIcon from '$lib/components/icons/ResizeIcon.svelte';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   interface Props {
     widget: DashboardWidget;
@@ -319,7 +320,7 @@
   <div class="widget-body">
     {#if loading}
       <div class="state-placeholder">
-        <div class="spinner" aria-label="Loading"></div>
+        <Spinner size={16} label="Loading" />
       </div>
     {:else if error}
       <div class="state-placeholder state-placeholder--error">
@@ -622,19 +623,6 @@
     font-size: var(--font-size-xs);
     padding: var(--spacing-2);
     text-align: center;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  .spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--color-border);
-    border-top-color: var(--color-accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
   }
 
   /* ── Count ───────────────────────────────────────────────────────────────── */

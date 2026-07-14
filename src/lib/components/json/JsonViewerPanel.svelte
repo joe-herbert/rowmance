@@ -18,6 +18,7 @@
   import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
   import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
   import PointerIcon from '$lib/components/icons/PointerIcon.svelte';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -360,7 +361,7 @@
                 class:jv-object={hasFk && isExpanded && !child?.loading}
               >
                 {#if child?.loading}
-                  <span class="spin-ring" aria-label="Loading"></span>
+                  <Spinner label="Loading" />
                 {:else if hasFk && isExpanded}
                   {'{'}
                 {:else if value === null}
@@ -638,23 +639,6 @@
   .jv-boolean { color: var(--color-warning, #f59e0b); }
   .jv-null { color: var(--color-text-muted); font-style: italic; }
   .jv-object { color: var(--color-text-secondary); }
-
-  /* ── Spinner ── */
-
-  .spin-ring {
-    display: block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    border: 2px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
-    border-top-color: var(--color-accent);
-    animation: spin 0.7s linear infinite;
-    flex-shrink: 0;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
 
   /* ── FK hint ── */
 

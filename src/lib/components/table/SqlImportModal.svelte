@@ -12,6 +12,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   interface Props {
     connectionId: string;
@@ -187,7 +188,7 @@
             <pre class="statement-preview"><SqlHighlight sql={progress.statement} /></pre>
           {:else}
             <div class="spinner-row">
-              <div class="spinner" aria-label="Running…"></div>
+              <Spinner size={20} label="Running…" />
               <span>Starting…</span>
             </div>
           {/if}
@@ -417,22 +418,6 @@
     gap: var(--spacing-3);
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
-  }
-
-  .spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--color-border);
-    border-top-color: var(--color-accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    flex-shrink: 0;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .errors-list {

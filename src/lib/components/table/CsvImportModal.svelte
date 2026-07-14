@@ -14,6 +14,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   interface Props {
     connectionId: string;
@@ -267,7 +268,7 @@
         </div>
       {:else if step === 'importing'}
         <div class="importing-step">
-          <div class="spinner" aria-label="Importing…"></div>
+          <Spinner size={32} label="Importing…" />
           <p>Importing rows…</p>
         </div>
       {:else if step === 'done'}
@@ -533,21 +534,6 @@
     padding: var(--spacing-8) 0;
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
-  }
-
-  .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--color-border);
-    border-top-color: var(--color-accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   .done-step {
