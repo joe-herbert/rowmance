@@ -7,7 +7,8 @@
   import { EditorView } from '@codemirror/view';
   import { EditorState, type Extension } from '@codemirror/state';
   import { sql as sqlLang } from '@codemirror/lang-sql';
-  import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
+  import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+  import { tags } from '@lezer/highlight';
   import { getDdl } from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
   import Loader from '$lib/components/ui/Loader.svelte';
@@ -78,6 +79,21 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  function buildHighlightStyle(): HighlightStyle {
+    return HighlightStyle.define([
+      { tag: tags.keyword, color: resolveCSSVar('--color-editor-keyword') },
+      { tag: tags.string, color: resolveCSSVar('--color-editor-string') },
+      { tag: tags.number, color: resolveCSSVar('--color-editor-number') },
+      { tag: tags.comment, color: resolveCSSVar('--color-editor-comment') },
+      { tag: tags.operator, color: resolveCSSVar('--color-editor-operator') },
+      {
+        tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+        color: resolveCSSVar('--color-editor-function'),
+      },
+      { tag: [tags.typeName, tags.className], color: resolveCSSVar('--color-editor-type') },
+    ]);
+  }
+
   function buildTheme(): Extension {
     return EditorView.theme({
       '&': {
@@ -130,7 +146,7 @@
         doc: ddlText,
         extensions: [
           buildTheme(),
-          syntaxHighlighting(defaultHighlightStyle),
+          syntaxHighlighting(buildHighlightStyle()),
           sqlLang(),
           EditorState.readOnly.of(true),
         ],
