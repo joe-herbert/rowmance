@@ -384,6 +384,9 @@ export interface SplitChild {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
+export type AiProvider = 'none' | 'claude' | 'openai' | 'gemini' | 'ollama' | 'custom';
+export type AiContextLevel = 'none' | 'structure' | 'structure_and_data';
+
 export type SoftDeleteConditionType = 'not-null' | 'is-null' | 'true' | 'false' | 'equals';
 
 export interface SoftDeleteCondition {
@@ -433,6 +436,12 @@ export interface AppSettings {
   localSearchHighlight: boolean;
   /** Automatically save a saved query when it is run and has unsaved changes. */
   saveOnRun: boolean;
+  aiProvider: AiProvider;
+  aiModel: string;
+  aiApiKey: string;
+  aiBaseUrl: string;
+  aiContextLevel: AiContextLevel;
+  aiDataSampleRows: number;
   /** Highlight rows that appear to be soft-deleted based on column values. */
   softDeleteHighlight: boolean;
   /** Strike through text in soft-deleted rows. */
@@ -478,6 +487,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   savedQueriesDirectory: '',
   localSearchHighlight: true,
   saveOnRun: false,
+  aiProvider: 'none',
+  aiModel: '',
+  aiApiKey: '',
+  aiBaseUrl: '',
+  aiContextLevel: 'none',
+  aiDataSampleRows: 3,
   softDeleteHighlight: true,
   softDeleteStrikethrough: true,
   softDeleteConditions: [

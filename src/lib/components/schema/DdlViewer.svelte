@@ -12,6 +12,8 @@
   import { errorMessage } from '$lib/utils/errors';
   import Loader from '$lib/components/ui/Loader.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import AiModal from '$lib/components/ai/AiModal.svelte';
 
   interface Props {
     connectionId: string;
@@ -25,7 +27,9 @@
   const { connectionId, database, objectName, objectType, itemId = '', splitId = '' }: Props = $props();
 
   const tabDrag = useTabDrag();
+  const settingsStore = useSettings();
 
+  let showAiDescribeModal = $state(false);
   let labelDragActive = $state(false);
   let labelDragStartX = 0;
   let labelDragStartY = 0;
@@ -165,6 +169,16 @@
       <span class="object-path">{database}.{objectName}</span>
     </span>
     <div class="toolbar-spacer"></div>
+    {#if settingsStore.settings.aiProvider !== 'none' && settingsStore.settings.aiContextLevel !== 'none'}
+      <button
+        class="copy-btn"
+        onclick={() => { showAiDescribeModal = true; }}
+        disabled={isLoading || !!loadError}
+        title="Describe table with AI"
+      >
+        AI Describe
+      </button>
+    {/if}
     <button
       class="copy-btn"
       onclick={copyDdl}
@@ -174,6 +188,17 @@
       Copy DDL
     </button>
   </div>
+
+  {#if showAiDescribeModal}
+    <AiModal
+      mode="describe"
+      tableName={objectName}
+      ddl={ddlText}
+      {connectionId}
+      {database}
+      onclose={() => { showAiDescribeModal = false; }}
+    />
+  {/if}
 
   <div class="content">
     {#if isLoading}
@@ -289,6 +314,11 @@
   .copy-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .copy-btn--active {
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
   }
 
   .content {
