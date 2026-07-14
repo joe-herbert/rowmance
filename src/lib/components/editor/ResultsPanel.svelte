@@ -20,10 +20,12 @@
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import AiModal from '$lib/components/ai/AiModal.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { useCellSelection } from '$lib/stores/cellSelection.svelte';
 
   const toast = useToast();
   const connections = useConnections();
   const settingsStore = useSettings();
+  const cellSelectionStore = useCellSelection();
 
   interface Props {
     results: QueryResult[];
@@ -182,6 +184,33 @@
   });
 
   let canSave = $derived(canEdit && detectedTable !== null && !!detectedDatabase);
+
+  function handleCellSelect(colIndex: number, row: CellValue[]): void {
+    if (!result || !connectionId || !detectedTable || !detectedDatabase) return;
+    const col = result.columns[colIndex];
+    if (!col) return;
+    cellSelectionStore.set({
+      connectionId,
+      database: detectedDatabase,
+      table: detectedTable,
+      columnName: col.name,
+      cellValue: row[colIndex],
+      row,
+      columns: result.columns,
+    });
+  }
+
+  function handleRowSelect(row: CellValue[], cols: ColumnMeta[]): void {
+    if (!connectionId || !detectedTable || !detectedDatabase) return;
+    cellSelectionStore.set({
+      connectionId,
+      database: detectedDatabase,
+      table: detectedTable,
+      row,
+      columns: cols,
+    });
+  }
+
   let pendingCount = $derived(
     [...pendingChanges.values()].reduce((sum, colMap) => sum + colMap.size, 0) +
       pendingDeletedRows.size,
@@ -641,6 +670,8 @@
             }}
             {connectionId}
             database={detectedDatabase ?? undefined}
+            onCellSelect={detectedTable ? handleCellSelect : undefined}
+            onRowSelect={detectedTable ? handleRowSelect : undefined}
           />
         {/key}
       </div>
