@@ -1561,11 +1561,12 @@
         </p>
       {/if}
       <label class="assign-label" for="assign-select">Map to local connection:</label>
-      <select id="assign-select" class="assign-select" bind:value={assignConnectionId}>
-        {#each connectionStore.profiles as p (p.id)}
-          <option value={p.id}>{p.name}</option>
-        {/each}
-      </select>
+      <Select
+        id="assign-select"
+        bind:value={assignConnectionId}
+        options={connectionStore.profiles.map((p) => ({ value: p.id, label: p.name }))}
+        style="width: 100%"
+      />
       <p class="assign-note">
         This mapping is saved locally and applied to all files sharing the same original connection.
       </p>
@@ -2084,17 +2085,6 @@
     font-size: var(--font-size-sm);
     font-weight: 500;
     color: var(--color-text-primary);
-  }
-
-  .assign-select {
-    width: 100%;
-    padding: var(--spacing-2) var(--spacing-2);
-    background: var(--color-bg-input, var(--color-bg-secondary));
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family-ui);
   }
 
   .assign-note {
