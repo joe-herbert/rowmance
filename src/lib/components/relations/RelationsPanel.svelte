@@ -15,6 +15,8 @@
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
+  import { listen } from '@tauri-apps/api/event';
+  import { portal } from '$lib/actions/portal';
 
   type CellValue = string | number | boolean | null;
 
@@ -26,6 +28,8 @@
     filterValue: CellValue;
     rows: CellValue[][];
     columnNames: string[];
+    totalRows: number | null;
+    queryId: string | null;
     loading: boolean;
     error: string | null;
     expanded: boolean;
@@ -45,6 +49,48 @@
   let globalLoading = $state(false);
   let forwardExpanded = $state(true);
   let reverseExpanded = $state(true);
+
+  let panelEl = $state<HTMLElement | null>(null);
+  let fwdSpacerEl = $state<HTMLElement | null>(null);
+  let revSpacerEl = $state<HTMLElement | null>(null);
+  let headerPositions = $state({ panelLeft: 0, panelWidth: 0, fwdTop: 0, revTop: 0 });
+
+  function updateHeaderPositions() {
+    if (!panelEl) return;
+    const panelRect = panelEl.getBoundingClientRect();
+    const fwdRect = fwdSpacerEl?.getBoundingClientRect();
+    const revRect = revSpacerEl?.getBoundingClientRect();
+    headerPositions = {
+      panelLeft: panelRect.left,
+      panelWidth: panelRect.width,
+      fwdTop: fwdRect ? Math.max(panelRect.top, fwdRect.top) : panelRect.top,
+      revTop: revRect ? Math.max(panelRect.top, revRect.top) : panelRect.top,
+    };
+  }
+
+  $effect(() => {
+    if (!panelEl) return;
+    panelEl.addEventListener('scroll', updateHeaderPositions, { passive: true });
+    const ro = new ResizeObserver(updateHeaderPositions);
+    ro.observe(panelEl);
+    updateHeaderPositions();
+    return () => {
+      panelEl.removeEventListener('scroll', updateHeaderPositions);
+      ro.disconnect();
+    };
+  });
+
+  $effect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ queryId: string; totalRows: number }>('query-count-updated', (event) => {
+      const { queryId, totalRows } = event.payload;
+      const idx = relations.findIndex((r) => r.queryId === queryId);
+      if (idx !== -1) relations[idx].totalRows = totalRows;
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  });
 
   function quoteId(name: string, dbType: DbType): string {
     return dbType === 'postgres'
@@ -85,6 +131,8 @@
             filterValue: sel.cellValue,
             rows: [],
             columnNames: [],
+            totalRows: null,
+            queryId: null,
             loading: true,
             error: null,
             expanded: true,
@@ -105,6 +153,8 @@
             filterValue: sel.cellValue,
             rows: [],
             columnNames: [],
+            totalRows: null,
+            queryId: null,
             loading: true,
             error: null,
             expanded: true,
@@ -128,6 +178,7 @@
           filterValue: sel.cellValue,
           rows: [],
           columnNames: [],
+          totalRows: null,
           loading: true,
           error: null,
           expanded: true,
@@ -154,6 +205,7 @@
           filterValue: sel.cellValue,
           rows: [],
           columnNames: [],
+          totalRows: null,
           loading: true,
           error: null,
           expanded: true,
@@ -189,6 +241,8 @@
               relations[i].loading = false;
               relations[i].rows = result.rows;
               relations[i].columnNames = result.columns.map((c) => c.name);
+              relations[i].totalRows = result.totalRows;
+              relations[i].queryId = result.queryId;
               if (result.rows.length === 0) relations[i].expanded = false;
             }
           } catch (err) {
@@ -256,7 +310,7 @@
   }
 </script>
 
-<div class="relations-panel">
+<div class="relations-panel" bind:this={panelEl}>
   {#if !sel || !sel.columnName}
     <div class="empty-state">
       <svg
@@ -323,28 +377,46 @@
       <div class="relations-list">
         {#if forwardRelations.length > 0}
           <div class="section">
-            <button class="section-header" onclick={() => (forwardExpanded = !forwardExpanded)}>
-              <div class="section-icon forward-icon">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M3 8h10M9 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </div>
+            <div class="section-header section-header-spacer" aria-hidden="true" bind:this={fwdSpacerEl}>
+              <div class="section-icon forward-icon"></div>
               <div class="section-info">
                 <span class="section-label">References</span>
-                <span class="section-desc">{sel.table} → foreign key targets</span>
+                <span class="section-desc">&nbsp;</span>
               </div>
-              <span class="section-count">{forwardRelations.length}</span>
-              <svg
-                class="section-chevron"
-                class:collapsed={!forwardExpanded}
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
+            </div>
+            {#if panelEl}
+              <button
+                class="section-header"
+                use:portal
+                style:position="fixed"
+                style:top="{headerPositions.fwdTop}px"
+                style:left="{headerPositions.panelLeft}px"
+                style:width="{headerPositions.panelWidth}px"
+                style:z-index="50"
+                onclick={() => (forwardExpanded = !forwardExpanded)}
               >
-                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
+                <div class="section-icon forward-icon">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 8h10M9 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="section-info">
+                  <span class="section-label">References</span>
+                  <span class="section-desc">{sel.table} → foreign key targets</span>
+                </div>
+                <span class="section-count">{forwardRelations.length}</span>
+                <svg
+                  class="section-chevron"
+                  class:collapsed={!forwardExpanded}
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            {/if}
 
             <div class="section-body" class:collapsed={!forwardExpanded}>
               <div class="section-body-inner">
@@ -354,6 +426,7 @@
                       class="card-header"
                       role="button"
                       tabindex="0"
+                      title="{rel.targetTable}/{rel.filterColumn}"
                       onclick={() => (rel.expanded = !rel.expanded)}
                       onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}
                     >
@@ -379,7 +452,7 @@
                         {/if}
                       </span>
                       {#if !rel.loading}
-                        <span class="card-row-count">{rel.rows.length}</span>
+                        <span class="card-row-count">{(rel.totalRows ?? rel.rows.length).toLocaleString()}</span>
                       {/if}
                       <button
                         class="card-open-btn"
@@ -465,28 +538,46 @@
 
         {#if reverseRelations.length > 0}
           <div class="section">
-            <button class="section-header" onclick={() => (reverseExpanded = !reverseExpanded)}>
-              <div class="section-icon reverse-icon">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M13 8H3M7 4L3 8l4 4" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </div>
+            <div class="section-header section-header-spacer" aria-hidden="true" bind:this={revSpacerEl}>
+              <div class="section-icon reverse-icon"></div>
               <div class="section-info">
                 <span class="section-label">Referenced by</span>
-                <span class="section-desc">tables pointing to {sel.table}</span>
+                <span class="section-desc">&nbsp;</span>
               </div>
-              <span class="section-count">{reverseRelations.length}</span>
-              <svg
-                class="section-chevron"
-                class:collapsed={!reverseExpanded}
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
+            </div>
+            {#if panelEl}
+              <button
+                class="section-header"
+                use:portal
+                style:position="fixed"
+                style:top="{headerPositions.revTop}px"
+                style:left="{headerPositions.panelLeft}px"
+                style:width="{headerPositions.panelWidth}px"
+                style:z-index="51"
+                onclick={() => (reverseExpanded = !reverseExpanded)}
               >
-                <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
+                <div class="section-icon reverse-icon">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M13 8H3M7 4L3 8l4 4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="section-info">
+                  <span class="section-label">Referenced by</span>
+                  <span class="section-desc">tables pointing to {sel.table}</span>
+                </div>
+                <span class="section-count">{reverseRelations.length}</span>
+                <svg
+                  class="section-chevron"
+                  class:collapsed={!reverseExpanded}
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            {/if}
 
             <div class="section-body" class:collapsed={!reverseExpanded}>
               <div class="section-body-inner">
@@ -496,6 +587,7 @@
                       class="card-header"
                       role="button"
                       tabindex="0"
+                      title="{rel.targetTable}/{rel.filterColumn}"
                       onclick={() => (rel.expanded = !rel.expanded)}
                       onkeydown={(e) => e.key === 'Enter' && (rel.expanded = !rel.expanded)}
                     >
@@ -521,7 +613,7 @@
                         {/if}
                       </span>
                       {#if !rel.loading}
-                        <span class="card-row-count">{rel.rows.length}</span>
+                        <span class="card-row-count">{(rel.totalRows ?? rel.rows.length).toLocaleString()}</span>
                       {/if}
                       <button
                         class="card-open-btn"
@@ -753,18 +845,24 @@
     padding: var(--spacing-2) var(--spacing-3);
     border-bottom: 1px solid var(--color-border);
     border-top: 1px solid var(--color-border);
-    background: var(--color-bg-secondary);
-    position: sticky;
-    top: 0;
-    z-index: 1;
+    background: color-mix(in srgb, var(--color-bg-secondary) 80%, transparent);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     width: 100%;
     text-align: left;
     cursor: pointer;
     transition: background var(--transition-fast);
+    box-sizing: border-box;
   }
 
-  .section-header:hover {
-    background: var(--color-bg-tertiary);
+  .section-header-spacer {
+    visibility: hidden;
+    pointer-events: none;
+    position: relative;
+  }
+
+  .section-header:not(.section-header-spacer):hover {
+    background: color-mix(in srgb, var(--color-bg-tertiary) 80%, transparent);
   }
 
   .section-chevron {
@@ -912,9 +1010,10 @@
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: baseline;
     gap: 3px;
+    overflow: hidden;
   }
 
   .card-table {
@@ -922,12 +1021,22 @@
     font-family: var(--font-family-mono);
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
   }
 
   .card-filter {
     font-size: 10px;
     color: var(--color-text-muted);
     font-family: var(--font-family-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
   }
 
   .card-open-btn {
