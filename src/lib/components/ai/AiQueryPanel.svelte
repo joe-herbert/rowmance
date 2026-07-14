@@ -10,6 +10,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   interface Props {
     mode: 'generate' | 'explain';
@@ -128,11 +129,15 @@
         }}
       ></textarea>
       <button class="ai-run-btn" onclick={runGenerate} disabled={isLoading || !prompt.trim()}>
-        {isLoading ? '…' : 'Generate'}
+        {#if isLoading}
+          <Spinner size={12} label="Generating" />
+        {:else}
+          Generate
+        {/if}
       </button>
     </div>
   {:else if mode === 'explain' && isLoading}
-    <div class="ai-loading">Explaining…</div>
+    <div class="ai-loading"><Spinner size={12} label="Explaining" /> Explaining…</div>
   {/if}
 
   {#if error}
@@ -224,6 +229,10 @@
   }
 
   .ai-run-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-2);
     height: 28px;
     padding: 0 var(--spacing-3);
     background: var(--color-accent);
@@ -248,6 +257,9 @@
   }
 
   .ai-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
     padding: var(--spacing-2) var(--spacing-3);
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);

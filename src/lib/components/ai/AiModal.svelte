@@ -12,6 +12,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import { marked } from 'marked';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import Spinner from '$lib/components/ui/Spinner.svelte';
 
   interface GenerateProps {
     mode: 'generate';
@@ -197,6 +198,7 @@
         <div class="ai-error">{error}</div>
       {:else if isLoading}
         <div class="ai-loading">
+          <Spinner size={14} label="Loading" />
           {props.mode === 'generate' ? 'Generating…' : props.mode === 'explain' ? 'Explaining…' : props.mode === 'describe' ? 'Describing…' : 'Summarising…'}
         </div>
       {:else if result}
@@ -226,7 +228,11 @@
           </button>
         {:else}
           <button class="ai-btn ai-btn--primary" onclick={runGenerate} disabled={isLoading || !prompt.trim()}>
-            Generate
+            {#if isLoading}
+              <Spinner size={12} label="Generating" />
+            {:else}
+              Generate
+            {/if}
           </button>
         {/if}
       {:else if props.mode === 'explain' && (result || error)}
@@ -358,6 +364,9 @@
   }
 
   .ai-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
     font-style: italic;
@@ -472,6 +481,10 @@
   }
 
   .ai-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-2);
     height: 30px;
     padding: 0 var(--spacing-3);
     border: 1px solid var(--color-border);
