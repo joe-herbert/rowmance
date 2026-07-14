@@ -1104,7 +1104,16 @@
     try {
       const quotedDb = quoteIdentifier(database);
       const quotedTable = quoteIdentifier(table);
-      const countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
+      const filterWhere = buildWhereClause(filterEditorState, quoteIdentifier);
+      const searchTrimmed = localSearchTerm.trim();
+      const conditions: string[] = [];
+      if (filterWhere) conditions.push(filterWhere);
+      if (searchTrimmed) {
+        const searchWhere = buildSearchWhere(searchTrimmed);
+        if (searchWhere) conditions.push(searchWhere);
+      }
+      let countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
+      if (conditions.length > 0) countSql += ` WHERE ${conditions.join(' AND ')}`;
       const countResult = await executeSelection(connectionId, countSql, database);
       if (countResult && !countResult.error) {
         const raw = countResult.rows[0]?.[0];
