@@ -316,7 +316,18 @@
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
 
-  function executeItem(item: ResultItem) {
+  async function executeItem(item: ResultItem) {
+    const connectionId =
+      item.kind === 'connection'
+        ? item.id
+        : 'connectionId' in item
+          ? item.connectionId
+          : undefined;
+
+    if (connectionId && !connections.activeIds.has(connectionId)) {
+      await connections.connect(connectionId);
+    }
+
     switch (item.kind) {
       case 'connection':
         panels.openInFocused({ kind: 'query_editor', connectionId: item.id });
