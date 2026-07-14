@@ -642,6 +642,44 @@ export function usePanels() {
       });
     },
 
+    /** Close all items in the same split that appear before itemId (to its left/above). */
+    closeItemsBefore(itemId: string) {
+      const splitId = findSplitForItem(itemId);
+      if (!splitId) return;
+
+      const state = getSplitState(splitId);
+      const idx = state.openItems.findIndex((i) => i.id === itemId);
+      if (idx <= 0) return;
+
+      const toClose = state.openItems.slice(0, idx);
+      for (const item of toClose) {
+        if (item.content.kind === 'query_editor' && item.content.editorId) {
+          queryEditorCache.delete(item.content.editorId);
+        }
+      }
+
+      setSplitState(splitId, { ...state, openItems: state.openItems.slice(idx) });
+    },
+
+    /** Close all items in the same split that appear after itemId (to its right/below). */
+    closeItemsAfter(itemId: string) {
+      const splitId = findSplitForItem(itemId);
+      if (!splitId) return;
+
+      const state = getSplitState(splitId);
+      const idx = state.openItems.findIndex((i) => i.id === itemId);
+      if (idx < 0 || idx === state.openItems.length - 1) return;
+
+      const toClose = state.openItems.slice(idx + 1);
+      for (const item of toClose) {
+        if (item.content.kind === 'query_editor' && item.content.editorId) {
+          queryEditorCache.delete(item.content.editorId);
+        }
+      }
+
+      setSplitState(splitId, { ...state, openItems: state.openItems.slice(0, idx + 1) });
+    },
+
     /** Close all open items associated with a specific connection. */
     closeItemsForConnection(connectionId: string, { skipDirty = false } = {}) {
       for (const [splitId, state] of splitStates) {

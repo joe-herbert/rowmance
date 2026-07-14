@@ -12,6 +12,7 @@
     generateSqlDelete,
   } from '$lib/utils/tab-sql-generation';
   import type { OpenItem } from '$lib/stores/panels.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
 
   interface Props {
     item: OpenItem;
@@ -28,6 +29,15 @@
 
   const panelStore = usePanels();
   const connectionStore = useConnections();
+  const settingsStore = useSettings();
+
+  const splitItems = $derived(panelStore.getSplitItems(splitId));
+  const itemIndex = $derived(splitItems.findIndex((i) => i.id === item.id));
+  const hasBefore = $derived(itemIndex > 0);
+  const hasAfter = $derived(itemIndex >= 0 && itemIndex < splitItems.length - 1);
+  const isTabBar = $derived(settingsStore.settings.openItemsLocation === 'top');
+  const beforeLabel = $derived(isTabBar ? 'Close tabs to the left' : 'Close tabs above');
+  const afterLabel = $derived(isTabBar ? 'Close tabs to the right' : 'Close tabs below');
 </script>
 
 <ContextMenu {x} {y} {open} {onclose} {minWidth}>
@@ -69,7 +79,25 @@
     >
     <CtxSep />
   {/if}
-  {#if panelStore.getSplitItems(splitId).length > 1}
+  {#if hasBefore}
+    <CtxItem
+      onclick={() => {
+        const id = item.id;
+        onclose();
+        panelStore.closeItemsBefore(id);
+      }}>{beforeLabel}</CtxItem
+    >
+  {/if}
+  {#if hasAfter}
+    <CtxItem
+      onclick={() => {
+        const id = item.id;
+        onclose();
+        panelStore.closeItemsAfter(id);
+      }}>{afterLabel}</CtxItem
+    >
+  {/if}
+  {#if splitItems.length > 1}
     <CtxItem
       onclick={() => {
         const id = item.id;
