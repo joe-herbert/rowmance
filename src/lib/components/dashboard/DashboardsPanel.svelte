@@ -5,15 +5,18 @@
 <script lang="ts">
   import { useDashboards } from '$lib/stores/dashboards.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import { useConnections } from '$lib/stores/connections.svelte';
   import { portal } from '$lib/actions/portal';
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import IconPicker from './IconPicker.svelte';
+  import { importDashboard, exportDashboard } from '$lib/utils/dashboard-io';
 
   const dashboardsStore = useDashboards();
   const panelStore = usePanels();
+  const connectionsStore = useConnections();
 
   // ── Default icon ──────────────────────────────────────────────────────────
 
@@ -90,6 +93,22 @@
     confirmDeleteId = null;
   }
 
+  // ── Import ────────────────────────────────────────────────────────────────
+
+  async function handleImport() {
+    const imported = await importDashboard(connectionsStore.profiles);
+    if (!imported) return;
+    const dashboard = await dashboardsStore.create({ name: imported.name, icon: imported.icon });
+    for (const w of imported.widgets) {
+      const { x, y, ...rest } = w;
+      const created = dashboardsStore.addWidget(dashboard.id, rest);
+      if (created) {
+        dashboardsStore.updateWidget(dashboard.id, created.id, { x, y });
+      }
+    }
+    panelStore.openInFocused({ kind: 'dashboard', dashboardId: dashboard.id });
+  }
+
   // ── Open ──────────────────────────────────────────────────────────────────
 
   function openDashboard(id: string) {
@@ -101,6 +120,19 @@
   <div class="panel-toolbar">
     <span class="panel-title">Dashboards</span>
     <div class="toolbar-gap"></div>
+    <button
+      class="icon-btn"
+      onclick={handleImport}
+      title="Import dashboard from file"
+      aria-label="Import dashboard from file"
+      type="button"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </button>
     <button
       class="icon-btn"
       onclick={() => (showNewForm = !showNewForm)}
@@ -217,6 +249,11 @@
     }}>
       {d?.pinned ? 'Unpin from title bar' : 'Pin to title bar'}
     </CtxItem>
+    <CtxItem onclick={() => {
+      if (!d) return;
+      ctxMenu = null;
+      void exportDashboard(d, (id) => connectionsStore.getById(id));
+    }}>Export to file</CtxItem>
     <CtxSep />
     <CtxItem danger onclick={() => startDelete(ctxMenu!.id, ctxMenu!.name)}>Delete</CtxItem>
   {/if}

@@ -12,6 +12,7 @@
   import WidgetEditor from './WidgetEditor.svelte';
   import IconPicker from './IconPicker.svelte';
   import { portal } from '$lib/actions/portal';
+  import { exportDashboard } from '$lib/utils/dashboard-io';
 
   interface Props {
     dashboardId: string;
@@ -241,6 +242,11 @@
       dashboardsStore.update(dashboardId, { name: editName.trim() });
     }
   }
+
+  async function handleExport() {
+    if (!dashboard) return;
+    await exportDashboard(dashboard, (id) => connectionsStore.getById(id));
+  }
 </script>
 
 {#if !dashboard}
@@ -308,6 +314,17 @@
       {/if}
 
       <div class="dash-header-actions">
+        {#if editMode}
+          <button
+            class="header-btn"
+            onclick={handleExport}
+            title="Export dashboard to file"
+            type="button"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
+          </button>
+        {/if}
         <button
           class="header-btn"
           class:header-btn--active={editMode}
