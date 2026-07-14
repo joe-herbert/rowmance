@@ -5,21 +5,19 @@
 -->
 <script lang="ts">
   import { usePanels, sameContent, dirtyKeyForContent } from '$lib/stores/panels.svelte';
+  import type { OpenItem } from '$lib/stores/panels.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
-  import TableIcon from '$lib/components/icons/TableIcon.svelte';
-  import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import type { PanelKind } from '$lib/types';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
-  import * as schemaApi from '$lib/tauri/schema';
-  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
-  import CtxItem from '$lib/components/ui/CtxItem.svelte';
-  import CtxSep from '$lib/components/ui/CtxSep.svelte';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import { useDashboards } from '$lib/stores/dashboards.svelte';
+  import { panelLabel } from '$lib/utils/panel-label';
+  import PanelIcon from '$lib/components/layout/PanelIcon.svelte';
+  import TabContextMenu from '$lib/components/layout/TabContextMenu.svelte';
 
   const panelStore = usePanels();
   const tabDrag = useTabDrag();
@@ -27,37 +25,6 @@
   const settingsStore = useSettings();
   const dashboardsStore = useDashboards();
   const dashboardsById = $derived(new Map(dashboardsStore.dashboards.map((d) => [d.id, d])));
-
-  function panelLabel(content: PanelKind): string {
-    switch (content.kind) {
-      case 'query_editor':
-        return content.savedQueryName ?? 'Query';
-      case 'table_browser':
-        return content.table;
-      case 'table_structure':
-        return content.table;
-      case 'ddl_viewer':
-        return content.objectName;
-      case 'erd':
-        return 'ERD';
-      case 'explain':
-        return 'Explain';
-      case 'settings':
-        return 'Settings';
-      case 'user_manager':
-        return 'Users';
-      case 'speed_analysis':
-        return 'Speed Analysis';
-      case 'release_notes':
-        return `What's New in ${content.version}`;
-      case 'connections':
-        return 'Connections';
-      case 'dashboard':
-        return dashboardsById.get(content.dashboardId)?.name ?? 'Dashboard';
-      case 'empty':
-        return 'Empty';
-    }
-  }
 
   function panelConnInfo(content: PanelKind): { color: string | null; shortName: string } | null {
     if (!('connectionId' in content)) return null;
@@ -168,105 +135,7 @@
     });
   });
 
-  // ── SQL generation helpers ────────────────────────────────────────────────
-
-  function qi(name: string, dbType: string): string {
-    if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
-    return '"' + name.replace(/"/g, '""') + '"';
-  }
-
-  function tableRef(database: string, table: string, dbType: string): string {
-    if (dbType === 'sqlite') return qi(table, dbType);
-    return `${qi(database, dbType)}.${qi(table, dbType)}`;
-  }
-
-  function generateSqlSelectAll(connectionId: string, database: string, table: string) {
-    const profile = connectionStore.getById(connectionId);
-    if (!profile) return;
-    const ref = tableRef(database, table, profile.dbType);
-    panelStore.openCopyInFocused({
-      kind: 'query_editor',
-      connectionId,
-      database,
-      initialSql: `SELECT * FROM ${ref}`,
-    });
-  }
-
-  function generateSqlSelectFirst(connectionId: string, database: string, table: string) {
-    const profile = connectionStore.getById(connectionId);
-    if (!profile) return;
-    const ref = tableRef(database, table, profile.dbType);
-    panelStore.openCopyInFocused({
-      kind: 'query_editor',
-      connectionId,
-      database,
-      initialSql: `SELECT * FROM ${ref} LIMIT `,
-    });
-  }
-
-  async function generateSqlInsert(connectionId: string, database: string, table: string) {
-    const profile = connectionStore.getById(connectionId);
-    if (!profile) return;
-    const ref = tableRef(database, table, profile.dbType);
-    let sql: string;
-    try {
-      const columns = await schemaApi.listColumns(connectionId, database, table);
-      const insertCols = columns.filter((c) => !c.isAutoIncrement);
-      const colList = insertCols.map((c) => qi(c.name, profile.dbType)).join(', ');
-      const valList = insertCols.map(() => '').join(', ');
-      sql = `INSERT INTO ${ref} (${colList})\nVALUES (${valList})`;
-    } catch {
-      sql = `INSERT INTO ${ref} ()\nVALUES ()`;
-    }
-    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
-  }
-
-  async function generateSqlUpdate(connectionId: string, database: string, table: string) {
-    const profile = connectionStore.getById(connectionId);
-    if (!profile) return;
-    const ref = tableRef(database, table, profile.dbType);
-    let sql: string;
-    try {
-      const columns = await schemaApi.listColumns(connectionId, database, table);
-      const pkCols = columns.filter((c) => c.isPrimaryKey);
-      const dataCols = columns.filter((c) => !c.isPrimaryKey);
-      const setCols = dataCols.length > 0 ? dataCols : columns;
-      const setClauses = setCols.map((c) => `    ${qi(c.name, profile.dbType)} = `).join(',\n');
-      const whereClauses =
-        pkCols.length > 0
-          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
-          : '';
-      sql = `UPDATE ${ref}\nSET\n${setClauses}\nWHERE ${whereClauses}`;
-    } catch {
-      sql = `UPDATE ${ref}\nSET\n    \nWHERE `;
-    }
-    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
-  }
-
-  async function generateSqlDelete(connectionId: string, database: string, table: string) {
-    const profile = connectionStore.getById(connectionId);
-    if (!profile) return;
-    const ref = tableRef(database, table, profile.dbType);
-    let sql: string;
-    try {
-      const columns = await schemaApi.listColumns(connectionId, database, table);
-      const pkCols = columns.filter((c) => c.isPrimaryKey);
-      const whereClauses =
-        pkCols.length > 0
-          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
-          : '';
-      sql = `DELETE FROM ${ref}\nWHERE ${whereClauses}`;
-    } catch {
-      sql = `DELETE FROM ${ref}\nWHERE `;
-    }
-    panelStore.openCopyInFocused({ kind: 'query_editor', connectionId, database, initialSql: sql });
-  }
-
-  function onContextMenu(
-    e: MouseEvent,
-    item: import('$lib/stores/panels.svelte').OpenItem,
-    itemSplitId: string,
-  ) {
+  function onContextMenu(e: MouseEvent, item: OpenItem, itemSplitId: string) {
     const hasSavedQuery = item.content.kind === 'query_editor' && !!item.content.savedQueryId;
     const hasConnection = 'connectionId' in item.content;
     const hasOtherTabs = panelStore.getSplitItems(itemSplitId).length > 1;
@@ -279,14 +148,7 @@
     contextMenuLeft = e.clientX;
   }
 
-  async function startRename(item: import('$lib/stores/panels.svelte').OpenItem) {
-    contextMenuItemId = null;
-    if (item.content.kind !== 'query_editor') return;
-    renamingItemId = item.id;
-    renameValue = item.content.savedQueryName ?? 'Query';
-  }
-
-  async function commitRename(item: import('$lib/stores/panels.svelte').OpenItem) {
+  async function commitRename(item: OpenItem) {
     if (!renameValue.trim() || item.content.kind !== 'query_editor' || !item.content.savedQueryId) {
       renamingItemId = null;
       return;
@@ -321,7 +183,7 @@
     renamingItemId = null;
   }
 
-  function itemIsDirty(item: import('$lib/stores/panels.svelte').OpenItem): boolean {
+  function itemIsDirty(item: OpenItem): boolean {
     const key = dirtyKeyForContent(item.content);
     return key ? panelStore.isItemDirty(key) : false;
   }
@@ -411,147 +273,7 @@
                 aria-hidden="true"
               ></span>
               <span class="panel-icon" aria-hidden="true">
-                {#if item.content.kind === 'table_browser'}
-                  <TableIcon
-                    system={isSystemDatabase(
-                      item.content.database,
-                      settingsStore.settings.systemDatabases,
-                    ) ||
-                      isSystemTable(item.content.table, settingsStore.settings.systemTablePatterns)}
-                  />
-                {:else if item.content.kind === 'table_structure'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                    <line x1="9" y1="4" x2="9" y2="20"></line>
-                    <line x1="15" y1="4" x2="15" y2="20"></line>
-                  </svg>
-                {:else if item.content.kind === 'query_editor'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <polyline points="8 7 4 12 8 17"></polyline>
-                    <polyline points="16 7 20 12 16 17"></polyline>
-                  </svg>
-                {:else if item.content.kind === 'ddl_viewer'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="8" y1="13" x2="16" y2="13"></line>
-                    <line x1="8" y1="17" x2="13" y2="17"></line>
-                  </svg>
-                {:else if item.content.kind === 'settings'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path
-                      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-                    ></path>
-                  </svg>
-                {:else if item.content.kind === 'user_manager'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <circle cx="12" cy="8" r="4"></circle>
-                    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
-                  </svg>
-                {:else if item.content.kind === 'speed_analysis'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <line x1="18" y1="20" x2="18" y2="10"></line>
-                    <line x1="12" y1="20" x2="12" y2="4"></line>
-                    <line x1="6" y1="20" x2="6" y2="14"></line>
-                  </svg>
-                {:else if item.content.kind === 'release_notes'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                  </svg>
-                {:else if item.content.kind === 'connections'}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-                  </svg>
-                {:else if item.content.kind === 'dashboard'}
-                  <span class="item-dash-icon">{@html dashboardsById.get(item.content.dashboardId)?.icon ?? ''}</span>
-                {:else}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linecap="round"
-                  >
-                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                  </svg>
-                {/if}
+                <PanelIcon content={item.content} size={14} />
               </span>
               {#if renamingItemId === item.id}
                 <input
@@ -575,8 +297,8 @@
                   onblur={() => commitRename(item)}
                 />
               {:else}
-                <span class="panel-label" title={panelLabel(item.content)}
-                  >{panelLabel(item.content)}</span
+                <span class="panel-label" title={panelLabel(item.content, dashboardsById)}
+                  >{panelLabel(item.content, dashboardsById)}</span
                 >
               {/if}
               {#if itemIsDirty(item)}
@@ -712,151 +434,7 @@
                       aria-hidden="true"
                     ></span>
                     <span class="panel-icon" aria-hidden="true">
-                      {#if item.content.kind === 'table_browser'}
-                        <TableIcon
-                          system={isSystemDatabase(
-                            item.content.database,
-                            settingsStore.settings.systemDatabases,
-                          ) ||
-                            isSystemTable(
-                              item.content.table,
-                              settingsStore.settings.systemTablePatterns,
-                            )}
-                        />
-                      {:else if item.content.kind === 'table_structure'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                          <line x1="9" y1="4" x2="9" y2="20"></line>
-                          <line x1="15" y1="4" x2="15" y2="20"></line>
-                        </svg>
-                      {:else if item.content.kind === 'query_editor'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <polyline points="8 7 4 12 8 17"></polyline>
-                          <polyline points="16 7 20 12 16 17"></polyline>
-                        </svg>
-                      {:else if item.content.kind === 'ddl_viewer'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                          ></path>
-                          <polyline points="14 2 14 8 20 8"></polyline>
-                          <line x1="8" y1="13" x2="16" y2="13"></line>
-                          <line x1="8" y1="17" x2="13" y2="17"></line>
-                        </svg>
-                      {:else if item.content.kind === 'settings'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <circle cx="12" cy="12" r="3"></circle>
-                          <path
-                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-                          ></path>
-                        </svg>
-                      {:else if item.content.kind === 'user_manager'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <circle cx="12" cy="8" r="4"></circle>
-                          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
-                        </svg>
-                      {:else if item.content.kind === 'speed_analysis'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <line x1="18" y1="20" x2="18" y2="10"></line>
-                          <line x1="12" y1="20" x2="12" y2="4"></line>
-                          <line x1="6" y1="20" x2="6" y2="14"></line>
-                        </svg>
-                      {:else if item.content.kind === 'release_notes'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                        </svg>
-                      {:else if item.content.kind === 'connections'}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        >
-                          <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                          <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-                          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-                        </svg>
-                      {:else if item.content.kind === 'dashboard'}
-                        <span class="item-dash-icon">{@html dashboardsById.get(item.content.dashboardId)?.icon ?? ''}</span>
-                      {:else}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.7"
-                          stroke-linecap="round"
-                        >
-                          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                        </svg>
-                      {/if}
+                      <PanelIcon content={item.content} size={14} />
                     </span>
                     {#if renamingItemId === item.id}
                       <input
@@ -880,8 +458,8 @@
                         onblur={() => commitRename(item)}
                       />
                     {:else}
-                      <span class="panel-label" title={panelLabel(item.content)}
-                        >{panelLabel(item.content)}</span
+                      <span class="panel-label" title={panelLabel(item.content, dashboardsById)}
+                        >{panelLabel(item.content, dashboardsById)}</span
                       >
                     {/if}
                     {#if itemIsDirty(item)}
@@ -933,110 +511,23 @@
   </div>
 {/if}
 
-{#if contextMenuItemId !== null}
+{#if contextMenuItemId !== null && contextMenuItemSplitId !== null}
   {@const allItems = panelStore.openItems}
   {@const contextItem = allItems.find((i) => i.id === contextMenuItemId)}
-  {@const ctxSplitId = contextMenuItemSplitId}
-  {#if contextItem && ctxSplitId}
-    <ContextMenu
+  {#if contextItem}
+    <TabContextMenu
+      item={contextItem}
+      splitId={contextMenuItemSplitId}
       x={contextMenuLeft}
       y={contextMenuTop}
       open={true}
       onclose={() => (contextMenuItemId = null)}
-    >
-      {#if contextItem.content.kind === 'query_editor' && contextItem.content.savedQueryId}
-        <CtxItem onclick={() => startRename(contextItem)}>Rename</CtxItem>
-        <CtxSep />
-      {/if}
-      {#if contextItem.content.kind === 'table_browser'}
-        <CtxItem
-          onclick={() => {
-            if (contextItem?.content.kind !== 'table_browser') return;
-            const { connectionId, database, table } = contextItem.content;
-            contextMenuItemId = null;
-            generateSqlSelectAll(connectionId, database, table);
-          }}>Select All Rows</CtxItem
-        >
-        <CtxItem
-          onclick={() => {
-            if (contextItem?.content.kind !== 'table_browser') return;
-            const { connectionId, database, table } = contextItem.content;
-            contextMenuItemId = null;
-            generateSqlSelectFirst(connectionId, database, table);
-          }}>Select First 100 Rows</CtxItem
-        >
-        <CtxItem
-          onclick={async () => {
-            if (contextItem?.content.kind !== 'table_browser') return;
-            const { connectionId, database, table } = contextItem.content;
-            contextMenuItemId = null;
-            await generateSqlInsert(connectionId, database, table);
-          }}>Insert Row</CtxItem
-        >
-        <CtxItem
-          onclick={async () => {
-            if (contextItem?.content.kind !== 'table_browser') return;
-            const { connectionId, database, table } = contextItem.content;
-            contextMenuItemId = null;
-            await generateSqlUpdate(connectionId, database, table);
-          }}>Update Rows</CtxItem
-        >
-        <CtxItem
-          onclick={async () => {
-            if (contextItem?.content.kind !== 'table_browser') return;
-            const { connectionId, database, table } = contextItem.content;
-            contextMenuItemId = null;
-            await generateSqlDelete(connectionId, database, table);
-          }}>Delete Rows</CtxItem
-        >
-        <CtxSep />
-      {/if}
-      {#if panelStore.getSplitItems(ctxSplitId).length > 1}
-        <CtxItem
-          onclick={() => {
-            const id = contextItem.id;
-            contextMenuItemId = null;
-            panelStore.closeOtherItems(id);
-          }}>Close other tabs</CtxItem
-        >
-      {/if}
-      {#if 'connectionId' in contextItem.content}
-        <CtxItem
-          onclick={() => {
-            const connId = (contextItem.content as { connectionId: string }).connectionId;
-            contextMenuItemId = null;
-            panelStore.closeItemsForConnection(connId);
-          }}>Close all tabs for this connection</CtxItem
-        >
-      {/if}
-      {#if panelStore.splitCount > 1}
-        {#each panelStore.getAllLeafIds().filter((id) => id !== ctxSplitId) as otherSplitId}
-          <CtxItem
-            onclick={() => {
-              const id = contextItem.id;
-              contextMenuItemId = null;
-              panelStore.moveItemToSplit(id, otherSplitId);
-            }}>Move to {panelStore.getSplitLabel(otherSplitId)}</CtxItem
-          >
-        {/each}
-        {#each panelStore.getAllLeafIds().filter((id) => id !== ctxSplitId) as otherSplitId}
-          <CtxItem
-            onclick={() => {
-              const content = contextItem.content;
-              contextMenuItemId = null;
-              panelStore.copyItemToSplit(content, otherSplitId);
-            }}>Open copy in {panelStore.getSplitLabel(otherSplitId)}</CtxItem
-          >
-        {/each}
-        <CtxItem
-          onclick={() => {
-            const sid = ctxSplitId;
-            contextMenuItemId = null;
-            panelStore.closeSplit(sid);
-          }}>Close split</CtxItem
-        >
-      {/if}
-    </ContextMenu>
+      onrename={(item) => {
+        if (item.content.kind !== 'query_editor') return;
+        renamingItemId = item.id;
+        renameValue = item.content.savedQueryName ?? 'Query';
+      }}
+    />
   {/if}
 {/if}
 
@@ -1243,18 +734,6 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-  }
-
-  .item-dash-icon {
-    display: flex;
-    align-items: center;
-    width: 14px;
-    height: 14px;
-  }
-
-  .item-dash-icon :global(svg) {
-    width: 14px;
-    height: 14px;
   }
 
   .panel-label {
