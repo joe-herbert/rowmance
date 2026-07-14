@@ -58,6 +58,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
+  import AiModal from '$lib/components/ai/AiModal.svelte';
   import QueryBuilderModal from '$lib/components/editor/QueryBuilderModal.svelte';
   import { portal } from '$lib/actions/portal';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
@@ -226,6 +227,18 @@
   let descriptionText = $state<string>(untrack(() => cached?.description ?? initialDescription ?? ''));
   let savedDescription = $state<string | null>(untrack(() => (initialSavedQueryId ? (initialDescription ?? '') : null)));
   let descriptionOpen = $state<boolean>(untrack(() => !!(cached?.description ?? initialDescription)));
+  let aiModal = $state<
+    | { mode: 'generate'; insertLine: number }
+    | { mode: 'explain'; sql: string }
+    | null
+  >(null);
+  let editorContextMenu = $state<{
+    x: number;
+    y: number;
+    hasSelection: boolean;
+    selectionSql: string;
+    cursorSql: string;
+  } | null>(null);
 
   // ── Inline Notes ──────────────────────────────────────────────────────────
 
@@ -1818,6 +1831,17 @@
             });
             return true;
           },
+          contextmenu(event, view) {
+            event.preventDefault();
+            const state = view.state;
+            const { from, to } = state.selection.main;
+            const hasSelection = from !== to;
+            const selectionSql = hasSelection ? state.sliceDoc(from, to).trim() : '';
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? state.selection.main.head;
+            const cursorSql = statementAtCursor(sqlText, pos);
+            editorContextMenu = { x: event.clientX, y: event.clientY, hasSelection, selectionSql, cursorSql };
+            return true;
+          },
         }),
         ...makeTableHighlightExtensions(),
         lintGutter(),
@@ -2286,6 +2310,15 @@
     style="top:{noteMenu.y}px;left:{noteMenu.x}px"
     use:portal
   >
+    {#if settingsStore.settings.aiProvider !== 'none'}
+      <button class="note-menu-item note-menu-item--ai" onmousedown={() => {
+        aiModal = { mode: 'generate', insertLine: noteMenu!.lineNumber };
+        noteMenu = null;
+      }}>
+        Generate with AI…
+      </button>
+      <div class="note-menu-separator"></div>
+    {/if}
     <button class="note-menu-item note-menu-item--builder" onmousedown={() => openQueryBuilder(noteMenu!.lineNumber)}>
       Build query…
     </button>
@@ -2316,6 +2349,88 @@
     oninsert={(sql) => insertSqlAtLine(qbLine, sql)}
     onclose={() => { queryBuilderLine = null; }}
   />
+{/if}
+
+{#if editorContextMenu !== null}
+  {@const ctx = editorContextMenu}
+  <div
+    class="note-menu-backdrop"
+    role="presentation"
+    onmousedown={() => { editorContextMenu = null; }}
+    use:portal
+  ></div>
+  <div
+    class="note-menu"
+    style="top:{ctx.y}px;left:{ctx.x}px"
+    use:portal
+    role="menu"
+  >
+    {#if ctx.hasSelection}
+      <button
+        class="note-menu-item"
+        role="menuitem"
+        disabled={isRunning}
+        onmousedown={() => { editorContextMenu = null; runSelection(); }}
+      >Run selection</button>
+      {#if settingsStore.settings.aiProvider !== 'none'}
+        <button
+          class="note-menu-item note-menu-item--ai"
+          role="menuitem"
+          onmousedown={() => { const sql = ctx.selectionSql; editorContextMenu = null; aiModal = { mode: 'explain', sql }; }}
+        >Explain selection</button>
+      {/if}
+    {:else}
+      <button
+        class="note-menu-item"
+        role="menuitem"
+        disabled={isRunning}
+        onmousedown={() => { editorContextMenu = null; runUnderCursor(); }}
+      >Run query under cursor</button>
+      {#if settingsStore.settings.aiProvider !== 'none'}
+        <button
+          class="note-menu-item note-menu-item--ai"
+          role="menuitem"
+          onmousedown={() => { const sql = ctx.cursorSql; editorContextMenu = null; aiModal = { mode: 'explain', sql }; }}
+        >Explain query under cursor</button>
+      {/if}
+    {/if}
+    <div class="note-menu-separator" role="separator"></div>
+    <button
+      class="note-menu-item"
+      role="menuitem"
+      disabled={isRunning}
+      onmousedown={() => { editorContextMenu = null; runQuery(); }}
+    >Run all</button>
+    {#if settingsStore.settings.aiProvider !== 'none'}
+      <button
+        class="note-menu-item note-menu-item--ai"
+        role="menuitem"
+        onmousedown={() => { const sql = sqlText; editorContextMenu = null; aiModal = { mode: 'explain', sql }; }}
+      >Explain all</button>
+    {/if}
+  </div>
+{/if}
+
+{#if aiModal !== null}
+  {#if aiModal.mode === 'generate'}
+    {@const insertLine = aiModal.insertLine}
+    <AiModal
+      mode="generate"
+      {connectionId}
+      database={selectedDatabase}
+      oninsert={(sql) => { insertSqlAtLine(insertLine, sql); aiModal = null; }}
+      onclose={() => { aiModal = null; }}
+    />
+  {:else}
+    {@const sql = aiModal.sql}
+    <AiModal
+      mode="explain"
+      {sql}
+      {connectionId}
+      database={selectedDatabase}
+      onclose={() => { aiModal = null; }}
+    />
+  {/if}
 {/if}
 
 <style>
@@ -2920,12 +3035,25 @@
     background: var(--color-bg-hover);
   }
 
+  .note-menu-item:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
   .note-menu-item--builder {
     color: var(--color-accent);
     font-weight: var(--font-weight-medium);
   }
 
   .note-menu-item--builder:hover {
+    background: var(--color-accent-subtle);
+  }
+
+  .note-menu-item--ai {
+    color: var(--color-accent);
+  }
+
+  .note-menu-item--ai:hover {
     background: var(--color-accent-subtle);
   }
 

@@ -26,7 +26,7 @@
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
 
-  type Section = 'general' | 'table-view' | 'editor' | 'keyboard' | 'connections' | 'appearance';
+  type Section = 'general' | 'table-view' | 'editor' | 'keyboard' | 'connections' | 'appearance' | 'ai';
 
   let activeSection = $state<Section>(lastActiveSection as Section);
   let settingsContentEl = $state<HTMLElement | null>(null);
@@ -269,7 +269,7 @@
 <div class="settings-page">
   <!-- Sidebar nav -->
   <nav class="settings-nav" aria-label="Settings sections">
-    {#each ['general', 'table-view', 'editor', 'keyboard', 'connections', 'appearance'] as const as section}
+    {#each ['general', 'table-view', 'editor', 'keyboard', 'connections', 'appearance', 'ai'] as const as section}
       <button
         class="nav-item"
         class:active={activeSection === section}
@@ -278,7 +278,9 @@
       >
         {section === 'table-view'
           ? 'Table View'
-          : section.charAt(0).toUpperCase() + section.slice(1)}
+          : section === 'ai'
+            ? 'AI'
+            : section.charAt(0).toUpperCase() + section.slice(1)}
       </button>
     {/each}
   </nav>
@@ -969,6 +971,128 @@
             />
           </div>
         {/key}
+      {/if}
+    {:else if activeSection === 'ai'}
+      <h2 class="section-title">AI</h2>
+      <p class="section-description">
+        Connect to an AI provider to generate queries from natural language, explain queries, and describe tables.
+      </p>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Provider</span>
+            <span class="label-hint">Choose your AI provider</span>
+          </div>
+          <Select
+            value={settings.aiProvider}
+            options={[
+              { value: 'none', label: 'None (disabled)' },
+              { value: 'claude', label: 'Claude (Anthropic)' },
+              { value: 'openai', label: 'OpenAI' },
+              { value: 'gemini', label: 'Google Gemini' },
+              { value: 'ollama', label: 'Ollama (local)' },
+              { value: 'custom', label: 'Custom (OpenAI-compatible)' },
+            ]}
+            onchange={(v) => update('aiProvider', v as AppSettings['aiProvider'])}
+          />
+        </div>
+
+        {#if settings.aiProvider !== 'none'}
+          {#if settings.aiProvider !== 'ollama'}
+            <div class="setting-row">
+              <div class="setting-label">
+                <span class="label-text">API Key</span>
+                <span class="label-hint">Your API key for the selected provider</span>
+              </div>
+              <input
+                class="setting-input"
+                type="password"
+                value={settings.aiApiKey}
+                placeholder="sk-…"
+                onchange={(e) => update('aiApiKey', (e.currentTarget as HTMLInputElement).value)}
+                spellcheck={false}
+              />
+            </div>
+          {/if}
+
+          {#if settings.aiProvider === 'ollama' || settings.aiProvider === 'custom'}
+            <div class="setting-row">
+              <div class="setting-label">
+                <span class="label-text">Base URL</span>
+                <span class="label-hint">{settings.aiProvider === 'ollama' ? 'Ollama server URL (default: http://localhost:11434)' : 'Base URL for the OpenAI-compatible API'}</span>
+              </div>
+              <input
+                class="setting-input"
+                type="text"
+                value={settings.aiBaseUrl}
+                placeholder={settings.aiProvider === 'ollama' ? 'http://localhost:11434' : 'https://…'}
+                onchange={(e) => update('aiBaseUrl', (e.currentTarget as HTMLInputElement).value.trim())}
+                spellcheck={false}
+              />
+            </div>
+          {/if}
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="label-text">Model</span>
+              <span class="label-hint">
+                {#if settings.aiProvider === 'claude'}claude-opus-4-5, claude-sonnet-4-5, etc.{:else if settings.aiProvider === 'openai'}gpt-4o, gpt-4o-mini, etc.{:else if settings.aiProvider === 'gemini'}gemini-1.5-pro, gemini-1.5-flash, etc.{:else if settings.aiProvider === 'ollama'}llama3.2, mistral, codellama, etc.{:else}Model name for the API{/if}
+              </span>
+            </div>
+            <input
+              class="setting-input"
+              type="text"
+              value={settings.aiModel}
+              placeholder={settings.aiProvider === 'claude' ? 'claude-opus-4-5' : settings.aiProvider === 'openai' ? 'gpt-4o' : settings.aiProvider === 'gemini' ? 'gemini-1.5-pro' : 'llama3.2'}
+              onchange={(e) => update('aiModel', (e.currentTarget as HTMLInputElement).value.trim())}
+              spellcheck={false}
+            />
+          </div>
+        {/if}
+      </div>
+
+      {#if settings.aiProvider !== 'none'}
+        <h3 class="subsection-title">Data Access</h3>
+        <p class="section-description">
+          Control what information the AI can see. This setting is strictly enforced — the AI will never receive database structure or data beyond what you allow here.
+        </p>
+
+        <div class="setting-group">
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="label-text">Context Level</span>
+              <span class="label-hint">What the AI is allowed to see about your database</span>
+            </div>
+            <Select
+              value={settings.aiContextLevel}
+              options={[
+                { value: 'none', label: 'None — AI cannot see any schema or data' },
+                { value: 'structure', label: 'Structure only — table names, columns, types, keys' },
+                { value: 'structure_and_data', label: 'Structure + sample data' },
+              ]}
+              onchange={(v) => update('aiContextLevel', v as AppSettings['aiContextLevel'])}
+            />
+          </div>
+
+          {#if settings.aiContextLevel === 'structure_and_data'}
+            <div class="setting-row">
+              <div class="setting-label">
+                <span class="label-text">Sample Rows</span>
+                <span class="label-hint">Number of rows per table sent to the AI as sample data</span>
+              </div>
+              <input
+                class="setting-input setting-input--sm"
+                type="number"
+                min="1"
+                max="20"
+                value={settings.aiDataSampleRows}
+                onchange={(e) =>
+                  update('aiDataSampleRows', parseInt((e.currentTarget as HTMLInputElement).value, 10) || 3)}
+              />
+            </div>
+          {/if}
+        </div>
       {/if}
     {/if}
   </div>

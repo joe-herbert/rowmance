@@ -18,9 +18,12 @@
   import { saveTableChanges } from '$lib/tauri/query';
   import { portal } from '$lib/actions/portal';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
+  import AiModal from '$lib/components/ai/AiModal.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
 
   const toast = useToast();
   const connections = useConnections();
+  const settingsStore = useSettings();
 
   interface Props {
     results: QueryResult[];
@@ -140,6 +143,9 @@
   let colWidths = $state<Record<string, number>>({});
   let columnOrder = $state<string[]>([]);
   let columnOrderOverride = $state<string[] | undefined>(undefined);
+
+  // AI summarise
+  let showAiSummarise = $state(false);
 
   // Search
   let showLocalSearch = $state(false);
@@ -578,6 +584,11 @@
           Columns
         </button>
         <button class="toolbar-btn" onclick={openLocalSearch}> Search </button>
+        {#if settingsStore.settings.aiProvider !== 'none' && settingsStore.settings.aiContextLevel === 'structure_and_data'}
+          <button class="toolbar-btn" onclick={() => { showAiSummarise = true; }}>
+            AI Summarise
+          </button>
+        {/if}
         <div class="toolbar-spacer"></div>
         {#if pendingCount > 0}
           <span class="pending-label">{pendingCount} pending</span>
@@ -806,6 +817,18 @@
     {/if}
   {/if}
 </div>
+
+{#if showAiSummarise && result && statements[activeTab]}
+  <AiModal
+    mode="summarise"
+    sql={statements[activeTab]}
+    columns={result.columns.map((c) => c.name)}
+    rows={result.rows}
+    connectionId={connectionId ?? ''}
+    database={database ?? ''}
+    onclose={() => { showAiSummarise = false; }}
+  />
+{/if}
 
 <style>
   .results-panel {
