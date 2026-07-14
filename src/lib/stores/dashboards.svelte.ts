@@ -1,10 +1,9 @@
 import type { Dashboard, DashboardWidget } from '$lib/types';
+import * as api from '$lib/tauri/dashboards';
 
-const STORAGE_KEY = 'rowmance:dashboards';
+const LEGACY_KEY = 'rowmance:dashboards';
 
-function generateId(): string {
-  return crypto.randomUUID();
-}
+// ── Position helpers ──────────────────────────────────────────────────────────
 
 function findFreePosition(
   existing: DashboardWidget[],
@@ -37,27 +36,35 @@ function migratePositions(
   return placed;
 }
 
-function loadFromStorage(): Dashboard[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as Dashboard[];
-    return parsed.map((d) => ({ ...d, widgets: migratePositions(d.widgets) }));
-  } catch {
-    return [];
-  }
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let dashboards = $state<Dashboard[]>([]);
+let loaded = $state(false);
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+async function persist(id: string) {
+  const d = dashboards.find((x) => x.id === id);
+  if (!d) return;
+  await api.updateDashboard(id, {
+    name: d.name,
+    icon: d.icon,
+    pinned: d.pinned,
+    pinnedOrder: d.pinnedOrder,
+    widgets: d.widgets,
+  });
 }
 
-function saveToStorage(list: Dashboard[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-}
-
-let dashboards = $state<Dashboard[]>(loadFromStorage());
+// ── Public interface ──────────────────────────────────────────────────────────
 
 export function useDashboards() {
   return {
     get dashboards() {
       return dashboards;
+    },
+
+    get loaded() {
+      return loaded;
     },
 
     get pinned(): Dashboard[] {
@@ -70,34 +77,55 @@ export function useDashboards() {
       return dashboards.find((d) => d.id === id);
     },
 
-    create(input: { name: string; icon: string }): Dashboard {
-      const now = new Date().toISOString();
-      const dashboard: Dashboard = {
-        id: generateId(),
-        name: input.name,
-        icon: input.icon,
-        pinned: false,
-        pinnedOrder: null,
-        widgets: [],
-        createdAt: now,
-        updatedAt: now,
-      };
-      dashboards = [...dashboards, dashboard];
-      saveToStorage(dashboards);
-      return dashboard;
+    async load() {
+      let remote = await api.listDashboards();
+
+      // One-time migration from localStorage
+      const legacy = localStorage.getItem(LEGACY_KEY);
+      if (legacy && remote.length === 0) {
+        try {
+          const local = JSON.parse(legacy) as Dashboard[];
+          for (const d of local) {
+            const created = await api.createDashboard({ name: d.name, icon: d.icon });
+            await api.updateDashboard(created.id, {
+              name: d.name,
+              icon: d.icon,
+              pinned: d.pinned,
+              pinnedOrder: d.pinnedOrder,
+              widgets: migratePositions(d.widgets),
+            });
+          }
+          localStorage.removeItem(LEGACY_KEY);
+          remote = await api.listDashboards();
+        } catch (e) {
+          console.warn('Dashboard localStorage migration failed:', e);
+        }
+      }
+
+      dashboards = remote.map((d) => ({
+        ...d,
+        widgets: migratePositions(d.widgets),
+      }));
+      loaded = true;
+    },
+
+    async create(input: { name: string; icon: string }): Promise<Dashboard> {
+      const d = await api.createDashboard(input);
+      dashboards = [...dashboards, { ...d, widgets: [] }];
+      return d;
+    },
+
+    async delete(id: string) {
+      dashboards = dashboards.filter((d) => d.id !== id);
+      resequencePinned();
+      await api.deleteDashboard(id);
     },
 
     update(id: string, input: Partial<Pick<Dashboard, 'name' | 'icon' | 'widgets'>>) {
       dashboards = dashboards.map((d) =>
         d.id === id ? { ...d, ...input, updatedAt: new Date().toISOString() } : d,
       );
-      saveToStorage(dashboards);
-    },
-
-    delete(id: string) {
-      dashboards = dashboards.filter((d) => d.id !== id);
-      resequencePinned();
-      saveToStorage(dashboards);
+      void persist(id);
     },
 
     togglePin(id: string) {
@@ -116,7 +144,7 @@ export function useDashboards() {
           d.id === id ? { ...d, pinned: true, pinnedOrder: pinnedCount } : d,
         );
       }
-      saveToStorage(dashboards);
+      void persist(id);
     },
 
     canPin(): boolean {
@@ -126,16 +154,17 @@ export function useDashboards() {
     addWidget(
       dashboardId: string,
       widget: Omit<DashboardWidget, 'id' | 'x' | 'y'>,
-    ): DashboardWidget {
-      const existing = dashboards.find((d) => d.id === dashboardId)?.widgets ?? [];
-      const pos = findFreePosition(existing, widget.w, widget.h);
-      const newWidget: DashboardWidget = { ...widget, id: generateId(), ...pos };
+    ): DashboardWidget | undefined {
+      const existing = dashboards.find((d) => d.id === dashboardId);
+      if (!existing) return undefined;
+      const pos = findFreePosition(existing.widgets, widget.w, widget.h);
+      const newWidget: DashboardWidget = { ...widget, id: crypto.randomUUID(), ...pos };
       dashboards = dashboards.map((d) =>
         d.id === dashboardId
           ? { ...d, widgets: [...d.widgets, newWidget], updatedAt: new Date().toISOString() }
           : d,
       );
-      saveToStorage(dashboards);
+      void persist(dashboardId);
       return newWidget;
     },
 
@@ -153,7 +182,7 @@ export function useDashboards() {
             }
           : d,
       );
-      saveToStorage(dashboards);
+      void persist(dashboardId);
     },
 
     deleteWidget(dashboardId: string, widgetId: string) {
@@ -166,9 +195,8 @@ export function useDashboards() {
             }
           : d,
       );
-      saveToStorage(dashboards);
+      void persist(dashboardId);
     },
-
   };
 }
 

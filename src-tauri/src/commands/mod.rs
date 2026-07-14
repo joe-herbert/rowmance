@@ -1,4 +1,5 @@
 pub mod connections;
+pub mod dashboards;
 pub mod erd;
 pub mod export;
 pub mod file_saved_queries;

@@ -25,9 +25,9 @@
   let newName = $state('');
   let newIcon = $state(DEFAULT_ICON);
 
-  function createDashboard() {
+  async function createDashboard() {
     if (!newName.trim()) return;
-    const dashboard = dashboardsStore.create({ name: newName.trim(), icon: newIcon });
+    const dashboard = await dashboardsStore.create({ name: newName.trim(), icon: newIcon });
     newName = '';
     newIcon = DEFAULT_ICON;
     showNewForm = false;
@@ -86,7 +86,7 @@
 
   function confirmDelete() {
     if (!confirmDeleteId) return;
-    dashboardsStore.delete(confirmDeleteId);
+    void dashboardsStore.delete(confirmDeleteId);
     confirmDeleteId = null;
   }
 

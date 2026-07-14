@@ -8,13 +8,16 @@
   import AppShell from '$lib/components/layout/AppShell.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useDashboards } from '$lib/stores/dashboards.svelte';
 
   const settingsStore = useSettings();
   const connectionStore = useConnections();
+  const dashboardsStore = useDashboards();
 
   $effect(() => {
     settingsStore.load();
     connectionStore.load();
+    dashboardsStore.load();
   });
 </script>
 

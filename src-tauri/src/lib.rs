@@ -376,6 +376,11 @@ pub fn run() {
             commands::history::history_list,
             commands::history::history_clear,
             commands::history::history_delete,
+            // Dashboards
+            commands::dashboards::dashboards_list,
+            commands::dashboards::dashboards_create,
+            commands::dashboards::dashboards_update,
+            commands::dashboards::dashboards_delete,
             // Saved queries (SQLite, kept for migration purposes)
             commands::saved_queries::saved_queries_list_folders,
             commands::saved_queries::saved_queries_create_folder,
