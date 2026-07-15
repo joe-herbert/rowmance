@@ -257,7 +257,7 @@
   onkeydown={handleTriggerKeydown}
 >
   <span class="trigger-label" class:trigger-label--placeholder={!selectedLabel && !!placeholder}>{selectedLabel || placeholder}</span>
-  <SmallChevronIcon class="trigger-chevron{open ? ' trigger-chevron--open' : ''}" />
+  <span class="trigger-chevron" class:trigger-chevron--open={open}><SmallChevronIcon /></span>
 </button>
 
 {#if open}
@@ -441,10 +441,15 @@
       color var(--transition-fast);
     pointer-events: none;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .select-trigger--xs .trigger-chevron {
     right: 5px;
+  }
+
+  .select-trigger--xs .trigger-chevron :global(svg) {
     width: 8px;
     height: 5px;
   }
