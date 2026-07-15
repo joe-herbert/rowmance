@@ -4988,6 +4988,10 @@
     transition: background var(--transition-fast);
   }
 
+  .data-row:nth-child(even) {
+    background: var(--color-table-row-alt);
+  }
+
   .data-row:hover {
     background: var(--color-bg-hover);
   }
