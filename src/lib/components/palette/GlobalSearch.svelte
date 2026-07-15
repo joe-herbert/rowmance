@@ -785,13 +785,14 @@
   .search-row {
     display: flex;
     align-items: center;
-    gap: var(--spacing-2);
+    gap: var(--spacing-1);
     padding: var(--spacing-3) var(--spacing-4);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
 
   .search-icon {
+    position: static;
     color: var(--color-text-muted);
     flex-shrink: 0;
     display: flex;
@@ -806,6 +807,7 @@
     color: var(--color-text-primary);
     outline: none;
     font-family: var(--font-family-ui);
+    padding: 0 4px;
   }
 
   .search-input::placeholder {
