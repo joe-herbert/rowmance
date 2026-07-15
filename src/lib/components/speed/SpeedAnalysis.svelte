@@ -7,10 +7,52 @@
   import * as api from '$lib/tauri/speed_analysis';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import type { SpeedAnalysisEntry } from '$lib/tauri/speed_analysis';
+  import { useConnections } from '$lib/stores/connections.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
+
+  type StepKey = 'total' | 'pool' | 'switch' | 'exec' | 'proc' | 'rows';
+  type SortField = 'date' | 'total' | 'pool' | 'switch' | 'exec' | 'proc' | 'rows';
+  type SortDir = 'asc' | 'desc';
+
+  interface TimingFilter {
+    id: string;
+    step: StepKey;
+    min: string;
+    max: string;
+  }
 
   let entries = $state<SpeedAnalysisEntry[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  let timingFilters = $state<TimingFilter[]>([]);
+  type SshFilter = 'all' | 'ssh' | 'no-ssh';
+  let filterSsh = $state<SshFilter>('all');
+  let filterConnectionId = $state('');
+
+  let sortField = $state<SortField>('date');
+  let sortDir = $state<SortDir>('desc');
+
+  const connections = useConnections();
+
+  function stepUs(entry: SpeedAnalysisEntry, step: StepKey): number {
+    if (step === 'total') return entry.totalUs;
+    if (step === 'pool') return entry.poolAcquireUs;
+    if (step === 'switch') return entry.dbSwitchUs;
+    if (step === 'exec') return entry.executionUs;
+    return entry.resultProcessingUs;
+  }
+
+  function addFilter() {
+    timingFilters = [
+      ...timingFilters,
+      { id: Math.random().toString(36).slice(2), step: 'total', min: '', max: '' },
+    ];
+  }
+
+  function removeFilter(id: string) {
+    timingFilters = timingFilters.filter((f) => f.id !== id);
+  }
 
   async function load() {
     loading = true;
@@ -29,14 +71,83 @@
     entries = [];
   }
 
+  function clearFilters() {
+    timingFilters = [];
+    filterSsh = 'all';
+    filterConnectionId = '';
+  }
+
   onMount(load);
 
+  const entryConnectionIds = $derived([...new Set(entries.map((e) => e.connectionId))]);
+
+  const hasActiveFilter = $derived(
+    timingFilters.length > 0 || filterSsh !== 'all' || filterConnectionId !== '',
+  );
+
+  function sortValue(entry: SpeedAnalysisEntry, field: SortField): number | string {
+    switch (field) {
+      case 'date': return entry.executedAt;
+      case 'total': return entry.totalUs;
+      case 'pool': return entry.poolAcquireUs;
+      case 'switch': return entry.dbSwitchUs;
+      case 'exec': return entry.executionUs;
+      case 'proc': return entry.resultProcessingUs;
+      case 'rows': return entry.rowCount ?? -Infinity;
+    }
+  }
+
+  const filteredEntries = $derived.by(() => {
+    const filtered = entries.filter((entry) => {
+      for (const f of timingFilters) {
+        if (f.step === 'rows') {
+          const rows = entry.rowCount;
+          if (f.min !== '') {
+            if (rows === null || rows < parseFloat(f.min)) return false;
+          }
+          if (f.max !== '') {
+            if (rows === null || rows > parseFloat(f.max)) return false;
+          }
+        } else {
+          const us = stepUs(entry, f.step);
+          if (f.min !== '') {
+            if (us < parseFloat(f.min) * 1000) return false;
+          }
+          if (f.max !== '') {
+            if (us > parseFloat(f.max) * 1000) return false;
+          }
+        }
+      }
+
+      if (filterSsh !== 'all') {
+        const sshEnabled = connections.profiles.find((p) => p.id === entry.connectionId)?.sshEnabled ?? false;
+        if (filterSsh === 'ssh' && !sshEnabled) return false;
+        if (filterSsh === 'no-ssh' && sshEnabled) return false;
+      }
+
+      if (filterConnectionId !== '' && entry.connectionId !== filterConnectionId) return false;
+
+      return true;
+    });
+
+    const dir = sortDir === 'desc' ? -1 : 1;
+    return filtered.slice().sort((a, b) => {
+      const av = sortValue(a, sortField);
+      const bv = sortValue(b, sortField);
+      if (av < bv) return -dir;
+      if (av > bv) return dir;
+      return 0;
+    });
+  });
+
   const avg = $derived(
-    entries.length > 0
-      ? Math.round(entries.reduce((s, e) => s + e.totalUs, 0) / entries.length)
+    filteredEntries.length > 0
+      ? Math.round(filteredEntries.reduce((s, e) => s + e.totalUs, 0) / filteredEntries.length)
       : 0,
   );
-  const max = $derived(entries.length > 0 ? Math.max(...entries.map((e) => e.totalUs)) : 0);
+  const max = $derived(
+    filteredEntries.length > 0 ? Math.max(...filteredEntries.map((e) => e.totalUs)) : 0,
+  );
 
   function formatUs(us: number): string {
     if (us >= 1_000_000) return `${(us / 1_000_000).toFixed(2)}s`;
@@ -81,6 +192,96 @@
     </div>
   </div>
 
+  {#if !loading && !error && entries.length > 0}
+    <div class="filters">
+      {#if timingFilters.length > 0}
+        <div class="filter-rows">
+          {#each timingFilters as f (f.id)}
+            <div class="filter-row">
+              <Select
+                size="xs"
+                bind:value={f.step}
+                options={[
+                  { value: 'total', label: 'Total' },
+                  { value: 'pool', label: 'Pool' },
+                  { value: 'switch', label: 'Switch' },
+                  { value: 'exec', label: 'Exec' },
+                  { value: 'proc', label: 'Proc' },
+                  { value: 'rows', label: 'Rows' },
+                ]}
+              />
+              <span class="filter-op">≥</span>
+              <input
+                class="filter-input"
+                type="number"
+                min="0"
+                placeholder={f.step === 'rows' ? 'rows' : 'ms'}
+                bind:value={f.min}
+              />
+              <span class="filter-op">≤</span>
+              <input
+                class="filter-input"
+                type="number"
+                min="0"
+                placeholder={f.step === 'rows' ? 'rows' : 'ms'}
+                bind:value={f.max}
+              />
+              <button class="filter-remove" onclick={() => removeFilter(f.id)} aria-label="Remove filter">×</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+      <div class="filter-toolbar">
+        <button class="btn-ghost" onclick={addFilter}>+ Add filter</button>
+        <Select
+          size="xs"
+          bind:value={filterSsh}
+          options={[
+            { value: 'all', label: 'All SSH states' },
+            { value: 'ssh', label: 'SSH only' },
+            { value: 'no-ssh', label: 'Not SSH' },
+          ]}
+        />
+        {#if entryConnectionIds.length > 1}
+          <Select
+            size="xs"
+            bind:value={filterConnectionId}
+            options={[
+              { value: '', label: 'All connections' },
+              ...entryConnectionIds.map((cid) => ({
+                value: cid,
+                label: connections.profiles.find((p) => p.id === cid)?.name ?? cid,
+              })),
+            ]}
+          />
+        {/if}
+        <span class="toolbar-divider"></span>
+        <span class="toolbar-label">Sort</span>
+        <Select
+          size="xs"
+          bind:value={sortField}
+          options={[
+            { value: 'date', label: 'Date' },
+            { value: 'total', label: 'Total time' },
+            { value: 'pool', label: 'Pool time' },
+            { value: 'switch', label: 'Switch time' },
+            { value: 'exec', label: 'Exec time' },
+            { value: 'proc', label: 'Proc time' },
+            { value: 'rows', label: 'Rows' },
+          ]}
+        />
+        <button
+          class="sort-dir-btn"
+          onclick={() => (sortDir = sortDir === 'desc' ? 'asc' : 'desc')}
+          title={sortDir === 'desc' ? 'Descending' : 'Ascending'}
+        >{sortDir === 'desc' ? '↓' : '↑'}</button>
+        {#if hasActiveFilter}
+          <button class="btn-ghost filter-clear" onclick={clearFilters}>Clear filters</button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   {#if loading}
     <div class="state-message">Loading…</div>
   {:else if error}
@@ -92,7 +293,11 @@
   {:else}
     <div class="summary">
       <div class="stat">
-        <span class="stat-value">{entries.length}</span>
+        <span class="stat-value"
+          >{filteredEntries.length}{#if hasActiveFilter}<span class="stat-total"
+              >/{entries.length}</span
+            >{/if}</span
+        >
         <span class="stat-label">recorded</span>
       </div>
       <div class="stat">
@@ -112,7 +317,7 @@
     </div>
 
     <div class="entries">
-      {#each entries as entry (entry.id)}
+      {#each filteredEntries as entry (entry.id)}
         <div class="entry">
           <div class="entry-header">
             <span class="entry-time">{formatTime(entry.executedAt)}</span>
@@ -258,6 +463,129 @@
   .btn-danger:disabled {
     opacity: 0.3;
     cursor: default;
+  }
+
+  .filters {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .filter-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--spacing-2) var(--spacing-4);
+    padding-bottom: var(--spacing-1);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+
+  .filter-op {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .filter-input {
+    width: 68px;
+    padding: 2px var(--spacing-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-primary);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .filter-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+
+  .filter-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--color-text-muted);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .filter-remove:hover {
+    color: var(--color-danger);
+    background: var(--color-danger-subtle);
+  }
+
+  .filter-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-4);
+  }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 14px;
+    background: var(--color-border);
+    flex-shrink: 0;
+    margin: 0 var(--spacing-1);
+  }
+
+  .toolbar-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .sort-dir-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .sort-dir-btn:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-border-strong);
+    background: var(--color-bg-hover);
+  }
+
+  .filter-clear {
+    margin-left: auto;
+  }
+
+  .stat-total {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-normal);
+    color: var(--color-text-muted);
   }
 
   .summary {
