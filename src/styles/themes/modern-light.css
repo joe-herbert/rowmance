@@ -1,0 +1,61 @@
+/* Modern Light theme — clean, flat, minimal. Solid whites and neutrals with a blue accent. */
+
+[data-theme='modern-light'] {
+  --app-background: #f5f5f5;
+  --glass-blur: none;
+
+  --panel-spacing: 6px;
+
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f9f9f9;
+  --color-bg-tertiary: #f2f2f2;
+  --color-bg-overlay: #ffffff;
+  --color-bg-hover: #f0f0f0;
+  --color-bg-active: #e8e8e8;
+
+  --color-border: #e2e2e2;
+  --color-border-strong: #c8c8c8;
+
+  --color-text-primary: #111111;
+  --color-text-secondary: #444444;
+  --color-text-muted: #777777;
+  --color-text-disabled: #bbbbbb;
+
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-subtle: rgba(37, 99, 235, 0.1);
+
+  --color-editor-bg: #ffffff;
+  --color-editor-text: #111111;
+  --color-editor-gutter-bg: #f5f5f5;
+  --color-editor-gutter-text: #aaaaaa;
+  --color-editor-selection: rgba(37, 99, 235, 0.15);
+  --color-editor-active-line: rgba(37, 99, 235, 0.05);
+  --color-editor-cursor: #2563eb;
+  --color-editor-keyword: #2563eb;
+  --color-editor-string: #16a34a;
+  --color-editor-number: #b45309;
+  --color-editor-comment: #999999;
+  --color-editor-function: #0369a1;
+  --color-editor-type: #0891b2;
+  --color-editor-bracket-match: rgba(37, 99, 235, 0.18);
+
+  --color-scrollbar-thumb: #d4d4d4;
+  --color-scrollbar-thumb-hover: #b0b0b0;
+
+  --color-table-row-alt: #fafafa;
+  --color-table-row-hover: rgba(37, 99, 235, 0.05);
+  --color-table-row-selected: rgba(37, 99, 235, 0.1);
+  --color-table-header-bg: #f0f0f0;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --panel-radius: 6px;
+}

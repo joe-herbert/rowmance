@@ -49,7 +49,7 @@
   const settings = $derived(settingsStore.settings);
   const toast = useToast();
 
-  const BUILTIN_THEMES = ['system', 'light', 'dark', 'high-contrast', 'ssms'];
+  const BUILTIN_THEMES = ['system', 'light', 'dark', 'high-contrast', 'ssms', 'modern-light', 'modern-dark'];
 
   let userThemes = $state<ThemeMeta[]>([]);
   let themeError = $state<string | null>(null);
@@ -70,6 +70,8 @@
         { value: 'dark', label: 'Dark' },
         { value: 'high-contrast', label: 'High Contrast' },
         { value: 'ssms', label: 'SSMS Retro' },
+        { value: 'modern-light', label: 'Modern Light' },
+        { value: 'modern-dark', label: 'Modern Dark' },
       ],
     },
     ...(userThemes.length > 0
@@ -85,6 +87,8 @@
         { value: 'dark', label: 'Dark' },
         { value: 'high-contrast', label: 'High Contrast' },
         { value: 'ssms', label: 'SSMS Retro' },
+        { value: 'modern-light', label: 'Modern Light' },
+        { value: 'modern-dark', label: 'Modern Dark' },
       ],
     },
     ...(userThemes.length > 0
