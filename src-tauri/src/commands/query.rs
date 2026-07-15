@@ -1,7 +1,8 @@
 /// Tauri commands for executing SQL queries against remote databases.
+use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::Statement as SqlStatement;
-use sqlparser::dialect::{MySqlDialect, PostgreSqlDialect, SQLiteDialect};
+use sqlparser::dialect::{MySqlDialect, MsSqlDialect, PostgreSqlDialect, SQLiteDialect};
 use sqlparser::parser::Parser;
 use sqlx::{Column, Executor, Row, Statement, TypeInfo};
 use std::sync::Arc;
@@ -347,6 +348,10 @@ pub async fn query_delete_rows(
                         .rows_affected();
                 }
             }
+            HeldConnection::SqlServer(conn) => {
+                total_deleted +=
+                    apply_deletes_sqlserver(&mut **conn, &database, &table, &rows).await?;
+            }
         }
     } else {
         let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
@@ -465,6 +470,20 @@ pub async fn query_delete_rows(
                         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
                         .rows_affected();
                 }
+            }
+            RemotePool::SqlServer(pool, read_only) => {
+                if *read_only {
+                    return Err(AppError::new(
+                        "READ_ONLY_VIOLATION",
+                        "This connection is in read-only mode",
+                    ));
+                }
+                let mut conn = pool
+                    .get()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                total_deleted +=
+                    apply_deletes_sqlserver(&mut *conn, &database, &table, &rows).await?;
             }
         }
     }
@@ -654,6 +673,10 @@ pub async fn query_update_rows(
                         .rows_affected();
                 }
             }
+            HeldConnection::SqlServer(conn) => {
+                total_updated +=
+                    apply_updates_sqlserver(&mut **conn, &database, &table, &changes).await?;
+            }
         }
     } else {
         let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
@@ -806,6 +829,20 @@ pub async fn query_update_rows(
                         .rows_affected();
                 }
             }
+            RemotePool::SqlServer(pool, read_only) => {
+                if *read_only {
+                    return Err(AppError::new(
+                        "READ_ONLY_VIOLATION",
+                        "This connection is in read-only mode",
+                    ));
+                }
+                let mut conn = pool
+                    .get()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                total_updated +=
+                    apply_updates_sqlserver(&mut *conn, &database, &table, &changes).await?;
+            }
         }
     }
 
@@ -915,6 +952,25 @@ pub async fn query_insert_row(
                     .await
                     .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
+            HeldConnection::SqlServer(conn) => {
+                let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_sqlserver(c)).collect();
+                let placeholders: Vec<String> =
+                    (1..=cols.len()).map(|i| format!("@P{i}")).collect();
+                let sql = format!(
+                    "INSERT INTO {}.{} ({}) VALUES ({})",
+                    quote_sqlserver(&database),
+                    quote_sqlserver(&table),
+                    col_list.join(", "),
+                    placeholders.join(", ")
+                );
+                let vals: Vec<&serde_json::Value> = cols.iter().map(|(_, v)| *v).collect();
+                let params = build_mssql_params(&vals);
+                let params_refs: Vec<&dyn tiberius::ToSql> =
+                    params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+                conn.execute(sql.as_str(), &params_refs)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
         }
     } else {
         let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
@@ -969,6 +1025,36 @@ pub async fn query_insert_row(
                     q = bind_sqlite_value(q, val);
                 }
                 q.execute(pool)
+                    .await
+                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            }
+            RemotePool::SqlServer(pool, read_only) => {
+                if *read_only {
+                    return Err(AppError::new(
+                        "READ_ONLY_VIOLATION",
+                        "This connection is in read-only mode",
+                    ));
+                }
+                let mut conn = pool
+                    .get()
+                    .await
+                    .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+                let col_list: Vec<String> =
+                    cols.iter().map(|(c, _)| quote_sqlserver(c)).collect();
+                let placeholders: Vec<String> =
+                    (1..=cols.len()).map(|i| format!("@P{i}")).collect();
+                let sql = format!(
+                    "INSERT INTO {}.{} ({}) VALUES ({})",
+                    quote_sqlserver(&database),
+                    quote_sqlserver(&table),
+                    col_list.join(", "),
+                    placeholders.join(", ")
+                );
+                let vals: Vec<&serde_json::Value> = cols.iter().map(|(_, v)| *v).collect();
+                let params = build_mssql_params(&vals);
+                let params_refs: Vec<&dyn tiberius::ToSql> =
+                    params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+                conn.execute(sql.as_str(), &params_refs)
                     .await
                     .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
@@ -1056,6 +1142,14 @@ pub async fn query_save_table_changes(
                 updated_count += apply_updates_sqlite(conn, &table, &updates).await?;
                 inserted_count += apply_inserts_sqlite(conn, &table, &inserts).await?;
                 deleted_count += apply_deletes_sqlite(conn, &table, &deletes).await?;
+            }
+            HeldConnection::SqlServer(conn) => {
+                updated_count +=
+                    apply_updates_sqlserver(&mut *conn, &database, &table, &updates).await?;
+                inserted_count +=
+                    apply_inserts_sqlserver(&mut *conn, &database, &table, &inserts).await?;
+                deleted_count +=
+                    apply_deletes_sqlserver(&mut *conn, &database, &table, &deletes).await?;
             }
         }
         return Ok(SaveChangesResult {
@@ -1145,6 +1239,35 @@ pub async fn query_save_table_changes(
                 }
                 Err(e) => {
                     let _ = tx.rollback().await;
+                    return Err(e);
+                }
+            }
+        }
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            mssql_exec_simple(&mut *conn, "BEGIN TRANSACTION").await?;
+            let r = async {
+                let u =
+                    apply_updates_sqlserver(&mut *conn, &database, &table, &updates).await?;
+                let i =
+                    apply_inserts_sqlserver(&mut *conn, &database, &table, &inserts).await?;
+                let d =
+                    apply_deletes_sqlserver(&mut *conn, &database, &table, &deletes).await?;
+                Ok::<_, AppError>((u, i, d))
+            }
+            .await;
+            match r {
+                Ok((u, i, d)) => {
+                    mssql_exec_simple(&mut *conn, "COMMIT").await?;
+                    updated_count = u;
+                    inserted_count = i;
+                    deleted_count = d;
+                }
+                Err(e) => {
+                    let _ = mssql_exec_simple(&mut *conn, "ROLLBACK").await;
                     return Err(e);
                 }
             }
@@ -1683,6 +1806,9 @@ pub async fn query_execute_multi(
                     execute_postgres(conn, stmt, 10_000, 0).await
                 }
                 HeldConnection::Sqlite(conn) => execute_sqlite(conn, stmt, 10_000, 0).await,
+                HeldConnection::SqlServer(conn) => {
+                    execute_sqlserver(&mut *conn, stmt, 10_000, 0).await
+                }
             };
             let duration_us = start.elapsed().as_micros() as u64;
             push_result(
@@ -1724,6 +1850,7 @@ pub async fn query_execute_multi(
                             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
                     }
                     HeldConnection::Sqlite(_) => {}
+                    HeldConnection::SqlServer(_) => {}
                 }
             }
             for stmt in &statements {
@@ -1735,6 +1862,9 @@ pub async fn query_execute_multi(
                         execute_postgres(conn, stmt, 10_000, 0).await
                     }
                     HeldConnection::Sqlite(conn) => execute_sqlite(conn, stmt, 10_000, 0).await,
+                    HeldConnection::SqlServer(conn) => {
+                        execute_sqlserver(&mut *conn, stmt, 10_000, 0).await
+                    }
                 };
                 let duration_us = start.elapsed().as_micros() as u64;
                 push_result(
@@ -1978,6 +2108,71 @@ pub async fn query_execute_multi(
                     .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             }
         }
+        RemotePool::SqlServer(pool, _) => {
+            let pool_clone = pool.clone();
+            let t = std::time::Instant::now();
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let pool_acquire_us = t.elapsed().as_micros() as u64;
+            if multi {
+                mssql_exec_simple(&mut *conn, "BEGIN TRANSACTION").await?;
+            }
+            for (i, stmt) in statements.iter().enumerate() {
+                let query_id = uuid::Uuid::new_v4().to_string();
+                let t = std::time::Instant::now();
+                let exec_result = execute_sqlserver(&mut *conn, stmt, 10_000, 0).await;
+                let execution_us = t.elapsed().as_micros() as u64;
+                let t = std::time::Instant::now();
+                push_result(
+                    &mut results,
+                    exec_result,
+                    query_id.clone(),
+                    &connection_id,
+                    stmt,
+                    execution_us,
+                    sqlite.inner(),
+                )
+                .await;
+                #[cfg(debug_assertions)]
+                {
+                    let result_processing_us = t.elapsed().as_micros() as u64;
+                    let this_pool = if i == 0 { pool_acquire_us } else { 0 };
+                    record_speed_analysis(
+                        sqlite.inner(),
+                        &connection_id,
+                        stmt,
+                        this_pool + execution_us + result_processing_us,
+                        this_pool,
+                        0,
+                        execution_us,
+                        result_processing_us,
+                        results.last().map(|r| r.rows.len() as i64),
+                    )
+                    .await;
+                }
+                if results
+                    .last()
+                    .map(|r| r.error.is_none() && !r.columns.is_empty())
+                    .unwrap_or(false)
+                {
+                    spawn_query_count_sqlserver(
+                        app.clone(),
+                        pool_clone.clone(),
+                        stmt.to_string(),
+                        query_id,
+                    );
+                }
+            }
+            if multi {
+                if results.iter().any(|r| r.error.is_some()) {
+                    let _ = mssql_exec_simple(&mut *conn, "ROLLBACK").await;
+                } else {
+                    mssql_exec_simple(&mut *conn, "COMMIT").await?;
+                }
+            }
+        }
     }
 
     Ok(results)
@@ -2081,6 +2276,9 @@ pub async fn query_execute(
                 execute_postgres(conn, &sql, page_size, offset).await
             }
             HeldConnection::Sqlite(conn) => execute_sqlite(conn, &sql, page_size, offset).await,
+            HeldConnection::SqlServer(conn) => {
+                execute_sqlserver(&mut *conn, &sql, page_size, offset).await
+            }
         };
         let duration_us = start.elapsed().as_micros() as u64;
         return Ok(build_query_result(
@@ -2100,6 +2298,7 @@ pub async fn query_execute(
         MySql(sqlx::MySqlPool, bool),
         Postgres(sqlx::PgPool),
         Sqlite(sqlx::SqlitePool),
+        SqlServer(bb8::Pool<bb8_tiberius::ConnectionManager>),
     }
 
     let pool_acquire_us;
@@ -2169,6 +2368,18 @@ pub async fn query_execute(
             execution_us = t.elapsed().as_micros() as u64;
             (res, PoolKind::Sqlite(pool.clone()))
         }
+        RemotePool::SqlServer(pool, _) => {
+            let t = std::time::Instant::now();
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            pool_acquire_us = t.elapsed().as_micros() as u64;
+            let t = std::time::Instant::now();
+            let res = execute_sqlserver(&mut *conn, &sql, page_size, offset).await;
+            execution_us = t.elapsed().as_micros() as u64;
+            (res, PoolKind::SqlServer(pool.clone()))
+        }
     };
 
     let duration_us = start.elapsed().as_micros() as u64;
@@ -2210,6 +2421,9 @@ pub async fn query_execute(
             }
             PoolKind::Sqlite(pool) => {
                 spawn_query_count_sqlite(app, pool, sql, qid);
+            }
+            PoolKind::SqlServer(pool) => {
+                spawn_query_count_sqlserver(app, pool, sql, qid);
             }
         }
     }
@@ -2805,6 +3019,581 @@ async fn execute_sqlite(
     }
 }
 
+/// Quote an identifier for SQL Server (square brackets).
+fn quote_sqlserver(ident: &str) -> String {
+    format!("[{}]", ident.replace(']', "]]"))
+}
+
+/// SQL Server OFFSET/FETCH pagination. SQL Server 2012+ requires ORDER BY for OFFSET.
+fn build_paginated_sql_mssql(sql: &str, page_size: u32, offset: u32) -> String {
+    if page_size == UNBOUNDED {
+        return sql.to_string();
+    }
+    let upper = sql.to_uppercase();
+    // Already has SQL Server pagination or a TOP clause
+    if upper.contains("FETCH NEXT") || upper.contains("FETCH FIRST") {
+        return sql.to_string();
+    }
+    let trimmed = upper.trim_start();
+    if trimmed.starts_with("SELECT TOP") || trimmed.starts_with("WITH ") {
+        return sql.to_string();
+    }
+    // SQL Server requires ORDER BY for OFFSET/FETCH
+    if sql_has_top_level_order_by(sql) {
+        format!(
+            "{} OFFSET {} ROWS FETCH NEXT {} ROWS ONLY",
+            sql, offset, page_size
+        )
+    } else {
+        format!(
+            "{} ORDER BY (SELECT NULL) OFFSET {} ROWS FETCH NEXT {} ROWS ONLY",
+            sql, offset, page_size
+        )
+    }
+}
+
+/// Returns true if the SQL has a top-level ORDER BY (not inside subqueries/brackets).
+fn sql_has_top_level_order_by(sql: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let len = bytes.len();
+    let mut i = 0usize;
+    let mut depth = 0i32;
+    while i < len {
+        match bytes[i] {
+            q @ (b'\'' | b'"' | b'`') => {
+                i += 1;
+                while i < len {
+                    if bytes[i] == q {
+                        i += 1;
+                        if i < len && bytes[i] == q {
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            b'[' => {
+                i += 1;
+                while i < len && bytes[i] != b']' {
+                    i += 1;
+                }
+                if i < len {
+                    i += 1;
+                }
+            }
+            b'-' if i + 1 < len && bytes[i + 1] == b'-' => {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if i + 1 < len && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < len {
+                    if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                        i += 2;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            _ => {
+                if depth == 0 && i + 8 <= len {
+                    let word = &sql[i..i + 8];
+                    if word.eq_ignore_ascii_case("order by") {
+                        let before_ok = i == 0
+                            || (!bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_');
+                        let after_ok = bytes
+                            .get(i + 8)
+                            .map_or(true, |b| b.is_ascii_whitespace() || !b.is_ascii_alphanumeric());
+                        if before_ok && after_ok {
+                            return true;
+                        }
+                    }
+                }
+                i += 1;
+            }
+        }
+    }
+    false
+}
+
+fn returns_rows_mssql(sql: &str) -> bool {
+    match Parser::parse_sql(&MsSqlDialect {}, sql) {
+        Ok(stmts) => stmts.first().map(stmt_returns_rows).unwrap_or(false),
+        Err(_) => returns_rows_heuristic(sql),
+    }
+}
+
+fn mssql_column_type_name(col_type: tiberius::ColumnType) -> String {
+    use tiberius::ColumnType;
+    match col_type {
+        ColumnType::Null => "null".to_string(),
+        ColumnType::Bit => "bit".to_string(),
+        ColumnType::Int1 => "tinyint".to_string(),
+        ColumnType::Int2 => "smallint".to_string(),
+        ColumnType::Int4 => "int".to_string(),
+        ColumnType::Int8 => "bigint".to_string(),
+        ColumnType::Float4 => "real".to_string(),
+        ColumnType::Float8 => "float".to_string(),
+        ColumnType::Money => "money".to_string(),
+        ColumnType::Money4 => "smallmoney".to_string(),
+        ColumnType::Datetime => "datetime".to_string(),
+        ColumnType::Datetime2 => "datetime2".to_string(),
+        ColumnType::Datetimen => "datetime".to_string(),
+        ColumnType::Datetime4 => "smalldatetime".to_string(),
+        ColumnType::DatetimeOffsetn => "datetimeoffset".to_string(),
+        ColumnType::Daten => "date".to_string(),
+        ColumnType::Timen => "time".to_string(),
+        ColumnType::Guid => "uniqueidentifier".to_string(),
+        ColumnType::Decimaln | ColumnType::Numericn => "decimal".to_string(),
+        ColumnType::BigVarBin => "varbinary(max)".to_string(),
+        ColumnType::BigBinary => "binary".to_string(),
+        ColumnType::BigVarChar => "varchar(max)".to_string(),
+        ColumnType::BigChar => "char".to_string(),
+        ColumnType::NVarchar => "nvarchar".to_string(),
+        ColumnType::NChar => "nchar".to_string(),
+        ColumnType::Text => "text".to_string(),
+        ColumnType::NText => "ntext".to_string(),
+        ColumnType::Image => "image".to_string(),
+        ColumnType::Xml => "xml".to_string(),
+        ColumnType::Udt => "udt".to_string(),
+        ColumnType::SSVariant => "sql_variant".to_string(),
+        _ => "unknown".to_string(),
+    }
+}
+
+fn mssql_column_data_to_json(data: tiberius::ColumnData<'_>) -> serde_json::Value {
+    use tiberius::ColumnData;
+    match data {
+        ColumnData::Bit(v) => v
+            .map(serde_json::Value::Bool)
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::U8(v) => v
+            .map(|n| serde_json::Value::from(n as i64))
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::I16(v) => v
+            .map(|n| serde_json::Value::from(n as i64))
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::I32(v) => v
+            .map(|n| serde_json::Value::from(n as i64))
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::I64(v) => v
+            .map(serde_json::Value::from)
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::F32(v) => v
+            .and_then(|f| {
+                serde_json::Number::from_f64(f as f64).map(serde_json::Value::Number)
+            })
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::F64(v) => v
+            .and_then(|f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::Guid(v) => v
+            .map(|g| serde_json::Value::String(g.to_string()))
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::String(v) => v
+            .map(|s| serde_json::Value::String(s.into_owned()))
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::Binary(v) => v
+            .map(|b| {
+                serde_json::Value::String(
+                    b.iter().map(|byte| format!("{:02x}", byte)).collect(),
+                )
+            })
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::Numeric(v) => v
+            .map(|n| serde_json::Value::String(n.to_string()))
+            .unwrap_or(serde_json::Value::Null),
+        // DateTime / SmallDateTime: tiberius internal types without Display.
+        // Use public getter methods to convert to NaiveDateTime string.
+        ColumnData::DateTime(v) => v
+            .map(|dt| {
+                let epoch = chrono::NaiveDate::from_ymd_opt(1900, 1, 1).unwrap();
+                let date = epoch + chrono::Duration::days(dt.days() as i64);
+                // seconds_fragments are 1/300 second units
+                let nanos = dt.seconds_fragments() as i64 * 1_000_000_000 / 300;
+                let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+                    + chrono::Duration::nanoseconds(nanos);
+                serde_json::Value::String(
+                    chrono::NaiveDateTime::new(date, time).to_string(),
+                )
+            })
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::SmallDateTime(v) => v
+            .map(|dt| {
+                let epoch = chrono::NaiveDate::from_ymd_opt(1900, 1, 1).unwrap();
+                let date = epoch + chrono::Duration::days(dt.days() as i64);
+                let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(
+                    dt.seconds_fragments() as u32 * 60,
+                    0,
+                )
+                .unwrap_or_else(|| chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+                serde_json::Value::String(
+                    chrono::NaiveDateTime::new(date, time).to_string(),
+                )
+            })
+            .unwrap_or(serde_json::Value::Null),
+        // TDS 7.3 date/time types: use public getter methods.
+        ColumnData::Time(v) => v
+            .map(|t| {
+                let nanos = t.increments() as i64 * 10i64.pow(9 - t.scale() as u32);
+                let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+                    + chrono::Duration::nanoseconds(nanos);
+                serde_json::Value::String(time.to_string())
+            })
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::Date(v) => v
+            .map(|d| {
+                let epoch = chrono::NaiveDate::from_ymd_opt(1, 1, 1).unwrap();
+                let date = epoch + chrono::Duration::days(d.days() as i64);
+                serde_json::Value::String(date.to_string())
+            })
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::DateTime2(v) => v
+            .map(|dt| {
+                let epoch = chrono::NaiveDate::from_ymd_opt(1, 1, 1).unwrap();
+                let date = epoch + chrono::Duration::days(dt.date().days() as i64);
+                let nanos =
+                    dt.time().increments() as i64 * 10i64.pow(9 - dt.time().scale() as u32);
+                let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+                    + chrono::Duration::nanoseconds(nanos);
+                serde_json::Value::String(
+                    chrono::NaiveDateTime::new(date, time).to_string(),
+                )
+            })
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::DateTimeOffset(v) => v
+            .map(|dto| {
+                let epoch = chrono::NaiveDate::from_ymd_opt(1, 1, 1).unwrap();
+                let date =
+                    epoch + chrono::Duration::days(dto.datetime2().date().days() as i64);
+                let nanos = dto.datetime2().time().increments() as i64
+                    * 10i64.pow(9 - dto.datetime2().time().scale() as u32);
+                let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+                    + chrono::Duration::nanoseconds(nanos);
+                let naive = chrono::NaiveDateTime::new(date, time);
+                let offset_secs = dto.offset() as i32 * 60;
+                let fixed_offset = chrono::FixedOffset::east_opt(offset_secs)
+                    .unwrap_or_else(|| chrono::FixedOffset::east_opt(0).unwrap());
+                let dt = chrono::DateTime::<chrono::FixedOffset>::from_naive_utc_and_offset(
+                    naive - chrono::Duration::seconds(dto.offset() as i64 * 60),
+                    fixed_offset,
+                );
+                serde_json::Value::String(dt.to_rfc3339())
+            })
+            .unwrap_or(serde_json::Value::Null),
+        ColumnData::Xml(v) => v
+            .map(|x| serde_json::Value::String(x.as_ref().to_string()))
+            .unwrap_or(serde_json::Value::Null),
+    }
+}
+
+type MssqlConn = tiberius::Client<tokio_util::compat::Compat<tokio::net::TcpStream>>;
+
+async fn mssql_exec_simple(conn: &mut MssqlConn, sql: &str) -> Result<(), AppError> {
+    crate::connections::sqlserver::exec_simple(conn, sql)
+        .await
+        .map_err(AppError::from)
+}
+
+async fn execute_sqlserver(
+    conn: &mut MssqlConn,
+    sql: &str,
+    page_size: u32,
+    offset: u32,
+) -> ExecuteResult {
+    let exec_sql = sql.trim_end_matches(';');
+    let is_select = returns_rows_mssql(exec_sql);
+
+    if is_select {
+        let paginated = build_paginated_sql_mssql(exec_sql, page_size, offset);
+        let mut stream = conn
+            .simple_query(paginated.as_str())
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mut columns: Vec<ColumnMeta> = vec![];
+        let mut raw_rows: Vec<tiberius::Row> = vec![];
+
+        while let Some(item) = stream.try_next().await.map_err(|e| e.to_string())? {
+            match item {
+                tiberius::QueryItem::Metadata(meta) => {
+                    if columns.is_empty() {
+                        columns = meta
+                            .columns()
+                            .iter()
+                            .map(|c| ColumnMeta {
+                                name: c.name().to_owned(),
+                                data_type: mssql_column_type_name(c.column_type()),
+                                nullable: true,
+                                is_primary_key: false,
+                                is_foreign_key: false,
+                            })
+                            .collect();
+                    }
+                }
+                tiberius::QueryItem::Row(row) => {
+                    raw_rows.push(row);
+                }
+            }
+        }
+
+        let data: Vec<Vec<serde_json::Value>> = raw_rows
+            .into_iter()
+            .map(|row| row.into_iter().map(mssql_column_data_to_json).collect())
+            .collect();
+
+        Ok((columns, data, None, None))
+    } else {
+        let result = conn
+            .execute(exec_sql, &[])
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok((vec![], vec![], None, Some(result.total())))
+    }
+}
+
+fn spawn_query_count_sqlserver(
+    app: tauri::AppHandle,
+    pool: bb8::Pool<bb8_tiberius::ConnectionManager>,
+    sql: String,
+    query_id: String,
+) {
+    tokio::spawn(async move {
+        let sql_trimmed = sql.trim_end_matches(';');
+        let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
+        let mut conn = match pool.get().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let stream = match conn.simple_query(&count_sql).await {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let rows = match stream.into_first_result().await {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+        if let Some(row) = rows.first() {
+            let total_rows: Option<i64> = row
+                .try_get::<i32, _>(0)
+                .ok()
+                .flatten()
+                .map(|n| n as i64)
+                .or_else(|| row.try_get::<i64, _>(0).ok().flatten());
+            if let Some(total_rows) = total_rows {
+                let _ = app.emit(
+                    "query-count-updated",
+                    QueryCountPayload {
+                        query_id,
+                        total_rows,
+                    },
+                );
+            }
+        }
+    });
+}
+
+/// Helper functions for SQL Server DML operations via tiberius.
+
+fn build_mssql_params(values: &[&serde_json::Value]) -> Vec<Box<dyn tiberius::ToSql + Send>> {
+    values
+        .iter()
+        .map(|v| -> Box<dyn tiberius::ToSql + Send> {
+            match *v {
+                serde_json::Value::String(s) => Box::new(s.clone()),
+                serde_json::Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        Box::new(i)
+                    } else if let Some(f) = n.as_f64() {
+                        Box::new(f)
+                    } else {
+                        Box::new(n.to_string())
+                    }
+                }
+                serde_json::Value::Bool(b) => Box::new(*b),
+                _ => Box::new(Option::<String>::None),
+            }
+        })
+        .collect()
+}
+
+async fn apply_updates_sqlserver(
+    conn: &mut MssqlConn,
+    schema: &str,
+    table: &str,
+    changes: &[RowChange],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for change in changes {
+        if change.changes.is_empty() || change.primary_keys.is_empty() {
+            continue;
+        }
+        let mut param_idx: usize = 1;
+        let set_clause: Vec<String> = change
+            .changes
+            .keys()
+            .map(|col| {
+                let s = format!("{} = @P{}", quote_sqlserver(col), param_idx);
+                param_idx += 1;
+                s
+            })
+            .collect();
+        let where_pairs: Vec<(&String, &serde_json::Value)> = change.primary_keys.iter().collect();
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() {
+                where_parts.push(format!("{} IS NULL", quote_sqlserver(col)));
+            } else {
+                where_parts.push(format!("{} = @P{}", quote_sqlserver(col), param_idx));
+                param_idx += 1;
+                where_bind.push(val);
+            }
+        }
+        let sql = format!(
+            "UPDATE {}.{} SET {} WHERE {}",
+            quote_sqlserver(schema),
+            quote_sqlserver(table),
+            set_clause.join(", "),
+            where_parts.join(" AND ")
+        );
+        let mut all_bind: Vec<&serde_json::Value> = change.changes.values().collect();
+        all_bind.extend(where_bind.iter().copied());
+        let params = build_mssql_params(&all_bind);
+        let params_refs: Vec<&dyn tiberius::ToSql> =
+            params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+        let result = conn
+            .execute(sql.as_str(), &params_refs)
+            .await
+            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        count += result.total();
+    }
+    Ok(count)
+}
+
+async fn apply_inserts_sqlserver(
+    conn: &mut MssqlConn,
+    schema: &str,
+    table: &str,
+    inserts: &[std::collections::HashMap<String, serde_json::Value>],
+) -> Result<u64, AppError> {
+    if inserts.is_empty() {
+        return Ok(0);
+    }
+
+    // SQL Server rejects any explicit value (including NULL) for identity columns.
+    // Fetch them once and exclude from every INSERT in this batch.
+    use futures::TryStreamExt;
+    let id_sql = "SELECT c.name FROM sys.columns c \
+        WHERE c.object_id = OBJECT_ID(N'[' + @P1 + N'].[' + @P2 + N']') \
+        AND c.is_identity = 1";
+    let identity_cols: std::collections::HashSet<String> = {
+        let mut stream = conn
+            .query(id_sql, &[&schema as &dyn tiberius::ToSql, &table as &dyn tiberius::ToSql])
+            .await
+            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        let mut set = std::collections::HashSet::<String>::new();
+        while let Some(item) = stream
+            .try_next()
+            .await
+            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
+        {
+            if let tiberius::QueryItem::Row(row) = item {
+                if let Ok(Some(name)) = row.try_get::<&str, _>(0) {
+                    set.insert(name.to_owned());
+                }
+            }
+        }
+        set
+    };
+
+    let mut count = 0u64;
+    for values in inserts {
+        if values.is_empty() {
+            continue;
+        }
+        let cols: Vec<(&String, &serde_json::Value)> = values
+            .iter()
+            .filter(|(c, _)| !identity_cols.contains(c.as_str()))
+            .collect();
+        if cols.is_empty() {
+            continue;
+        }
+        let col_list: Vec<String> = cols.iter().map(|(c, _)| quote_sqlserver(c)).collect();
+        let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("@P{}", i)).collect();
+        let sql = format!(
+            "INSERT INTO {}.{} ({}) VALUES ({})",
+            quote_sqlserver(schema),
+            quote_sqlserver(table),
+            col_list.join(", "),
+            placeholders.join(", ")
+        );
+        let vals: Vec<&serde_json::Value> = cols.iter().map(|(_, v)| *v).collect();
+        let params = build_mssql_params(&vals);
+        let params_refs: Vec<&dyn tiberius::ToSql> =
+            params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+        conn.execute(sql.as_str(), &params_refs)
+            .await
+            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+async fn apply_deletes_sqlserver(
+    conn: &mut MssqlConn,
+    schema: &str,
+    table: &str,
+    deletes: &[RowDelete],
+) -> Result<u64, AppError> {
+    let mut count = 0u64;
+    for row_del in deletes {
+        if row_del.primary_keys.is_empty() {
+            continue;
+        }
+        let where_pairs: Vec<(&String, &serde_json::Value)> = row_del.primary_keys.iter().collect();
+        let mut param_idx = 1usize;
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut where_bind: Vec<&serde_json::Value> = Vec::new();
+        for (col, val) in &where_pairs {
+            if val.is_null() {
+                where_parts.push(format!("{} IS NULL", quote_sqlserver(col)));
+            } else {
+                where_parts.push(format!("{} = @P{}", quote_sqlserver(col), param_idx));
+                param_idx += 1;
+                where_bind.push(val);
+            }
+        }
+        let sql = format!(
+            "DELETE FROM {}.{} WHERE {}",
+            quote_sqlserver(schema),
+            quote_sqlserver(table),
+            where_parts.join(" AND ")
+        );
+        let params = build_mssql_params(&where_bind);
+        let params_refs: Vec<&dyn tiberius::ToSql> =
+            params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+        let result = conn
+            .execute(sql.as_str(), &params_refs)
+            .await
+            .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        count += result.total();
+    }
+    Ok(count)
+}
+
 /// Convert a SQLite column value to a JSON-serialisable form.
 fn sqlite_value_to_json(row: &sqlx::sqlite::SqliteRow, idx: usize) -> serde_json::Value {
     if let Ok(v) = row.try_get::<Option<i64>, _>(idx) {
@@ -3139,6 +3928,38 @@ pub async fn query_explain(
                 raw_json: serde_json::to_string(&plans)
                     .map_err(|e| AppError::new("SERIALISATION_ERROR", e.to_string()))?,
                 dialect: "sqlite".to_string(),
+            })
+        }
+        RemotePool::SqlServer(pool, _) => {
+            // SQL Server uses SET SHOWPLAN_ALL ON or SET STATISTICS XML ON.
+            // We use the XML plan for structured output.
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let explain_sql = format!("SET SHOWPLAN_XML ON; {sql}; SET SHOWPLAN_XML OFF");
+            // SHOWPLAN_XML returns a result set with one row/one column containing XML.
+            let mut stream = conn
+                .simple_query(explain_sql.as_str())
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            let mut plan_xml = String::new();
+            while let Some(item) = stream
+                .try_next()
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
+            {
+                if let tiberius::QueryItem::Row(row) = item {
+                    if let Some(tiberius::ColumnData::String(Some(s))) = row.into_iter().next() {
+                        plan_xml = s.into_owned();
+                        break;
+                    }
+                }
+            }
+            let plans = serde_json::json!([{ "xml": plan_xml }]);
+            Ok(ExplainResult {
+                raw_json: plans.to_string(),
+                dialect: "sqlserver".to_string(),
             })
         }
     }

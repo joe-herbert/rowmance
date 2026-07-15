@@ -99,9 +99,9 @@
   });
 
   function quoteId(name: string, dbType: DbType): string {
-    return dbType === 'postgres'
-      ? `"${name.replace(/"/g, '""')}"`
-      : `\`${name.replace(/`/g, '``')}\``;
+    if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
+    if (dbType === 'sqlserver') return `[${name.replace(/\]/g, ']]')}]`;
+    return `\`${name.replace(/`/g, '``')}\``;
   }
 
   function escapeStr(val: string): string {

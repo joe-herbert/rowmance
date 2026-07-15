@@ -25,7 +25,13 @@
         ? 'PostgreSQL'
         : focusedConnection.dbType === 'mysql'
           ? 'MySQL'
-          : 'MariaDB'
+          : focusedConnection.dbType === 'mariadb'
+            ? 'MariaDB'
+            : focusedConnection.dbType === 'sqlite'
+              ? 'SQLite'
+              : focusedConnection.dbType === 'sqlserver'
+                ? 'SQL Server'
+                : focusedConnection.dbType
       : null,
   );
   const host = $derived(

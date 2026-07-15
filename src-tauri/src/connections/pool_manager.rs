@@ -28,8 +28,8 @@ async fn pg_reset_schema(conn: &mut sqlx::postgres::PgConnection, set_path_sql: 
     conn.execute(sqlx::raw_sql(set_path_sql)).await.is_ok()
 }
 
-/// Unified handle for a pool that may be MySQL/MariaDB, PostgreSQL, or SQLite.
-/// The `bool` on the MySql variant is `read_only`: enforced via after_connect
+/// Unified handle for a pool that may be MySQL/MariaDB, PostgreSQL, SQLite, or SQL Server.
+/// The `bool` on the MySql/SqlServer variants is `read_only`: enforced via after_connect
 /// (`SET SESSION TRANSACTION READ ONLY`) for all pool connections. The
 /// after_release hook resets the database/schema context so released connections
 /// are always clean for the next caller.
@@ -38,6 +38,7 @@ pub enum RemotePool {
     MySql(sqlx::MySqlPool, bool),
     Postgres(sqlx::PgPool),
     Sqlite(sqlx::SqlitePool),
+    SqlServer(bb8::Pool<bb8_tiberius::ConnectionManager>, bool),
 }
 
 /// Thread-safe registry of active remote pools.
@@ -220,6 +221,41 @@ impl ConnectionManager {
                     .await?;
                 RemotePool::Sqlite(p)
             }
+            "sqlserver" => {
+                use tiberius::{AuthMethod, Config, EncryptionLevel};
+
+                let mut config = Config::new();
+                config.host(host);
+                config.port(port);
+                config.database(database);
+                config.authentication(AuthMethod::sql_server(username, password));
+
+                if ssl_enabled {
+                    config.encryption(EncryptionLevel::Required);
+                    if ssl_ca_path.is_none() {
+                        // Trust self-signed certs when no CA is provided.
+                        config.trust_cert();
+                    }
+                } else {
+                    config.encryption(EncryptionLevel::NotSupported);
+                }
+
+                let manager = bb8_tiberius::ConnectionManager::build(config)
+                    .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
+                let pool = bb8::Pool::builder()
+                    .max_size(pool_max)
+                    .build(manager)
+                    .await
+                    .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
+
+                // Verify the credentials by acquiring one connection.
+                let _ = pool
+                    .get()
+                    .await
+                    .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
+
+                RemotePool::SqlServer(pool, read_only)
+            }
             other => {
                 return Err(RowmanceError::ConnectionNotFound(format!(
                     "Unknown db_type: {other}"
@@ -240,6 +276,9 @@ impl ConnectionManager {
                     RemotePool::MySql(p, _) => p.close().await,
                     RemotePool::Postgres(p) => p.close().await,
                     RemotePool::Sqlite(p) => p.close().await,
+                    RemotePool::SqlServer(_, _) => {
+                        // bb8 pools are dropped automatically; no explicit close needed.
+                    }
                 }
             };
             // If the graceful close hangs (e.g. in-flight query or unreachable server),
@@ -255,10 +294,33 @@ impl ConnectionManager {
         let Ok(pool) = self.get(id) else {
             return false;
         };
-        match pool.value() {
-            RemotePool::MySql(p, _) => sqlx::query("SELECT 1").execute(p).await.is_ok(),
-            RemotePool::Postgres(p) => sqlx::query("SELECT 1").execute(p).await.is_ok(),
-            RemotePool::Sqlite(_) => true,
+        // Extract what we need before the async work begins so the dashmap ref
+        // (`pool`) is dropped before we hit any await points.
+        enum PingKind {
+            MySql(sqlx::MySqlPool),
+            Postgres(sqlx::PgPool),
+            Sqlite,
+            SqlServer(bb8::Pool<bb8_tiberius::ConnectionManager>),
+        }
+        let kind = match pool.value() {
+            RemotePool::MySql(p, _) => PingKind::MySql(p.clone()),
+            RemotePool::Postgres(p) => PingKind::Postgres(p.clone()),
+            RemotePool::Sqlite(_) => PingKind::Sqlite,
+            RemotePool::SqlServer(p, _) => PingKind::SqlServer(p.clone()),
+        };
+        drop(pool);
+
+        match kind {
+            PingKind::MySql(p) => sqlx::query("SELECT 1").execute(&p).await.is_ok(),
+            PingKind::Postgres(p) => sqlx::query("SELECT 1").execute(&p).await.is_ok(),
+            PingKind::Sqlite => true,
+            PingKind::SqlServer(p) => {
+                if let Ok(mut conn) = p.get().await {
+                    conn.simple_query("SELECT 1").await.is_ok()
+                } else {
+                    false
+                }
+            }
         }
     }
 

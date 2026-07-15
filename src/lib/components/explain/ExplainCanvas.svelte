@@ -46,6 +46,7 @@
   let layoutEdges = $state<LayoutEdge[]>([]);
   let parseError = $state<string | null>(null);
   let transform = $state({ x: 40, y: 40, k: 1 });
+  let xmlPlanText = $state<string | null>(null);
 
   const NODE_WIDTH = 220;
   const NODE_HEIGHT = 70;
@@ -208,6 +209,22 @@
 
   $effect(() => {
     nodeCounter = 0;
+    xmlPlanText = null;
+
+    if (dialect === 'sqlserver') {
+      try {
+        const arr = JSON.parse(rawJson);
+        const xml = arr?.[0]?.xml ?? '';
+        xmlPlanText = xml || '(no plan returned)';
+      } catch {
+        xmlPlanText = rawJson;
+      }
+      parseError = null;
+      layoutNodes = [];
+      layoutEdges = [];
+      return;
+    }
+
     let root: ExplainNode | null = null;
     try {
       root = dialect === 'postgres' ? parsePostgres(rawJson) : parseMysql(rawJson);
@@ -252,6 +269,8 @@
 
   {#if parseError}
     <div class="explain-error">{parseError}</div>
+  {:else if xmlPlanText !== null}
+    <pre class="explain-xml">{xmlPlanText}</pre>
   {:else}
     <svg class="explain-svg" bind:this={svgEl} aria-label="Query execution plan" role="img">
       <g transform="translate({transform.x},{transform.y}) scale({transform.k})">
@@ -319,6 +338,18 @@
     color: var(--color-accent);
     border-radius: var(--radius-sm);
     font-weight: var(--font-weight-medium);
+  }
+
+  .explain-xml {
+    flex: 1;
+    overflow: auto;
+    padding: var(--spacing-3);
+    margin: 0;
+    font-size: var(--font-size-xs);
+    font-family: var(--font-mono);
+    color: var(--color-text-secondary);
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 
   .explain-svg {

@@ -52,6 +52,7 @@ pub async fn erd_get_graph(
         RemotePool::MySql(pool, _) => get_graph_mysql(pool, &database).await,
         RemotePool::Postgres(pool) => get_graph_postgres(pool, &database).await,
         RemotePool::Sqlite(pool) => get_graph_sqlite(pool).await,
+        RemotePool::SqlServer(pool, _) => get_graph_sqlserver(pool, &database).await,
     }
 }
 
@@ -368,6 +369,56 @@ fn build_edges_from_fk_rows(rows: impl Iterator<Item = FkNorm>) -> Vec<ErdRelati
         });
     }
     edges
+}
+
+async fn get_graph_sqlserver(
+    pool: &bb8::Pool<bb8_tiberius::ConnectionManager>,
+    schema: &str,
+) -> Result<ErdGraph, AppError> {
+    let mut conn = pool
+        .get()
+        .await
+        .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+
+    let all_cols = crate::connections::sqlserver::list_all_columns(&mut *conn, schema)
+        .await
+        .map_err(AppError::from)?;
+
+    let col_pairs: Vec<(String, ErdColumn)> = all_cols
+        .into_iter()
+        .map(|(table_name, c)| {
+            (
+                table_name,
+                ErdColumn {
+                    name: c.name,
+                    data_type: c.data_type,
+                    is_primary_key: c.is_primary_key,
+                },
+            )
+        })
+        .collect();
+    let nodes = group_into_tables(col_pairs.into_iter());
+
+    let mut all_fk_edges: Vec<ErdRelation> = Vec::new();
+    for table in &nodes {
+        let fks = crate::connections::sqlserver::list_foreign_keys(&mut *conn, schema, &table.name)
+            .await
+            .map_err(AppError::from)?;
+        for fk in fks {
+            all_fk_edges.push(ErdRelation {
+                from_table: table.name.clone(),
+                from_columns: fk.columns,
+                to_table: fk.referenced_table,
+                to_columns: fk.referenced_columns,
+                constraint_name: fk.constraint_name,
+            });
+        }
+    }
+
+    Ok(ErdGraph {
+        nodes,
+        edges: all_fk_edges,
+    })
 }
 
 #[cfg(test)]

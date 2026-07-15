@@ -157,6 +157,7 @@
     mariadb: 'MariaDB',
     postgres: 'Postgres',
     sqlite: 'SQLite',
+    sqlserver: 'SQL Server',
   };
 
   const availableDbTypes = $derived(

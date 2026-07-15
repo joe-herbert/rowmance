@@ -732,6 +732,7 @@
 
   function qi(name: string, dbType: string): string {
     if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
+    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
     return '"' + name.replace(/"/g, '""') + '"';
   }
 
@@ -774,17 +775,20 @@
     if (!profile || profile.readOnly) return;
     const dbType = profile.dbType;
     let sql: string;
+    const isSchema = dbType === 'postgres' || dbType === 'sqlserver';
     if (dbType === 'mysql' || dbType === 'mariadb') {
       sql = `DROP DATABASE ${qi(database, dbType)}`;
-    } else if (dbType === 'postgres') {
+    } else if (dbType === 'sqlserver') {
+      sql = `DROP SCHEMA ${qi(database, dbType)}`;
+    } else if (isSchema) {
       sql = `DROP SCHEMA ${qi(database, dbType)} CASCADE`;
     } else {
       return;
     }
     confirmState = {
-      title: dbType === 'postgres' ? 'Drop Schema' : 'Drop Database',
-      message: `Drop ${dbType === 'postgres' ? 'schema' : 'database'} "${database}"? This will permanently delete all tables and data within it. This cannot be undone.`,
-      confirmText: dbType === 'postgres' ? 'Drop Schema' : 'Drop Database',
+      title: isSchema ? 'Drop Schema' : 'Drop Database',
+      message: `Drop ${isSchema ? 'schema' : 'database'} "${database}"? This will permanently delete all tables and data within it. This cannot be undone.`,
+      confirmText: isSchema ? 'Drop Schema' : 'Drop Database',
       onconfirm: async () => {
         confirmState = null;
         try {
@@ -823,7 +827,7 @@
     }
     const { connectionId, dbType } = createDbModal;
     const sql =
-      dbType === 'postgres'
+      dbType === 'postgres' || dbType === 'sqlserver'
         ? `CREATE SCHEMA ${qi(name, dbType)}`
         : `CREATE DATABASE ${qi(name, dbType)}`;
     createDbLoading = true;
@@ -845,10 +849,32 @@
   function defaultColumnType(dbType: string): string {
     if (dbType === 'postgres') return 'SERIAL';
     if (dbType === 'sqlite') return 'INTEGER';
+    if (dbType === 'sqlserver') return 'INT IDENTITY(1,1)';
     return 'INT';
   }
 
   function columnTypes(dbType: string): string[] {
+    if (dbType === 'sqlserver') {
+      return [
+        'INT',
+        'BIGINT',
+        'SMALLINT',
+        'TINYINT',
+        'INT IDENTITY(1,1)',
+        'NVARCHAR(255)',
+        'NVARCHAR(MAX)',
+        'VARCHAR(255)',
+        'NTEXT',
+        'DATETIME2',
+        'DATE',
+        'TIME',
+        'FLOAT',
+        'DECIMAL(10,2)',
+        'MONEY',
+        'BIT',
+        'UNIQUEIDENTIFIER',
+      ];
+    }
     if (dbType === 'mysql' || dbType === 'mariadb') {
       return [
         'INT',
@@ -1524,7 +1550,7 @@
     {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dbType !== 'sqlite'}
       <CtxSep />
       <CtxItem danger onclick={ctxDropDatabase}>
-        {dbCtxProfile?.dbType === 'postgres' ? 'Drop Schema' : 'Drop Database'}
+        {dbCtxProfile?.dbType === 'postgres' || dbCtxProfile?.dbType === 'sqlserver' ? 'Drop Schema' : 'Drop Database'}
       </CtxItem>
     {/if}
   </ContextMenu>
@@ -1575,7 +1601,7 @@
     <CtxItem onclick={ctxNewQueryEditor}>New Query Editor</CtxItem>
     {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dbType !== 'sqlite'}
       <CtxItem onclick={ctxNewDatabase}
-        >New {connCtx.profile.dbType === 'postgres' ? 'Schema' : 'Database'}</CtxItem
+        >New {connCtx.profile.dbType === 'postgres' || connCtx.profile.dbType === 'sqlserver' ? 'Schema' : 'Database'}</CtxItem
       >
     {/if}
     <CtxItem onclick={ctxManageUsers}>Manage Users</CtxItem>

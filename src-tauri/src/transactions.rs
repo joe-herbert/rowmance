@@ -12,6 +12,10 @@ use tokio::sync::Mutex;
 use crate::connections::pool_manager::{ConnectionManager, RemotePool};
 use crate::error::AppError;
 
+/// Type alias for an owned SQL Server pooled connection with a 'static lifetime.
+pub type SqlServerOwnedConn =
+    bb8::PooledConnection<'static, bb8_tiberius::ConnectionManager>;
+
 pub enum HeldConnection {
     // MySQL uses a direct MySqlConnection (not PoolConnection) so we can open
     // it with the correct database already set in the connect options, avoiding
@@ -20,6 +24,7 @@ pub enum HeldConnection {
     MySql(sqlx::mysql::MySqlConnection),
     Postgres(sqlx::pool::PoolConnection<sqlx::Postgres>),
     Sqlite(sqlx::pool::PoolConnection<sqlx::Sqlite>),
+    SqlServer(SqlServerOwnedConn),
 }
 
 pub struct TransactionManager {
@@ -109,6 +114,16 @@ pub async fn transaction_begin(
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
             HeldConnection::Sqlite(conn)
         }
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get_owned()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            crate::connections::sqlserver::exec_simple(&mut *conn, "BEGIN TRANSACTION")
+                .await
+                .map_err(AppError::from)?;
+            HeldConnection::SqlServer(conn)
+        }
     };
 
     transactions
@@ -154,6 +169,11 @@ pub async fn transaction_commit(
                 .await
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         }
+        HeldConnection::SqlServer(conn) => {
+            crate::connections::sqlserver::exec_simple(&mut **conn, "COMMIT")
+                .await
+                .map_err(AppError::from)?;
+        }
     };
     drop(guard);
     transactions.remove(&connection_id);
@@ -195,6 +215,11 @@ pub async fn transaction_rollback(
                 .execute(&mut **conn)
                 .await
                 .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+        }
+        HeldConnection::SqlServer(conn) => {
+            crate::connections::sqlserver::exec_simple(&mut **conn, "ROLLBACK")
+                .await
+                .map_err(AppError::from)?;
         }
     };
     drop(guard);

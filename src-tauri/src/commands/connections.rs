@@ -436,6 +436,41 @@ pub async fn connections_test(
                 .await
                 .map(|_| ())
         }
+        "sqlserver" => {
+            use tiberius::{AuthMethod, Config, EncryptionLevel};
+            use tokio::net::TcpStream;
+            use tokio_util::compat::TokioAsyncWriteCompatExt;
+            let mut config = Config::new();
+            config.host(&connect_host);
+            config.port(connect_port);
+            config.database(&row.database);
+            config.authentication(AuthMethod::sql_server(&row.username, &password));
+            config.encryption(EncryptionLevel::NotSupported);
+            let test_result = match TcpStream::connect(config.get_addr()).await {
+                Err(e) => Err(e.to_string()),
+                Ok(tcp) => {
+                    tcp.set_nodelay(true).ok();
+                    tiberius::Client::connect(config, tcp.compat_write())
+                        .await
+                        .map(|_| ())
+                        .map_err(|e| e.to_string())
+                }
+            };
+            let latency_ms = start.elapsed().as_millis() as u64;
+            tunnels.destroy_tunnel(&tunnel_key);
+            return Ok(match test_result {
+                Ok(()) => ConnectionTestResult {
+                    success: true,
+                    message: "Connection successful".to_owned(),
+                    latency_ms: Some(latency_ms),
+                },
+                Err(msg) => ConnectionTestResult {
+                    success: false,
+                    message: msg,
+                    latency_ms: None,
+                },
+            });
+        }
         _ => {
             tunnels.destroy_tunnel(&tunnel_key);
             return Ok(ConnectionTestResult {
@@ -545,6 +580,41 @@ pub async fn connections_test_unsaved(
                 .connect_with(opts)
                 .await
                 .map(|_| ())
+        }
+        "sqlserver" => {
+            use tiberius::{AuthMethod, Config, EncryptionLevel};
+            use tokio::net::TcpStream;
+            use tokio_util::compat::TokioAsyncWriteCompatExt;
+            let mut config = Config::new();
+            config.host(&connect_host);
+            config.port(connect_port);
+            config.database(&input.database);
+            config.authentication(AuthMethod::sql_server(&input.username, &password));
+            config.encryption(EncryptionLevel::NotSupported);
+            let test_result = match TcpStream::connect(config.get_addr()).await {
+                Err(e) => Err(e.to_string()),
+                Ok(tcp) => {
+                    tcp.set_nodelay(true).ok();
+                    tiberius::Client::connect(config, tcp.compat_write())
+                        .await
+                        .map(|_| ())
+                        .map_err(|e| e.to_string())
+                }
+            };
+            let latency_ms = start.elapsed().as_millis() as u64;
+            tunnels.destroy_tunnel(&tunnel_key);
+            return Ok(match test_result {
+                Ok(()) => ConnectionTestResult {
+                    success: true,
+                    message: "Connection successful".to_owned(),
+                    latency_ms: Some(latency_ms),
+                },
+                Err(msg) => ConnectionTestResult {
+                    success: false,
+                    message: msg,
+                    latency_ms: None,
+                },
+            });
         }
         _ => {
             tunnels.destroy_tunnel(&tunnel_key);
@@ -1109,6 +1179,10 @@ pub async fn connections_get_db_url(
             row.username, password, row.host, row.port, row.database
         ),
         "sqlite" => format!("sqlite://{}", row.host),
+        "sqlserver" => format!(
+            "sqlserver://{}:{}@{}:{}/{}",
+            row.username, password, row.host, row.port, row.database
+        ),
         other => {
             return Err(AppError::new(
                 "UNSUPPORTED",

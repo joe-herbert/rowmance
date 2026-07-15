@@ -42,6 +42,11 @@ url = "2"
 dashmap = "6"
 chrono = { version = "0.4", features = ["serde"] }
 sqlparser = "0.62.0"
+tiberius = { version = "0.12", default-features = false, features = ["rustls", "chrono", "time", "tds73"] }
+bb8 = "0.9"
+bb8-tiberius = { version = "0.16", default-features = false, features = ["with-tokio"] }
+futures = { version = "0.3", default-features = false, features = ["std"] }
+tokio-util = { version = "0.7", features = ["compat"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2"

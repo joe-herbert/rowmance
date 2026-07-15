@@ -73,6 +73,13 @@ pub async fn session_acquire(
                 .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
             HeldConnection::Sqlite(conn)
         }
+        RemotePool::SqlServer(pool, _) => {
+            let conn = pool
+                .get_owned()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            HeldConnection::SqlServer(conn)
+        }
     };
 
     sessions

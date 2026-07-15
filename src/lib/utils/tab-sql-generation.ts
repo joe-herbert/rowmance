@@ -7,6 +7,7 @@ type PanelStore = ReturnType<typeof usePanels>;
 
 export function qi(name: string, dbType: string): string {
   if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
+  if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
   return '"' + name.replace(/"/g, '""') + '"';
 }
 
@@ -43,11 +44,15 @@ export function generateSqlSelectFirst(
   const profile = connectionStore.getById(connectionId);
   if (!profile) return;
   const ref = tableRef(database, table, profile.dbType);
+  const initialSql =
+    profile.dbType === 'sqlserver'
+      ? `SELECT TOP  * FROM ${ref}`
+      : `SELECT * FROM ${ref} LIMIT `;
   panelStore.openCopyInFocused({
     kind: 'query_editor',
     connectionId,
     database,
-    initialSql: `SELECT * FROM ${ref} LIMIT `,
+    initialSql,
   });
 }
 

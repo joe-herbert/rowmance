@@ -59,6 +59,15 @@ pub async fn schema_list_databases(
         RemotePool::Sqlite(pool) => crate::connections::sqlite::list_databases(pool)
             .await
             .map_err(AppError::from),
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            crate::connections::sqlserver::list_databases(&mut *conn)
+                .await
+                .map_err(AppError::from)
+        }
     }
 }
 
@@ -201,6 +210,56 @@ pub async fn schema_list_tables(
             }
             Ok(result)
         }
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let tables = crate::connections::sqlserver::list_tables(&mut *conn, &database)
+                .await
+                .map_err(AppError::from)?;
+            let result: Vec<TableInfo> = tables
+                .iter()
+                .map(|t| TableInfo {
+                    name: t.name.clone(),
+                    table_type: t.table_type.clone(),
+                    row_count: t.row_count,
+                })
+                .collect();
+            // Background count for SQL Server tables using partition stats.
+            let names: Vec<String> = tables
+                .iter()
+                .filter(|t| t.table_type == "table")
+                .map(|t| t.name.clone())
+                .collect();
+            drop(conn); // release before spawning
+            if !names.is_empty() {
+                let pool = pool.clone();
+                let conn_id = connection_id.clone();
+                let db = database.clone();
+                tokio::spawn(async move {
+                    for name in names {
+                        if let Ok(mut c) = pool.get().await {
+                            if let Ok(count) =
+                                crate::connections::sqlserver::count_table(&mut *c, &db, &name)
+                                    .await
+                            {
+                                let _ = app.emit(
+                                    "table-count-updated",
+                                    TableCountPayload {
+                                        connection_id: conn_id.clone(),
+                                        database: db.clone(),
+                                        table_name: name,
+                                        count,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                });
+            }
+            Ok(result)
+        }
     }
 }
 
@@ -254,6 +313,29 @@ pub async fn schema_list_columns(
             let cols = crate::connections::sqlite::list_columns(pool, &database, &table)
                 .await
                 .map_err(AppError::from)?;
+            Ok(cols
+                .into_iter()
+                .map(|c| ColumnInfo {
+                    name: c.name,
+                    data_type: c.data_type,
+                    nullable: c.nullable,
+                    default_value: c.default_value,
+                    is_primary_key: c.is_primary_key,
+                    is_auto_increment: c.is_auto_increment,
+                    is_foreign_key: c.is_foreign_key,
+                    comment: c.comment,
+                })
+                .collect())
+        }
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let cols =
+                crate::connections::sqlserver::list_columns(&mut *conn, &database, &table)
+                    .await
+                    .map_err(AppError::from)?;
             Ok(cols
                 .into_iter()
                 .map(|c| ColumnInfo {
@@ -333,6 +415,17 @@ pub async fn schema_list_all_columns(
         )
         .await
         .map_err(AppError::from)?),
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            to_bulk!(
+                crate::connections::sqlserver::list_all_columns(&mut *conn, &database)
+                    .await
+                    .map_err(AppError::from)?
+            )
+        }
     };
     Ok(rows)
 }
@@ -413,6 +506,25 @@ pub async fn schema_list_indexes(
                 })
                 .collect())
         }
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let rows =
+                crate::connections::sqlserver::list_indexes(&mut *conn, &database, &table)
+                    .await
+                    .map_err(AppError::from)?;
+            Ok(rows
+                .into_iter()
+                .map(|r| IndexInfo {
+                    name: r.name,
+                    columns: r.columns,
+                    unique: r.unique,
+                    index_type: r.index_type,
+                })
+                .collect())
+        }
     }
 }
 
@@ -462,6 +574,27 @@ pub async fn schema_list_foreign_keys(
             let rows = crate::connections::sqlite::list_foreign_keys(pool, &database, &table)
                 .await
                 .map_err(AppError::from)?;
+            Ok(rows
+                .into_iter()
+                .map(|r| ForeignKeyInfo {
+                    constraint_name: r.constraint_name,
+                    columns: r.columns,
+                    referenced_table: r.referenced_table,
+                    referenced_columns: r.referenced_columns,
+                    on_delete: r.on_delete,
+                    on_update: r.on_update,
+                })
+                .collect())
+        }
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            let rows =
+                crate::connections::sqlserver::list_foreign_keys(&mut *conn, &database, &table)
+                    .await
+                    .map_err(AppError::from)?;
             Ok(rows
                 .into_iter()
                 .map(|r| ForeignKeyInfo {
@@ -527,6 +660,25 @@ pub async fn schema_execute_ddl(
             .await
             .map(|_| ())
             .map_err(|e| AppError::from(RowmanceError::Database(e)))?,
+        RemotePool::SqlServer(pool, _) => {
+            use futures::TryStreamExt;
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            // DDL must use simple_query (text batch protocol). execute() uses
+            // sp_executesql which SQL Server rejects for CREATE/DROP SCHEMA etc.
+            let mut stream = conn
+                .simple_query(sql.as_str())
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+            while stream
+                .try_next()
+                .await
+                .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?
+                .is_some()
+            {}
+        }
     }
     Ok(())
 }
@@ -553,5 +705,14 @@ pub async fn schema_get_ddl(
         RemotePool::Sqlite(pool) => crate::connections::sqlite::get_ddl(pool, &object_name)
             .await
             .map_err(AppError::from),
+        RemotePool::SqlServer(pool, _) => {
+            let mut conn = pool
+                .get()
+                .await
+                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
+            crate::connections::sqlserver::get_ddl(&mut *conn, &database, &object_name)
+                .await
+                .map_err(AppError::from)
+        }
     }
 }

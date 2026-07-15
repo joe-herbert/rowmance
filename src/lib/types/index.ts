@@ -3,7 +3,7 @@ import { BUILTIN_DATABASES, BUILTIN_TABLE_PATTERNS } from '$lib/utils/system-ite
 
 // ── Database connections ────────────────────────────────────────────────────
 
-export type DbType = 'mysql' | 'mariadb' | 'postgres' | 'sqlite';
+export type DbType = 'mysql' | 'mariadb' | 'postgres' | 'sqlite' | 'sqlserver';
 
 /** A connection profile as stored in the local SQLite database. */
 export interface ConnectionProfile {

@@ -337,6 +337,12 @@ async fn csv_execute_from_text(
                 inserted += 1;
             }
         }
+        RemotePool::SqlServer(_, _) => {
+            return Err(AppError::new(
+                "UNSUPPORTED",
+                "CSV import is not yet supported for SQL Server connections",
+            ));
+        }
     }
 
     Ok(inserted)
@@ -419,6 +425,9 @@ async fn sql_execute_from_text(
             RemotePool::MySql(pool, _) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
             RemotePool::Postgres(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
             RemotePool::Sqlite(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
+            RemotePool::SqlServer(_, _) => Err(sqlx::Error::Configuration(
+                "SQL Server is not supported for SQL file import".into(),
+            )),
         };
 
         let error = result.err().map(|e| e.to_string());

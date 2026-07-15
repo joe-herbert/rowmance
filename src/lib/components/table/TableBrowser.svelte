@@ -246,6 +246,7 @@
   function quoteIdent(name: string, dbType: DbType): string {
     if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
     if (dbType === 'sqlite') return `"${name.replace(/"/g, '""')}"`;
+    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
     return `\`${name.replace(/`/g, '``')}\``;
   }
 
@@ -674,6 +675,7 @@
 
   function quoteIdentifier(name: string): string {
     if (dbType === 'postgres' || dbType === 'sqlite') return `"${name.replace(/"/g, '""')}"`;
+    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
     return `\`${name.replace(/`/g, '``')}\``;
   }
 
@@ -1199,6 +1201,15 @@
         '(' +
         columns
           .map((c) => `CAST(${quoteIdentifier(c.name)} AS TEXT) ILIKE ${pattern}`)
+          .join(' OR ') +
+        ')'
+      );
+    }
+    if (dbType === 'sqlserver') {
+      return (
+        '(' +
+        columns
+          .map((c) => `CAST(${quoteIdentifier(c.name)} AS NVARCHAR(MAX)) LIKE ${pattern}`)
           .join(' OR ') +
         ')'
       );

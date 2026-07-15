@@ -98,9 +98,9 @@ pub async fn users_list(
                 .collect();
             Ok(users)
         }
-        RemotePool::Sqlite(_) => Err(AppError::new(
+        RemotePool::Sqlite(_) | RemotePool::SqlServer(_, _) => Err(AppError::new(
             "UNSUPPORTED",
-            "User management is not supported for SQLite connections",
+            "User management is not supported for this connection type",
         )),
     }
 }
@@ -198,9 +198,9 @@ pub async fn users_get_grants(
 
             Ok(grants)
         }
-        RemotePool::Sqlite(_) => Err(AppError::new(
+        RemotePool::Sqlite(_) | RemotePool::SqlServer(_, _) => Err(AppError::new(
             "UNSUPPORTED",
-            "User management is not supported for SQLite connections",
+            "User management is not supported for this connection type",
         )),
     }
 }
@@ -250,9 +250,9 @@ pub async fn users_create(
                 .map(|_| ())
                 .map_err(|e| AppError::new("DB_ERROR", e.to_string()))
         }
-        RemotePool::Sqlite(_) => Err(AppError::new(
+        RemotePool::Sqlite(_) | RemotePool::SqlServer(_, _) => Err(AppError::new(
             "UNSUPPORTED",
-            "User management is not supported for SQLite connections",
+            "User management is not supported for this connection type",
         )),
     }
 }
@@ -285,9 +285,9 @@ pub async fn users_drop(
                 .map(|_| ())
                 .map_err(|e| AppError::new("DB_ERROR", e.to_string()))
         }
-        RemotePool::Sqlite(_) => Err(AppError::new(
+        RemotePool::Sqlite(_) | RemotePool::SqlServer(_, _) => Err(AppError::new(
             "UNSUPPORTED",
-            "User management is not supported for SQLite connections",
+            "User management is not supported for this connection type",
         )),
     }
 }
@@ -323,9 +323,9 @@ pub async fn users_set_password(
                 .map(|_| ())
                 .map_err(|e| AppError::new("DB_ERROR", e.to_string()))
         }
-        RemotePool::Sqlite(_) => Err(AppError::new(
+        RemotePool::Sqlite(_) | RemotePool::SqlServer(_, _) => Err(AppError::new(
             "UNSUPPORTED",
-            "User management is not supported for SQLite connections",
+            "User management is not supported for this connection type",
         )),
     }
 }
@@ -366,9 +366,9 @@ pub async fn users_rename(
             }
             Ok(())
         }
-        RemotePool::Sqlite(_) => Err(AppError::new(
+        RemotePool::Sqlite(_) | RemotePool::SqlServer(_, _) => Err(AppError::new(
             "UNSUPPORTED",
-            "User management is not supported for SQLite connections",
+            "User management is not supported for this connection type",
         )),
     }
 }
@@ -391,9 +391,9 @@ pub async fn users_execute_grant(
             .await
             .map(|_| ())
             .map_err(|e| AppError::new("DB_ERROR", e.to_string())),
-        RemotePool::Sqlite(_) => Err(AppError::new(
+        RemotePool::Sqlite(_) | RemotePool::SqlServer(_, _) => Err(AppError::new(
             "UNSUPPORTED",
-            "User management is not supported for SQLite connections",
+            "User management is not supported for this connection type",
         )),
     }
 }

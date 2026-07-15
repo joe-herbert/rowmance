@@ -55,9 +55,9 @@
   let copied = $state(false);
 
   function quoteId(name: string, dbType: DbType): string {
-    return dbType === 'postgres'
-      ? `"${name.replace(/"/g, '""')}"`
-      : `\`${name.replace(/`/g, '``')}\``;
+    if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
+    if (dbType === 'sqlserver') return `[${name.replace(/\]/g, ']]')}]`;
+    return `\`${name.replace(/`/g, '``')}\``;
   }
 
   function escapeStr(val: string): string {
@@ -166,7 +166,10 @@
     };
 
     try {
-      const sql = `SELECT * FROM ${quoteId(db, dbType)}.${quoteId(target.targetTable, dbType)} WHERE ${quoteId(target.targetColumn, dbType)} = ${valueLiteral(cellValue)} LIMIT 1`;
+      const sql =
+        dbType === 'sqlserver'
+          ? `SELECT TOP 1 * FROM ${quoteId(db, dbType)}.${quoteId(target.targetTable, dbType)} WHERE ${quoteId(target.targetColumn, dbType)} = ${valueLiteral(cellValue)}`
+          : `SELECT * FROM ${quoteId(db, dbType)}.${quoteId(target.targetTable, dbType)} WHERE ${quoteId(target.targetColumn, dbType)} = ${valueLiteral(cellValue)} LIMIT 1`;
       const result = await executeSelection(connId, sql);
       if (result.error) {
         children[colName].error = result.error;

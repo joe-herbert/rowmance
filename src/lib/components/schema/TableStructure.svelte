@@ -86,6 +86,7 @@
   const isMysql = $derived(dbType === 'mysql' || dbType === 'mariadb');
   const isPostgres = $derived(dbType === 'postgres');
   const isSqlite = $derived(dbType === 'sqlite');
+  const isSqlServer = $derived(dbType === 'sqlserver');
 
   // ── Data state ─────────────────────────────────────────────────────────────
 
@@ -203,6 +204,7 @@
 
   function qi(name: string): string {
     if (isMysql) return '`' + name.replace(/`/g, '``') + '`';
+    if (isSqlServer) return '[' + name.replace(/\]/g, ']]') + ']';
     return '"' + name.replace(/"/g, '""') + '"';
   }
 
@@ -291,6 +293,7 @@
     if (name === 'PRIMARY' && isMysql) return `ALTER TABLE ${tRef()} DROP PRIMARY KEY`;
     if (isMysql) return `DROP INDEX ${qi(name)} ON ${tRef()}`;
     if (isPostgres) return `DROP INDEX ${qi(database)}.${qi(name)}`;
+    if (isSqlServer) return `DROP INDEX ${qi(name)} ON ${tRef()}`;
     return `DROP INDEX ${qi(name)}`;
   }
 

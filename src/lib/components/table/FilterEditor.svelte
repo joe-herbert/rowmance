@@ -334,7 +334,9 @@
   const settings = useSettings();
 
   function quoteIdentifier(name: string): string {
-    return dbType === 'postgres' ? `"${name}"` : `\`${name}\``;
+    if (dbType === 'postgres') return `"${name}"`;
+    if (dbType === 'sqlserver') return `[${name.replace(/\]/g, ']]')}]`;
+    return `\`${name.replace(/`/g, '``')}\``;
   }
 
   function switchMode(newMode: 'builder' | 'sql'): void {

@@ -108,6 +108,7 @@
 
   function qi(name: string, dbType: string): string {
     if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
+    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
     return '"' + name.replace(/"/g, '""') + '"';
   }
 
@@ -119,16 +120,16 @@
       return;
     }
     const { connectionId, dbType } = createDbModal;
-    const sql =
-      dbType === 'postgres'
-        ? `CREATE SCHEMA ${qi(name, dbType)}`
-        : `CREATE DATABASE ${qi(name, dbType)}`;
+    const isSchema = dbType === 'postgres' || dbType === 'sqlserver';
+    const sql = isSchema
+      ? `CREATE SCHEMA ${qi(name, dbType)}`
+      : `CREATE DATABASE ${qi(name, dbType)}`;
     createDbLoading = true;
     createDbError = '';
     try {
       await schemaApi.executeDdl(connectionId, sql);
       createDbModal = null;
-      toast.addToast(`${dbType === 'postgres' ? 'Schema' : 'Database'} created`, 'success', 2000);
+      toast.addToast(`${isSchema ? 'Schema' : 'Database'} created`, 'success', 2000);
     } catch (err) {
       createDbError = errorMessage(err);
     } finally {
@@ -482,7 +483,7 @@
   <ContextMenu x={cardCtx.x} y={cardCtx.y} open={true} onclose={() => (cardCtx = null)}>
     {#if connected && !p.readOnly && p.dbType !== 'sqlite'}
       <CtxItem onclick={() => { const prof = p; cardCtx = null; handleNewDatabase(prof); }}>
-        New {p.dbType === 'postgres' ? 'Schema' : 'Database'}
+        New {(p.dbType === 'postgres' || p.dbType === 'sqlserver') ? 'Schema' : 'Database'}
       </CtxItem>
     {/if}
     <CtxItem onclick={() => { const prof = p; cardCtx = null; handleManageUsers(prof); }}>
@@ -602,7 +603,7 @@
 
 <!-- New database/schema modal -->
 {#if createDbModal}
-  {@const dbLabel = createDbModal.dbType === 'postgres' ? 'Schema' : 'Database'}
+  {@const dbLabel = (createDbModal.dbType === 'postgres' || createDbModal.dbType === 'sqlserver') ? 'Schema' : 'Database'}
   <Modal label="New {dbLabel}" onbackdropclick={createDbLoading ? undefined : () => (createDbModal = null)}>
     <div class="create-modal-card">
       <div class="create-modal-title">New {dbLabel}</div>

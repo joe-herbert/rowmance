@@ -37,6 +37,7 @@
     mariadb: 3306,
     postgres: 5432,
     sqlite: 0,
+    sqlserver: 1433,
   };
 
   type Tab = 'basic' | 'ssh' | 'ssl' | 'advanced';
@@ -112,10 +113,13 @@
         postgresql: 'postgres',
         mysql: 'mysql',
         mariadb: 'mariadb',
+        sqlserver: 'sqlserver',
+        mssql: 'sqlserver',
+        'jdbc:sqlserver': 'sqlserver',
       };
       const type = schemeMap[scheme];
       if (!type) {
-        urlError = `Unsupported scheme "${scheme}". Use postgres, mysql, mariadb, or sqlite.`;
+        urlError = `Unsupported scheme "${scheme}". Use postgres, mysql, mariadb, sqlite, or sqlserver.`;
         return;
       }
 
@@ -419,6 +423,7 @@
                 { value: 'mysql', label: 'MySQL' },
                 { value: 'mariadb', label: 'MariaDB' },
                 { value: 'sqlite', label: 'SQLite' },
+                { value: 'sqlserver', label: 'SQL Server' },
               ]}
               size="md"
               onchange={handleDbTypeChange}
