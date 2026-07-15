@@ -586,6 +586,7 @@
   }
 
   .header-btn--accent:hover {
+    background: var(--color-accent);
     opacity: 0.9;
     color: #fff;
   }
