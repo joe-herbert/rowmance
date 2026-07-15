@@ -672,7 +672,7 @@
           class:card-dot--connected={connected}
           class:card-dot--connecting={connecting}
           class:card-dot--error={error}
-          style={connected || connecting || error ? '' : `background: ${profile.color ?? 'var(--color-accent)'}`}
+          style={`--conn-color: ${profile.color ?? 'var(--color-accent)'}; background: var(--conn-color)`}
           aria-hidden="true"
         ></span>
         <span class="card-name" title={profile.name}>{profile.name}</span>
@@ -1058,17 +1058,12 @@
   }
 
   .card-dot--connected {
-    background: var(--color-success, #16a34a);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success, #16a34a) 25%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--conn-color, var(--color-accent)) 40%, transparent);
   }
 
   .card-dot--connecting {
-    background: var(--color-warning, #f59e0b);
     animation: dot-pulse 1s ease-in-out infinite;
-  }
-
-  .card-dot--error {
-    background: var(--color-danger, #dc2626);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--conn-color, var(--color-accent)) 40%, transparent);
   }
 
   @keyframes dot-pulse {
