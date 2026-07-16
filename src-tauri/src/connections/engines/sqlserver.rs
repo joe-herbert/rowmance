@@ -1096,14 +1096,24 @@ pub async fn create_pool(
     config.database(database);
     config.authentication(AuthMethod::sql_server(username, password));
 
-    if ssl_enabled {
-        config.encryption(EncryptionLevel::Required);
-        if ssl_ca_path.is_none() {
-            config.trust_cert();
-        }
-    } else {
-        config.encryption(EncryptionLevel::Off);
+    config.encryption(EncryptionLevel::Required);
+    if !ssl_enabled || ssl_ca_path.is_none() {
         config.trust_cert();
+    }
+
+    // Verify credentials with a direct tiberius connection before building the pool.
+    // pool.get() always returns bb8::RunError::TimedOut on failure, hiding the real
+    // error (e.g. wrong password). A raw connection surfaces the actual tiberius error.
+    {
+        use tokio_util::compat::TokioAsyncWriteCompatExt;
+        let tcp = tokio::net::TcpStream::connect((host, port))
+            .await
+            .map_err(|e| crate::error::RowmanceError::Pool(
+                format!("Cannot reach SQL Server at {host}:{port}: {e}")
+            ))?;
+        tiberius::Client::connect(config.clone(), tcp.compat_write())
+            .await
+            .map_err(|e| crate::error::RowmanceError::Pool(e.to_string()))?;
     }
 
     let manager = bb8_tiberius::ConnectionManager::build(config)
@@ -1112,12 +1122,6 @@ pub async fn create_pool(
         .max_size(pool_max)
         .connection_timeout(std::time::Duration::from_secs(10))
         .build(manager)
-        .await
-        .map_err(|e| crate::error::RowmanceError::Pool(e.to_string()))?;
-
-    // Verify the credentials by acquiring one connection.
-    let _ = pool
-        .get()
         .await
         .map_err(|e| crate::error::RowmanceError::Pool(e.to_string()))?;
 
