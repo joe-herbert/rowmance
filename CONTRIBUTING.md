@@ -54,6 +54,67 @@ Use `SQLX_OFFLINE=true` when running cargo commands locally if you do not have a
 
 ---
 
+## Test databases
+
+Rowmance ships a `docker-compose.yml` that spins up a local instance of every database engine the client supports, each pre-seeded with the same `customers` / `orders` schema. Use these for manual testing and for anything that needs a real database rather than a mock.
+
+### Prerequisites
+
+- Docker and Docker Compose
+- `make` (already required by the other targets in this Makefile)
+
+### Starting and stopping
+
+```bash
+make test-db-up      # start all test databases in the background
+make test-db-down     # stop and remove the containers (data persists in volumes)
+```
+
+Under the hood these just wrap `docker compose -f docker-compose.yml up -d` / `down`.
+
+To wipe all data and start from a completely clean state (needed after changing anything in `init-scripts/`, since most engines only run their init scripts on a fresh volume):
+
+```bash
+make test-db-down
+docker compose down -v
+rm -rf ./data/sqlite
+make test-db-up
+```
+
+### Connecting
+
+All engines use the same credentials pattern (`test1234` / `TestPass123` depending on the engine's password rules) and the same database/schema name, `testdb`, so you can swap connection strings without re-learning setup each time.
+
+| Engine     | Connection URL                                                  |
+|------------|-------------------------------------------------------------------|
+| Postgres   | `postgresql://postgres:test1234@localhost:5432/testdb`            |
+| SQL Server | `sqlserver://sa:TestPass123%23@localhost:1433/testdb`             |
+| MySQL      | `mysql://root:TestPass123@localhost:3306/testdb`                  |
+| MariaDB    | `mysql://root:TestPass123@localhost:3307/testdb`                  |
+| Oracle     | `oracle://appuser:TestPass123@localhost:1521/testdb`              |
+| SQLite     | `sqlite:///./data/sqlite/testdb.db` (path relative to repo root)  |
+
+Notes:
+
+- **SQL Server**: the `#` in the password must be percent-encoded (`%23`) in URL form. `dbo` is the default *schema* inside `testdb`, not a separate database — if your client lists it as a sibling of `testdb` rather than nested underneath, that's a display bug in the client, not the database.
+- **Oracle**: connect as `appuser`, not `system`. The seed script creates the tables under the `appuser` schema so they're visible without schema-qualifying every query.
+- **MariaDB**: runs on host port `3307` (not the default `3306`) so it can run alongside MySQL without a port clash.
+- **SQLite**: there's no server to connect to — your client just opens the `.db` file directly from disk. If you need foreign keys enforced, your client must run `PRAGMA foreign_keys = ON` per connection; SQLite doesn't persist this setting.
+
+### Seed schema
+
+Every engine seeds two tables — `customers` (parent) and `orders` (child, FK'd on `customer_id` with `ON DELETE CASCADE`) — deliberately covering a wide spread of column types so client features can be exercised against all of them: auto-increment/identity primary keys, UUID/GUID, short and long text, boolean, decimal/numeric, float, date, timestamp, JSON, binary/BLOB, and a `CHECK`-constrained status column. Some rows include `NULL`s to test nullable-column handling.
+
+Seed SQL lives in `init-scripts/<engine>/01-seed.sql`. If you need to add columns or test cases, edit the relevant file per engine (the SQL dialects differ enough that there's a separate script per engine rather than one shared file) — then do a full `docker compose down -v` reset for the change to take effect, since most engines only run these scripts once, on first initialization of an empty volume.
+
+### Gotchas
+
+- **First-boot-only init**: `POSTGRES_DB`, `MYSQL_DATABASE`, `MARIADB_DATABASE`, and Oracle's startup scripts only run when a volume is created empty. Editing a seed script and restarting the container without also dropping its volume will silently do nothing.
+- **`mssql-init` is a one-shot container**: it creates `testdb` and runs SQL Server's seed script, then exits successfully. It won't appear in `docker compose ps` once done — that's expected, not a failure. It reruns its `CREATE DATABASE IF NOT EXISTS` logic on every `docker compose up`, but the seed *data* inserts are not idempotent, so rerunning it against an already-seeded `testdb` will fail on unique constraints. That's fine for local dev; just don't expect repeated `up`s to reset SQL Server's data — use the full volume reset above instead.
+- **Startup time**: Oracle is the slowest engine to become ready (up to ~1-2 minutes on first boot). If you're scripting against it (e.g. in CI), wait/retry rather than assuming a fast failure means something's broken.
+
+---
+
 ## Code Style
 
 - **Prettier** for all frontend files — run `make format` to auto-fix.
