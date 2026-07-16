@@ -1074,11 +1074,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             }),
             editor_dialect: "postgresql".into(),
             explain_format: "postgres_json".into(),
-            system_databases: vec![
-                "postgres".into(),
-                "template0".into(),
-                "template1".into(),
-            ],
+            system_databases: vec![],
             file_extensions: vec![],
         }),
         _ => None,

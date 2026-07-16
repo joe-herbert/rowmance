@@ -159,7 +159,7 @@ impl DatabaseEngine for SqlServerEngine {
     async fn execute(
         &self,
         sql: &str,
-        _database: Option<&str>,
+        database: Option<&str>,
         page_size: u32,
         offset: u32,
     ) -> Result<EngineQueryResult, RowmanceError> {
@@ -168,6 +168,18 @@ impl DatabaseEngine for SqlServerEngine {
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+        // SQL Server has no session-level SET search_path equivalent. The closest
+        // approach is ALTER USER ... WITH DEFAULT_SCHEMA, which affects unqualified
+        // name resolution. This is best-effort: it will silently fail for built-in
+        // users like dbo that SQL Server prohibits from being altered.
+        if let Some(schema) = database {
+            let schema_escaped = schema.replace(']', "]]");
+            let set_default_sql = format!(
+                "EXEC('ALTER USER [' + USER_NAME() + '] WITH DEFAULT_SCHEMA = [{schema_escaped}]')"
+            );
+            conn.simple_query(&set_default_sql).await.ok();
+        }
 
         execute_on_sqlserver_conn(&mut conn, sql, page_size, offset).await
     }
@@ -181,10 +193,17 @@ impl DatabaseEngine for SqlServerEngine {
         crate::connections::sqlserver::exec_simple(&mut conn, sql).await
     }
 
-    async fn count_query_rows(&self, sql: &str, _database: Option<&str>) -> Option<i64> {
+    async fn count_query_rows(&self, sql: &str, database: Option<&str>) -> Option<i64> {
         let sql_trimmed = sql.trim_end_matches(';');
         let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
         let mut conn = self.pool.get().await.ok()?;
+        if let Some(schema) = database {
+            let schema_escaped = schema.replace(']', "]]");
+            let set_default_sql = format!(
+                "EXEC('ALTER USER [' + USER_NAME() + '] WITH DEFAULT_SCHEMA = [{schema_escaped}]')"
+            );
+            conn.simple_query(&set_default_sql).await.ok();
+        }
         let stream = conn.simple_query(&count_sql).await.ok()?;
         let rows = stream.into_first_result().await.ok()?;
         if let Some(row) = rows.first() {
@@ -1037,12 +1056,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             fk_violation: None,
             editor_dialect: "sql".into(),
             explain_format: "sqlserver_xml".into(),
-            system_databases: vec![
-                "master".into(),
-                "model".into(),
-                "msdb".into(),
-                "tempdb".into(),
-            ],
+            system_databases: vec![],
             file_extensions: vec![],
         }),
         _ => None,

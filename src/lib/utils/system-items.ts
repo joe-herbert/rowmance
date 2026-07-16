@@ -1,21 +1,13 @@
 export const BUILTIN_DATABASES: string[] = [
-  // MySQL / MariaDB
+  // MySQL / MariaDB — these are actual database names shown in the tree
   'information_schema',
   'mysql',
   'performance_schema',
   'sys',
-  // PostgreSQL
-  'postgres',
-  'template0',
-  'template1',
+  // PostgreSQL — these are schema names (backend query already excludes them, but kept as a second layer)
   'pg_catalog',
   'pg_toast',
   'pg_temp',
-  // SQL Server
-  'master',
-  'model',
-  'msdb',
-  'tempdb',
 ];
 
 export const BUILTIN_TABLE_PATTERNS: string[] = [
