@@ -4,10 +4,15 @@ use sqlx::PgPool;
 use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
 use crate::error::RowmanceError;
 
-/// List all non-system databases visible to this connection.
+/// List all user schemas in the connected database.
+/// PostgreSQL separates "database" (connection target) from "schema" (namespace).
+/// The pool is already scoped to one database, so we expose schemas as the
+/// navigatable unit — they map to the `schema` parameter used in list_tables.
 pub async fn list_databases(pool: &PgPool) -> Result<Vec<String>, RowmanceError> {
     let rows = sqlx::query_scalar::<_, String>(
-        "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname",
+        "SELECT nspname FROM pg_catalog.pg_namespace \
+         WHERE nspname NOT LIKE 'pg_%' AND nspname != 'information_schema' \
+         ORDER BY nspname",
     )
     .fetch_all(pool)
     .await?;
