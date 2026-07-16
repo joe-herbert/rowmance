@@ -10,6 +10,7 @@
   import ConnectionsIcon from '$lib/components/icons/ConnectionsIcon.svelte';
   import BoxIcon from '$lib/components/icons/BoxIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
+  import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useDashboards } from '$lib/stores/dashboards.svelte';
   import type { PanelKind } from '$lib/types';
@@ -29,7 +30,7 @@
 {#if content.kind === 'table_browser'}
   <TableIcon
     {size}
-    system={isSystemDatabase(content.database, settingsStore.settings.systemDatabases) ||
+    system={isSystemDatabase(content.database, [...settingsStore.settings.systemDatabases, ...getAllSystemDatabases()]) ||
       isSystemTable(content.table, settingsStore.settings.systemTablePatterns)}
   />
 {:else if content.kind === 'table_structure'}

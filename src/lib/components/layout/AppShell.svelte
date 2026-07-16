@@ -27,6 +27,7 @@
   import { useRecording } from '$lib/stores/recording.svelte';
   import { useRevert } from '$lib/stores/revert.svelte';
   import { useDashboards } from '$lib/stores/dashboards.svelte';
+  import { getAllFileExtensions } from '$lib/stores/dialects.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
@@ -163,13 +164,14 @@
     panelStore.openInFocused({ kind: 'settings' });
   }
 
-  async function openSqliteFile(filePath: string) {
+  async function openFileBasedDb(filePath: string, dbType: string) {
     const filename = filePath.split('/').pop() ?? filePath;
-    const name = filename.replace(/\.(sqlite3?|db)$/i, '');
+    const extPattern = /\.[^.]+$/i;
+    const name = filename.replace(extPattern, '');
     try {
       const profile = await connectionsStore.create({
         name,
-        dbType: 'sqlite',
+        dbType,
         host: filePath,
         port: 0,
         database: '',
@@ -202,9 +204,10 @@
   }
 
   async function handleFileOpen(filePath: string) {
-    const ext = filePath.split('.').pop()?.toLowerCase();
-    if (ext === 'sqlite' || ext === 'db' || ext === 'sqlite3') {
-      await openSqliteFile(filePath);
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+    const match = getAllFileExtensions().find((e) => e.ext === ext);
+    if (match) {
+      await openFileBasedDb(filePath, match.dbType);
     } else if (ext === 'sql') {
       await openSqlFile(filePath);
     }
@@ -294,10 +297,11 @@
         }
       }),
       listen('menu:open-file', async () => {
+        const dbExts = getAllFileExtensions().map((e) => e.ext);
         const filePath = await openFileDialog({
           multiple: false,
           filters: [
-            { name: 'Database & SQL Files', extensions: ['sqlite', 'db', 'sqlite3', 'sql'] },
+            { name: 'Database & SQL Files', extensions: [...dbExts, 'sql'] },
           ],
         });
         if (filePath && typeof filePath === 'string') {

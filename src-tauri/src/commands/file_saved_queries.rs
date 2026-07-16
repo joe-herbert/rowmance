@@ -528,6 +528,7 @@ pub async fn file_saved_queries_list(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn file_saved_queries_create(
     sqlite: State<'_, SqlitePool>,
     folder_id: Option<String>,
@@ -619,6 +620,7 @@ pub async fn file_saved_queries_create(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn file_saved_queries_update(
     sqlite: State<'_, SqlitePool>,
     id: String,

@@ -5,17 +5,16 @@
 /// the connection is held purely so that session-scoped state (e.g. MySQL
 /// user-defined variables) survives across separate query executions.
 use dashmap::DashMap;
-use sqlx::ConnectOptions;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
-use crate::connections::pool_manager::{ConnectionManager, RemotePool};
+use crate::connections::engine::EngineTransaction;
+use crate::connections::pool_manager::ConnectionManager;
 use crate::error::AppError;
-use crate::transactions::HeldConnection;
 
 pub struct SessionManager {
-    active: DashMap<String, Arc<Mutex<HeldConnection>>>,
+    active: DashMap<String, Arc<Mutex<Box<dyn EngineTransaction>>>>,
 }
 
 impl SessionManager {
@@ -25,7 +24,7 @@ impl SessionManager {
         })
     }
 
-    pub fn get(&self, session_id: &str) -> Option<Arc<Mutex<HeldConnection>>> {
+    pub fn get(&self, session_id: &str) -> Option<Arc<Mutex<Box<dyn EngineTransaction>>>> {
         self.active.get(session_id).map(|r| Arc::clone(&*r))
     }
 
@@ -46,45 +45,12 @@ pub async fn session_acquire(
 ) -> Result<(), AppError> {
     sessions.remove(&session_id);
 
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
-
-    let held = match pool_ref.value() {
-        RemotePool::MySql(pool, _) => {
-            // Direct connection (not a pool slot) so no after_release hook resets
-            // the session state between queries. autocommit stays at the default (1).
-            let conn = (*pool.connect_options())
-                .clone()
-                .connect()
-                .await
-                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            HeldConnection::MySql(conn)
-        }
-        RemotePool::Postgres(pool) => {
-            let conn = pool
-                .acquire()
-                .await
-                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            HeldConnection::Postgres(conn)
-        }
-        RemotePool::Sqlite(pool) => {
-            let conn = pool
-                .acquire()
-                .await
-                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            HeldConnection::Sqlite(conn)
-        }
-        RemotePool::SqlServer(pool, _) => {
-            let conn = pool
-                .get_owned()
-                .await
-                .map_err(|e| AppError::new("POOL_ERROR", e.to_string()))?;
-            HeldConnection::SqlServer(conn)
-        }
-    };
+    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let session = engine.begin_session().await.map_err(AppError::from)?;
 
     sessions
         .active
-        .insert(session_id, Arc::new(Mutex::new(held)));
+        .insert(session_id, Arc::new(Mutex::new(session)));
     Ok(())
 }
 

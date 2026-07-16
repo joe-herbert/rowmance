@@ -24,11 +24,11 @@
 
   const connections = useConnections();
   const profile = $derived(connections.getById(connectionId));
-  const dbType = $derived(profile?.dbType ?? 'mysql');
+  const dialect = $derived(profile?.dialectInfo);
   const isReadOnly = $derived(profile?.readOnly ?? false);
-  const isMysql = $derived(dbType === 'mysql' || dbType === 'mariadb');
-  const isPostgres = $derived(dbType === 'postgres');
-  const isSqlite = $derived(dbType === 'sqlite');
+  const hostBasedUsers = $derived(dialect?.hostBasedUsers ?? false);
+  const supportsRoles = $derived(dialect?.supportsRoles ?? false);
+  const noUserManagement = $derived(!(dialect?.supportsUserManagement ?? true));
 
   // ── Data state ──────────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@
     addUserSaving = true;
     addUserError = null;
     const newUsername = addUserForm.username.trim();
-    const newHost = isMysql ? addUserForm.host : null;
+    const newHost = hostBasedUsers ? addUserForm.host : null;
     try {
       await usersApi.createUser(
         connectionId,
@@ -208,21 +208,21 @@
     const orig = selectedUser;
     try {
       const usernameChanged = editUserForm.username.trim() !== orig.username;
-      const hostChanged = isMysql && editUserForm.host !== (orig.host ?? '%');
+      const hostChanged = hostBasedUsers && editUserForm.host !== (orig.host ?? '%');
       if (usernameChanged || hostChanged) {
         await usersApi.renameUser(
           connectionId,
           orig.username,
           orig.host,
           editUserForm.username.trim(),
-          isMysql ? editUserForm.host : null,
+          hostBasedUsers ? editUserForm.host : null,
         );
       }
       if (editUserForm.password) {
         await usersApi.setPassword(
           connectionId,
           editUserForm.username.trim(),
-          isMysql ? editUserForm.host : null,
+          hostBasedUsers ? editUserForm.host : null,
           editUserForm.password,
         );
       }
@@ -371,7 +371,7 @@
   ];
 
   const scopeOptions = $derived.by(() => {
-    if (isMysql)
+    if (hostBasedUsers)
       return [
         { value: 'global', label: 'Global (*.*)' },
         { value: 'database', label: 'Database (db.*)' },
@@ -384,7 +384,7 @@
   });
 
   const availablePrivs = $derived.by(() => {
-    if (isMysql) {
+    if (hostBasedUsers) {
       if (grantScope === 'global') return MYSQL_GLOBAL_PRIVS;
       if (grantScope === 'database') return MYSQL_DB_PRIVS;
       return MYSQL_TABLE_PRIVS;
@@ -398,7 +398,7 @@
     const privList = [...grantPrivs].join(', ');
 
     let onClause = '';
-    if (isMysql) {
+    if (hostBasedUsers) {
       if (grantScope === 'global') onClause = '*.*';
       else if (grantScope === 'database' && grantDb) onClause = `\`${grantDb}\`.*`;
       else if (grantScope === 'table' && grantDb && grantTable)
@@ -410,7 +410,7 @@
       else return '';
     }
 
-    const target = isMysql
+    const target = hostBasedUsers
       ? `'${selectedUser.username}'@'${selectedUser.host ?? '%'}'`
       : `"${selectedUser.username}"`;
     const verb = grantAction.toUpperCase();
@@ -422,7 +422,7 @@
 
   // Load DB list when scope requires it
   $effect(() => {
-    const needsDb = isMysql
+    const needsDb = hostBasedUsers
       ? grantScope === 'database' || grantScope === 'table'
       : grantScope === 'schema' || grantScope === 'table';
     if (needsDb && builderDbList.length === 0 && !builderDbLoading) {
@@ -459,7 +459,7 @@
   // Reset builder state when selected user changes
   $effect(() => {
     void selectedUser;
-    grantScope = isMysql ? 'global' : 'schema';
+    grantScope = hostBasedUsers ? 'global' : 'schema';
     grantDb = '';
     grantTable = '';
     grantPrivs = new Set();
@@ -520,7 +520,7 @@
     let newDb = '';
     let newTable = '';
 
-    if (isMysql) {
+    if (hostBasedUsers) {
       if (onClause === '*.*') {
         newScope = 'global';
       } else {
@@ -610,7 +610,7 @@
 </script>
 
 <div class="user-manager">
-  {#if isSqlite}
+  {#if noUserManagement}
     <div class="unsupported-notice">
       <div class="unsupported-icon" aria-hidden="true">
         <LockIcon width={48} height={48} />
@@ -661,7 +661,7 @@
               >
                 <div class="user-row-main">
                   <span class="user-name">{user.username}</span>
-                  {#if isMysql && user.host != null}
+                  {#if hostBasedUsers && user.host != null}
                     <span class="user-host">@{user.host}</span>
                   {/if}
                   {#if user.isSuperuser}
@@ -689,7 +689,7 @@
           <div class="detail-header">
             <div class="detail-title">
               <span class="detail-username">{selectedUser.username}</span>
-              {#if isMysql && selectedUser.host != null}
+              {#if hostBasedUsers && selectedUser.host != null}
                 <span class="detail-host">@{selectedUser.host}</span>
               {/if}
             </div>
@@ -791,12 +791,12 @@
                   />
 
                   <!-- Database / schema selector -->
-                  {#if (isMysql && (grantScope === 'database' || grantScope === 'table')) || (!isMysql && (grantScope === 'schema' || grantScope === 'table'))}
+                  {#if (hostBasedUsers && (grantScope === 'database' || grantScope === 'table')) || (!hostBasedUsers && (grantScope === 'schema' || grantScope === 'table'))}
                     <Select
                       options={builderDbLoading
                         ? [{ value: '', label: 'Loading…' }]
                         : [
-                            { value: '', label: isMysql ? 'Database…' : 'Schema…' },
+                            { value: '', label: hostBasedUsers ? 'Database…' : 'Schema…' },
                             ...builderDbList.map((d) => ({ value: d, label: d })),
                           ]}
                       value={grantDb}
@@ -946,7 +946,7 @@
             placeholder="username"
           />
         </div>
-        {#if isMysql}
+        {#if hostBasedUsers}
           <div class="form-row">
             <label class="form-label" for="add-host">Host</label>
             <input
@@ -978,7 +978,7 @@
             placeholder="password"
           />
         </div>
-        {#if isPostgres}
+        {#if supportsRoles}
           <label class="form-check-row">
             <Checkbox
               size="sm"
@@ -1031,7 +1031,7 @@
       <div class="modal-title">Set Password</div>
       <div class="modal-body">
         <p class="modal-subtitle">
-          {isMysql ? `'${user.username}'@'${user.host ?? '%'}'` : user.username}
+          {hostBasedUsers ? `'${user.username}'@'${user.host ?? '%'}'` : user.username}
         </p>
         <div class="form-row">
           <label class="form-label" for="set-password">New Password</label>
@@ -1089,7 +1089,7 @@
             }}
           />
         </div>
-        {#if isMysql}
+        {#if hostBasedUsers}
           <div class="form-row">
             <label class="form-label" for="edit-host">Host</label>
             <input
@@ -1140,7 +1140,7 @@
 
 <!-- ── Drop User Confirm ──────────────────────────────────────────────────── -->
 {#if dropConfirmUser}
-  {@const label = isMysql
+  {@const label = hostBasedUsers
     ? `'${dropConfirmUser.username}'@'${dropConfirmUser.host ?? '%'}'`
     : dropConfirmUser.username}
   <ConfirmDialog

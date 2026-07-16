@@ -141,8 +141,7 @@
   // ── SQL variable tracking (MySQL/MariaDB @varname) ────────────────────────
 
   let sqlVariableNames = $derived.by((): string[] => {
-    const dbType = connections.getById(connectionId)?.dbType;
-    if (dbType !== 'mysql' && dbType !== 'mariadb') return [];
+    if (!connections.getById(connectionId)?.dialectInfo.detectsSqlVariables) return [];
     const vars = new Set<string>();
     const re = /@([a-zA-Z_]\w*)/g;
     // Strip string literals and comments to avoid false positives
@@ -629,21 +628,15 @@
   const txDatabaseMismatch = $derived.by(() => {
     if (!connections.isTransactionActive(connectionId)) return null;
     const profile = connections.getById(connectionId);
-    if (!profile || (profile.dbType !== 'mysql' && profile.dbType !== 'mariadb')) return null;
+    if (!profile || !profile.dialectInfo.warnsTxDatabaseMismatch) return null;
     const txDb = connections.getTxDatabase(connectionId);
     if (!txDb || !selectedDatabase || txDb === selectedDatabase) return null;
     return txDb;
   });
 
-  const DB_TYPE_DIALECT: Record<string, string> = {
-    mysql: 'mysql',
-    mariadb: 'mysql',
-    postgres: 'postgresql',
-  };
-
   let sqlDialect = $derived(() => {
     const profile = connections.getById(connectionId);
-    return profile ? (DB_TYPE_DIALECT[profile.dbType] ?? 'sql') : 'sql';
+    return profile?.dialectInfo?.editorDialect ?? 'sql';
   });
 
   // ── Schema-aware autocomplete ─────────────────────────────────────────────

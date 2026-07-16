@@ -14,6 +14,7 @@
   import ComboInput from '$lib/components/ui/ComboInput.svelte';
   import type { ColumnRef, PolymorphicVirtualRelation, TableInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { qi, tableRef, defaultDialectInfo } from '$lib/utils/dialect';
   import PencilIcon from '$lib/components/icons/PencilIcon.svelte';
   import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
@@ -67,12 +68,12 @@
   async function loadTypeColumnValues(col: string) {
     if (!col) { typeColumnValues = []; return; }
     try {
-      const quotedCol = `\`${col.replace(/`/g, '``')}\``;
-      const quotedDb = `\`${database.replace(/`/g, '``')}\``;
-      const quotedTable = `\`${table.replace(/`/g, '``')}\``;
+      const d = connectionStore.getById(connectionId)?.dialectInfo ?? defaultDialectInfo;
+      const quotedCol = qi(col, d);
+      const tblRef = tableRef(database, table, d);
       const result = await queryApi.executeSelection(
         connectionId,
-        `SELECT DISTINCT ${quotedCol} FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} IS NOT NULL ORDER BY ${quotedCol} LIMIT 100`,
+        `SELECT DISTINCT ${quotedCol} FROM ${tblRef} WHERE ${quotedCol} IS NOT NULL ORDER BY ${quotedCol} LIMIT 100`,
         database,
       );
       if (!result.error) {

@@ -1,6 +1,10 @@
+pub mod engine;
+pub mod engines;
+pub mod erd;
 pub mod mysql;
 pub mod pool_manager;
 pub mod postgres;
 pub mod sqlite;
 pub mod sqlserver;
 pub mod ssh_tunnel;
+pub mod types;

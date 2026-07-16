@@ -81,12 +81,12 @@
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   }
   const profile = $derived(connections.getById(connectionId));
-  const dbType = $derived(profile?.dbType ?? 'mysql');
+  const dialect = $derived(profile?.dialectInfo);
   const isReadOnly = $derived(profile?.readOnly ?? false);
-  const isMysql = $derived(dbType === 'mysql' || dbType === 'mariadb');
-  const isPostgres = $derived(dbType === 'postgres');
-  const isSqlite = $derived(dbType === 'sqlite');
-  const isSqlServer = $derived(dbType === 'sqlserver');
+  const supportsChangeColumn = $derived(dialect?.supportsChangeColumn ?? false);
+  const supportsRoles = $derived(dialect?.supportsRoles ?? false);
+  const schemaless = $derived(!(dialect?.usesSchema ?? true));
+  const dropIndexOnTable = $derived(dialect?.dropIndexSyntax === 'on_table_no_schema');
 
   // ── Data state ─────────────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@
   let saveError = $state<string | null>(null);
 
   // Name, Type, Key, Null, Uniq, Default, [Actions], [Drag handle]
-  const colTableColCount = $derived(6 + (editMode ? 1 : 0) + (editMode && isMysql ? 1 : 0));
+  const colTableColCount = $derived(6 + (editMode ? 1 : 0) + (editMode && supportsChangeColumn ? 1 : 0));
 
   interface ColForm {
     mode: 'add' | 'edit';
@@ -203,13 +203,13 @@
   // ── SQL helpers ────────────────────────────────────────────────────────────
 
   function qi(name: string): string {
-    if (isMysql) return '`' + name.replace(/`/g, '``') + '`';
-    if (isSqlServer) return '[' + name.replace(/\]/g, ']]') + ']';
-    return '"' + name.replace(/"/g, '""') + '"';
+    if (!dialect) return `"${name.replace(/"/g, '""')}"`;
+    const escaped = name.split(dialect.identifierClose).join(dialect.identifierEscape);
+    return dialect.identifierOpen + escaped + dialect.identifierClose;
   }
 
   function tRef(): string {
-    if (isSqlite) return qi(table);
+    if (!dialect?.usesSchema) return qi(table);
     return qi(database) + '.' + qi(table);
   }
 
@@ -228,9 +228,9 @@
   function colDef(form: ColForm): string {
     let s = `${qi(form.name)} ${form.dataType}`;
     if (!form.nullable) s += ' NOT NULL';
-    if (isMysql && form.autoIncrement) s += ' AUTO_INCREMENT';
+    if (dialect?.supportsAutoIncrement && form.autoIncrement) s += ' AUTO_INCREMENT';
     if (form.defaultValue.trim()) s += ` DEFAULT ${form.defaultValue.trim()}`;
-    if (isMysql && form.comment.trim()) s += ` COMMENT ${escStr(form.comment.trim())}`;
+    if (dialect?.supportsColumnComment && form.comment.trim()) s += ` COMMENT ${escStr(form.comment.trim())}`;
     return s;
   }
 
@@ -239,39 +239,33 @@
   }
 
   function buildEditColSqls(orig: ColumnInfo, form: ColForm): string[] {
-    if (isMysql) {
+    if (dialect?.supportsChangeColumn) {
       return [`ALTER TABLE ${tRef()} CHANGE COLUMN ${qi(orig.name)} ${colDef(form)}`];
     }
-    if (isPostgres) {
-      const stmts: string[] = [];
-      const t = tRef();
-      const oq = qi(orig.name);
-      if (form.dataType !== orig.dataType) {
-        stmts.push(`ALTER TABLE ${t} ALTER COLUMN ${oq} TYPE ${form.dataType}`);
-      }
-      if (form.nullable !== orig.nullable) {
-        stmts.push(
-          `ALTER TABLE ${t} ALTER COLUMN ${oq} ${form.nullable ? 'DROP NOT NULL' : 'SET NOT NULL'}`,
-        );
-      }
-      const origDef = orig.defaultValue ?? '';
-      const newDef = form.defaultValue.trim();
-      if (newDef !== origDef) {
-        stmts.push(
-          newDef
-            ? `ALTER TABLE ${t} ALTER COLUMN ${oq} SET DEFAULT ${newDef}`
-            : `ALTER TABLE ${t} ALTER COLUMN ${oq} DROP DEFAULT`,
-        );
-      }
-      if (form.name !== orig.name) {
-        stmts.push(`ALTER TABLE ${t} RENAME COLUMN ${oq} TO ${qi(form.name)}`);
-      }
-      return stmts;
+    const stmts: string[] = [];
+    const t = tRef();
+    const oq = qi(orig.name);
+    if (form.dataType !== orig.dataType) {
+      stmts.push(`ALTER TABLE ${t} ALTER COLUMN ${oq} TYPE ${form.dataType}`);
     }
-    if (isSqlite && form.name !== orig.name) {
-      return [`ALTER TABLE ${tRef()} RENAME COLUMN ${qi(orig.name)} TO ${qi(form.name)}`];
+    if (form.nullable !== orig.nullable) {
+      stmts.push(
+        `ALTER TABLE ${t} ALTER COLUMN ${oq} ${form.nullable ? 'DROP NOT NULL' : 'SET NOT NULL'}`,
+      );
     }
-    return [];
+    const origDef = orig.defaultValue ?? '';
+    const newDef = form.defaultValue.trim();
+    if (newDef !== origDef) {
+      stmts.push(
+        newDef
+          ? `ALTER TABLE ${t} ALTER COLUMN ${oq} SET DEFAULT ${newDef}`
+          : `ALTER TABLE ${t} ALTER COLUMN ${oq} DROP DEFAULT`,
+      );
+    }
+    if (form.name !== orig.name && dialect?.supportsRenameColumn) {
+      stmts.push(`ALTER TABLE ${t} RENAME COLUMN ${oq} TO ${qi(form.name)}`);
+    }
+    return stmts;
   }
 
   function buildDropColSql(name: string): string {
@@ -290,10 +284,13 @@
   }
 
   function buildDropIdxSql(name: string): string {
-    if (name === 'PRIMARY' && isMysql) return `ALTER TABLE ${tRef()} DROP PRIMARY KEY`;
-    if (isMysql) return `DROP INDEX ${qi(name)} ON ${tRef()}`;
-    if (isPostgres) return `DROP INDEX ${qi(database)}.${qi(name)}`;
-    if (isSqlServer) return `DROP INDEX ${qi(name)} ON ${tRef()}`;
+    const syntax = dialect?.dropIndexSyntax ?? 'simple';
+    if (syntax === 'on_table') {
+      if (name === 'PRIMARY') return `ALTER TABLE ${tRef()} DROP PRIMARY KEY`;
+      return `DROP INDEX ${qi(name)} ON ${tRef()}`;
+    }
+    if (syntax === 'schema_qualified') return `DROP INDEX ${qi(database)}.${qi(name)}`;
+    if (syntax === 'on_table_no_schema') return `DROP INDEX ${qi(name)} ON ${tRef()}`;
     return `DROP INDEX ${qi(name)}`;
   }
 
@@ -310,7 +307,7 @@
   }
 
   function buildDropFkSql(name: string): string {
-    if (isMysql) return `ALTER TABLE ${tRef()} DROP FOREIGN KEY ${qi(name)}`;
+    if (dialect?.usesForeignKeyKeyword) return `ALTER TABLE ${tRef()} DROP FOREIGN KEY ${qi(name)}`;
     return `ALTER TABLE ${tRef()} DROP CONSTRAINT ${qi(name)}`;
   }
 
@@ -321,7 +318,7 @@
       mode: 'add',
       original: null,
       name: '',
-      dataType: isMysql ? 'VARCHAR(255)' : 'TEXT',
+      dataType: dialect?.defaultNewColumnType ?? 'TEXT',
       nullable: true,
       defaultValue: '',
       autoIncrement: false,
@@ -534,9 +531,9 @@
   function colDefFromInfo(col: ColumnInfo): string {
     let s = `${qi(col.name)} ${col.dataType}`;
     if (!col.nullable) s += ' NOT NULL';
-    if (isMysql && col.isAutoIncrement) s += ' AUTO_INCREMENT';
+    if (dialect?.supportsAutoIncrement && col.isAutoIncrement) s += ' AUTO_INCREMENT';
     if (col.defaultValue !== null && col.defaultValue !== '') s += ` DEFAULT ${col.defaultValue}`;
-    if (isMysql && col.comment) s += ` COMMENT ${escStr(col.comment)}`;
+    if (dialect?.supportsColumnComment && col.comment) s += ` COMMENT ${escStr(col.comment)}`;
     return s;
   }
 
@@ -692,7 +689,7 @@
           >
             <thead>
               <tr>
-                {#if editMode && isMysql}<th class="th-drag"></th>{/if}
+                {#if editMode && supportsChangeColumn}<th class="th-drag"></th>{/if}
                 <th>Name</th>
                 <th>Type</th>
                 <th class="th-narrow">Key</th>
@@ -714,7 +711,7 @@
                   class:col-row-dragging={colDragFromIdx === i && colIsDragging}
                   data-col-drag-idx={i}
                 >
-                  {#if editMode && isMysql}
+                  {#if editMode && supportsChangeColumn}
                     <td class="col-drag-cell">
                       <span
                         class="col-drag-handle"
@@ -832,7 +829,7 @@
           <section class="section">
             <div class="section-header section-header--flex">
               <span>Foreign Keys ({foreignKeys.length})</span>
-              {#if editMode && !isSqlite}
+              {#if editMode && !schemaless}
                 <button class="add-btn" onclick={openAddFk}>+ Add Foreign Key</button>
               {/if}
             </div>
@@ -868,12 +865,12 @@
                   </div>
                 </div>
               {/each}
-              {#if foreignKeys.length === 0 && editMode && !isSqlite}
+              {#if foreignKeys.length === 0 && editMode && !schemaless}
                 <div class="empty-hint">No foreign keys defined.</div>
               {/if}
-              {#if editMode && isSqlite}
+              {#if editMode && schemaless}
                 <div class="sqlite-note">
-                  SQLite does not support adding foreign key constraints to existing tables.
+                  This engine does not support adding foreign key constraints to existing tables.
                 </div>
               {/if}
             </div>
@@ -1007,7 +1004,7 @@
 
 <!-- ── Column type suggestions ────────────────────────────────────────────── -->
 <datalist id="col-dtype-opts">
-  {#if isMysql}
+  {#if supportsChangeColumn}
     <option value="INT"></option>
     <option value="BIGINT"></option>
     <option value="SMALLINT"></option>
@@ -1027,7 +1024,7 @@
     <option value="DATETIME"></option>
     <option value="TIMESTAMP"></option>
     <option value="JSON"></option>
-  {:else if isPostgres}
+  {:else if supportsRoles}
     <option value="integer"></option>
     <option value="bigint"></option>
     <option value="smallint"></option>
@@ -1144,7 +1141,7 @@
         <div class="form-row">
           <label class="form-label" for="col-type">
             Type
-            {#if isSqlite && form.mode === 'edit'}
+            {#if schemaless && form.mode === 'edit'}
               <span class="form-hint">(SQLite: rename only)</span>
             {/if}
           </label>
@@ -1156,11 +1153,11 @@
             oninput={(e) => {
               columnForm!.dataType = (e.target as HTMLInputElement).value;
             }}
-            placeholder={isMysql ? 'VARCHAR(255)' : 'TEXT'}
-            disabled={isSqlite && form.mode === 'edit'}
+            placeholder={dialect?.defaultNewColumnType ?? 'TEXT'}
+            disabled={schemaless && form.mode === 'edit'}
           />
         </div>
-        {#if !(isSqlite && form.mode === 'edit')}
+        {#if !(schemaless && form.mode === 'edit')}
           <div class="form-check-row">
             <Checkbox
               id="col-nullable"
@@ -1183,7 +1180,7 @@
               placeholder="e.g. 0, 'active', NULL, CURRENT_TIMESTAMP"
             />
           </div>
-          {#if isMysql}
+          {#if supportsChangeColumn}
             <div class="form-check-row">
               <Checkbox
                 id="col-ai"
@@ -1279,7 +1276,7 @@
             <label for="idx-unique" class="form-check-label">Unique</label>
           </div>
         {/if}
-        {#if !isSqlite}
+        {#if !schemaless}
           <div class="form-check-row">
             <Checkbox
               id="idx-pk"

@@ -9,7 +9,8 @@
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { executeSelection } from '$lib/tauri/query';
-  import type { ForeignKeyInfo, DbType } from '$lib/types';
+  import type { ForeignKeyInfo } from '$lib/types';
+  import { qi as dialectQi, tableRef as dialectTableRef, defaultDialectInfo } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import JsonIcon from '$lib/components/icons/JsonIcon.svelte';
@@ -54,11 +55,7 @@
   let metaKey = $state<string | null>(null);
   let copied = $state(false);
 
-  function quoteId(name: string, dbType: DbType): string {
-    if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
-    if (dbType === 'sqlserver') return `[${name.replace(/\]/g, ']]')}]`;
-    return `\`${name.replace(/`/g, '``')}\``;
-  }
+
 
   function escapeStr(val: string): string {
     return val.replace(/'/g, "''");
@@ -150,7 +147,7 @@
 
     const connId = target.targetConnectionId ?? parentConnId;
     const db = target.targetDatabase ?? parentDb;
-    const dbType = connectionStore.getById(connId)?.dbType ?? 'mysql';
+    const d = connectionStore.getById(connId)?.dialectInfo ?? defaultDialectInfo;
 
     children[colName] = {
       target,
@@ -166,10 +163,11 @@
     };
 
     try {
-      const sql =
-        dbType === 'sqlserver'
-          ? `SELECT TOP 1 * FROM ${quoteId(db, dbType)}.${quoteId(target.targetTable, dbType)} WHERE ${quoteId(target.targetColumn, dbType)} = ${valueLiteral(cellValue)}`
-          : `SELECT * FROM ${quoteId(db, dbType)}.${quoteId(target.targetTable, dbType)} WHERE ${quoteId(target.targetColumn, dbType)} = ${valueLiteral(cellValue)} LIMIT 1`;
+      const tRef = dialectTableRef(db, target.targetTable, d);
+      const qCol = dialectQi(target.targetColumn, d);
+      const sql = d.selectTop
+        ? `SELECT TOP 1 * FROM ${tRef} WHERE ${qCol} = ${valueLiteral(cellValue)}`
+        : `SELECT * FROM ${tRef} WHERE ${qCol} = ${valueLiteral(cellValue)} LIMIT 1`;
       const result = await executeSelection(connId, sql);
       if (result.error) {
         children[colName].error = result.error;

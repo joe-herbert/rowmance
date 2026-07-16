@@ -347,6 +347,7 @@ pub fn run() {
             commands::connections::connections_get_db_url,
             commands::connections::connections_copy_db_url_to_clipboard,
             commands::connections::connections_duplicate,
+            commands::connections::connections_list_dialects,
             // Keychain
             commands::keychain::keychain_store,
             commands::keychain::keychain_retrieve,

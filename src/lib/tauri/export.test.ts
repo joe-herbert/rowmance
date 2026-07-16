@@ -25,6 +25,7 @@ describe('exportResultToClipboard', () => {
       columns,
       format: 'csv',
       tableName: undefined,
+      connectionId: undefined,
     });
   });
 
@@ -36,6 +37,19 @@ describe('exportResultToClipboard', () => {
       columns: [],
       format: 'sql_insert',
       tableName: 'my_table',
+      connectionId: undefined,
+    });
+  });
+
+  it('passes connectionId when provided', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await exportResultToClipboard([], [], 'sql_insert', 'users', 'conn-123');
+    expect(mockInvoke).toHaveBeenCalledWith('export_result_to_clipboard', {
+      rows: [],
+      columns: [],
+      format: 'sql_insert',
+      tableName: 'users',
+      connectionId: 'conn-123',
     });
   });
 
@@ -52,6 +66,7 @@ describe('exportResultToClipboard', () => {
       columns,
       format: 'tab_separated',
       tableName: undefined,
+      connectionId: undefined,
     });
   });
 });
@@ -66,6 +81,7 @@ describe('exportResultToFile', () => {
       format: 'json',
       filePath: '/tmp/out.json',
       tableName: undefined,
+      connectionId: undefined,
     });
   });
 
@@ -83,6 +99,7 @@ describe('exportResultToFile', () => {
       format: 'csv',
       filePath: '/tmp/data.csv',
       tableName: undefined,
+      connectionId: undefined,
     });
   });
 
@@ -97,6 +114,22 @@ describe('exportResultToFile', () => {
       format: 'sql_insert',
       filePath: '/tmp/inserts.sql',
       tableName: 'users',
+      connectionId: undefined,
+    });
+  });
+
+  it('passes connectionId for sql_insert format', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    const rows = [[1, 'Alice']];
+    const columns = ['id', 'name'];
+    await exportResultToFile(rows, columns, 'sql_insert', '/tmp/inserts.sql', 'users', 'conn-abc');
+    expect(mockInvoke).toHaveBeenCalledWith('export_result_to_file', {
+      rows,
+      columns,
+      format: 'sql_insert',
+      filePath: '/tmp/inserts.sql',
+      tableName: 'users',
+      connectionId: 'conn-abc',
     });
   });
 
@@ -109,6 +142,7 @@ describe('exportResultToFile', () => {
       format: 'tab_separated',
       filePath: '/tmp/out.tsv',
       tableName: undefined,
+      connectionId: undefined,
     });
   });
 });

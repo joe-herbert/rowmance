@@ -12,6 +12,7 @@
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
+  import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import type { TableInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
@@ -247,7 +248,7 @@
   // ── System item helpers ───────────────────────────────────────────────────────
 
   function checkSystemDatabase(db: string): boolean {
-    return isSystemDatabase(db, settingsStore.settings.systemDatabases);
+    return isSystemDatabase(db, [...settingsStore.settings.systemDatabases, ...getAllSystemDatabases()]);
   }
 
   function checkSystemTable(name: string): boolean {

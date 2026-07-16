@@ -3,7 +3,115 @@ import { BUILTIN_DATABASES, BUILTIN_TABLE_PATTERNS } from '$lib/utils/system-ite
 
 // ── Database connections ────────────────────────────────────────────────────
 
-export type DbType = 'mysql' | 'mariadb' | 'postgres' | 'sqlite' | 'sqlserver';
+export type DbType = string;
+
+/** Engine-specific hints for parsing FK constraint violation errors. */
+export interface FkViolationHint {
+  /** Case-insensitive substring that identifies an FK violation in this engine's errors. */
+  detect: string;
+  /** Regex (no flags) with capture group 1 = referencing table name. */
+  tablePattern: string;
+  /** Regex with groups 1 = FK column (referencing table), 2 = referenced column (current table). */
+  columnPairPattern: string | null;
+  /** Regex with groups 1 = referenced column name, 2 = value embedded in the error text. */
+  columnValuePattern: string | null;
+}
+
+/**
+ * Dialect-specific metadata populated by the backend from db_type.
+ * Every engine-specific UI decision should read a field here instead of
+ * branching on dbType strings, so that new engines require no frontend changes.
+ */
+export interface DialectInfo {
+  // ── Identifier quoting ──────────────────────────────────────────────────────
+  identifierOpen: string;
+  identifierClose: string;
+  identifierEscape: string;
+
+  // ── Schema / namespace ──────────────────────────────────────────────────────
+  /** False for SQLite; true for all other engines. */
+  usesSchema: boolean;
+  /** "Database" or "Schema". */
+  dbLabel: string;
+
+  // ── Query syntax ────────────────────────────────────────────────────────────
+  /** SQL Server uses SELECT TOP n; others use LIMIT n. */
+  selectTop: boolean;
+  /** PostgreSQL uses TRUE/FALSE; others use 1/0. */
+  booleanLiterals: boolean;
+  /** PostgreSQL supports case-insensitive ILIKE; others use LIKE. */
+  usesIlike: boolean;
+  /** CAST template with {col} placeholder, e.g. "CAST({col} AS TEXT)". */
+  castToText: string;
+
+  // ── User management ─────────────────────────────────────────────────────────
+  supportsUserManagement: boolean;
+  /** MySQL/MariaDB identify users as username@host. */
+  hostBasedUsers: boolean;
+  /** PostgreSQL supports role-based grants. */
+  supportsRoles: boolean;
+
+  // ── Editor behaviour ────────────────────────────────────────────────────────
+  /** Scan SQL for @varname variables (MySQL/MariaDB). */
+  detectsSqlVariables: boolean;
+  /** Warn when USE db is issued inside a transaction (MySQL/MariaDB). */
+  warnsTxDatabaseMismatch: boolean;
+
+  // ── Display ─────────────────────────────────────────────────────────────────
+  /** e.g. "PostgreSQL", "MySQL", "SQLite", "SQL Server". */
+  displayName: string;
+
+  // ── Create-table UI ─────────────────────────────────────────────────────────
+  defaultColumnType: string;
+  commonColumnTypes: string[];
+
+  // ── Schema editor capabilities ───────────────────────────────────────────────
+  supportsAutoIncrement: boolean;
+  supportsColumnComment: boolean;
+  /** ALTER TABLE … CHANGE COLUMN syntax (MySQL/MariaDB). */
+  supportsChangeColumn: boolean;
+  /** ALTER TABLE … RENAME COLUMN syntax. */
+  supportsRenameColumn: boolean;
+  /** Uses FOREIGN KEY keyword in DROP (MySQL); others use CONSTRAINT. */
+  usesForeignKeyKeyword: boolean;
+  /** "on_table" | "schema_qualified" | "on_table_no_schema" | "simple" */
+  dropIndexSyntax: string;
+  defaultNewColumnType: string;
+
+  // ── Database/schema DDL ─────────────────────────────────────────────────────
+  /** True for MySQL/MariaDB (CREATE DATABASE / DROP DATABASE); false for schema-based engines. */
+  usesDatabaseKeyword: boolean;
+  /** True for PostgreSQL (DROP SCHEMA … CASCADE); false for SQL Server and others. */
+  dropSchemaCascade: boolean;
+
+  // ── Connection form ─────────────────────────────────────────────────────────
+  /** True when the engine connects to a file path (SQLite) rather than host/port. */
+  isFileBased: boolean;
+  /** Default TCP port shown in the connection form, or 0 for file-based engines. */
+  defaultPort: number;
+  /** URL schemes that identify this engine in a pasted connection URL. */
+  urlSchemes: string[];
+  /** URL template for generating a connection URL. Placeholders: {username} {password} {host} {port} {database}. */
+  urlTemplate: string;
+
+  // ── FK violation navigation ─────────────────────────────────────────────────
+  /** Hints for parsing FK constraint errors to offer "navigate to referencing table". Null when not supported. */
+  fkViolation: FkViolationHint | null;
+
+  // ── SQL editor ────────────────────────────────────────────────────────────
+  /** Syntax highlighter dialect for the SQL editor: "mysql" | "postgresql" | "sql". */
+  editorDialect: string;
+  /** How to parse EXPLAIN output: "mysql_json" | "postgres_json" | "sqlite_queryplan" | "sqlserver_xml". */
+  explainFormat: string;
+
+  // ── System-object filtering ─────────────────────────────────────────────────
+  /** Database names this engine considers internal/system (e.g. "information_schema"). */
+  systemDatabases: string[];
+
+  // ── File-based engine support ───────────────────────────────────────────────
+  /** File extensions this engine recognises (e.g. ["sqlite", "db", "sqlite3"]). Empty for network engines. */
+  fileExtensions: string[];
+}
 
 /** A connection profile as stored in the local SQLite database. */
 export interface ConnectionProfile {
@@ -32,6 +140,7 @@ export interface ConnectionProfile {
   pingInterval: number | null;
   createdAt: string;
   updatedAt: string;
+  dialectInfo: DialectInfo;
 }
 
 /** Input type for creating or updating a connection profile.

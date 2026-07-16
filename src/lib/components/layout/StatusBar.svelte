@@ -19,21 +19,7 @@
 
   const connColor = $derived(focusedConnection?.color ?? 'var(--color-accent)');
   const connName = $derived(focusedConnection?.name ?? null);
-  const connType = $derived(
-    focusedConnection
-      ? focusedConnection.dbType === 'postgres'
-        ? 'PostgreSQL'
-        : focusedConnection.dbType === 'mysql'
-          ? 'MySQL'
-          : focusedConnection.dbType === 'mariadb'
-            ? 'MariaDB'
-            : focusedConnection.dbType === 'sqlite'
-              ? 'SQLite'
-              : focusedConnection.dbType === 'sqlserver'
-                ? 'SQL Server'
-                : focusedConnection.dbType
-      : null,
-  );
+  const connType = $derived(focusedConnection?.dialectInfo.displayName ?? null);
   const host = $derived(
     focusedConnection ? `${focusedConnection.host}:${focusedConnection.port}` : null,
   );

@@ -152,16 +152,8 @@
     { label: 'Fuzzy', value: 'fuzzy', title: 'Loose matching — more results' },
   ];
 
-  const dbTypeLabels: Record<DbType, string> = {
-    mysql: 'MySQL',
-    mariadb: 'MariaDB',
-    postgres: 'Postgres',
-    sqlite: 'SQLite',
-    sqlserver: 'SQL Server',
-  };
-
   const availableDbTypes = $derived(
-    [...new Set(connections.profiles.map((p) => p.dbType))].sort() as DbType[],
+    [...new Set(connections.profiles.map((p) => p.dbType))].sort(),
   );
 
   const hasAnyGroup = $derived(connections.profiles.some((p) => p.groupId !== null));
@@ -580,7 +572,7 @@
                 filterDbType = dt;
                 inputEl?.focus();
               }}
-              type="button">{dbTypeLabels[dt]}</button
+              type="button">{connections.profiles.find((p) => p.dbType === dt)?.dialectInfo?.displayName ?? dt}</button
             >
           {/each}
         </div>

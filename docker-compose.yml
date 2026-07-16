@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: pg-test
+    environment:
+      POSTGRES_PASSWORD: test1234
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-test
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "TestPass123#"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssqldata:/var/opt/mssql
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8
+    container_name: mysql-test
+    environment:
+      MYSQL_ROOT_PASSWORD: TestPass123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysqldata:/var/lib/mysql
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11
+    container_name: mariadb-test
+    environment:
+      MARIADB_ROOT_PASSWORD: TestPass123
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadbdata:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  mssqldata:
+  mysqldata:
+  mariadbdata:

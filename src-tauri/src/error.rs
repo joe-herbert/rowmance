@@ -41,6 +41,9 @@ pub enum RowmanceError {
     #[error("Read-only mode: mutating statements are not allowed")]
     ReadOnlyViolation,
 
+    #[error("Pool error: {0}")]
+    Pool(String),
+
     #[error("Keychain error: {0}")]
     Keychain(String),
 
@@ -72,6 +75,7 @@ impl From<RowmanceError> for AppError {
                 "READ_ONLY_VIOLATION",
                 "This connection is in read-only mode",
             ),
+            RowmanceError::Pool(ref msg) => AppError::new("POOL_ERROR", msg.clone()),
             RowmanceError::Keychain(ref msg) => AppError::new("KEYCHAIN_ERROR", msg.clone()),
             RowmanceError::Ssh(ref msg) => AppError::new("SSH_ERROR", msg.clone()),
             RowmanceError::Io(ref e) => AppError::new("IO_ERROR", e.to_string()),

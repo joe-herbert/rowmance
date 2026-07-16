@@ -3473,6 +3473,7 @@ version = "1.5.2"
 dependencies = [
  "anyhow",
  "arboard",
+ "async-trait",
  "bb8",
  "bb8-tiberius",
  "chrono",

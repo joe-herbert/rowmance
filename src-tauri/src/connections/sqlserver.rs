@@ -1,60 +1,10 @@
 /// SQL Server-specific schema introspection queries using tiberius.
 use futures::TryStreamExt;
-use serde::Serialize;
 use tiberius::{Client, ColumnData, QueryItem};
 use tokio_util::compat::Compat;
 
+use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
 use crate::error::RowmanceError;
-
-#[derive(Debug, Serialize)]
-pub struct TableInfo {
-    pub name: String,
-    #[serde(rename = "tableType")]
-    pub table_type: String,
-    #[serde(rename = "rowCount")]
-    pub row_count: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ColumnInfo {
-    pub name: String,
-    #[serde(rename = "dataType")]
-    pub data_type: String,
-    pub nullable: bool,
-    #[serde(rename = "defaultValue")]
-    pub default_value: Option<String>,
-    #[serde(rename = "isPrimaryKey")]
-    pub is_primary_key: bool,
-    #[serde(rename = "isAutoIncrement")]
-    pub is_auto_increment: bool,
-    #[serde(rename = "isForeignKey")]
-    pub is_foreign_key: bool,
-    pub comment: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct IndexInfo {
-    pub name: String,
-    pub columns: Vec<String>,
-    pub unique: bool,
-    #[serde(rename = "indexType")]
-    pub index_type: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ForeignKeyInfo {
-    #[serde(rename = "constraintName")]
-    pub constraint_name: String,
-    pub columns: Vec<String>,
-    #[serde(rename = "referencedTable")]
-    pub referenced_table: String,
-    #[serde(rename = "referencedColumns")]
-    pub referenced_columns: Vec<String>,
-    #[serde(rename = "onDelete")]
-    pub on_delete: String,
-    #[serde(rename = "onUpdate")]
-    pub on_update: String,
-}
 
 pub type MssqlConn = Client<Compat<tokio::net::TcpStream>>;
 
@@ -67,11 +17,11 @@ pub async fn exec_simple(conn: &mut MssqlConn, sql: &str) -> Result<(), Rowmance
     let mut stream = conn
         .simple_query(sql)
         .await
-        .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
     while stream
         .try_next()
         .await
-        .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
         .is_some()
     {}
     Ok(())
@@ -172,13 +122,13 @@ async fn collect_rows(
     let mut stream = conn
         .query(sql, params)
         .await
-        .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
     let mut rows = Vec::new();
     while let Some(item) = stream
         .try_next()
         .await
-        .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
     {
         if let QueryItem::Row(row) = item {
             rows.push(row);
@@ -195,13 +145,13 @@ async fn collect_rows_simple(
     let mut stream = conn
         .simple_query(sql)
         .await
-        .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
     let mut rows = Vec::new();
     while let Some(item) = stream
         .try_next()
         .await
-        .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
     {
         if let QueryItem::Row(row) = item {
             rows.push(row);

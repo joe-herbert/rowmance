@@ -306,7 +306,8 @@
 
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import type { ColumnMeta } from '$lib/types';
+  import type { ColumnMeta, DialectInfo } from '$lib/types';
+  import { qi as dialectQi } from '$lib/utils/dialect';
   import Select from '$lib/components/ui/Select.svelte';
   import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -322,21 +323,19 @@
   interface Props {
     columns: ColumnMeta[];
     value: FilterEditorState;
-    dbType: string;
+    dialectInfo: DialectInfo;
     tableName?: string;
     schemaName?: string;
     onApply: (_state: FilterEditorState) => void;
     onClose: () => void;
   }
 
-  let { columns, value, dbType, tableName, schemaName, onApply, onClose }: Props = $props();
+  let { columns, value, dialectInfo, tableName, schemaName, onApply, onClose }: Props = $props();
 
   const settings = useSettings();
 
   function quoteIdentifier(name: string): string {
-    if (dbType === 'postgres') return `"${name}"`;
-    if (dbType === 'sqlserver') return `[${name.replace(/\]/g, ']]')}]`;
-    return `\`${name.replace(/`/g, '``')}\``;
+    return dialectQi(name, dialectInfo);
   }
 
   function switchMode(newMode: 'builder' | 'sql'): void {

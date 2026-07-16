@@ -80,6 +80,8 @@
   import SqlPreviewModal from '$lib/components/table/SqlPreviewModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import type { DbType } from '$lib/types';
+  import { qi as dialectQi, formatSqlValue as dialectFmtVal, castToText as dialectCastToText, defaultDialectInfo } from '$lib/utils/dialect';
+  import { parseFkViolationError, type FkNavigationInfo } from '$lib/utils/fk-error';
   import {
     exportResultToFile,
     exportResultToClipboard,
@@ -238,37 +240,18 @@
   );
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
-  type FkNavigationInfo = { referencingTable: string; filterSql: string };
   let fkNavigationInfo = $state<FkNavigationInfo | null>(null);
   let showSqlPreview = $state(false);
   let showDeleteConfirm = $state(false);
 
-  function quoteIdent(name: string, dbType: DbType): string {
-    if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
-    if (dbType === 'sqlite') return `"${name.replace(/"/g, '""')}"`;
-    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
-    return `\`${name.replace(/`/g, '``')}\``;
-  }
-
-  function formatSqlValue(val: unknown, dbType: DbType): string {
-    if (val === null || val === undefined) return 'NULL';
-    if (typeof val === 'boolean') {
-      if (dbType === 'postgres') return val ? 'TRUE' : 'FALSE';
-      return val ? '1' : '0';
-    }
-    if (typeof val === 'number') return String(val);
-    return `'${String(val).replace(/'/g, "''")}'`;
-  }
-
   function buildPreviewStatements(): string[] {
     if (!result) return [];
     const connection = connections.getById(connectionId);
-    const dbType: DbType = connection?.dbType ?? 'mysql';
-    const q = (name: string) => quoteIdent(name, dbType);
-    const v = (val: unknown) => formatSqlValue(val, dbType);
+    const d = connection?.dialectInfo;
+    const q = (name: string) => (d ? dialectQi(name, d) : `\`${name}\``);
+    const v = (val: unknown) => (d ? dialectFmtVal(val, d) : String(val ?? 'NULL'));
 
-    const useSchema = dbType !== 'sqlite';
-    const tableRef = useSchema ? `${q(database)}.${q(table)}` : q(table);
+    const tblRef = d?.usesSchema ? `${q(database)}.${q(table)}` : q(table);
     const pkColumns = result.columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
     const hasPk = pkColumns.length > 0;
 
@@ -285,7 +268,7 @@
         if (Object.keys(vals).length === 0) continue;
         const cols = Object.keys(vals).map(q).join(', ');
         const values = Object.values(vals).map(v).join(', ');
-        stmts.push(`INSERT INTO ${tableRef} (${cols}) VALUES (${values});`);
+        stmts.push(`INSERT INTO ${tblRef} (${cols}) VALUES (${values});`);
         continue;
       }
 
@@ -312,8 +295,7 @@
       const whereClauses = Object.entries(primaryKeys)
         .map(([col, val]) => (val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`))
         .join(' AND ');
-      const limit = dbType === 'mysql' || dbType === 'mariadb' ? ' LIMIT 1' : '';
-      stmts.push(`UPDATE ${tableRef} SET ${setClauses} WHERE ${whereClauses}${limit};`);
+      stmts.push(`UPDATE ${tblRef} SET ${setClauses} WHERE ${whereClauses};`);
     }
 
     for (const [rowKey, origRow] of pendingDeletedRows) {
@@ -332,8 +314,7 @@
       const whereClauses = Object.entries(primaryKeys)
         .map(([col, val]) => (val === null ? `${q(col)} IS NULL` : `${q(col)} = ${v(val)}`))
         .join(' AND ');
-      const limit = dbType === 'mysql' || dbType === 'mariadb' ? ' LIMIT 1' : '';
-      stmts.push(`DELETE FROM ${tableRef} WHERE ${whereClauses}${limit};`);
+      stmts.push(`DELETE FROM ${tblRef} WHERE ${whereClauses};`);
     }
 
     return stmts;
@@ -400,11 +381,10 @@
   }
 
   function buildRevertSql(db: string, tbl: string, rows: RevertRowChange[]): string {
-    const dbType: DbType = connections.getById(connectionId)?.dbType ?? 'mysql';
-    const q = (name: string) => quoteIdent(name, dbType);
-    const v = (val: unknown) => formatSqlValue(val, dbType);
-    const target = dbType === 'sqlite' ? q(tbl) : `${q(db)}.${q(tbl)}`;
-    const limit = dbType === 'mysql' || dbType === 'mariadb' ? ' LIMIT 1' : '';
+    const d = connections.getById(connectionId)?.dialectInfo;
+    const q = (name: string) => (d ? dialectQi(name, d) : `\`${name}\``);
+    const v = (val: unknown) => (d ? dialectFmtVal(val, d) : String(val ?? 'NULL'));
+    const target = d?.usesSchema ? `${q(db)}.${q(tbl)}` : q(tbl);
     const lines: string[] = [];
     for (const row of rows) {
       if (row.operation === 'update') {
@@ -412,7 +392,7 @@
         const where = Object.entries(row.pkValues)
           .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
           .join(' AND ');
-        if (set && where) lines.push(`UPDATE ${target} SET ${set} WHERE ${where}${limit};`);
+        if (set && where) lines.push(`UPDATE ${target} SET ${set} WHERE ${where};`);
       } else if (row.operation === 'insert') {
         const pkEntries = Object.entries(row.pkValues);
         let where: string;
@@ -426,7 +406,7 @@
             .map((c) => `${q(c.column)} = ${v(c.newValue)}`)
             .join(' AND ');
         }
-        if (where) lines.push(`DELETE FROM ${target} WHERE ${where}${limit};`);
+        if (where) lines.push(`DELETE FROM ${target} WHERE ${where};`);
       } else if (row.operation === 'delete') {
         const cols = row.columnChanges.map((c) => q(c.column)).join(', ');
         const values = row.columnChanges.map((c) => v(c.previousValue)).join(', ');
@@ -443,10 +423,10 @@
     inserts: Record<string, unknown>[],
     deletes: RowDelete[],
   ): string {
-    const dbType: DbType = connections.getById(connectionId)?.dbType ?? 'mysql';
-    const q = (name: string) => quoteIdent(name, dbType);
-    const v = (val: unknown) => formatSqlValue(val, dbType);
-    const target = dbType === 'sqlite' ? q(tbl) : `${q(db)}.${q(tbl)}`;
+    const d = connections.getById(connectionId)?.dialectInfo;
+    const q = (name: string) => (d ? dialectQi(name, d) : `\`${name}\``);
+    const v = (val: unknown) => (d ? dialectFmtVal(val, d) : String(val ?? 'NULL'));
+    const target = d?.usesSchema ? `${q(db)}.${q(tbl)}` : q(tbl);
     const lines: string[] = [];
     for (const { primaryKeys, changes } of updates) {
       const set = Object.entries(changes).map(([c, val]) => `${q(c)} = ${v(val)}`).join(', ');
@@ -671,12 +651,11 @@
   // ── DB type + SQL helpers ─────────────────────────────────────────────────
 
   let dbType = $derived(connections.getById(connectionId)?.dbType ?? 'mysql');
+  let dialect = $derived(connections.getById(connectionId)?.dialectInfo);
   let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
 
   function quoteIdentifier(name: string): string {
-    if (dbType === 'postgres' || dbType === 'sqlite') return `"${name.replace(/"/g, '""')}"`;
-    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
-    return `\`${name.replace(/`/g, '``')}\``;
+    return dialect ? dialectQi(name, dialect) : `\`${name.replace(/`/g, '``')}\``;
   }
 
   function parseFkError(
@@ -684,62 +663,15 @@
     deletedRows: Map<string, CellValue[]>,
     cols: ColumnMeta[],
   ): FkNavigationInfo | null {
-    const errObj = typeof err === 'object' && err !== null ? (err as Record<string, unknown>) : null;
-    const message = errObj ? String(errObj.message ?? '') : String(err);
-    const detail = errObj ? String(errObj.detail ?? '') : '';
-
-    const isFkError =
-      /foreign key constraint/i.test(message) ||
-      /foreign key constraint/i.test(detail);
-    if (!isFkError) return null;
-
-    // MySQL: constraint fails (`db`.`table`, CONSTRAINT `name` FOREIGN KEY (`fk_col`) REFERENCES `ref_table` (`ref_col`))
-    const mysqlMatch = message.match(
-      /constraint fails \(`[^`]*`\.`([^`]+)`,\s*CONSTRAINT\s*`[^`]*`\s*FOREIGN KEY \(`([^`]+)`\)\s*REFERENCES\s*`[^`]+`\s*\(`([^`]+)`\)/i,
-    );
-    if (mysqlMatch) {
-      const [, referencingTable, fkCol, referencedCol] = mysqlMatch;
-      const colIdx = cols.findIndex((c) => c.name === referencedCol);
-      const rowValues = [...deletedRows.values()][0];
-      const value = colIdx >= 0 ? rowValues?.[colIdx] : undefined;
-      const quotedFkCol = `\`${fkCol.replace(/`/g, '``')}\``;
-      let filterSql = '';
-      if (value !== undefined && value !== null) {
-        filterSql =
-          typeof value === 'number' || typeof value === 'boolean'
-            ? `${quotedFkCol} = ${value}`
-            : `${quotedFkCol} = '${String(value).replace(/'/g, "''")}'`;
-      }
-      return { referencingTable, filterSql };
-    }
-
-    // Postgres: "violates foreign key constraint ... on table "orders""
-    const pgTableMatch =
-      message.match(/violates foreign key constraint "[^"]*" on table "([^"]+)"/i) ||
-      message.match(/on table "([^"]+)"$/i);
-    if (pgTableMatch) {
-      const referencingTable = pgTableMatch[1];
-      // DETAIL: Key (ref_col)=(value) is still referenced from table "orders".
-      const fullText = `${message}\n${detail}`;
-      const pgDetailMatch = fullText.match(/Key \(([^)]+)\)=\(([^)]+)\) is still referenced from/i);
-      if (pgDetailMatch) {
-        const [, referencedCol, rawValue] = pgDetailMatch;
-        const quotedCol = `"${referencedCol.replace(/"/g, '""')}"`;
-        const filterSql = /^\d+$/.test(rawValue)
-          ? `${quotedCol} = ${rawValue}`
-          : `${quotedCol} = '${rawValue.replace(/'/g, "''")}'`;
-        return { referencingTable, filterSql };
-      }
-      return { referencingTable, filterSql: '' };
-    }
-
-    return null;
+    return parseFkViolationError(err, deletedRows, cols, dialect);
   }
 
   function buildSql(): string {
-    const quotedDb = quoteIdentifier(database);
     const quotedTable = quoteIdentifier(table);
-    let base = `SELECT * FROM ${quotedDb}.${quotedTable}`;
+    const tblTarget = dialect?.usesSchema
+      ? `${quoteIdentifier(database)}.${quotedTable}`
+      : quotedTable;
+    let base = `SELECT * FROM ${tblTarget}`;
     const conditions: string[] = [];
     const filterWhere = buildWhereClause(filterEditorState, quoteIdentifier);
     if (filterWhere) conditions.push(filterWhere);
@@ -945,9 +877,10 @@
     const t0 = performance.now();
     try {
       const filterActive = filterStateIsActive(filterEditorState);
-      const quotedDb = quoteIdentifier(database);
-      const quotedTable = quoteIdentifier(table);
-      const countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
+      const countTarget = dialect?.usesSchema
+        ? `${quoteIdentifier(database)}.${quoteIdentifier(table)}`
+        : quoteIdentifier(table);
+      const countSql = `SELECT COUNT(*) FROM ${countTarget}`;
 
       const schemaKey = `${connectionId}:${database}:${table}`;
       const cachedSchema = tableSchemaCache.get(schemaKey);
@@ -1118,8 +1051,9 @@
     if (!result || isFetchingCount) return;
     isFetchingCount = true;
     try {
-      const quotedDb = quoteIdentifier(database);
-      const quotedTable = quoteIdentifier(table);
+      const fetchCountTarget = dialect?.usesSchema
+        ? `${quoteIdentifier(database)}.${quoteIdentifier(table)}`
+        : quoteIdentifier(table);
       const filterWhere = buildWhereClause(filterEditorState, quoteIdentifier);
       const searchTrimmed = localSearchTerm.trim();
       const conditions: string[] = [];
@@ -1128,7 +1062,7 @@
         const searchWhere = buildSearchWhere(searchTrimmed);
         if (searchWhere) conditions.push(searchWhere);
       }
-      let countSql = `SELECT COUNT(*) FROM ${quotedDb}.${quotedTable}`;
+      let countSql = `SELECT COUNT(*) FROM ${fetchCountTarget}`;
       if (conditions.length > 0) countSql += ` WHERE ${conditions.join(' AND ')}`;
       const countResult = await executeSelection(connectionId, countSql, database);
       if (countResult && !countResult.error) {
@@ -1196,27 +1130,15 @@
       .replace(/_/g, '\\_')
       .replace(/'/g, "''");
     const pattern = `'%${escaped}%'`;
-    if (dbType === 'postgres') {
-      return (
-        '(' +
-        columns
-          .map((c) => `CAST(${quoteIdentifier(c.name)} AS TEXT) ILIKE ${pattern}`)
-          .join(' OR ') +
-        ')'
-      );
-    }
-    if (dbType === 'sqlserver') {
-      return (
-        '(' +
-        columns
-          .map((c) => `CAST(${quoteIdentifier(c.name)} AS NVARCHAR(MAX)) LIKE ${pattern}`)
-          .join(' OR ') +
-        ')'
-      );
-    }
+    const op = dialect?.usesIlike ? 'ILIKE' : 'LIKE';
     return (
       '(' +
-      columns.map((c) => `CAST(${quoteIdentifier(c.name)} AS CHAR) LIKE ${pattern}`).join(' OR ') +
+      columns
+        .map((c) => {
+          const cast = dialectCastToText(quoteIdentifier(c.name), dialect ?? defaultDialectInfo);
+          return `${cast} ${op} ${pattern}`;
+        })
+        .join(' OR ') +
       ')'
     );
   }
@@ -1298,10 +1220,10 @@
           filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
         });
         if (!filePath) return;
-        await exportResultToFile(getExportRows(), getExportColumns(), format, filePath, tblName);
+        await exportResultToFile(getExportRows(), getExportColumns(), format, filePath, tblName, connectionId);
         toast.addToast('Exported to file', 'success', 2000);
       } else {
-        await exportResultToClipboard(getExportRows(), getExportColumns(), format, tblName);
+        await exportResultToClipboard(getExportRows(), getExportColumns(), format, tblName, connectionId);
         toast.addToast('Copied to clipboard', 'success', 2000);
       }
     } catch (err) {
@@ -1409,8 +1331,8 @@
       if (!connections.isActive(targetConnId)) {
         await connections.connect(targetConnId);
       }
-      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
-      const quotedCol = targetDbType === 'postgres' ? `"${vr.to.column}"` : `\`${vr.to.column}\``;
+      const targetDialect = connections.getById(targetConnId)?.dialectInfo;
+      const quotedCol = targetDialect ? dialectQi(vr.to.column, targetDialect) : `\`${vr.to.column}\``;
       let filter: string;
       if (typeof value === 'number' || typeof value === 'boolean') {
         filter = `${quotedCol} = ${value}`;
@@ -1438,9 +1360,10 @@
       if (!connections.isActive(targetConnId)) {
         await connections.connect(targetConnId);
       }
-      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
-      const quotedCol =
-        targetDbType === 'postgres' ? `"${mapping.to.column}"` : `\`${mapping.to.column}\``;
+      const targetDialect2 = connections.getById(targetConnId)?.dialectInfo;
+      const quotedCol = targetDialect2
+        ? dialectQi(mapping.to.column, targetDialect2)
+        : `\`${mapping.to.column}\``;
       let filter: string;
       if (typeof value === 'number' || typeof value === 'boolean') {
         filter = `${quotedCol} = ${value}`;
@@ -1468,8 +1391,9 @@
       const colIdx = fk.columns.indexOf(colName);
       const refCol = fk.referencedColumns[colIdx];
       if (!refCol) return null;
-      const quotedDb = quoteIdentifier(database);
-      const quotedTable = quoteIdentifier(fk.referencedTable);
+      const fkTarget = dialect?.usesSchema
+        ? `${quoteIdentifier(database)}.${quoteIdentifier(fk.referencedTable)}`
+        : quoteIdentifier(fk.referencedTable);
       const quotedCol = quoteIdentifier(refCol);
       let whereVal: string;
       if (typeof value === 'number' || typeof value === 'boolean') {
@@ -1478,7 +1402,7 @@
         const escaped = String(value).replace(/'/g, "''");
         whereVal = `'${escaped}'`;
       }
-      const sql = `SELECT * FROM ${quotedDb}.${quotedTable} WHERE ${quotedCol} = ${whereVal}`;
+      const sql = `SELECT * FROM ${fkTarget} WHERE ${quotedCol} = ${whereVal}`;
       try {
         const queryResult = await executeQuery(connectionId, sql, 1, 1);
         if (queryResult.error) return null;
@@ -1501,11 +1425,12 @@
       if (!connections.isActive(targetConnId)) {
         await connections.connect(targetConnId);
       }
-      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
-      const q = (name: string) => (targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``);
-      const quotedDb = q(vr.to.database);
-      const quotedTable = q(vr.to.table);
-      const quotedCol = q(vr.to.column);
+      const targetDialectQv = connections.getById(targetConnId)?.dialectInfo;
+      const qQv = (name: string) =>
+        targetDialectQv ? dialectQi(name, targetDialectQv) : `\`${name}\``;
+      const quotedDb = qQv(vr.to.database);
+      const quotedTable = qQv(vr.to.table);
+      const quotedCol = qQv(vr.to.column);
       let whereVal: string;
       if (typeof value === 'number' || typeof value === 'boolean') {
         whereVal = String(value);
@@ -1539,8 +1464,9 @@
       if (!connections.isActive(targetConnId)) {
         await connections.connect(targetConnId);
       }
-      const targetDbType = connections.getById(targetConnId)?.dbType ?? 'mysql';
-      const q = (name: string) => (targetDbType === 'postgres' ? `"${name}"` : `\`${name}\``);
+      const targetDialectPv = connections.getById(targetConnId)?.dialectInfo;
+      const q = (name: string) =>
+        targetDialectPv ? dialectQi(name, targetDialectPv) : `\`${name}\``;
       const quotedDb = q(mapping.to.database);
       const quotedTable = q(mapping.to.table);
       const quotedCol = q(mapping.to.column);
@@ -2364,7 +2290,7 @@
       <FilterEditor
         columns={currentColumns}
         value={filterEditorState}
-        {dbType}
+        dialectInfo={dialect ?? defaultDialectInfo}
         tableName={table}
         schemaName={database}
         onApply={(newState) => {

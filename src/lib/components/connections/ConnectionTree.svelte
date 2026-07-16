@@ -19,6 +19,7 @@
   import LockIcon from '$lib/components/icons/LockIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
+  import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
@@ -33,6 +34,7 @@
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
+  import { qi, tableRef as dialectTableRef } from '$lib/utils/dialect';
   import { listen } from '@tauri-apps/api/event';
   import { useGlobalSearchCache } from '$lib/stores/globalSearchCache.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
@@ -154,7 +156,6 @@
 
   interface CreateDbModal {
     connectionId: string;
-    dbType: string;
   }
   interface CreateTableColumn {
     name: string;
@@ -616,18 +617,13 @@
     tableCtx = null;
   }
 
-  function tableRef(database: string, table: string, dbType: string): string {
-    if (dbType === 'sqlite') return qi(table, dbType);
-    return `${qi(database, dbType)}.${qi(table, dbType)}`;
-  }
-
   function ctxGenerateSqlSelectAll() {
     if (!tableCtx) return;
     const { connectionId, database, table } = tableCtx;
     const profile = connectionStore.getById(connectionId);
     tableCtx = null;
     if (!profile) return;
-    const ref = tableRef(database, table.name, profile.dbType);
+    const ref = dialectTableRef(database, table.name, profile.dialectInfo);
     panelStore.openCopyInFocused({
       kind: 'query_editor',
       connectionId,
@@ -642,12 +638,12 @@
     const profile = connectionStore.getById(connectionId);
     tableCtx = null;
     if (!profile) return;
-    const ref = tableRef(database, table.name, profile.dbType);
+    const ref = dialectTableRef(database, table.name, profile.dialectInfo);
     panelStore.openCopyInFocused({
       kind: 'query_editor',
       connectionId,
       database,
-      initialSql: `SELECT * FROM ${ref} LIMIT `,
+      initialSql: profile.dialectInfo.selectTop ? `SELECT TOP  * FROM ${ref}` : `SELECT * FROM ${ref} LIMIT `,
     });
   }
 
@@ -657,12 +653,12 @@
     const profile = connectionStore.getById(connectionId);
     tableCtx = null;
     if (!profile) return;
-    const ref = tableRef(database, table.name, profile.dbType);
+    const ref = dialectTableRef(database, table.name, profile.dialectInfo);
     let sql: string;
     try {
       const columns = await schemaApi.listColumns(connectionId, database, table.name);
       const insertCols = columns.filter((c) => !c.isAutoIncrement);
-      const colList = insertCols.map((c) => qi(c.name, profile.dbType)).join(', ');
+      const colList = insertCols.map((c) => qi(c.name, profile.dialectInfo)).join(', ');
       const valList = insertCols.map(() => '').join(', ');
       sql = `INSERT INTO ${ref} (${colList})\nVALUES (${valList})`;
     } catch {
@@ -677,7 +673,7 @@
     const profile = connectionStore.getById(connectionId);
     tableCtx = null;
     if (!profile) return;
-    const ref = tableRef(database, table.name, profile.dbType);
+    const ref = dialectTableRef(database, table.name, profile.dialectInfo);
     let sql: string;
     try {
       const columns = await schemaApi.listColumns(connectionId, database, table.name);
@@ -685,11 +681,11 @@
       const dataCols = columns.filter((c) => !c.isPrimaryKey);
       const setCols = dataCols.length > 0 ? dataCols : columns;
       const setClauses = setCols
-        .map((c) => `    ${qi(c.name, profile.dbType)} = `)
+        .map((c) => `    ${qi(c.name, profile.dialectInfo)} = `)
         .join(',\n');
       const whereClauses =
         pkCols.length > 0
-          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+          ? pkCols.map((c) => `${qi(c.name, profile.dialectInfo)} = `).join(' AND ')
           : '';
       sql = `UPDATE ${ref}\nSET\n${setClauses}\nWHERE ${whereClauses}`;
     } catch {
@@ -704,14 +700,14 @@
     const profile = connectionStore.getById(connectionId);
     tableCtx = null;
     if (!profile) return;
-    const ref = tableRef(database, table.name, profile.dbType);
+    const ref = dialectTableRef(database, table.name, profile.dialectInfo);
     let sql: string;
     try {
       const columns = await schemaApi.listColumns(connectionId, database, table.name);
       const pkCols = columns.filter((c) => c.isPrimaryKey);
       const whereClauses =
         pkCols.length > 0
-          ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+          ? pkCols.map((c) => `${qi(c.name, profile.dialectInfo)} = `).join(' AND ')
           : '';
       sql = `DELETE FROM ${ref}\nWHERE ${whereClauses}`;
     } catch {
@@ -730,23 +726,16 @@
     dbCtx = null;
   }
 
-  function qi(name: string, dbType: string): string {
-    if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
-    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
-    return '"' + name.replace(/"/g, '""') + '"';
-  }
-
   function ctxDropTable() {
     if (!tableCtx) return;
     const { connectionId, database, table } = tableCtx;
     const profile = connectionStore.getById(connectionId);
     tableCtx = null;
     if (!profile || profile.readOnly) return;
-    const dbType = profile.dbType;
-    const sql =
-      dbType === 'sqlite'
-        ? `DROP TABLE ${qi(table.name, dbType)}`
-        : `DROP TABLE ${qi(database, dbType)}.${qi(table.name, dbType)}`;
+    const d = profile.dialectInfo;
+    const sql = d.usesSchema
+      ? `DROP TABLE ${qi(database, d)}.${qi(table.name, d)}`
+      : `DROP TABLE ${qi(table.name, d)}`;
     confirmState = {
       title: 'Drop Table',
       message: `Drop table "${table.name}"? This will permanently delete the table and all its data. This cannot be undone.`,
@@ -773,15 +762,13 @@
     const profile = connectionStore.getById(connectionId);
     dbCtx = null;
     if (!profile || profile.readOnly) return;
-    const dbType = profile.dbType;
+    const d = profile.dialectInfo;
     let sql: string;
-    const isSchema = dbType === 'postgres' || dbType === 'sqlserver';
-    if (dbType === 'mysql' || dbType === 'mariadb') {
-      sql = `DROP DATABASE ${qi(database, dbType)}`;
-    } else if (dbType === 'sqlserver') {
-      sql = `DROP SCHEMA ${qi(database, dbType)}`;
+    const isSchema = d.usesSchema;
+    if (d.usesDatabaseKeyword) {
+      sql = `DROP DATABASE ${qi(database, d)}`;
     } else if (isSchema) {
-      sql = `DROP SCHEMA ${qi(database, dbType)} CASCADE`;
+      sql = `DROP SCHEMA ${qi(database, d)}${d.dropSchemaCascade ? ' CASCADE' : ''}`;
     } else {
       return;
     }
@@ -815,7 +802,7 @@
     connCtx = null;
     createDbName = '';
     createDbError = '';
-    createDbModal = { connectionId: profile.id, dbType: profile.dbType };
+    createDbModal = { connectionId: profile.id };
   }
 
   async function executeCreateDatabase() {
@@ -825,11 +812,12 @@
       createDbError = 'Name is required';
       return;
     }
-    const { connectionId, dbType } = createDbModal;
-    const sql =
-      dbType === 'postgres' || dbType === 'sqlserver'
-        ? `CREATE SCHEMA ${qi(name, dbType)}`
-        : `CREATE DATABASE ${qi(name, dbType)}`;
+    const { connectionId } = createDbModal;
+    const profile = connectionStore.getById(connectionId);
+    const d = profile?.dialectInfo;
+    const sql = d?.usesDatabaseKeyword
+      ? `CREATE DATABASE ${qi(name, d)}`
+      : `CREATE SCHEMA ${d ? qi(name, d) : `"${name}"`}`;
     createDbLoading = true;
     createDbError = '';
     try {
@@ -846,73 +834,6 @@
 
   // ── Create table ──────────────────────────────────────────────────────────
 
-  function defaultColumnType(dbType: string): string {
-    if (dbType === 'postgres') return 'SERIAL';
-    if (dbType === 'sqlite') return 'INTEGER';
-    if (dbType === 'sqlserver') return 'INT IDENTITY(1,1)';
-    return 'INT';
-  }
-
-  function columnTypes(dbType: string): string[] {
-    if (dbType === 'sqlserver') {
-      return [
-        'INT',
-        'BIGINT',
-        'SMALLINT',
-        'TINYINT',
-        'INT IDENTITY(1,1)',
-        'NVARCHAR(255)',
-        'NVARCHAR(MAX)',
-        'VARCHAR(255)',
-        'NTEXT',
-        'DATETIME2',
-        'DATE',
-        'TIME',
-        'FLOAT',
-        'DECIMAL(10,2)',
-        'MONEY',
-        'BIT',
-        'UNIQUEIDENTIFIER',
-      ];
-    }
-    if (dbType === 'mysql' || dbType === 'mariadb') {
-      return [
-        'INT',
-        'BIGINT',
-        'SMALLINT',
-        'TINYINT',
-        'VARCHAR(255)',
-        'TEXT',
-        'LONGTEXT',
-        'DATETIME',
-        'DATE',
-        'FLOAT',
-        'DOUBLE',
-        'DECIMAL(10,2)',
-        'BOOLEAN',
-        'JSON',
-      ];
-    } else if (dbType === 'postgres') {
-      return [
-        'INTEGER',
-        'BIGINT',
-        'SMALLINT',
-        'VARCHAR(255)',
-        'TEXT',
-        'TIMESTAMP',
-        'DATE',
-        'REAL',
-        'NUMERIC(10,2)',
-        'BOOLEAN',
-        'JSON',
-        'JSONB',
-        'UUID',
-        'SERIAL',
-        'BIGSERIAL',
-      ];
-    }
-    return ['INTEGER', 'TEXT', 'REAL', 'BLOB', 'NUMERIC'];
-  }
 
   function ctxNewTable() {
     if (!dbCtx) return;
@@ -923,7 +844,7 @@
     createTableName = '';
     createTableError = '';
     createTableColumns = [
-      { name: 'id', type: defaultColumnType(profile.dbType), nullable: false, primaryKey: true },
+      { name: 'id', type: profile.dialectInfo.defaultColumnType, nullable: false, primaryKey: true },
     ];
     createTableFks = [];
     fkRefColumns = new Map();
@@ -951,7 +872,9 @@
       return;
     }
     const { connectionId, database, dbType } = createTableModal;
-    const q = (n: string) => qi(n, dbType);
+    const prof = connectionStore.getById(connectionId);
+    const d = prof?.dialectInfo;
+    const q = (n: string) => (d ? qi(n, d) : `"${n}"`);
     const pkCols = createTableColumns.filter((c) => c.primaryKey);
     const colDefs = createTableColumns.map((c) => {
       let def = `  ${q(c.name.trim())} ${c.type}`;
@@ -967,7 +890,7 @@
         `  CONSTRAINT ${q(fkName)} FOREIGN KEY (${q(fk.localColumn)}) REFERENCES ${q(fk.refTable.trim())} (${q(fk.refColumn.trim())}) ON DELETE ${fk.onDelete} ON UPDATE ${fk.onUpdate}`,
       );
     }
-    const tablePath = dbType === 'sqlite' ? q(name) : `${q(database)}.${q(name)}`;
+    const tablePath = d?.usesSchema ? `${q(database)}.${q(name)}` : q(name);
     const sql = `CREATE TABLE ${tablePath} (\n${colDefs.join(',\n')}\n)`;
     createTableLoading = true;
     createTableError = '';
@@ -1043,7 +966,7 @@
   // ── System database / table detection ────────────────────────────────────
 
   function checkSystemDatabase(name: string) {
-    return isSystemDatabase(name, settingsStore.settings.systemDatabases);
+    return isSystemDatabase(name, [...settingsStore.settings.systemDatabases, ...getAllSystemDatabases()]);
   }
   function checkSystemTable(name: string) {
     return isSystemTable(name, settingsStore.settings.systemTablePatterns);
@@ -1547,10 +1470,10 @@
         }
       }}>Copy Name</CtxItem
     >
-    {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dbType !== 'sqlite'}
+    {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dialectInfo.usesSchema}
       <CtxSep />
       <CtxItem danger onclick={ctxDropDatabase}>
-        {dbCtxProfile?.dbType === 'postgres' || dbCtxProfile?.dbType === 'sqlserver' ? 'Drop Schema' : 'Drop Database'}
+        {dbCtxProfile?.dialectInfo.usesSchema ? 'Drop Schema' : 'Drop Database'}
       </CtxItem>
     {/if}
   </ContextMenu>
@@ -1599,9 +1522,9 @@
   {@const connConnected = isConnected(connCtx.profile.id)}
   <ContextMenu x={connCtx.x} y={connCtx.y} open={true} onclose={closeAllCtx}>
     <CtxItem onclick={ctxNewQueryEditor}>New Query Editor</CtxItem>
-    {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dbType !== 'sqlite'}
+    {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dialectInfo.usesSchema}
       <CtxItem onclick={ctxNewDatabase}
-        >New {connCtx.profile.dbType === 'postgres' || connCtx.profile.dbType === 'sqlserver' ? 'Schema' : 'Database'}</CtxItem
+        >New {connCtx.profile.dialectInfo.dbLabel}</CtxItem
       >
     {/if}
     <CtxItem onclick={ctxManageUsers}>Manage Users</CtxItem>
@@ -1769,7 +1692,7 @@
 {/if}
 
 {#if createDbModal}
-  {@const dbLabel = createDbModal.dbType === 'postgres' ? 'Schema' : 'Database'}
+  {@const dbLabel = connectionStore.getById(createDbModal.connectionId)?.dialectInfo.dbLabel ?? 'Database'}
   <Modal
     label="New {dbLabel}"
     onbackdropclick={() => {
@@ -1895,7 +1818,7 @@
 {/if}
 
 {#if createTableModal}
-  {@const types = columnTypes(createTableModal.dbType)}
+  {@const types = connectionStore.getById(createTableModal.connectionId)?.dialectInfo.commonColumnTypes ?? []}
   <Modal
     label="New Table"
     onbackdropclick={() => {
@@ -1978,7 +1901,7 @@
           {/each}
         </div>
 
-        {#if createTableModal.dbType !== 'sqlite'}
+        {#if connectionStore.getById(createTableModal.connectionId)?.dialectInfo.usesSchema}
           <div class="cols-section">
             <div class="cols-header">
               <span class="field-label">Foreign Keys</span>

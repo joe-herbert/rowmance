@@ -11,6 +11,7 @@
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
+  import { qi as dialectQi } from '$lib/utils/dialect';
   import ConnectionForm from './ConnectionForm.svelte';
   import ExportConnectionsDialog from './ExportConnectionsDialog.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -106,12 +107,6 @@
   let createDbError = $state('');
   let createDbLoading = $state(false);
 
-  function qi(name: string, dbType: string): string {
-    if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
-    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
-    return '"' + name.replace(/"/g, '""') + '"';
-  }
-
   async function executeCreateDatabase() {
     if (!createDbModal) return;
     const name = createDbName.trim();
@@ -119,11 +114,12 @@
       createDbError = 'Name is required';
       return;
     }
-    const { connectionId, dbType } = createDbModal;
-    const isSchema = dbType === 'postgres' || dbType === 'sqlserver';
+    const { connectionId } = createDbModal;
+    const d = connectionStore.getById(connectionId)?.dialectInfo;
+    const isSchema = d?.usesSchema && (d.dbLabel === 'Schema');
     const sql = isSchema
-      ? `CREATE SCHEMA ${qi(name, dbType)}`
-      : `CREATE DATABASE ${qi(name, dbType)}`;
+      ? `CREATE SCHEMA ${d ? dialectQi(name, d) : `"${name}"`}`
+      : `CREATE DATABASE ${d ? dialectQi(name, d) : `\`${name}\``}`;
     createDbLoading = true;
     createDbError = '';
     try {
@@ -360,7 +356,7 @@
   }
 
   function hostDisplay(profile: ConnectionProfile): string {
-    if (profile.dbType === 'sqlite') return profile.host;
+    if (!profile.dialectInfo.usesSchema) return profile.host;
     const db = profile.database ? `/${profile.database}` : '';
     return `${profile.host}:${profile.port}${db}`;
   }
@@ -481,9 +477,9 @@
   {@const connected = isConnected(p.id)}
   {@const hasGroups = connectionStore.groups.length > 0}
   <ContextMenu x={cardCtx.x} y={cardCtx.y} open={true} onclose={() => (cardCtx = null)}>
-    {#if connected && !p.readOnly && p.dbType !== 'sqlite'}
+    {#if connected && !p.readOnly && p.dialectInfo.usesSchema}
       <CtxItem onclick={() => { const prof = p; cardCtx = null; handleNewDatabase(prof); }}>
-        New {(p.dbType === 'postgres' || p.dbType === 'sqlserver') ? 'Schema' : 'Database'}
+        New {p.dialectInfo.dbLabel}
       </CtxItem>
     {/if}
     <CtxItem onclick={() => { const prof = p; cardCtx = null; handleManageUsers(prof); }}>
@@ -603,7 +599,7 @@
 
 <!-- New database/schema modal -->
 {#if createDbModal}
-  {@const dbLabel = (createDbModal.dbType === 'postgres' || createDbModal.dbType === 'sqlserver') ? 'Schema' : 'Database'}
+  {@const dbLabel = connectionStore.getById(createDbModal.connectionId)?.dialectInfo.dbLabel ?? 'Database'}
   <Modal label="New {dbLabel}" onbackdropclick={createDbLoading ? undefined : () => (createDbModal = null)}>
     <div class="create-modal-card">
       <div class="create-modal-title">New {dbLabel}</div>
@@ -695,7 +691,7 @@
     <!-- Connection info -->
     <div class="card-detail">
       <span class="card-host" title={hostDisplay(profile)}>{hostDisplay(profile)}</span>
-      {#if profile.dbType !== 'sqlite' && profile.username}
+      {#if profile.dialectInfo.usesSchema && profile.username}
         <span class="card-user">{profile.username}</span>
       {/if}
     </div>

@@ -11,7 +11,8 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import { getErdGraph } from '$lib/tauri/erd';
   import { executeQuery } from '$lib/tauri/query';
-  import type { ErdRelation, DbType } from '$lib/types';
+  import type { ErdRelation } from '$lib/types';
+  import { qi as dialectQi, tableRef as dialectTableRef, defaultDialectInfo } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
@@ -98,12 +99,6 @@
     return () => unlisten?.();
   });
 
-  function quoteId(name: string, dbType: DbType): string {
-    if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
-    if (dbType === 'sqlserver') return `[${name.replace(/\]/g, ']]')}]`;
-    return `\`${name.replace(/`/g, '``')}\``;
-  }
-
   function escapeStr(val: string): string {
     return val.replace(/'/g, "''");
   }
@@ -116,7 +111,6 @@
   }
 
   async function loadRelations(sel: CellSelection) {
-    const dbType = connectionStore.getById(sel.connectionId)?.dbType ?? 'mysql';
     globalLoading = true;
     relations = [];
 
@@ -231,9 +225,11 @@
           const rel = relations[i];
           const connId = rel.targetConnectionId ?? sel.connectionId;
           const db = rel.targetDatabase ?? sel.database;
-          const connDbType = connectionStore.getById(connId)?.dbType ?? dbType;
+          const connDialect = connectionStore.getById(connId)?.dialectInfo ?? defaultDialectInfo;
           try {
-            const sql = `SELECT * FROM ${quoteId(db, connDbType)}.${quoteId(rel.targetTable, connDbType)} WHERE ${quoteId(rel.filterColumn, connDbType)} = ${valueLiteral(rel.filterValue)}`;
+            const tRef = dialectTableRef(db, rel.targetTable, connDialect);
+            const qCol = dialectQi(rel.filterColumn, connDialect);
+            const sql = `SELECT * FROM ${tRef} WHERE ${qCol} = ${valueLiteral(rel.filterValue)}`;
             const result = await executeQuery(
               connId,
               sql,
@@ -266,7 +262,7 @@
   async function openRelation(sel: CellSelection, rel: RelationEntry) {
     const connId = rel.targetConnectionId ?? sel.connectionId;
     const db = rel.targetDatabase ?? sel.database;
-    const connDbType = connectionStore.getById(connId)?.dbType ?? 'mysql';
+    const connDialect2 = connectionStore.getById(connId)?.dialectInfo ?? defaultDialectInfo;
     if (rel.virtual && rel.targetConnectionId && !connectionStore.isActive(connId)) {
       await connectionStore.connect(connId);
     }
@@ -275,7 +271,7 @@
       connectionId: connId,
       database: db,
       table: rel.targetTable,
-      initialFilter: `${quoteId(rel.filterColumn, connDbType)} = ${valueLiteral(rel.filterValue)}`,
+      initialFilter: `${dialectQi(rel.filterColumn, connDialect2)} = ${valueLiteral(rel.filterValue)}`,
     });
   }
 

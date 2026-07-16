@@ -211,7 +211,7 @@
     nodeCounter = 0;
     xmlPlanText = null;
 
-    if (dialect === 'sqlserver') {
+    if (dialect.endsWith('_xml')) {
       try {
         const arr = JSON.parse(rawJson);
         const xml = arr?.[0]?.xml ?? '';
@@ -225,9 +225,55 @@
       return;
     }
 
+    if (dialect.endsWith('_queryplan')) {
+      try {
+        parseError = null;
+        const rows: Array<{ id: number; parent: number; detail: string }> = JSON.parse(rawJson);
+        // Build a flat tree: root node with all steps as children
+        const root: ExplainNode = {
+          id: nextId(),
+          nodeType: 'Query Plan',
+          relation: null,
+          estimatedRows: 0,
+          actualRows: null,
+          cost: 0,
+          children: rows.map((r) => ({
+            id: nextId(),
+            nodeType: r.detail,
+            relation: null,
+            estimatedRows: 0,
+            actualRows: null,
+            cost: 0,
+            children: [],
+          })),
+        };
+        const { nodes, edges } = computeLayout(root);
+        layoutNodes = nodes;
+        layoutEdges = edges;
+      } catch (e) {
+        parseError = String(e);
+      }
+      return;
+    }
+
+    if (!dialect.endsWith('_json')) {
+      // Unknown format from a new engine: fall back to raw text display.
+      xmlPlanText = rawJson;
+      parseError = null;
+      layoutNodes = [];
+      layoutEdges = [];
+      return;
+    }
+
     let root: ExplainNode | null = null;
     try {
-      root = dialect === 'postgres' ? parsePostgres(rawJson) : parseMysql(rawJson);
+      const parsed = JSON.parse(rawJson);
+      const plan = Array.isArray(parsed) ? parsed[0]?.Plan : parsed?.Plan;
+      if (plan?.['Node Type'] !== undefined) {
+        root = parsePostgres(rawJson);
+      } else {
+        root = parseMysql(rawJson);
+      }
     } catch (e) {
       parseError = String(e);
       return;

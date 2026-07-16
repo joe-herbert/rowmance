@@ -9,6 +9,7 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import { generateQuery, explainQuery, describeTable, summariseResult, type AiConfig } from '$lib/ai/service';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { defaultDialectInfo } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
   import { marked } from 'marked';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
@@ -61,7 +62,7 @@
     dataSampleRows: settingsStore.settings.aiDataSampleRows,
   });
 
-  const dbType = $derived(connections.getById(props.connectionId)?.dbType ?? 'mysql');
+  const dialectInfo = $derived(connections.getById(props.connectionId)?.dialectInfo);
 
   let prompt = $state('');
   let result = $state('');
@@ -97,7 +98,7 @@
     error = null;
     result = '';
     try {
-      result = await generateQuery(config, prompt, props.connectionId, props.database, dbType);
+      result = await generateQuery(config, prompt, props.connectionId, props.database, dialectInfo ?? defaultDialectInfo);
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -111,7 +112,7 @@
     error = null;
     result = '';
     try {
-      result = await explainQuery(config, props.sql, props.connectionId, props.database, dbType);
+      result = await explainQuery(config, props.sql, props.connectionId, props.database, dialectInfo ?? defaultDialectInfo);
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -139,7 +140,7 @@
     error = null;
     result = '';
     try {
-      result = await describeTable(config, props.tableName, props.ddl, props.connectionId, props.database, dbType);
+      result = await describeTable(config, props.tableName, props.ddl, props.connectionId, props.database, dialectInfo ?? defaultDialectInfo);
     } catch (err) {
       error = errorMessage(err);
     } finally {
