@@ -20,6 +20,7 @@ type MssqlConn = tiberius::Client<tokio_util::compat::Compat<tokio::net::TcpStre
 pub struct SqlServerEngine {
     pub pool: MssqlPool,
     pub read_only: bool,
+    pub initial_catalog: String,
 }
 
 #[async_trait]
@@ -64,38 +65,48 @@ impl DatabaseEngine for SqlServerEngine {
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::list_databases(&mut conn).await
+        crate::connections::sqlserver::list_instance_databases(&mut conn).await
     }
 
-    async fn list_tables(&self, database: &str) -> Result<Vec<TableInfo>, RowmanceError> {
+    async fn list_schemas(&self, instance_db: &str) -> Result<Vec<String>, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::list_tables(&mut conn, database).await
+        crate::connections::sqlserver::list_schemas_in_database(&mut conn, instance_db).await
+    }
+
+    async fn list_tables(&self, database: &str, instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        crate::connections::sqlserver::list_tables(&mut conn, database, instance_db).await
     }
 
     async fn list_columns(
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
     ) -> Result<Vec<ColumnInfo>, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::list_columns(&mut conn, database, table).await
+        crate::connections::sqlserver::list_columns(&mut conn, database, table, instance_db).await
     }
 
-    async fn list_all_columns(&self, database: &str) -> Result<Vec<BulkColumnRow>, RowmanceError> {
+    async fn list_all_columns(&self, database: &str, instance_db: Option<&str>) -> Result<Vec<BulkColumnRow>, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let pairs = crate::connections::sqlserver::list_all_columns(&mut conn, database).await?;
+        let pairs = crate::connections::sqlserver::list_all_columns(&mut conn, database, instance_db).await?;
         Ok(pairs
             .into_iter()
             .map(|(table_name, col)| BulkColumnRow {
@@ -116,50 +127,53 @@ impl DatabaseEngine for SqlServerEngine {
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
     ) -> Result<Vec<IndexInfo>, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::list_indexes(&mut conn, database, table).await
+        crate::connections::sqlserver::list_indexes(&mut conn, database, table, instance_db).await
     }
 
     async fn list_foreign_keys(
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
     ) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::list_foreign_keys(&mut conn, database, table).await
+        crate::connections::sqlserver::list_foreign_keys(&mut conn, database, table, instance_db).await
     }
 
-    async fn count_table(&self, database: &str, table: &str) -> Result<i64, RowmanceError> {
+    async fn count_table(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<i64, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::count_table(&mut conn, database, table).await
+        crate::connections::sqlserver::count_table(&mut conn, database, table, instance_db).await
     }
 
-    async fn get_ddl(&self, database: &str, table: &str) -> Result<String, RowmanceError> {
+    async fn get_ddl(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<String, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::get_ddl(&mut conn, database, table).await
+        crate::connections::sqlserver::get_ddl(&mut conn, database, table, instance_db).await
     }
 
     async fn execute(
         &self,
         sql: &str,
         database: Option<&str>,
+        instance_db: Option<&str>,
         page_size: u32,
         offset: u32,
     ) -> Result<EngineQueryResult, RowmanceError> {
@@ -168,6 +182,11 @@ impl DatabaseEngine for SqlServerEngine {
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+        if let Some(db) = instance_db {
+            let db_esc = db.replace(']', "]]");
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]")).await.ok();
+        }
 
         // SQL Server has no session-level SET search_path equivalent. The closest
         // approach is ALTER USER ... WITH DEFAULT_SCHEMA, which affects unqualified
@@ -181,7 +200,14 @@ impl DatabaseEngine for SqlServerEngine {
             conn.simple_query(&set_default_sql).await.ok();
         }
 
-        execute_on_sqlserver_conn(&mut conn, sql, page_size, offset).await
+        let result = execute_on_sqlserver_conn(&mut conn, sql, page_size, offset).await;
+
+        if instance_db.is_some() {
+            let cat_esc = self.initial_catalog.replace(']', "]]");
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
+        }
+
+        result
     }
 
     async fn execute_ddl(&self, sql: &str) -> Result<(), RowmanceError> {
@@ -193,10 +219,14 @@ impl DatabaseEngine for SqlServerEngine {
         crate::connections::sqlserver::exec_simple(&mut conn, sql).await
     }
 
-    async fn count_query_rows(&self, sql: &str, database: Option<&str>) -> Option<i64> {
+    async fn count_query_rows(&self, sql: &str, database: Option<&str>, instance_db: Option<&str>) -> Option<i64> {
         let sql_trimmed = sql.trim_end_matches(';');
         let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
         let mut conn = self.pool.get().await.ok()?;
+        if let Some(db) = instance_db {
+            let db_esc = db.replace(']', "]]");
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]")).await.ok();
+        }
         if let Some(schema) = database {
             let schema_escaped = schema.replace(']', "]]");
             let set_default_sql = format!(
@@ -206,7 +236,7 @@ impl DatabaseEngine for SqlServerEngine {
         }
         let stream = conn.simple_query(&count_sql).await.ok()?;
         let rows = stream.into_first_result().await.ok()?;
-        if let Some(row) = rows.first() {
+        let result = if let Some(row) = rows.first() {
             row.try_get::<i32, _>(0)
                 .ok()
                 .flatten()
@@ -214,13 +244,19 @@ impl DatabaseEngine for SqlServerEngine {
                 .or_else(|| row.try_get::<i64, _>(0).ok().flatten())
         } else {
             None
+        };
+        if instance_db.is_some() {
+            let cat_esc = self.initial_catalog.replace(']', "]]");
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
         }
+        result
     }
 
     async fn apply_changes(
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
         updates: &[RowChange],
         inserts: &[HashMap<String, serde_json::Value>],
         deletes: &[RowDelete],
@@ -231,21 +267,33 @@ impl DatabaseEngine for SqlServerEngine {
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
+        if let Some(db) = instance_db {
+            let db_esc = db.replace(']', "]]");
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]")).await?;
+        }
+
         crate::connections::sqlserver::exec_simple(&mut conn, "BEGIN TRANSACTION").await?;
 
         let result =
             apply_all_sqlserver(&mut conn, database, table, updates, inserts, deletes).await;
 
+        let cat_esc = self.initial_catalog.replace(']', "]]");
         match result {
             Ok(counts) => {
                 crate::connections::sqlserver::exec_simple(&mut conn, "COMMIT TRANSACTION")
                     .await?;
+                if instance_db.is_some() {
+                    crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
+                }
                 Ok(counts)
             }
             Err(e) => {
                 crate::connections::sqlserver::exec_simple(&mut conn, "ROLLBACK TRANSACTION")
                     .await
                     .ok();
+                if instance_db.is_some() {
+                    crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
+                }
                 Err(e)
             }
         }
@@ -271,7 +319,7 @@ impl DatabaseEngine for SqlServerEngine {
         Ok(Box::new(SqlServerTransaction { conn }))
     }
 
-    async fn explain(&self, sql: &str, _database: Option<&str>) -> Result<ExplainResult, RowmanceError> {
+    async fn explain(&self, sql: &str, _database: Option<&str>, _instance_db: Option<&str>) -> Result<ExplainResult, RowmanceError> {
         let mut conn = self
             .pool
             .get()
@@ -308,14 +356,14 @@ impl DatabaseEngine for SqlServerEngine {
         Ok(Box::new(SqlServerTransaction { conn }))
     }
 
-    async fn get_erd_graph(&self, schema: &str) -> Result<ErdGraph, RowmanceError> {
+    async fn get_erd_graph(&self, schema: &str, instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
-        let all_cols = crate::connections::sqlserver::list_all_columns(&mut conn, schema)
+        let all_cols = crate::connections::sqlserver::list_all_columns(&mut conn, schema, instance_db)
             .await?;
 
         let col_pairs: Vec<(String, ErdColumn)> = all_cols
@@ -336,7 +384,7 @@ impl DatabaseEngine for SqlServerEngine {
         let mut all_fk_edges: Vec<ErdRelation> = Vec::new();
         for table in &nodes {
             let fks =
-                crate::connections::sqlserver::list_foreign_keys(&mut conn, schema, &table.name)
+                crate::connections::sqlserver::list_foreign_keys(&mut conn, schema, &table.name, instance_db)
                     .await?;
             for fk in fks {
                 all_fk_edges.push(ErdRelation {
@@ -359,6 +407,7 @@ impl DatabaseEngine for SqlServerEngine {
         &self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
         headers: &[String],
         rows: &[Vec<String>],
         create_table: bool,
@@ -436,6 +485,7 @@ impl EngineTransaction for SqlServerTransaction {
         &mut self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
         updates: &[RowChange],
         inserts: &[HashMap<String, serde_json::Value>],
         deletes: &[RowDelete],
@@ -1024,6 +1074,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             identifier_escape: "]]".into(),
             uses_schema: true,
             db_label: "Schema".into(),
+            has_instance_databases: true,
             select_top: true,
             boolean_literals: false,
             uses_ilike: false,
@@ -1056,7 +1107,12 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             fk_violation: None,
             editor_dialect: "sql".into(),
             explain_format: "sqlserver_xml".into(),
-            system_databases: vec![],
+            system_databases: vec![
+                "master".into(),
+                "model".into(),
+                "msdb".into(),
+                "tempdb".into(),
+            ],
             file_extensions: vec![],
         }),
         _ => None,
@@ -1069,6 +1125,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
 pub struct SqlServerPoolAdapter {
     pub pool: MssqlPool,
     pub read_only: bool,
+    pub initial_catalog: String,
 }
 
 #[async_trait]
@@ -1084,7 +1141,11 @@ impl crate::connections::engine::PoolAdapter for SqlServerPoolAdapter {
         }
     }
     fn get_engine(&self) -> std::sync::Arc<dyn crate::connections::engine::DatabaseEngine> {
-        std::sync::Arc::new(SqlServerEngine { pool: self.pool.clone(), read_only: self.read_only })
+        std::sync::Arc::new(SqlServerEngine {
+            pool: self.pool.clone(),
+            read_only: self.read_only,
+            initial_catalog: self.initial_catalog.clone(),
+        })
     }
 }
 
@@ -1139,5 +1200,5 @@ pub async fn create_pool(
         .await
         .map_err(|e| crate::error::RowmanceError::Pool(e.to_string()))?;
 
-    Ok(Box::new(SqlServerPoolAdapter { pool, read_only }))
+    Ok(Box::new(SqlServerPoolAdapter { pool, read_only, initial_catalog: database.to_string() }))
 }

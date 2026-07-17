@@ -48,6 +48,7 @@ function makeProfile(overrides: Partial<ConnectionProfile> = {}): ConnectionProf
       identifierEscape: '""',
       usesSchema: true,
       dbLabel: 'Schema',
+      hasInstanceDatabases: false,
       selectTop: false,
       booleanLiterals: true,
       usesIlike: true,

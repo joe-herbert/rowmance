@@ -33,28 +33,39 @@ pub trait DatabaseEngine: Send + Sync {
 
     // ── Schema introspection ──────────────────────────────────────────────────
     async fn list_databases(&self) -> Result<Vec<String>, RowmanceError>;
-    async fn list_tables(&self, database: &str) -> Result<Vec<TableInfo>, RowmanceError>;
+    /// List all user schemas within the given instance-level database.
+    /// Only meaningful for engines where has_instance_databases = true (SQL Server).
+    async fn list_schemas(&self, _instance_db: &str) -> Result<Vec<String>, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound(
+            "This engine does not support instance-level database navigation".to_string(),
+        ))
+    }
+    async fn list_tables(&self, database: &str, instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError>;
     async fn list_columns(
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
     ) -> Result<Vec<ColumnInfo>, RowmanceError>;
     async fn list_all_columns(
         &self,
         database: &str,
+        instance_db: Option<&str>,
     ) -> Result<Vec<BulkColumnRow>, RowmanceError>;
     async fn list_indexes(
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
     ) -> Result<Vec<IndexInfo>, RowmanceError>;
     async fn list_foreign_keys(
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
     ) -> Result<Vec<ForeignKeyInfo>, RowmanceError>;
-    async fn count_table(&self, database: &str, table: &str) -> Result<i64, RowmanceError>;
-    async fn get_ddl(&self, database: &str, table: &str) -> Result<String, RowmanceError>;
+    async fn count_table(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<i64, RowmanceError>;
+    async fn get_ddl(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<String, RowmanceError>;
 
     // ── Query execution ───────────────────────────────────────────────────────
     /// Execute a SQL statement, switching to `database` context first if provided.
@@ -63,6 +74,7 @@ pub trait DatabaseEngine: Send + Sync {
         &self,
         sql: &str,
         database: Option<&str>,
+        instance_db: Option<&str>,
         page_size: u32,
         offset: u32,
     ) -> Result<EngineQueryResult, RowmanceError>;
@@ -73,7 +85,7 @@ pub trait DatabaseEngine: Send + Sync {
 
     /// Count the total rows a SELECT would return, ignoring pagination.
     /// Returns None if counting is not practical (e.g., non-SELECT statements).
-    async fn count_query_rows(&self, sql: &str, database: Option<&str>) -> Option<i64>;
+    async fn count_query_rows(&self, sql: &str, database: Option<&str>, instance_db: Option<&str>) -> Option<i64>;
 
     // ── Row mutations ─────────────────────────────────────────────────────────
     /// Apply a batch of UPDATEs, INSERTs, and DELETEs atomically.
@@ -81,6 +93,7 @@ pub trait DatabaseEngine: Send + Sync {
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
         updates: &[RowChange],
         inserts: &[std::collections::HashMap<String, serde_json::Value>],
         deletes: &[RowDelete],
@@ -105,11 +118,12 @@ pub trait DatabaseEngine: Send + Sync {
         &self,
         sql: &str,
         database: Option<&str>,
+        instance_db: Option<&str>,
     ) -> Result<ExplainResult, RowmanceError>;
 
     // ── Entity-relationship diagram ───────────────────────────────────────────
     /// Build the full entity-relationship graph for a database/schema.
-    async fn get_erd_graph(&self, database: &str) -> Result<ErdGraph, RowmanceError>;
+    async fn get_erd_graph(&self, database: &str, instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError>;
 
     // ── User management ───────────────────────────────────────────────────────
     async fn list_users(&self) -> Result<Vec<DbUser>, RowmanceError> {
@@ -183,6 +197,7 @@ pub trait DatabaseEngine: Send + Sync {
         &self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
         headers: &[String],
         rows: &[Vec<String>],
         create_table: bool,
@@ -217,6 +232,7 @@ pub trait EngineTransaction: Send {
         &mut self,
         database: &str,
         table: &str,
+        instance_db: Option<&str>,
         updates: &[RowChange],
         inserts: &[std::collections::HashMap<String, serde_json::Value>],
         deletes: &[RowDelete],

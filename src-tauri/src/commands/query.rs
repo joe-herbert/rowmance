@@ -94,6 +94,7 @@ pub async fn query_delete_rows(
     connection_id: String,
     database: String,
     table: String,
+    instance_db: Option<String>,
     rows: Vec<RowDelete>,
 ) -> Result<UpdateResult, AppError> {
     let profile_row = sqlx::query!(
@@ -130,14 +131,14 @@ pub async fn query_delete_rows(
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         let (_, _, deleted) = guard
-            .apply_changes(&database, &table, &[], &[], &rows)
+            .apply_changes(&database, &table, instance_db.as_deref(), &[], &[], &rows)
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         total_deleted += deleted;
     } else {
         let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
         let (_, _, deleted) = engine
-            .apply_changes(&database, &table, &[], &[], &rows)
+            .apply_changes(&database, &table, instance_db.as_deref(), &[], &[], &rows)
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         total_deleted += deleted;
@@ -157,6 +158,7 @@ pub async fn query_update_rows(
     connection_id: String,
     table: String,
     database: String,
+    instance_db: Option<String>,
     changes: Vec<RowChange>,
 ) -> Result<UpdateResult, AppError> {
     // Check read-only mode before touching the remote pool.
@@ -194,14 +196,14 @@ pub async fn query_update_rows(
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         let (updated, _, _) = guard
-            .apply_changes(&database, &table, &changes, &[], &[])
+            .apply_changes(&database, &table, instance_db.as_deref(), &changes, &[], &[])
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         total_updated += updated;
     } else {
         let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
         let (updated, _, _) = engine
-            .apply_changes(&database, &table, &changes, &[], &[])
+            .apply_changes(&database, &table, instance_db.as_deref(), &changes, &[], &[])
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         total_updated += updated;
@@ -221,6 +223,7 @@ pub async fn query_insert_row(
     connection_id: String,
     database: String,
     table: String,
+    instance_db: Option<String>,
     values: std::collections::HashMap<String, serde_json::Value>,
 ) -> Result<(), AppError> {
     let profile_row = sqlx::query!(
@@ -257,13 +260,13 @@ pub async fn query_insert_row(
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         guard
-            .apply_changes(&database, &table, &[], &[values], &[])
+            .apply_changes(&database, &table, instance_db.as_deref(), &[], &[values], &[])
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     } else {
         let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
         engine
-            .apply_changes(&database, &table, &[], &[values], &[])
+            .apply_changes(&database, &table, instance_db.as_deref(), &[], &[values], &[])
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     }
@@ -295,6 +298,7 @@ pub async fn query_save_table_changes(
     connection_id: String,
     database: String,
     table: String,
+    instance_db: Option<String>,
     updates: Vec<RowChange>,
     inserts: Vec<std::collections::HashMap<String, serde_json::Value>>,
     deletes: Vec<RowDelete>,
@@ -332,7 +336,7 @@ pub async fn query_save_table_changes(
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         let (u, i, d) = guard
-            .apply_changes(&database, &table, &updates, &inserts, &deletes)
+            .apply_changes(&database, &table, instance_db.as_deref(), &updates, &inserts, &deletes)
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         return Ok(SaveChangesResult {
@@ -345,7 +349,7 @@ pub async fn query_save_table_changes(
     // No active user transaction — delegate to the engine (handles transaction internally).
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
     let (u, i, d) = engine
-        .apply_changes(&database, &table, &updates, &inserts, &deletes)
+        .apply_changes(&database, &table, instance_db.as_deref(), &updates, &inserts, &deletes)
         .await
         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     updated_count += u;
@@ -477,6 +481,7 @@ pub async fn query_execute_multi(
     connection_id: String,
     sql: String,
     database: Option<String>,
+    instance_db: Option<String>,
     session_id: Option<String>,
 ) -> Result<Vec<QueryResult>, AppError> {
     let statements = split_statements(&sql);
@@ -552,7 +557,7 @@ pub async fn query_execute_multi(
         let query_id = uuid::Uuid::new_v4().to_string();
         let t = std::time::Instant::now();
         let exec_result = engine
-            .execute(stmt, database.as_deref(), 10_000, 0)
+            .execute(stmt, database.as_deref(), instance_db.as_deref(), 10_000, 0)
             .await;
         let execution_us = t.elapsed().as_micros() as u64;
         #[cfg(debug_assertions)]
@@ -602,10 +607,11 @@ pub async fn query_execute_multi(
                     let engine_clone = engine.clone();
                     let stmt_clone = stmt.to_string();
                     let db_clone = database.clone();
+                    let inst_db_clone = instance_db.clone();
                     let qid = query_id.clone();
                     let app_clone = app.clone();
                     tokio::spawn(async move {
-                        if let Some(total) = engine_clone.count_query_rows(&stmt_clone, db_clone.as_deref()).await {
+                        if let Some(total) = engine_clone.count_query_rows(&stmt_clone, db_clone.as_deref(), inst_db_clone.as_deref()).await {
                             let _ = app_clone.emit("query-count-updated", QueryCountPayload { query_id: qid, total_rows: total });
                         }
                     });
@@ -729,6 +735,7 @@ pub async fn query_execute(
     page: u32,
     page_size: u32,
     database: Option<String>,
+    instance_db: Option<String>,
 ) -> Result<QueryResult, AppError> {
     let query_id = uuid::Uuid::new_v4().to_string();
     let start = std::time::Instant::now();
@@ -757,7 +764,7 @@ pub async fn query_execute(
 
     let t = std::time::Instant::now();
     let exec_result = engine
-        .execute(&sql, database.as_deref(), page_size, offset)
+        .execute(&sql, database.as_deref(), instance_db.as_deref(), page_size, offset)
         .await
         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     let execution_us = t.elapsed().as_micros() as u64;
@@ -808,9 +815,10 @@ pub async fn query_execute(
         let engine = engine.clone();
         let sql_clone = sql.clone();
         let db_clone = database.clone();
+        let inst_db_clone = instance_db.clone();
         let qid = query_id_clone;
         tokio::spawn(async move {
-            if let Some(total) = engine.count_query_rows(&sql_clone, db_clone.as_deref()).await {
+            if let Some(total) = engine.count_query_rows(&sql_clone, db_clone.as_deref(), inst_db_clone.as_deref()).await {
                 let _ = app.emit("query-count-updated", QueryCountPayload { query_id: qid, total_rows: total });
             }
         });
@@ -886,6 +894,7 @@ pub async fn query_execute_selection(
     connection_id: String,
     sql: String,
     database: Option<String>,
+    instance_db: Option<String>,
 ) -> Result<QueryResult, AppError> {
     // Execute without LIMIT/OFFSET so the user's highlighted text reaches the driver unchanged.
     query_execute(
@@ -898,6 +907,7 @@ pub async fn query_execute_selection(
         1,
         UNBOUNDED,
         database,
+        instance_db,
     )
     .await
 }
@@ -1020,9 +1030,10 @@ pub async fn query_explain(
     connection_id: String,
     sql: String,
     database: Option<String>,
+    instance_db: Option<String>,
 ) -> Result<crate::connections::types::ExplainResult, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.explain(&sql, database.as_deref()).await.map_err(AppError::from)
+    engine.explain(&sql, database.as_deref(), instance_db.as_deref()).await.map_err(AppError::from)
 }
 
 /// Write a query execution record to the local history table.

@@ -38,6 +38,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { useGlobalSearchCache } from '$lib/stores/globalSearchCache.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import SchemaIcon from '$lib/components/icons/SchemaIcon.svelte';
 
   const connectionStore = useConnections();
   const panelStore = usePanels();
@@ -66,8 +67,12 @@
   // ── Schema state ──────────────────────────────────────────────────────────
 
   let schemaCache = $state<Map<string, Map<string, TableInfo[]>>>(new Map());
+  // SQL Server only: connectionId → instanceDb → schemas[]
+  let instanceSchemaCache = $state<Map<string, Map<string, string[]>>>(new Map());
   let expandedConnections = $state<Set<string>>(new Set());
   let expandedDatabases = $state<Set<string>>(new Set());
+  // SQL Server only: `${connectionId}/${instanceDb}/${schema}`
+  let expandedSchemas = $state<Set<string>>(new Set());
   let loadingKeys = $state<Set<string>>(new Set());
 
   $effect(() => {
@@ -134,11 +139,35 @@
     y: number;
   }
 
+  interface InstDbCtxMenu {
+    x: number;
+    y: number;
+    connectionId: string;
+    instanceDb: string;
+  }
+  interface SchemaCtxMenu {
+    x: number;
+    y: number;
+    connectionId: string;
+    instanceDb: string;
+    schema: string;
+  }
+
+  interface StaticDbCtxMenu {
+    x: number;
+    y: number;
+    connectionId: string;
+    database: string;
+  }
+
   let tableCtx = $state<TableCtxMenu | null>(null);
   let dbCtx = $state<DbCtxMenu | null>(null);
   let grpCtx = $state<GrpCtxMenu | null>(null);
   let connCtx = $state<ConnCtxMenu | null>(null);
   let panelCtx = $state<PanelCtxMenu | null>(null);
+  let instDbCtx = $state<InstDbCtxMenu | null>(null);
+  let schemaCtx = $state<SchemaCtxMenu | null>(null);
+  let staticDbCtx = $state<StaticDbCtxMenu | null>(null);
 
   let moveToGroupSubmenuOpen = $state(false);
   let moveToGroupSubmenuTimer = $state<ReturnType<typeof setTimeout> | null>(null);
@@ -188,6 +217,15 @@
   let createTableError = $state('');
   let createTableLoading = $state(false);
   let fkRefColumns = $state<Map<number, string[]>>(new Map());
+
+  interface CreateSchemaModal {
+    connectionId: string;
+    instanceDb: string;
+  }
+  let createSchemaModal = $state<CreateSchemaModal | null>(null);
+  let createSchemaName = $state('');
+  let createSchemaError = $state('');
+  let createSchemaLoading = $state(false);
 
   async function loadFkRefColumns(fkIndex: number, refTable: string) {
     if (!createTableModal || !refTable) return;
@@ -305,6 +343,63 @@
     }
   }
 
+  // ── SQL Server 3-level tree ────────────────────────────────────────────────
+
+  async function toggleInstanceDb(connectionId: string, instanceDb: string) {
+    const key = `${connectionId}/${instanceDb}`;
+    if (expandedDatabases.has(key)) {
+      expandedDatabases = new Set([...expandedDatabases].filter((k) => k !== key));
+    } else {
+      expandedDatabases = new Set([...expandedDatabases, key]);
+      await loadSchemas(connectionId, instanceDb);
+    }
+  }
+
+  async function loadSchemas(connectionId: string, instanceDb: string) {
+    const existing = instanceSchemaCache.get(connectionId)?.get(instanceDb);
+    if (existing && existing.length > 0) return;
+    const key = `${connectionId}/${instanceDb}`;
+    loadingKeys = new Set([...loadingKeys, key]);
+    try {
+      const schemas = await schemaApi.listSchemas(connectionId, instanceDb);
+      const instMap = new Map(instanceSchemaCache.get(connectionId) ?? []);
+      instMap.set(instanceDb, schemas);
+      instanceSchemaCache = new Map([...instanceSchemaCache, [connectionId, instMap]]);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+    } finally {
+      loadingKeys = new Set([...loadingKeys].filter((k) => k !== key));
+    }
+  }
+
+  async function toggleSchema(connectionId: string, instanceDb: string, schema: string) {
+    const key = `${connectionId}/${instanceDb}/${schema}`;
+    if (expandedSchemas.has(key)) {
+      expandedSchemas = new Set([...expandedSchemas].filter((k) => k !== key));
+    } else {
+      expandedSchemas = new Set([...expandedSchemas, key]);
+      await loadTablesForSchema(connectionId, instanceDb, schema);
+    }
+  }
+
+  async function loadTablesForSchema(connectionId: string, instanceDb: string, schema: string) {
+    const cacheKey = `${instanceDb}/${schema}`;
+    const existing = schemaCache.get(connectionId)?.get(cacheKey);
+    if (existing && existing.length > 0) return;
+    const key = `${connectionId}/${instanceDb}/${schema}`;
+    loadingKeys = new Set([...loadingKeys, key]);
+    try {
+      const tables = await schemaApi.listTables(connectionId, schema, instanceDb);
+      const connMap = new Map(schemaCache.get(connectionId) ?? []);
+      connMap.set(cacheKey, tables);
+      schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error', 0);
+    } finally {
+      loadingKeys = new Set([...loadingKeys].filter((k) => k !== key));
+    }
+  }
+
   const focusedContent = $derived(panelStore.focusedPanel?.content);
 
   function isTableActive(connectionId: string, database: string, tableName: string): boolean {
@@ -316,8 +411,8 @@
     );
   }
 
-  function openTable(connectionId: string, database: string, table: string) {
-    panelStore.openInFocused({ kind: 'table_browser', connectionId, database, table });
+  function openTable(connectionId: string, database: string, table: string, instanceDb?: string) {
+    panelStore.openInFocused({ kind: 'table_browser', connectionId, database, table, instanceDb });
   }
 
   // ── Group helpers ─────────────────────────────────────────────────────────
@@ -449,6 +544,9 @@
     grpCtx = null;
     connCtx = null;
     panelCtx = null;
+    instDbCtx = null;
+    schemaCtx = null;
+    staticDbCtx = null;
     moveToGroupSubmenuOpen = false;
     if (moveToGroupSubmenuTimer) {
       clearTimeout(moveToGroupSubmenuTimer);
@@ -489,6 +587,27 @@
     panelCtx = { x: e.clientX, y: e.clientY };
   }
 
+  function showInstDbCtx(e: MouseEvent, connectionId: string, instanceDb: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllCtx();
+    instDbCtx = { x: e.clientX, y: e.clientY, connectionId, instanceDb };
+  }
+
+  function showSchemaCtx(e: MouseEvent, connectionId: string, instanceDb: string, schema: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllCtx();
+    schemaCtx = { x: e.clientX, y: e.clientY, connectionId, instanceDb, schema };
+  }
+
+  function showStaticDbCtx(e: MouseEvent, connectionId: string, database: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllCtx();
+    staticDbCtx = { x: e.clientX, y: e.clientY, connectionId, database };
+  }
+
   async function ctxRefreshConnection() {
     if (!connCtx) return;
     const { profile } = connCtx;
@@ -510,6 +629,210 @@
     if (expandedDatabases.has(`${connectionId}/${database}`)) {
       await loadTables(connectionId, database);
     }
+  }
+
+  async function ctxRefreshInstanceDb() {
+    if (!instDbCtx) return;
+    const { connectionId, instanceDb } = instDbCtx;
+    instDbCtx = null;
+    const instMap = new Map(instanceSchemaCache.get(connectionId) ?? []);
+    instMap.delete(instanceDb);
+    instanceSchemaCache = new Map([...instanceSchemaCache, [connectionId, instMap]]);
+    const connMap = new Map(schemaCache.get(connectionId) ?? []);
+    for (const key of [...connMap.keys()].filter((k) => k.startsWith(`${instanceDb}/`))) {
+      connMap.delete(key);
+    }
+    schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+    if (expandedDatabases.has(`${connectionId}/${instanceDb}`)) {
+      await loadSchemas(connectionId, instanceDb);
+    }
+  }
+
+  function ctxDropInstanceDatabase() {
+    if (!instDbCtx) return;
+    const { connectionId, instanceDb } = instDbCtx;
+    const profile = connectionStore.getById(connectionId);
+    instDbCtx = null;
+    if (!profile || profile.readOnly) return;
+    const d = profile.dialectInfo;
+    const sql = `DROP DATABASE ${qi(instanceDb, d)}`;
+    confirmState = {
+      title: 'Drop Database',
+      message: `Drop database "${instanceDb}"? This will permanently delete all schemas, tables, and data within it. This cannot be undone.`,
+      confirmText: 'Drop Database',
+      onconfirm: async () => {
+        confirmState = null;
+        try {
+          await schemaApi.executeDdl(connectionId, sql);
+          const connMap = new Map(schemaCache.get(connectionId) ?? []);
+          for (const key of [...connMap.keys()].filter(
+            (k) => k.startsWith(`${instanceDb}/`) || k === instanceDb,
+          )) {
+            connMap.delete(key);
+          }
+          schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+          const instMap = new Map(instanceSchemaCache.get(connectionId) ?? []);
+          instMap.delete(instanceDb);
+          instanceSchemaCache = new Map([...instanceSchemaCache, [connectionId, instMap]]);
+          expandedDatabases = new Set(
+            [...expandedDatabases].filter((k) => k !== `${connectionId}/${instanceDb}`),
+          );
+          expandedSchemas = new Set(
+            [...expandedSchemas].filter((k) => !k.startsWith(`${connectionId}/${instanceDb}/`)),
+          );
+        } catch (err) {
+          errorModal = { title: 'Drop Failed', message: errorMessage(err) };
+        }
+      },
+    };
+  }
+
+  function ctxNewSchemaInDb() {
+    if (!instDbCtx) return;
+    const { connectionId, instanceDb } = instDbCtx;
+    instDbCtx = null;
+    createSchemaName = '';
+    createSchemaError = '';
+    createSchemaModal = { connectionId, instanceDb };
+  }
+
+  async function executeCreateSchema() {
+    if (!createSchemaModal) return;
+    const name = createSchemaName.trim();
+    if (!name) {
+      createSchemaError = 'Name is required';
+      return;
+    }
+    const { connectionId, instanceDb } = createSchemaModal;
+    const profile = connectionStore.getById(connectionId);
+    const d = profile?.dialectInfo;
+    const dbEsc = instanceDb.replace(/]/g, ']]');
+    const sql = `USE [${dbEsc}]; CREATE SCHEMA ${d ? qi(name, d) : `[${name}]`}`;
+    createSchemaLoading = true;
+    createSchemaError = '';
+    try {
+      await schemaApi.executeDdl(connectionId, sql);
+      const instMap = new Map(instanceSchemaCache.get(connectionId) ?? []);
+      instMap.delete(instanceDb);
+      instanceSchemaCache = new Map([...instanceSchemaCache, [connectionId, instMap]]);
+      await loadSchemas(connectionId, instanceDb);
+      createSchemaModal = null;
+    } catch (err) {
+      createSchemaError = errorMessage(err);
+    } finally {
+      createSchemaLoading = false;
+    }
+  }
+
+  async function ctxRefreshSchema() {
+    if (!schemaCtx) return;
+    const { connectionId, instanceDb, schema } = schemaCtx;
+    schemaCtx = null;
+    const cacheKey = `${instanceDb}/${schema}`;
+    const connMap = new Map(schemaCache.get(connectionId) ?? []);
+    connMap.set(cacheKey, []);
+    schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+    if (expandedSchemas.has(`${connectionId}/${instanceDb}/${schema}`)) {
+      await loadTablesForSchema(connectionId, instanceDb, schema);
+    }
+  }
+
+  function ctxNewTableInSchema() {
+    if (!schemaCtx) return;
+    const { connectionId, instanceDb, schema } = schemaCtx;
+    const profile = connectionStore.getById(connectionId);
+    schemaCtx = null;
+    if (!profile) return;
+    createTableName = '';
+    createTableError = '';
+    createTableColumns = [
+      { name: 'id', type: profile.dialectInfo.defaultColumnType, nullable: false, primaryKey: true },
+    ];
+    createTableFks = [];
+    fkRefColumns = new Map();
+    createTableModal = { connectionId, database: schema, dbType: profile.dbType };
+  }
+
+  function ctxOpenErdForSchema() {
+    if (!schemaCtx) return;
+    panelStore.openInFocused({
+      kind: 'erd',
+      connectionId: schemaCtx.connectionId,
+      database: schemaCtx.schema,
+    });
+    schemaCtx = null;
+  }
+
+  function ctxDropSchemaInDb() {
+    if (!schemaCtx) return;
+    const { connectionId, instanceDb, schema } = schemaCtx;
+    const profile = connectionStore.getById(connectionId);
+    schemaCtx = null;
+    if (!profile || profile.readOnly) return;
+    const d = profile.dialectInfo;
+    const dbEsc = instanceDb.replace(/]/g, ']]');
+    const sql = `USE [${dbEsc}]; DROP SCHEMA ${qi(schema, d)}`;
+    confirmState = {
+      title: 'Drop Schema',
+      message: `Drop schema "${schema}" in "${instanceDb}"? This will permanently delete all tables and data within it. This cannot be undone.`,
+      confirmText: 'Drop Schema',
+      onconfirm: async () => {
+        confirmState = null;
+        try {
+          await schemaApi.executeDdl(connectionId, sql);
+          const cacheKey = `${instanceDb}/${schema}`;
+          const connMap = new Map(schemaCache.get(connectionId) ?? []);
+          connMap.delete(cacheKey);
+          schemaCache = new Map([...schemaCache, [connectionId, connMap]]);
+          const instMap = new Map(instanceSchemaCache.get(connectionId) ?? []);
+          const schemas = instMap.get(instanceDb) ?? [];
+          instMap.set(
+            instanceDb,
+            schemas.filter((s) => s !== schema),
+          );
+          instanceSchemaCache = new Map([...instanceSchemaCache, [connectionId, instMap]]);
+          expandedSchemas = new Set(
+            [...expandedSchemas].filter((k) => k !== `${connectionId}/${instanceDb}/${schema}`),
+          );
+        } catch (err) {
+          errorModal = { title: 'Drop Failed', message: errorMessage(err) };
+        }
+      },
+    };
+  }
+
+  function ctxNewQueryEditorForInstanceDb() {
+    if (!instDbCtx) return;
+    const { connectionId, instanceDb } = instDbCtx;
+    instDbCtx = null;
+    panelStore.openInFocused({ kind: 'query_editor', connectionId, database: instanceDb });
+  }
+
+  function ctxNewQueryEditorForSchema() {
+    if (!schemaCtx) return;
+    const { connectionId, schema } = schemaCtx;
+    schemaCtx = null;
+    panelStore.openInFocused({ kind: 'query_editor', connectionId, database: schema });
+  }
+
+  function ctxNewSchemaForStaticDb() {
+    if (!staticDbCtx) return;
+    const { connectionId } = staticDbCtx;
+    staticDbCtx = null;
+    createDbName = '';
+    createDbError = '';
+    createDbModal = { connectionId };
+  }
+
+  async function ctxRefreshStaticDb() {
+    if (!staticDbCtx) return;
+    const { connectionId } = staticDbCtx;
+    staticDbCtx = null;
+    schemaCache = new Map([...schemaCache].filter(([k]) => k !== connectionId));
+    expandedDatabases = new Set(
+      [...expandedDatabases].filter((k) => !k.startsWith(`${connectionId}/`)),
+    );
+    await loadDatabases(connectionId);
   }
 
   async function ctxMoveToGroup(groupId: string | null) {
@@ -815,9 +1138,10 @@
     const { connectionId } = createDbModal;
     const profile = connectionStore.getById(connectionId);
     const d = profile?.dialectInfo;
-    const sql = d?.usesDatabaseKeyword
-      ? `CREATE DATABASE ${qi(name, d)}`
-      : `CREATE SCHEMA ${d ? qi(name, d) : `"${name}"`}`;
+    const sql =
+      d?.hasInstanceDatabases || d?.usesDatabaseKeyword
+        ? `CREATE DATABASE ${qi(name, d)}`
+        : `CREATE SCHEMA ${d ? qi(name, d) : `"${name}"`}`;
     createDbLoading = true;
     createDbError = '';
     try {
@@ -1323,70 +1647,241 @@
             <span class="loading-dots" aria-label="Loading">Loading…</span>
           </div>
         {:else if databases}
-          {#each [...databases.keys()].filter((db) => (settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) && dbMatchesFilter(profile.id, db)) as database}
-            {@const dbKey = `${profile.id}/${database}`}
-            {@const isDbExpanded = expandedDatabases.has(dbKey)}
-            {@const isDbLoading = loadingKeys.has(dbKey)}
-            {@const tables = databases.get(database) ?? []}
+          {@const hasInstanceDbs = profile.dialectInfo?.hasInstanceDatabases ?? false}
+          {#if hasInstanceDbs}
+            <!-- SQL Server 3-level: Instance DB → Schema → Tables -->
+            {#each [...databases.keys()].filter((db) => !db.includes('/') && (settingsStore.settings.showSystemItems || !checkSystemDatabase(db))) as instanceDb}
+              {@const instKey = `${profile.id}/${instanceDb}`}
+              {@const isInstExpanded = expandedDatabases.has(instKey)}
+              {@const isInstLoading = loadingKeys.has(instKey)}
+              {@const isInstSystem = checkSystemDatabase(instanceDb)}
+              <div class="db-item" class:system-item={isInstSystem}>
+                <button
+                  class="db-row"
+                  class:open={isInstExpanded}
+                  onclick={() => toggleInstanceDb(profile.id, instanceDb)}
+                  oncontextmenu={(e) => showInstDbCtx(e, profile.id, instanceDb)}
+                  aria-label="{isInstExpanded ? 'Collapse' : 'Expand'} {instanceDb}"
+                >
+                  <span class="chevron" class:open={isInstExpanded} aria-hidden="true">
+                    <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
+                  </span>
+                  <DbIcon system={isInstSystem} aria-hidden="true" />
+                  <span class="db-name">{instanceDb}</span>
+                  {#if isInstLoading}
+                    <Spinner label="Loading" />
+                  {/if}
+                </button>
 
-            {@const isDbSystem = checkSystemDatabase(database)}
-            <div class="db-item" class:system-item={isDbSystem}>
-              <button
-                class="db-row"
-                class:open={isDbExpanded || !!filterQuery}
-                onclick={() => toggleDatabase(profile.id, database)}
-                oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
-                aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
-              >
-                <span class="chevron" class:open={isDbExpanded || !!filterQuery} aria-hidden="true">
-                  <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
-                </span>
-                <DbIcon system={isDbSystem} aria-hidden="true" />
-                <span class="db-name">{database}</span>
-                {#if isDbLoading}
-                  <Spinner label="Loading" />
-                {/if}
-              </button>
+                {#if isInstExpanded}
+                  {#each (instanceSchemaCache.get(profile.id)?.get(instanceDb) ?? []).filter((s) => settingsStore.settings.showSystemItems || !checkSystemDatabase(s)) as schema}
+                    {@const schemaKey = `${profile.id}/${instanceDb}/${schema}`}
+                    {@const isSchemaExpanded = expandedSchemas.has(schemaKey)}
+                    {@const isSchemaLoading = loadingKeys.has(schemaKey)}
+                    {@const schemaTables = schemaCache.get(profile.id)?.get(`${instanceDb}/${schema}`) ?? []}
+                    <div class="db-item schema-item">
+                      <button
+                        class="db-row schema-row"
+                        class:open={isSchemaExpanded}
+                        onclick={() => toggleSchema(profile.id, instanceDb, schema)}
+                        oncontextmenu={(e) => showSchemaCtx(e, profile.id, instanceDb, schema)}
+                        aria-label="{isSchemaExpanded ? 'Collapse' : 'Expand'} {schema}"
+                      >
+                        <span class="chevron" class:open={isSchemaExpanded} aria-hidden="true">
+                          <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
+                        </span>
+                        <SchemaIcon aria-hidden="true" />
+                        <span class="db-name">{schema}</span>
+                        {#if isSchemaLoading}
+                          <Spinner label="Loading" />
+                        {/if}
+                      </button>
 
-              {#if (isDbExpanded || filterQuery) && tables.length > 0}
-                <div class="table-list">
-                  {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) && (!filterQuery || t.name.toLowerCase().includes(filterQuery.toLowerCase()))) as table}
-                    {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
-                    <button
-                      class="table-row"
-                      class:system-item={isTableSystem}
-                      class:active={isTableActive(profile.id, database, table.name)}
-                      class:dragging={tabDrag.isDragging &&
-                        tabDrag.dragContent?.kind === 'table_browser' &&
-                        tabDrag.dragContent.connectionId === profile.id &&
-                        tabDrag.dragContent.database === database &&
-                        tabDrag.dragContent.table === table.name}
-                      onclick={(e) => {
-                        if (tabDrag.isDragging) {
-                          e.preventDefault();
-                          tabDrag.end();
-                          return;
-                        }
-                        openTable(profile.id, database, table.name);
-                      }}
-                      oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
-                      onpointerdown={(e) => onTablePointerDown(e, profile.id, database, table.name)}
-                      onpointermove={onTablePointerMove}
-                      onpointerup={onTablePointerUp}
-                      title={table.name}
-                      aria-label="Open {table.name}"
-                    >
-                      <TableIcon system={isTableSystem} aria-hidden="true" />
-                      <span class="table-name">{table.name}</span>
-                      {#if table.rowCount !== null}
-                        <span class="row-count">{table.rowCount.toLocaleString()}</span>
+                      {#if isSchemaExpanded && schemaTables.length > 0}
+                        <div class="table-list">
+                          {#each schemaTables.filter((t) => settingsStore.settings.showSystemItems || !checkSystemTable(t.name)) as table}
+                            {@const isTableSystem = checkSystemTable(table.name)}
+                            <button
+                              class="table-row"
+                              class:system-item={isTableSystem}
+                              class:active={isTableActive(profile.id, schema, table.name)}
+                              onclick={(e) => {
+                                if (tabDrag.isDragging) { e.preventDefault(); tabDrag.end(); return; }
+                                openTable(profile.id, schema, table.name, instanceDb);
+                              }}
+                              oncontextmenu={(e) => showTableCtx(e, profile.id, schema, table)}
+                              title={table.name}
+                              aria-label="Open {table.name}"
+                            >
+                              <TableIcon system={isTableSystem} aria-hidden="true" />
+                              <span class="table-name">{table.name}</span>
+                              {#if table.rowCount !== null}
+                                <span class="row-count">{table.rowCount.toLocaleString()}</span>
+                              {/if}
+                            </button>
+                          {/each}
+                        </div>
                       {/if}
-                    </button>
+                    </div>
                   {/each}
+                {/if}
+              </div>
+            {/each}
+          {:else}
+            {@const usesSchema = profile.dialectInfo?.usesSchema ?? false}
+            {@const usesDatabaseKeyword = profile.dialectInfo?.usesDatabaseKeyword ?? false}
+            {#if usesSchema && !usesDatabaseKeyword}
+              <!-- Schema-based (Postgres): static database node wrapping schema list -->
+              {@const dbNodeKey = `${profile.id}/__db__`}
+              {@const isDbNodeExpanded = expandedDatabases.has(dbNodeKey)}
+              <div class="db-item">
+                <button
+                  class="db-row"
+                  class:open={isDbNodeExpanded || !!filterQuery}
+                  onclick={() => {
+                    expandedDatabases = isDbNodeExpanded
+                      ? new Set([...expandedDatabases].filter((k) => k !== dbNodeKey))
+                      : new Set([...expandedDatabases, dbNodeKey]);
+                  }}
+                  oncontextmenu={(e) => showStaticDbCtx(e, profile.id, profile.database)}
+                  aria-label="{isDbNodeExpanded ? 'Collapse' : 'Expand'} {profile.database}"
+                >
+                  <span class="chevron" class:open={isDbNodeExpanded || !!filterQuery} aria-hidden="true">
+                    <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
+                  </span>
+                  <DbIcon system={false} aria-hidden="true" />
+                  <span class="db-name">{profile.database}</span>
+                </button>
+
+                {#if isDbNodeExpanded || filterQuery}
+                  <div class="schema-item">
+                    {#each [...databases.keys()].filter((db) => (settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) && dbMatchesFilter(profile.id, db)) as database}
+                      {@const dbKey = `${profile.id}/${database}`}
+                      {@const isDbExpanded = expandedDatabases.has(dbKey)}
+                      {@const isDbLoading = loadingKeys.has(dbKey)}
+                      {@const tables = databases.get(database) ?? []}
+                      <div class="db-item">
+                        <button
+                          class="db-row schema-row"
+                          class:open={isDbExpanded || !!filterQuery}
+                          onclick={() => toggleDatabase(profile.id, database)}
+                          oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
+                          aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
+                        >
+                          <span class="chevron" class:open={isDbExpanded || !!filterQuery} aria-hidden="true">
+                            <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
+                          </span>
+                          <SchemaIcon aria-hidden="true" />
+                          <span class="db-name">{database}</span>
+                          {#if isDbLoading}<Spinner label="Loading" />{/if}
+                        </button>
+
+                        {#if (isDbExpanded || filterQuery) && tables.length > 0}
+                          <div class="table-list">
+                            {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !checkSystemTable(t.name)) && (!filterQuery || t.name.toLowerCase().includes(filterQuery.toLowerCase()))) as table}
+                              {@const isTableSystem = checkSystemTable(table.name)}
+                              <button
+                                class="table-row"
+                                class:system-item={isTableSystem}
+                                class:active={isTableActive(profile.id, database, table.name)}
+                                class:dragging={tabDrag.isDragging &&
+                                  tabDrag.dragContent?.kind === 'table_browser' &&
+                                  tabDrag.dragContent.connectionId === profile.id &&
+                                  tabDrag.dragContent.database === database &&
+                                  tabDrag.dragContent.table === table.name}
+                                onclick={(e) => {
+                                  if (tabDrag.isDragging) { e.preventDefault(); tabDrag.end(); return; }
+                                  openTable(profile.id, database, table.name);
+                                }}
+                                oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
+                                onpointerdown={(e) => onTablePointerDown(e, profile.id, database, table.name)}
+                                onpointermove={onTablePointerMove}
+                                onpointerup={onTablePointerUp}
+                                title={table.name}
+                                aria-label="Open {table.name}"
+                              >
+                                <TableIcon system={isTableSystem} aria-hidden="true" />
+                                <span class="table-name">{table.name}</span>
+                                {#if table.rowCount !== null}
+                                  <span class="row-count">{table.rowCount.toLocaleString()}</span>
+                                {/if}
+                              </button>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <!-- Regular 2-level: Database → Tables (MySQL, MariaDB, SQLite) -->
+              {#each [...databases.keys()].filter((db) => (settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) && dbMatchesFilter(profile.id, db)) as database}
+                {@const dbKey = `${profile.id}/${database}`}
+                {@const isDbExpanded = expandedDatabases.has(dbKey)}
+                {@const isDbLoading = loadingKeys.has(dbKey)}
+                {@const tables = databases.get(database) ?? []}
+
+                {@const isDbSystem = checkSystemDatabase(database)}
+                <div class="db-item" class:system-item={isDbSystem}>
+                  <button
+                    class="db-row"
+                    class:open={isDbExpanded || !!filterQuery}
+                    onclick={() => toggleDatabase(profile.id, database)}
+                    oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
+                    aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
+                  >
+                    <span class="chevron" class:open={isDbExpanded || !!filterQuery} aria-hidden="true">
+                      <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
+                    </span>
+                    <DbIcon system={isDbSystem} aria-hidden="true" />
+                    <span class="db-name">{database}</span>
+                    {#if isDbLoading}
+                      <Spinner label="Loading" />
+                    {/if}
+                  </button>
+
+                  {#if (isDbExpanded || filterQuery) && tables.length > 0}
+                    <div class="table-list">
+                      {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) && (!filterQuery || t.name.toLowerCase().includes(filterQuery.toLowerCase()))) as table}
+                        {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
+                        <button
+                          class="table-row"
+                          class:system-item={isTableSystem}
+                          class:active={isTableActive(profile.id, database, table.name)}
+                          class:dragging={tabDrag.isDragging &&
+                            tabDrag.dragContent?.kind === 'table_browser' &&
+                            tabDrag.dragContent.connectionId === profile.id &&
+                            tabDrag.dragContent.database === database &&
+                            tabDrag.dragContent.table === table.name}
+                          onclick={(e) => {
+                            if (tabDrag.isDragging) {
+                              e.preventDefault();
+                              tabDrag.end();
+                              return;
+                            }
+                            openTable(profile.id, database, table.name);
+                          }}
+                          oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
+                          onpointerdown={(e) => onTablePointerDown(e, profile.id, database, table.name)}
+                          onpointermove={onTablePointerMove}
+                          onpointerup={onTablePointerUp}
+                          title={table.name}
+                          aria-label="Open {table.name}"
+                        >
+                          <TableIcon system={isTableSystem} aria-hidden="true" />
+                          <span class="table-name">{table.name}</span>
+                          {#if table.rowCount !== null}
+                            <span class="row-count">{table.rowCount.toLocaleString()}</span>
+                          {/if}
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
-              {/if}
-            </div>
-          {/each}
+              {/each}
+            {/if}
+          {/if}
         {/if}
       </div>
     {/if}
@@ -1470,12 +1965,91 @@
         }
       }}>Copy Name</CtxItem
     >
-    {#if !dbCtxProfile?.readOnly && dbCtxProfile?.dialectInfo.usesSchema}
+    {#if !dbCtxProfile?.readOnly && (dbCtxProfile?.dialectInfo.usesSchema || dbCtxProfile?.dialectInfo.usesDatabaseKeyword)}
       <CtxSep />
       <CtxItem danger onclick={ctxDropDatabase}>
-        {dbCtxProfile?.dialectInfo.usesSchema ? 'Drop Schema' : 'Drop Database'}
+        Drop {dbCtxProfile?.dialectInfo.dbLabel}
       </CtxItem>
     {/if}
+  </ContextMenu>
+{/if}
+
+{#if instDbCtx}
+  {@const instDbProfile = connectionStore.getById(instDbCtx.connectionId)}
+  <ContextMenu x={instDbCtx.x} y={instDbCtx.y} open={true} onclose={closeAllCtx}>
+    {#if !instDbProfile?.readOnly}
+      <CtxItem onclick={ctxNewSchemaInDb}>New Schema</CtxItem>
+      <CtxSep />
+    {/if}
+    <CtxItem onclick={ctxNewQueryEditorForInstanceDb}>New Query Editor</CtxItem>
+    <CtxSep />
+    <CtxItem onclick={ctxRefreshInstanceDb}>Refresh</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (instDbCtx) {
+          navigator.clipboard.writeText(instDbCtx.instanceDb);
+          instDbCtx = null;
+        }
+      }}>Copy Name</CtxItem
+    >
+    {#if !instDbProfile?.readOnly}
+      <CtxSep />
+      <CtxItem danger onclick={ctxDropInstanceDatabase}>Drop Database</CtxItem>
+    {/if}
+  </ContextMenu>
+{/if}
+
+{#if schemaCtx}
+  {@const schemaProfile = connectionStore.getById(schemaCtx.connectionId)}
+  <ContextMenu x={schemaCtx.x} y={schemaCtx.y} open={true} onclose={closeAllCtx}>
+    {#if !schemaProfile?.readOnly}
+      <CtxItem onclick={ctxNewTableInSchema}>New Table</CtxItem>
+      <CtxSep />
+    {/if}
+    <CtxItem onclick={ctxNewQueryEditorForSchema}>New Query Editor</CtxItem>
+    <CtxItem onclick={ctxOpenErdForSchema}>Open ERD</CtxItem>
+    <CtxSep />
+    <CtxItem onclick={ctxRefreshSchema}>Refresh</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (schemaCtx) {
+          navigator.clipboard.writeText(schemaCtx.schema);
+          schemaCtx = null;
+        }
+      }}>Copy Name</CtxItem
+    >
+    {#if !schemaProfile?.readOnly}
+      <CtxSep />
+      <CtxItem danger onclick={ctxDropSchemaInDb}>Drop Schema</CtxItem>
+    {/if}
+  </ContextMenu>
+{/if}
+
+{#if staticDbCtx}
+  {@const staticDbProfile = connectionStore.getById(staticDbCtx.connectionId)}
+  <ContextMenu x={staticDbCtx.x} y={staticDbCtx.y} open={true} onclose={closeAllCtx}>
+    {#if !staticDbProfile?.readOnly}
+      <CtxItem onclick={ctxNewSchemaForStaticDb}>New Schema</CtxItem>
+      <CtxSep />
+    {/if}
+    <CtxItem
+      onclick={() => {
+        if (staticDbCtx) {
+          panelStore.openInFocused({ kind: 'query_editor', connectionId: staticDbCtx.connectionId });
+          staticDbCtx = null;
+        }
+      }}>New Query Editor</CtxItem
+    >
+    <CtxSep />
+    <CtxItem onclick={ctxRefreshStaticDb}>Refresh</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (staticDbCtx) {
+          navigator.clipboard.writeText(staticDbCtx.database);
+          staticDbCtx = null;
+        }
+      }}>Copy Name</CtxItem
+    >
   </ContextMenu>
 {/if}
 
@@ -1522,12 +2096,16 @@
   {@const connConnected = isConnected(connCtx.profile.id)}
   <ContextMenu x={connCtx.x} y={connCtx.y} open={true} onclose={closeAllCtx}>
     <CtxItem onclick={ctxNewQueryEditor}>New Query Editor</CtxItem>
-    {#if connConnected && !connCtx.profile.readOnly && connCtx.profile.dialectInfo.usesSchema}
-      <CtxItem onclick={ctxNewDatabase}
-        >New {connCtx.profile.dialectInfo.dbLabel}</CtxItem
-      >
+    {#if connConnected && !connCtx.profile.readOnly}
+      {#if connCtx.profile.dialectInfo.hasInstanceDatabases}
+        <CtxItem onclick={ctxNewDatabase}>New Database</CtxItem>
+      {:else if connCtx.profile.dialectInfo.usesDatabaseKeyword}
+        <CtxItem onclick={ctxNewDatabase}>New {connCtx.profile.dialectInfo.dbLabel}</CtxItem>
+      {/if}
     {/if}
-    <CtxItem onclick={ctxManageUsers}>Manage Users</CtxItem>
+    {#if connCtx.profile.dialectInfo.supportsUserManagement}
+      <CtxItem onclick={ctxManageUsers}>Manage Users</CtxItem>
+    {/if}
     <CtxSep />
     <CtxItem
       onclick={() => {
@@ -1728,6 +2306,50 @@
         <button class="btn" onclick={() => (createDbModal = null)}>Cancel</button>
         <button class="btn btn--primary" onclick={executeCreateDatabase} disabled={createDbLoading}>
           {createDbLoading ? 'Creating…' : 'Create'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+{#if createSchemaModal}
+  <Modal
+    label="New Schema"
+    onbackdropclick={() => {
+      createSchemaModal = null;
+    }}
+  >
+    <div class="create-modal-card">
+      <div class="create-modal-title">
+        New Schema in <span class="create-modal-db">{createSchemaModal.instanceDb}</span>
+      </div>
+      <div class="create-modal-body">
+        <label class="field-label" for="create-schema-name">Schema Name</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          id="create-schema-name"
+          class="field-input"
+          type="text"
+          bind:value={createSchemaName}
+          placeholder="my_schema"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck={false}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') executeCreateSchema();
+            if (e.key === 'Escape') createSchemaModal = null;
+          }}
+          autofocus
+        />
+        {#if createSchemaError}
+          <div class="field-error">{createSchemaError}</div>
+        {/if}
+      </div>
+      <div class="create-modal-footer">
+        <button class="btn" onclick={() => (createSchemaModal = null)}>Cancel</button>
+        <button class="btn btn--primary" onclick={executeCreateSchema} disabled={createSchemaLoading}>
+          {createSchemaLoading ? 'Creating…' : 'Create'}
         </button>
       </div>
     </div>
@@ -2389,6 +3011,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  .schema-item {
+    padding-left: 8px;
+  }
+
+  .schema-row {
+    font-style: italic;
+  }
+
 
   /* ── Table rows ── */
 

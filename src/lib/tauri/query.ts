@@ -8,6 +8,7 @@ export async function executeQuery(
   page: number,
   pageSize: number,
   database?: string | null,
+  instanceDb?: string | null,
 ): Promise<QueryResult> {
   return invoke<QueryResult>('query_execute', {
     connectionId,
@@ -15,6 +16,7 @@ export async function executeQuery(
     page,
     pageSize,
     database: database ?? null,
+    instanceDb: instanceDb ?? null,
   });
 }
 
@@ -22,11 +24,13 @@ export async function executeSelection(
   connectionId: string,
   sql: string,
   database?: string | null,
+  instanceDb?: string | null,
 ): Promise<QueryResult> {
   return invoke<QueryResult>('query_execute_selection', {
     connectionId,
     sql,
     database: database ?? null,
+    instanceDb: instanceDb ?? null,
   });
 }
 
@@ -34,12 +38,14 @@ export async function executeMultiQuery(
   connectionId: string,
   sql: string,
   database?: string | null,
+  instanceDb?: string | null,
   sessionId?: string | null,
 ): Promise<QueryResult[]> {
   return invoke<QueryResult[]>('query_execute_multi', {
     connectionId,
     sql,
     database: database ?? null,
+    instanceDb: instanceDb ?? null,
     sessionId: sessionId ?? null,
   });
 }
@@ -62,8 +68,9 @@ export async function updateRows(
   database: string,
   table: string,
   changes: RowChange[],
+  instanceDb?: string | null,
 ): Promise<UpdateResult> {
-  return invoke<UpdateResult>('query_update_rows', { connectionId, database, table, changes });
+  return invoke<UpdateResult>('query_update_rows', { connectionId, database, table, instanceDb: instanceDb ?? null, changes });
 }
 
 export interface RowDelete {
@@ -75,8 +82,9 @@ export async function deleteRows(
   database: string,
   table: string,
   rows: RowDelete[],
+  instanceDb?: string | null,
 ): Promise<UpdateResult> {
-  return invoke<UpdateResult>('query_delete_rows', { connectionId, database, table, rows });
+  return invoke<UpdateResult>('query_delete_rows', { connectionId, database, table, instanceDb: instanceDb ?? null, rows });
 }
 
 export async function insertRow(
@@ -84,8 +92,9 @@ export async function insertRow(
   database: string,
   table: string,
   values: Record<string, unknown>,
+  instanceDb?: string | null,
 ): Promise<void> {
-  return invoke<void>('query_insert_row', { connectionId, database, table, values });
+  return invoke<void>('query_insert_row', { connectionId, database, table, instanceDb: instanceDb ?? null, values });
 }
 
 export interface SaveChangesResult {
@@ -101,11 +110,13 @@ export async function saveTableChanges(
   updates: RowChange[],
   inserts: Record<string, unknown>[],
   deletes: RowDelete[],
+  instanceDb?: string | null,
 ): Promise<SaveChangesResult> {
   return invoke<SaveChangesResult>('query_save_table_changes', {
     connectionId,
     database,
     table,
+    instanceDb: instanceDb ?? null,
     updates,
     inserts,
     deletes,
@@ -116,6 +127,7 @@ export async function explainQuery(
   connectionId: string,
   sql: string,
   database?: string | null,
+  instanceDb?: string | null,
 ): Promise<ExplainResult> {
-  return invoke<ExplainResult>('query_explain', { connectionId, sql, database: database ?? null });
+  return invoke<ExplainResult>('query_explain', { connectionId, sql, database: database ?? null, instanceDb: instanceDb ?? null });
 }

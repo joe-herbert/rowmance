@@ -114,13 +114,14 @@
     connectionId: string;
     database: string;
     table: string;
+    instanceDb?: string;
     initialFilter?: string;
     isFocused?: boolean;
     itemId?: string;
     splitId?: string;
   }
 
-  let { connectionId, database, table, initialFilter, isFocused = false, itemId = '', splitId = '' }: Props = $props();
+  let { connectionId, database, table, instanceDb, initialFilter, isFocused = false, itemId = '', splitId = '' }: Props = $props();
 
   const connections = useConnections();
   const cellSelectionStore = useCellSelection();
@@ -560,6 +561,7 @@
         rowChanges,
         insertValues,
         deleteChanges,
+        instanceDb,
       );
       const changesSql = buildChangesSql(database, table, rowChanges, insertValues, deleteChanges);
       if (connections.isTransactionActive(connectionId) && changesSql) {
@@ -891,9 +893,9 @@
       }> = cachedSchema
         ? Promise.resolve(cachedSchema)
         : Promise.all([
-            listColumns(connectionId, database, table).catch((): ColumnInfo[] => []),
-            listIndexes(connectionId, database, table).catch((): IndexInfo[] => []),
-            listForeignKeys(connectionId, database, table).catch((): ForeignKeyInfo[] => []),
+            listColumns(connectionId, database, table, instanceDb).catch((): ColumnInfo[] => []),
+            listIndexes(connectionId, database, table, instanceDb).catch((): IndexInfo[] => []),
+            listForeignKeys(connectionId, database, table, instanceDb).catch((): ForeignKeyInfo[] => []),
           ]).then(([columns, indexes, fks]) => {
             const schema = { columns, indexes, foreignKeys: fks };
             tableSchemaCache.set(schemaKey, schema);
@@ -906,9 +908,11 @@
           buildSql(),
           untrack(() => page),
           PAGE_SIZE,
+          database,
+          instanceDb,
         ),
         schemaPromise,
-        filterActive ? executeSelection(connectionId, countSql, database) : Promise.resolve(null),
+        filterActive ? executeSelection(connectionId, countSql, database, instanceDb) : Promise.resolve(null),
       ]);
       const { columns: schemaColumns, indexes, foreignKeys: fks } = schema;
       foreignKeys = fks;
@@ -1064,7 +1068,7 @@
       }
       let countSql = `SELECT COUNT(*) FROM ${fetchCountTarget}`;
       if (conditions.length > 0) countSql += ` WHERE ${conditions.join(' AND ')}`;
-      const countResult = await executeSelection(connectionId, countSql, database);
+      const countResult = await executeSelection(connectionId, countSql, database, instanceDb);
       if (countResult && !countResult.error) {
         const raw = countResult.rows[0]?.[0];
         const totalRows = raw !== null && raw !== undefined ? Number(raw) : null;
@@ -1404,7 +1408,7 @@
       }
       const sql = `SELECT * FROM ${fkTarget} WHERE ${quotedCol} = ${whereVal}`;
       try {
-        const queryResult = await executeQuery(connectionId, sql, 1, 1);
+        const queryResult = await executeQuery(connectionId, sql, 1, 1, database, instanceDb);
         if (queryResult.error) return null;
         return {
           tableName: fk.referencedTable,

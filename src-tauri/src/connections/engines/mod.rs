@@ -70,6 +70,7 @@ fn default_dialect(db_type: &str) -> DialectInfo {
         identifier_escape: "\"\"".into(),
         uses_schema: true,
         db_label: "Database".into(),
+        has_instance_databases: false,
         select_top: false,
         boolean_literals: false,
         uses_ilike: false,

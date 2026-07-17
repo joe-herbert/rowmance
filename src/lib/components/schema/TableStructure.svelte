@@ -33,11 +33,12 @@
     connectionId: string;
     database: string;
     table: string;
+    instanceDb?: string;
     itemId?: string;
     splitId?: string;
   }
 
-  const { connectionId, database, table, itemId = '', splitId = '' }: Props = $props();
+  const { connectionId, database, table, instanceDb, itemId = '', splitId = '' }: Props = $props();
 
   const connections = useConnections();
   const vrStore = useVirtualRelations();
@@ -106,9 +107,9 @@
     isLoading = true;
     loadError = null;
     Promise.all([
-      schemaApi.listColumns(connectionId, database, table),
-      schemaApi.listIndexes(connectionId, database, table),
-      schemaApi.listForeignKeys(connectionId, database, table),
+      schemaApi.listColumns(connectionId, database, table, instanceDb),
+      schemaApi.listIndexes(connectionId, database, table, instanceDb),
+      schemaApi.listForeignKeys(connectionId, database, table, instanceDb),
     ])
       .then(([cols, idxs, fks]) => {
         columns = cols;
@@ -187,7 +188,7 @@
       return;
     }
     try {
-      const cols = await schemaApi.listColumns(connectionId, database, tableName);
+      const cols = await schemaApi.listColumns(connectionId, database, tableName, instanceDb);
       fkRefColumnOptions = cols.map((c) => ({ value: c.name, label: c.name }));
     } catch {
       fkRefColumnOptions = [];

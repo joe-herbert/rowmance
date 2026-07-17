@@ -50,6 +50,11 @@ pub struct DialectInfo {
     /// Human-readable label for the database/schema namespace: "Database" or "Schema".
     #[serde(rename = "dbLabel")]
     pub db_label: String,
+    /// True for SQL Server: the connection tree has an instance-database level above
+    /// schemas. list_databases() returns instance-level databases; callers must then
+    /// call list_schemas() to enumerate schemas within each database.
+    #[serde(rename = "hasInstanceDatabases")]
+    pub has_instance_databases: bool,
 
     // ── Query syntax ──────────────────────────────────────────────────────────
     /// True for SQL Server (`SELECT TOP n`); false for engines that use `LIMIT n`.

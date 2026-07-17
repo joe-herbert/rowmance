@@ -11,9 +11,10 @@ pub async fn erd_get_graph(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     database: String,
+    instance_db: Option<String>,
 ) -> Result<ErdGraph, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.get_erd_graph(&database).await.map_err(AppError::from)
+    engine.get_erd_graph(&database, instance_db.as_deref()).await.map_err(AppError::from)
 }
 
 #[cfg(test)]

@@ -366,6 +366,7 @@ pub fn run() {
             commands::query::query_save_table_changes,
             // Schema introspection & modification
             commands::schema::schema_list_databases,
+            commands::schema::schema_list_schemas,
             commands::schema::schema_list_tables,
             commands::schema::schema_list_columns,
             commands::schema::schema_list_all_columns,

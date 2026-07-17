@@ -188,7 +188,7 @@ async fn csv_execute_from_text(
 
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
     let count = engine
-        .import_csv("", &table_name, &headers, &all_records, create_table)
+        .import_csv("", &table_name, None, &headers, &all_records, create_table)
         .await
         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     let inserted = count as u32;

@@ -8,6 +8,7 @@ export const defaultDialectInfo: DialectInfo = {
   identifierEscape: '""',
   usesSchema: true,
   dbLabel: 'Database',
+  hasInstanceDatabases: false,
   selectTop: false,
   booleanLiterals: false,
   usesIlike: false,

@@ -22,11 +22,12 @@
     database: string;
     objectName: string;
     objectType: 'table' | 'view';
+    instanceDb?: string;
     itemId?: string;
     splitId?: string;
   }
 
-  const { connectionId, database, objectName, objectType, itemId = '', splitId = '' }: Props = $props();
+  const { connectionId, database, objectName, objectType, instanceDb, itemId = '', splitId = '' }: Props = $props();
 
   const tabDrag = useTabDrag();
   const settingsStore = useSettings();
@@ -125,7 +126,7 @@
     isLoading = true;
     loadError = null;
     try {
-      ddlText = await getDdl(connectionId, database, objectName, objectType);
+      ddlText = await getDdl(connectionId, database, objectName, objectType, instanceDb);
     } catch (err) {
       loadError = errorMessage(err);
     } finally {

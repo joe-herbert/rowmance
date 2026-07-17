@@ -12,6 +12,8 @@ struct TableCountPayload {
     #[serde(rename = "connectionId")]
     connection_id: String,
     database: String,
+    #[serde(rename = "instanceDb")]
+    instance_db: Option<String>,
     #[serde(rename = "tableName")]
     table_name: String,
     count: i64,
@@ -27,6 +29,17 @@ pub async fn schema_list_databases(
     engine.list_databases().await.map_err(AppError::from)
 }
 
+/// List all user schemas within an instance-level database (SQL Server only).
+#[tauri::command]
+pub async fn schema_list_schemas(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    instance_db: String,
+) -> Result<Vec<String>, AppError> {
+    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    engine.list_schemas(&instance_db).await.map_err(AppError::from)
+}
+
 /// List all tables in the given database/schema.
 /// Row counts are returned immediately using cheap estimates where available.
 /// Accurate counts for tables with a zero/null estimate are fetched in the
@@ -37,9 +50,10 @@ pub async fn schema_list_tables(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     database: String,
+    instance_db: Option<String>,
 ) -> Result<Vec<TableInfo>, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    let tables = engine.list_tables(&database).await.map_err(AppError::from)?;
+    let tables = engine.list_tables(&database, instance_db.as_deref()).await.map_err(AppError::from)?;
 
     let names: Vec<String> = tables
         .iter()
@@ -50,14 +64,16 @@ pub async fn schema_list_tables(
         let engine = engine.clone();
         let conn_id = connection_id.clone();
         let db = database.clone();
+        let inst_db = instance_db.clone();
         tokio::spawn(async move {
             for name in names {
-                if let Ok(count) = engine.count_table(&db, &name).await {
+                if let Ok(count) = engine.count_table(&db, &name, inst_db.as_deref()).await {
                     let _ = app.emit(
                         "table-count-updated",
                         TableCountPayload {
                             connection_id: conn_id.clone(),
                             database: db.clone(),
+                            instance_db: inst_db.clone(),
                             table_name: name,
                             count,
                         },
@@ -77,9 +93,10 @@ pub async fn schema_list_columns(
     connection_id: String,
     database: String,
     table: String,
+    instance_db: Option<String>,
 ) -> Result<Vec<ColumnInfo>, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_columns(&database, &table).await.map_err(AppError::from)
+    engine.list_columns(&database, &table, instance_db.as_deref()).await.map_err(AppError::from)
 }
 
 /// List all columns for every table and view in a database in one round-trip.
@@ -89,9 +106,10 @@ pub async fn schema_list_all_columns(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     database: String,
+    instance_db: Option<String>,
 ) -> Result<Vec<BulkColumnRow>, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_all_columns(&database).await.map_err(AppError::from)
+    engine.list_all_columns(&database, instance_db.as_deref()).await.map_err(AppError::from)
 }
 
 /// List all indexes for a given table.
@@ -101,9 +119,10 @@ pub async fn schema_list_indexes(
     connection_id: String,
     database: String,
     table: String,
+    instance_db: Option<String>,
 ) -> Result<Vec<IndexInfo>, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_indexes(&database, &table).await.map_err(AppError::from)
+    engine.list_indexes(&database, &table, instance_db.as_deref()).await.map_err(AppError::from)
 }
 
 /// List all foreign keys for a given table.
@@ -113,9 +132,10 @@ pub async fn schema_list_foreign_keys(
     connection_id: String,
     database: String,
     table: String,
+    instance_db: Option<String>,
 ) -> Result<Vec<ForeignKeyInfo>, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_foreign_keys(&database, &table).await.map_err(AppError::from)
+    engine.list_foreign_keys(&database, &table, instance_db.as_deref()).await.map_err(AppError::from)
 }
 
 /// Execute a DDL statement (ALTER TABLE, CREATE INDEX, etc.) against the connection.
@@ -163,7 +183,8 @@ pub async fn schema_get_ddl(
     database: String,
     object_name: String,
     #[allow(unused_variables)] object_type: String,
+    instance_db: Option<String>,
 ) -> Result<String, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.get_ddl(&database, &object_name).await.map_err(AppError::from)
+    engine.get_ddl(&database, &object_name, instance_db.as_deref()).await.map_err(AppError::from)
 }

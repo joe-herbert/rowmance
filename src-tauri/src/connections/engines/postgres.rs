@@ -53,7 +53,7 @@ impl DatabaseEngine for PostgresEngine {
         crate::connections::postgres::list_databases(&self.pool).await
     }
 
-    async fn list_tables(&self, database: &str) -> Result<Vec<TableInfo>, RowmanceError> {
+    async fn list_tables(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError> {
         crate::connections::postgres::list_tables(&self.pool, database).await
     }
 
@@ -61,11 +61,12 @@ impl DatabaseEngine for PostgresEngine {
         &self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
     ) -> Result<Vec<ColumnInfo>, RowmanceError> {
         crate::connections::postgres::list_columns(&self.pool, database, table).await
     }
 
-    async fn list_all_columns(&self, database: &str) -> Result<Vec<BulkColumnRow>, RowmanceError> {
+    async fn list_all_columns(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<BulkColumnRow>, RowmanceError> {
         let pairs = crate::connections::postgres::list_all_columns(&self.pool, database).await?;
         Ok(pairs
             .into_iter()
@@ -87,6 +88,7 @@ impl DatabaseEngine for PostgresEngine {
         &self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
     ) -> Result<Vec<IndexInfo>, RowmanceError> {
         crate::connections::postgres::list_indexes(&self.pool, database, table).await
     }
@@ -95,15 +97,16 @@ impl DatabaseEngine for PostgresEngine {
         &self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
     ) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
         crate::connections::postgres::list_foreign_keys(&self.pool, database, table).await
     }
 
-    async fn count_table(&self, database: &str, table: &str) -> Result<i64, RowmanceError> {
+    async fn count_table(&self, database: &str, table: &str, _instance_db: Option<&str>) -> Result<i64, RowmanceError> {
         crate::connections::postgres::count_table(&self.pool, database, table).await
     }
 
-    async fn get_ddl(&self, database: &str, table: &str) -> Result<String, RowmanceError> {
+    async fn get_ddl(&self, database: &str, table: &str, _instance_db: Option<&str>) -> Result<String, RowmanceError> {
         crate::connections::postgres::get_ddl(&self.pool, database, table).await
     }
 
@@ -111,6 +114,7 @@ impl DatabaseEngine for PostgresEngine {
         &self,
         sql: &str,
         database: Option<&str>,
+        _instance_db: Option<&str>,
         page_size: u32,
         offset: u32,
     ) -> Result<EngineQueryResult, RowmanceError> {
@@ -136,7 +140,7 @@ impl DatabaseEngine for PostgresEngine {
             .map_err(RowmanceError::Database)
     }
 
-    async fn count_query_rows(&self, sql: &str, database: Option<&str>) -> Option<i64> {
+    async fn count_query_rows(&self, sql: &str, database: Option<&str>, _instance_db: Option<&str>) -> Option<i64> {
         let sql_trimmed = sql.trim_end_matches(';');
         let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
         let mut conn = self.pool.acquire().await.ok()?;
@@ -157,6 +161,7 @@ impl DatabaseEngine for PostgresEngine {
         &self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
         updates: &[RowChange],
         inserts: &[HashMap<String, serde_json::Value>],
         deletes: &[RowDelete],
@@ -209,7 +214,7 @@ impl DatabaseEngine for PostgresEngine {
         Ok(Box::new(PostgresTransaction { conn }))
     }
 
-    async fn explain(&self, sql: &str, database: Option<&str>) -> Result<ExplainResult, RowmanceError> {
+    async fn explain(&self, sql: &str, database: Option<&str>, _instance_db: Option<&str>) -> Result<ExplainResult, RowmanceError> {
         let mut conn = self
             .pool
             .acquire()
@@ -251,7 +256,7 @@ impl DatabaseEngine for PostgresEngine {
         Ok(Box::new(PostgresTransaction { conn }))
     }
 
-    async fn get_erd_graph(&self, schema: &str) -> Result<ErdGraph, RowmanceError> {
+    async fn get_erd_graph(&self, schema: &str, _instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError> {
         #[derive(sqlx::FromRow)]
         struct ColRow {
             table_name: Option<String>,
@@ -517,6 +522,7 @@ impl DatabaseEngine for PostgresEngine {
         &self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
         headers: &[String],
         rows: &[Vec<String>],
         create_table: bool,
@@ -598,6 +604,7 @@ impl EngineTransaction for PostgresTransaction {
         &mut self,
         database: &str,
         table: &str,
+        _instance_db: Option<&str>,
         updates: &[RowChange],
         inserts: &[std::collections::HashMap<String, serde_json::Value>],
         deletes: &[RowDelete],
@@ -1034,6 +1041,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             identifier_escape: "\"\"".into(),
             uses_schema: true,
             db_label: "Schema".into(),
+            has_instance_databases: false,
             select_top: false,
             boolean_literals: true,
             uses_ilike: true,

@@ -33,6 +33,8 @@ export interface DialectInfo {
   usesSchema: boolean;
   /** "Database" or "Schema". */
   dbLabel: string;
+  /** True for SQL Server: connection tree has Instance Database → Schema → Tables hierarchy. */
+  hasInstanceDatabases: boolean;
 
   // ── Query syntax ────────────────────────────────────────────────────────────
   /** SQL Server uses SELECT TOP n; others use LIMIT n. */
@@ -451,17 +453,19 @@ export type PanelKind =
       connectionId: string;
       database: string;
       table: string;
+      instanceDb?: string;
       initialFilter?: string;
     }
-  | { kind: 'table_structure'; connectionId: string; database: string; table: string }
+  | { kind: 'table_structure'; connectionId: string; database: string; table: string; instanceDb?: string }
   | {
       kind: 'ddl_viewer';
       connectionId: string;
       database: string;
       objectName: string;
       objectType: 'table' | 'view';
+      instanceDb?: string;
     }
-  | { kind: 'erd'; connectionId: string; database: string }
+  | { kind: 'erd'; connectionId: string; database: string; instanceDb?: string }
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'settings' }
   | { kind: 'user_manager'; connectionId: string }
