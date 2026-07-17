@@ -48,6 +48,7 @@ bb8 = "0.9"
 bb8-tiberius = { version = "0.16", default-features = false, features = ["with-tokio"] }
 futures = { version = "0.3", default-features = false, features = ["std"] }
 tokio-util = { version = "0.7", features = ["compat"] }
+oracle = { version = "0.6", features = ["chrono"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2"

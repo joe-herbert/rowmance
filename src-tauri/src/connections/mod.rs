@@ -2,6 +2,7 @@ pub mod engine;
 pub mod engines;
 pub mod erd;
 pub mod mysql;
+pub mod oracle;
 pub mod pool_manager;
 pub mod postgres;
 pub mod sqlite;

@@ -225,6 +225,19 @@
       return;
     }
 
+    if (dialect === 'oracle_text') {
+      try {
+        const parsed = JSON.parse(rawJson);
+        xmlPlanText = parsed?.text ?? rawJson;
+      } catch {
+        xmlPlanText = rawJson;
+      }
+      parseError = null;
+      layoutNodes = [];
+      layoutEdges = [];
+      return;
+    }
+
     if (dialect.endsWith('_queryplan')) {
       try {
         parseError = null;

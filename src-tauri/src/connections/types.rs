@@ -270,7 +270,7 @@ pub struct EngineQueryResult {
 }
 
 /// A row change (update) — primary key values + the new cell values.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct RowChange {
     #[serde(rename = "primaryKeys")]
     pub primary_keys: std::collections::HashMap<String, serde_json::Value>,
@@ -278,7 +278,7 @@ pub struct RowChange {
 }
 
 /// A row to delete, identified by its primary key column values.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct RowDelete {
     #[serde(rename = "primaryKeys")]
     pub primary_keys: std::collections::HashMap<String, serde_json::Value>,

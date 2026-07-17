@@ -1,4 +1,5 @@
 pub mod mysql;
+pub mod oracle;
 pub mod postgres;
 pub mod sqlite;
 pub mod sqlserver;
@@ -26,6 +27,7 @@ pub fn all_known_dialects() -> Vec<(String, DialectInfo)> {
         ("postgres".to_owned(),  postgres::dialect_info("postgres").unwrap()),
         ("sqlite".to_owned(),    sqlite::dialect_info("sqlite").unwrap()),
         ("sqlserver".to_owned(), sqlserver::dialect_info("sqlserver").unwrap()),
+        ("oracle".to_owned(),    oracle::dialect_info("oracle").unwrap()),
     ]
 }
 
@@ -58,6 +60,9 @@ pub async fn connect_for_db_type(
         }
         "sqlserver" => {
             sqlserver::create_pool(host, port, database, username, password, pool_max, ssl_enabled, ssl_ca_path, read_only).await
+        }
+        "oracle" => {
+            oracle::create_pool(host, port, database, username, password, pool_max, ssl_enabled, ssl_ca_path, read_only).await
         }
         other => Err(RowmanceError::ConnectionNotFound(format!("Unknown db_type: {other}")))
     }
