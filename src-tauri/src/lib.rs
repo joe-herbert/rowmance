@@ -457,6 +457,18 @@ pub fn run() {
             commands::virtual_relations::polymorphic_vr_create,
             commands::virtual_relations::polymorphic_vr_update,
             commands::virtual_relations::polymorphic_vr_delete,
+            // Server administration
+            commands::server_admin::server_admin_get_capabilities,
+            commands::server_admin::server_admin_list_processes,
+            commands::server_admin::server_admin_kill_session,
+            commands::server_admin::server_admin_cancel_session,
+            commands::server_admin::server_admin_get_status,
+            commands::server_admin::server_admin_list_variables,
+            commands::server_admin::server_admin_set_variable,
+            commands::server_admin::server_admin_list_locks,
+            commands::server_admin::server_admin_list_scheduled_jobs,
+            commands::server_admin::server_admin_get_innodb_status,
+            commands::server_admin::server_admin_get_vacuum_status,
             // User management
             commands::users::users_list,
             commands::users::users_get_grants,

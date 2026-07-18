@@ -13,8 +13,10 @@ use sqlparser::parser::Parser;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::{build_edges_from_fk_rows, group_into_tables, FkNorm};
 use crate::connections::types::{
-    BulkColumnRow, ColumnInfo, ColumnMeta, DbUser, ErdColumn, ErdGraph,
-    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, DbUser, ErdColumn, ErdGraph,
+    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
+    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
+    TableInfo, VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -542,6 +544,298 @@ impl DatabaseEngine for MySqlEngine {
         }
 
         Ok(inserted)
+    }
+
+    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+        let process_list = match sqlx::query("SELECT 1 FROM information_schema.PROCESSLIST LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await
+        {
+            Ok(_) => CapabilityStatus::Supported,
+            Err(e) => {
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("access denied") || msg.contains("denied") {
+                    CapabilityStatus::InsufficientPrivileges
+                } else {
+                    CapabilityStatus::NotSupported
+                }
+            }
+        };
+
+        Ok(ServerAdminCapabilityFlags {
+            process_list,
+            kill_session: CapabilityStatus::Supported,
+            cancel_session: CapabilityStatus::NotSupported,
+            server_status: CapabilityStatus::Supported,
+            variables: CapabilityStatus::Supported,
+            set_variable: CapabilityStatus::Supported,
+            scheduled_jobs: CapabilityStatus::Supported,
+            locks: CapabilityStatus::Supported,
+            innodb_status: CapabilityStatus::Supported,
+            vacuum_status: CapabilityStatus::NotSupported,
+        })
+    }
+
+    async fn list_processes(&self) -> Result<Vec<ProcessInfo>, RowmanceError> {
+        let rows = sqlx::query(
+            "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO \
+             FROM information_schema.PROCESSLIST",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        Ok(rows
+            .iter()
+            .map(|r| ProcessInfo {
+                id: r.get::<u64, _>("ID").to_string(),
+                user: r.get("USER"),
+                host: r.get("HOST"),
+                database: r.get("DB"),
+                command: r.get("COMMAND"),
+                time_seconds: r.try_get::<u64, _>("TIME").ok(),
+                state: r.get("STATE"),
+                info: r.get("INFO"),
+                can_kill: true,
+                can_cancel: false,
+            })
+            .collect())
+    }
+
+    async fn kill_session(&self, session_id: &str) -> Result<(), RowmanceError> {
+        let id: u64 = session_id
+            .parse()
+            .map_err(|_| RowmanceError::ConnectionNotFound("Invalid session id".to_string()))?;
+        sqlx::query(&format!("KILL CONNECTION {id}"))
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(RowmanceError::Database)
+    }
+
+    async fn get_server_status(&self) -> Result<ServerStatus, RowmanceError> {
+        let version_row = sqlx::query("SELECT VERSION() AS v")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+        let version: String = version_row.get("v");
+
+        let status_rows = sqlx::query("SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime', 'Threads_connected', 'Questions', 'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads')")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+
+        let mut status_map = std::collections::HashMap::<String, String>::new();
+        for row in &status_rows {
+            let k: String = row.get("Variable_name");
+            let v: String = row.get("Value");
+            status_map.insert(k, v);
+        }
+
+        let max_conn_row = sqlx::query("SHOW VARIABLES LIKE 'max_connections'")
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+        let connections_max = max_conn_row
+            .as_ref()
+            .and_then(|r| r.get::<Option<String>, _>("Value"))
+            .and_then(|v| v.parse::<u64>().ok());
+
+        let uptime_seconds = status_map.get("Uptime").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+        let connections_current = status_map.get("Threads_connected").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+
+        let qps = if uptime_seconds > 0 {
+            status_map.get("Questions").and_then(|v| v.parse::<f64>().ok()).map(|q| q / uptime_seconds as f64)
+        } else {
+            None
+        };
+
+        let buf_requests = status_map.get("Innodb_buffer_pool_read_requests").and_then(|v| v.parse::<f64>().ok());
+        let buf_reads = status_map.get("Innodb_buffer_pool_reads").and_then(|v| v.parse::<f64>().ok());
+        let cache_hit_ratio = match (buf_requests, buf_reads) {
+            (Some(req), Some(rd)) if req > 0.0 => Some((req - rd) / req * 100.0),
+            _ => None,
+        };
+
+        Ok(ServerStatus {
+            version,
+            uptime_seconds,
+            connections_current,
+            connections_max,
+            queries_per_second: qps,
+            cache_hit_ratio,
+            extra: std::collections::HashMap::new(),
+        })
+    }
+
+    async fn list_variables(&self) -> Result<Vec<ServerVariable>, RowmanceError> {
+        let global_rows = sqlx::query("SHOW GLOBAL VARIABLES")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+
+        let session_rows = sqlx::query("SHOW SESSION VARIABLES")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+
+        let mut global_map = std::collections::HashMap::<String, String>::new();
+        for row in &global_rows {
+            let k: String = row.get("Variable_name");
+            let v: String = row.get("Value");
+            global_map.insert(k, v);
+        }
+
+        let mut session_map = std::collections::HashMap::<String, String>::new();
+        for row in &session_rows {
+            let k: String = row.get("Variable_name");
+            let v: String = row.get("Value");
+            session_map.insert(k, v);
+        }
+
+        let mut vars: Vec<ServerVariable> = Vec::new();
+        for (name, value) in &global_map {
+            let in_session = session_map.contains_key(name.as_str());
+            let scope = if in_session { VarScope::Both } else { VarScope::Global };
+            vars.push(ServerVariable {
+                name: name.clone(),
+                value: value.clone(),
+                scope,
+                is_dynamic: true,
+                restart_required: false,
+                description: None,
+                data_type: None,
+            });
+        }
+        for (name, value) in &session_map {
+            if !global_map.contains_key(name.as_str()) {
+                vars.push(ServerVariable {
+                    name: name.clone(),
+                    value: value.clone(),
+                    scope: VarScope::Session,
+                    is_dynamic: true,
+                    restart_required: false,
+                    description: None,
+                    data_type: None,
+                });
+            }
+        }
+
+        vars.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(vars)
+    }
+
+    async fn set_variable(&self, name: &str, value: &str, scope: VarScope) -> Result<(), RowmanceError> {
+        let scope_str = match scope {
+            VarScope::Session => "SESSION",
+            VarScope::Global | VarScope::Both => "GLOBAL",
+        };
+        let en = name.replace('`', "``");
+        let ev = escape_sql_string(value);
+        let sql = format!("SET {scope_str} `{en}` = '{ev}'");
+        sqlx::query(&sql)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(RowmanceError::Database)
+    }
+
+    async fn list_locks(&self) -> Result<Vec<LockInfo>, RowmanceError> {
+        let rows_result = sqlx::query(
+            "SELECT \
+                LOCK_ID, ENGINE_TRANSACTION_ID, LOCK_MODE, LOCK_TYPE, OBJECT_NAME \
+             FROM performance_schema.data_locks \
+             WHERE LOCK_STATUS = 'WAITING' OR OBJECT_NAME IS NOT NULL \
+             LIMIT 200",
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        match rows_result {
+            Ok(rows) => {
+                Ok(rows.iter().map(|r| LockInfo {
+                    lock_id: r.try_get::<String, _>("LOCK_ID").unwrap_or_default(),
+                    blocker_session_id: None,
+                    waiting_session_id: r.try_get::<Option<u64>, _>("ENGINE_TRANSACTION_ID").ok().flatten().map(|v| v.to_string()),
+                    lock_type: r.try_get::<String, _>("LOCK_TYPE").unwrap_or_default(),
+                    lock_mode: r.try_get::<String, _>("LOCK_MODE").unwrap_or_default(),
+                    object_name: r.try_get("OBJECT_NAME").ok(),
+                    duration_ms: None,
+                }).collect())
+            }
+            Err(_) => {
+                let rows2 = sqlx::query(
+                    "SELECT \
+                        r.trx_id AS waiting_trx_id, \
+                        r.trx_mysql_thread_id AS waiting_thread, \
+                        b.trx_id AS blocking_trx_id, \
+                        b.trx_mysql_thread_id AS blocking_thread, \
+                        r.trx_query AS waiting_query \
+                     FROM information_schema.INNODB_TRX r \
+                     INNER JOIN information_schema.INNODB_TRX b ON b.trx_id != r.trx_id \
+                     WHERE r.trx_wait_started IS NOT NULL \
+                     LIMIT 200",
+                )
+                .fetch_all(&self.pool)
+                .await
+                .map_err(RowmanceError::Database)?;
+
+                Ok(rows2.iter().map(|r| LockInfo {
+                    lock_id: r.try_get::<String, _>("waiting_trx_id").unwrap_or_default(),
+                    blocker_session_id: r.try_get::<Option<u64>, _>("blocking_thread").ok().flatten().map(|v| v.to_string()),
+                    waiting_session_id: r.try_get::<Option<u64>, _>("waiting_thread").ok().flatten().map(|v| v.to_string()),
+                    lock_type: "InnoDB".to_string(),
+                    lock_mode: "LOCK".to_string(),
+                    object_name: None,
+                    duration_ms: None,
+                }).collect())
+            }
+        }
+    }
+
+    async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
+        let rows = sqlx::query(
+            "SELECT EVENT_NAME, EVENT_SCHEMA, STATUS, INTERVAL_VALUE, INTERVAL_FIELD, \
+                    LAST_EXECUTED, EXECUTE_AT, EVENT_DEFINITION \
+             FROM information_schema.EVENTS \
+             ORDER BY EVENT_SCHEMA, EVENT_NAME",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        Ok(rows.iter().map(|r| {
+            let schema: String = r.try_get("EVENT_SCHEMA").unwrap_or_default();
+            let name: String = r.try_get("EVENT_NAME").unwrap_or_default();
+            let status: String = r.try_get("STATUS").unwrap_or_default();
+            let interval_value: Option<String> = r.try_get("INTERVAL_VALUE").ok().flatten();
+            let interval_field: Option<String> = r.try_get("INTERVAL_FIELD").ok().flatten();
+            let schedule = match (interval_value, interval_field) {
+                (Some(v), Some(f)) => format!("EVERY {v} {f}"),
+                _ => "ONE TIME".to_string(),
+            };
+            let last_run: Option<String> = r.try_get("LAST_EXECUTED").ok().flatten();
+            let next_run: Option<String> = r.try_get("EXECUTE_AT").ok().flatten();
+            let body: Option<String> = r.try_get("EVENT_DEFINITION").ok();
+            ScheduledJob {
+                id: format!("{schema}.{name}"),
+                name: format!("{schema}.{name}"),
+                schedule,
+                enabled: status == "ENABLED",
+                last_run,
+                next_run,
+                body,
+            }
+        }).collect())
+    }
+
+    async fn get_innodb_status(&self) -> Result<String, RowmanceError> {
+        let row = sqlx::query("SHOW ENGINE INNODB STATUS")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+        let status: String = row.get("Status");
+        Ok(status)
     }
 }
 

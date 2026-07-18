@@ -469,6 +469,7 @@ export type PanelKind =
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'settings' }
   | { kind: 'user_manager'; connectionId: string }
+  | { kind: 'server_admin'; connectionId: string }
   | { kind: 'speed_analysis' }
   | { kind: 'release_notes'; version: string; notes: string }
   | { kind: 'connections' }
@@ -677,6 +678,91 @@ export interface Dashboard {
   widgets: DashboardWidget[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Server Admin ─────────────────────────────────────────────────────────────
+
+export type CapabilityStatus =
+  | { status: 'supported' }
+  | { status: 'notSupported' }
+  | { status: 'insufficientPrivileges' }
+  | { status: 'extensionRequired'; extension: string };
+
+export interface ServerAdminCapabilityFlags {
+  processList: CapabilityStatus;
+  killSession: CapabilityStatus;
+  cancelSession: CapabilityStatus;
+  serverStatus: CapabilityStatus;
+  variables: CapabilityStatus;
+  setVariable: CapabilityStatus;
+  scheduledJobs: CapabilityStatus;
+  locks: CapabilityStatus;
+  innodbStatus: CapabilityStatus;
+  vacuumStatus: CapabilityStatus;
+}
+
+export interface ProcessInfo {
+  id: string;
+  user: string | null;
+  host: string | null;
+  database: string | null;
+  command: string | null;
+  timeSeconds: number | null;
+  state: string | null;
+  info: string | null;
+  canKill: boolean;
+  canCancel: boolean;
+}
+
+export interface ServerStatus {
+  version: string;
+  uptimeSeconds: number;
+  connectionsCurrent: number;
+  connectionsMax: number | null;
+  queriesPerSecond: number | null;
+  cacheHitRatio: number | null;
+  extra: Record<string, string>;
+}
+
+export type VarScope = 'session' | 'global' | 'both';
+
+export interface ServerVariable {
+  name: string;
+  value: string;
+  scope: VarScope;
+  isDynamic: boolean;
+  restartRequired: boolean;
+  description: string | null;
+  dataType: string | null;
+}
+
+export interface LockInfo {
+  lockId: string;
+  blockerSessionId: string | null;
+  waitingSessionId: string | null;
+  lockType: string;
+  lockMode: string;
+  objectName: string | null;
+  durationMs: number | null;
+}
+
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  schedule: string;
+  enabled: boolean;
+  lastRun: string | null;
+  nextRun: string | null;
+  body: string | null;
+}
+
+export interface VacuumInfo {
+  table: string;
+  lastVacuum: string | null;
+  lastAutoVacuum: string | null;
+  deadTuples: number;
+  liveTuples: number;
+  bloatEstimateBytes: number | null;
 }
 
 // ── Errors ───────────────────────────────────────────────────────────────────

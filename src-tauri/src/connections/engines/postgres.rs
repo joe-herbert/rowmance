@@ -13,8 +13,10 @@ use sqlparser::parser::Parser;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::{build_edges_from_fk_rows, group_into_tables, FkNorm};
 use crate::connections::types::{
-    BulkColumnRow, ColumnInfo, ColumnMeta, DbUser, ErdColumn, ErdGraph, EngineQueryResult,
-    ExplainResult, ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, DbUser, ErdColumn, ErdGraph,
+    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
+    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
+    TableInfo, VacuumInfo, VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -580,6 +582,312 @@ impl DatabaseEngine for PostgresEngine {
         }
 
         Ok(inserted)
+    }
+
+    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+        let process_list = match sqlx::query("SELECT 1 FROM pg_stat_activity WHERE pid != pg_backend_pid() LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await
+        {
+            Ok(_) => CapabilityStatus::Supported,
+            Err(e) => {
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("permission") || msg.contains("denied") {
+                    CapabilityStatus::InsufficientPrivileges
+                } else {
+                    CapabilityStatus::NotSupported
+                }
+            }
+        };
+
+        let pg_cron = match sqlx::query("SELECT 1 FROM pg_extension WHERE extname = 'pg_cron'")
+            .fetch_optional(&self.pool)
+            .await
+        {
+            Ok(Some(_)) => CapabilityStatus::Supported,
+            _ => CapabilityStatus::ExtensionRequired { extension: "pg_cron".to_string() },
+        };
+
+        Ok(ServerAdminCapabilityFlags {
+            process_list,
+            kill_session: CapabilityStatus::Supported,
+            cancel_session: CapabilityStatus::Supported,
+            server_status: CapabilityStatus::Supported,
+            variables: CapabilityStatus::Supported,
+            set_variable: CapabilityStatus::Supported,
+            scheduled_jobs: pg_cron,
+            locks: CapabilityStatus::Supported,
+            innodb_status: CapabilityStatus::NotSupported,
+            vacuum_status: CapabilityStatus::Supported,
+        })
+    }
+
+    async fn list_processes(&self) -> Result<Vec<ProcessInfo>, RowmanceError> {
+        let rows = sqlx::query(
+            "SELECT pid, usename, client_addr, datname, state, wait_event_type, \
+                    EXTRACT(EPOCH FROM (now() - query_start))::bigint AS elapsed_secs, \
+                    left(query, 500) AS query_text \
+             FROM pg_stat_activity \
+             WHERE pid != pg_backend_pid() \
+             ORDER BY query_start NULLS LAST",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        Ok(rows.iter().map(|r| {
+            let pid: i32 = r.try_get("pid").unwrap_or(0);
+            ProcessInfo {
+                id: pid.to_string(),
+                user: r.try_get("usename").ok(),
+                host: r.try_get::<Option<String>, _>("client_addr").ok().flatten(),
+                database: r.try_get("datname").ok(),
+                command: r.try_get("wait_event_type").ok().flatten(),
+                time_seconds: r.try_get::<Option<i64>, _>("elapsed_secs").ok().flatten().map(|v| v.max(0) as u64),
+                state: r.try_get("state").ok(),
+                info: r.try_get("query_text").ok(),
+                can_kill: true,
+                can_cancel: true,
+            }
+        }).collect())
+    }
+
+    async fn kill_session(&self, pid: &str) -> Result<(), RowmanceError> {
+        let pid_num: i32 = pid.parse()
+            .map_err(|_| RowmanceError::ConnectionNotFound("Invalid pid".to_string()))?;
+        sqlx::query("SELECT pg_terminate_backend($1)")
+            .bind(pid_num)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(RowmanceError::Database)
+    }
+
+    async fn cancel_session(&self, pid: &str) -> Result<(), RowmanceError> {
+        let pid_num: i32 = pid.parse()
+            .map_err(|_| RowmanceError::ConnectionNotFound("Invalid pid".to_string()))?;
+        sqlx::query("SELECT pg_cancel_backend($1)")
+            .bind(pid_num)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(RowmanceError::Database)
+    }
+
+    async fn get_server_status(&self) -> Result<ServerStatus, RowmanceError> {
+        let version_row = sqlx::query("SELECT version() AS v")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+        let version: String = version_row.get("v");
+
+        let uptime_row = sqlx::query(
+            "SELECT EXTRACT(EPOCH FROM now() - pg_postmaster_start_time())::bigint AS secs",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+        let uptime_seconds: u64 = uptime_row.try_get::<i64, _>("secs").unwrap_or(0).max(0) as u64;
+
+        let conn_row = sqlx::query("SELECT count(*) AS cnt FROM pg_stat_activity")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RowmanceError::Database)?;
+        let connections_current: u64 = conn_row.try_get::<i64, _>("cnt").unwrap_or(0).max(0) as u64;
+
+        let max_conn_row = sqlx::query("SHOW max_connections")
+            .fetch_one(&self.pool)
+            .await
+            .ok();
+        let connections_max = max_conn_row
+            .as_ref()
+            .and_then(|r| r.try_get::<String, _>("max_connections").ok())
+            .and_then(|v| v.parse::<u64>().ok());
+
+        let bgwriter_row = sqlx::query(
+            "SELECT blks_hit, blks_read FROM pg_stat_database WHERE datname = current_database()",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        let cache_hit_ratio = bgwriter_row.as_ref().and_then(|r| {
+            let hit: i64 = r.try_get("blks_hit").ok()?;
+            let read: i64 = r.try_get("blks_read").ok()?;
+            let total = hit + read;
+            if total > 0 {
+                Some(hit as f64 / total as f64 * 100.0)
+            } else {
+                None
+            }
+        });
+
+        Ok(ServerStatus {
+            version,
+            uptime_seconds,
+            connections_current,
+            connections_max,
+            queries_per_second: None,
+            cache_hit_ratio,
+            extra: std::collections::HashMap::new(),
+        })
+    }
+
+    async fn list_variables(&self) -> Result<Vec<ServerVariable>, RowmanceError> {
+        let rows = sqlx::query(
+            "SELECT name, setting, unit, context, short_desc, vartype \
+             FROM pg_settings \
+             ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        Ok(rows.iter().map(|r| {
+            let name: String = r.try_get("name").unwrap_or_default();
+            let setting: String = r.try_get("setting").unwrap_or_default();
+            let unit: Option<String> = r.try_get("unit").ok().flatten();
+            let context: String = r.try_get("context").unwrap_or_default();
+            let short_desc: Option<String> = r.try_get("short_desc").ok();
+            let vartype: String = r.try_get("vartype").unwrap_or_default();
+
+            let value = if let Some(u) = &unit {
+                format!("{setting} {u}")
+            } else {
+                setting
+            };
+
+            let (is_dynamic, restart_required) = match context.as_str() {
+                "user" | "superuser" | "backend" | "superuser-backend" => (true, false),
+                "sighup" => (true, false),
+                "postmaster" => (false, true),
+                _ => (false, false),
+            };
+
+            let scope = match context.as_str() {
+                "user" | "backend" => VarScope::Session,
+                _ => VarScope::Global,
+            };
+
+            ServerVariable {
+                name,
+                value,
+                scope,
+                is_dynamic,
+                restart_required,
+                description: short_desc,
+                data_type: Some(vartype),
+            }
+        }).collect())
+    }
+
+    async fn set_variable(&self, name: &str, value: &str, scope: VarScope) -> Result<(), RowmanceError> {
+        let en = name.replace('"', "\"\"");
+        let ev = escape_sql_string(value);
+        let sql = match scope {
+            VarScope::Session => format!("SET \"{en}\" = '{ev}'"),
+            VarScope::Global | VarScope::Both => format!("ALTER SYSTEM SET \"{en}\" = '{ev}'"),
+        };
+        sqlx::query(&sql)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(RowmanceError::Database)
+    }
+
+    async fn list_locks(&self) -> Result<Vec<LockInfo>, RowmanceError> {
+        let rows = sqlx::query(
+            "SELECT \
+                l.pid::text AS waiting_pid, \
+                l.locktype, \
+                l.mode, \
+                c.relname AS object_name, \
+                bl.pid::text AS blocker_pid, \
+                EXTRACT(EPOCH FROM (now() - a.query_start)) * 1000 AS duration_ms \
+             FROM pg_locks l \
+             LEFT JOIN pg_class c ON c.oid = l.relation \
+             LEFT JOIN pg_stat_activity a ON a.pid = l.pid \
+             LEFT JOIN pg_locks bl ON bl.relation = l.relation \
+                 AND bl.granted = true AND bl.pid != l.pid \
+             WHERE l.granted = false \
+             ORDER BY duration_ms DESC NULLS LAST \
+             LIMIT 200",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        Ok(rows.iter().enumerate().map(|(i, r)| LockInfo {
+            lock_id: format!("lock-{i}"),
+            blocker_session_id: r.try_get("blocker_pid").ok().flatten(),
+            waiting_session_id: r.try_get("waiting_pid").ok(),
+            lock_type: r.try_get("locktype").unwrap_or_default(),
+            lock_mode: r.try_get("mode").unwrap_or_default(),
+            object_name: r.try_get("object_name").ok().flatten(),
+            duration_ms: r.try_get::<Option<f64>, _>("duration_ms").ok().flatten().map(|v| v.max(0.0) as u64),
+        }).collect())
+    }
+
+    async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
+        let rows = sqlx::query(
+            "SELECT jobid::text AS job_id, jobname, schedule, active, \
+                    last_run_details \
+             FROM cron.job \
+             LEFT JOIN LATERAL (
+                 SELECT status || ' at ' || end_time::text AS last_run_details
+                 FROM cron.job_run_details
+                 WHERE jobid = cron.job.jobid
+                 ORDER BY end_time DESC
+                 LIMIT 1
+             ) AS last_run ON true \
+             ORDER BY jobname",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        Ok(rows.iter().map(|r| {
+            let id: String = r.try_get("job_id").unwrap_or_default();
+            let name: String = r.try_get("jobname").unwrap_or_default();
+            let schedule: String = r.try_get("schedule").unwrap_or_default();
+            let enabled: bool = r.try_get("active").unwrap_or(false);
+            let last_run: Option<String> = r.try_get("last_run_details").ok().flatten();
+            ScheduledJob {
+                id,
+                name,
+                schedule,
+                enabled,
+                last_run,
+                next_run: None,
+                body: None,
+            }
+        }).collect())
+    }
+
+    async fn get_vacuum_status(&self) -> Result<Vec<VacuumInfo>, RowmanceError> {
+        let rows = sqlx::query(
+            "SELECT \
+                schemaname || '.' || relname AS table_name, \
+                last_vacuum::text, \
+                last_autovacuum::text, \
+                n_dead_tup, \
+                n_live_tup \
+             FROM pg_stat_user_tables \
+             ORDER BY n_dead_tup DESC \
+             LIMIT 100",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RowmanceError::Database)?;
+
+        Ok(rows.iter().map(|r| VacuumInfo {
+            table: r.try_get("table_name").unwrap_or_default(),
+            last_vacuum: r.try_get("last_vacuum").ok().flatten(),
+            last_auto_vacuum: r.try_get("last_autovacuum").ok().flatten(),
+            dead_tuples: r.try_get("n_dead_tup").unwrap_or(0),
+            live_tuples: r.try_get("n_live_tup").unwrap_or(0),
+            bloat_estimate_bytes: None,
+        }).collect())
     }
 }
 

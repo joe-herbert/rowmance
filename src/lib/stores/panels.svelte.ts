@@ -63,6 +63,8 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
       return b.kind === 'query_editor' && !!a.editorId && a.editorId === b.editorId;
     case 'user_manager':
       return b.kind === 'user_manager' && a.connectionId === b.connectionId;
+    case 'server_admin':
+      return b.kind === 'server_admin' && a.connectionId === b.connectionId;
     case 'speed_analysis':
       return true;
     case 'release_notes':

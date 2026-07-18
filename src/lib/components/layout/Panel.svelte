@@ -16,6 +16,7 @@
   import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
   import Settings from '$lib/components/settings/Settings.svelte';
   import UserManager from '$lib/components/users/UserManager.svelte';
+  import ServerAdmin from '$lib/components/server-admin/ServerAdmin.svelte';
   import SpeedAnalysis from '$lib/components/speed/SpeedAnalysis.svelte';
   import ReleaseNotes from '$lib/components/release/ReleaseNotes.svelte';
   import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
@@ -103,6 +104,8 @@
     <Settings />
   {:else if panel.content.kind === 'user_manager'}
     <UserManager connectionId={panel.content.connectionId} />
+  {:else if panel.content.kind === 'server_admin'}
+    <ServerAdmin connectionId={panel.content.connectionId} />
   {:else if panel.content.kind === 'speed_analysis'}
     <SpeedAnalysis />
   {:else if panel.content.kind === 'release_notes'}

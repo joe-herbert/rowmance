@@ -43,6 +43,8 @@
   <GearIcon width={size} height={size} />
 {:else if content.kind === 'user_manager'}
   <PersonIcon {size} />
+{:else if content.kind === 'server_admin'}
+  <GearIcon width={size} height={size} />
 {:else if content.kind === 'speed_analysis'}
   <BarChartIcon {size} />
 {:else if content.kind === 'release_notes'}

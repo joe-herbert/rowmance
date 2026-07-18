@@ -905,6 +905,13 @@
     panelStore.openInFocused({ kind: 'user_manager', connectionId: profile.id });
   }
 
+  async function ctxOpenServerAdmin() {
+    if (!connCtx) return;
+    const { profile } = connCtx;
+    connCtx = null;
+    panelStore.openInFocused({ kind: 'server_admin', connectionId: profile.id });
+  }
+
   function ctxOpenTable() {
     if (!tableCtx) return;
     openTable(tableCtx.connectionId, tableCtx.database, tableCtx.table.name);
@@ -2106,6 +2113,7 @@
     {#if connCtx.profile.dialectInfo.supportsUserManagement}
       <CtxItem onclick={ctxManageUsers}>Manage Users</CtxItem>
     {/if}
+    <CtxItem onclick={ctxOpenServerAdmin}>Server Admin</CtxItem>
     <CtxSep />
     <CtxItem
       onclick={() => {

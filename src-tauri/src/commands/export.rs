@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn unknown_format_returns_error() {
-        let result = apply_format(&[], &[], "xml", None);
+        let result = apply_format(&[], &[], "xml", None, &|s| format!("\"{s}\""), false);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().code, "EXPORT_ERROR");
     }

@@ -18,6 +18,8 @@ export function panelLabel(content: PanelKind, dashboardsById: Map<string, { nam
       return 'Settings';
     case 'user_manager':
       return 'Users';
+    case 'server_admin':
+      return 'Server';
     case 'speed_analysis':
       return 'Speed Analysis';
     case 'release_notes':

@@ -9,8 +9,10 @@ use sqlparser::parser::Parser;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::group_into_tables;
 use crate::connections::types::{
-    BulkColumnRow, ColumnInfo, ColumnMeta, ErdColumn, ErdGraph, ErdRelation, EngineQueryResult,
-    ExplainResult, ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, ErdColumn, ErdGraph, ErdRelation,
+    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
+    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
+    TableInfo, VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -461,6 +463,241 @@ impl DatabaseEngine for SqlServerEngine {
         }
 
         Ok(inserted)
+    }
+
+    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+        Ok(ServerAdminCapabilityFlags {
+            process_list: CapabilityStatus::Supported,
+            kill_session: CapabilityStatus::Supported,
+            cancel_session: CapabilityStatus::NotSupported,
+            server_status: CapabilityStatus::Supported,
+            variables: CapabilityStatus::Supported,
+            set_variable: CapabilityStatus::Supported,
+            scheduled_jobs: CapabilityStatus::Supported,
+            locks: CapabilityStatus::Supported,
+            innodb_status: CapabilityStatus::NotSupported,
+            vacuum_status: CapabilityStatus::NotSupported,
+        })
+    }
+
+    async fn list_processes(&self) -> Result<Vec<ProcessInfo>, RowmanceError> {
+        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn.simple_query(
+            "SELECT s.session_id, s.login_name, s.host_name, s.database_id, \
+                    s.status, r.command, r.wait_type, \
+                    DB_NAME(s.database_id) AS db_name, \
+                    DATEDIFF(SECOND, s.last_request_start_time, GETDATE()) AS elapsed_secs, \
+                    SUBSTRING(st.text, 1, 500) AS query_text \
+             FROM sys.dm_exec_sessions s \
+             LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id \
+             OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) st \
+             WHERE s.is_user_process = 1 \
+             ORDER BY s.session_id"
+        )
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+        let mut processes = Vec::new();
+        for row_set in results {
+            for row in row_set {
+                let session_id: Option<i16> = row.try_get("session_id").ok().flatten();
+                let login_name: Option<&str> = row.try_get("login_name").ok().flatten();
+                let host_name: Option<&str> = row.try_get("host_name").ok().flatten();
+                let db_name: Option<&str> = row.try_get("db_name").ok().flatten();
+                let status: Option<&str> = row.try_get("status").ok().flatten();
+                let command: Option<&str> = row.try_get("command").ok().flatten();
+                let elapsed_secs: Option<i32> = row.try_get("elapsed_secs").ok().flatten();
+                let query_text: Option<&str> = row.try_get("query_text").ok().flatten();
+
+                processes.push(ProcessInfo {
+                    id: session_id.map(|v| v.to_string()).unwrap_or_default(),
+                    user: login_name.map(String::from),
+                    host: host_name.map(String::from),
+                    database: db_name.map(String::from),
+                    command: command.map(String::from),
+                    time_seconds: elapsed_secs.map(|v| v.max(0) as u64),
+                    state: status.map(String::from),
+                    info: query_text.map(String::from),
+                    can_kill: true,
+                    can_cancel: false,
+                });
+            }
+        }
+        Ok(processes)
+    }
+
+    async fn kill_session(&self, session_id: &str) -> Result<(), RowmanceError> {
+        let id: i32 = session_id.parse()
+            .map_err(|_| RowmanceError::ConnectionNotFound("Invalid session id".to_string()))?;
+        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        conn.simple_query(format!("KILL {id}").as_str())
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_server_status(&self) -> Result<ServerStatus, RowmanceError> {
+        let mut conn2 = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let ver_stream = conn2.simple_query("SELECT @@VERSION AS version, @@SERVERNAME AS server_name")
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let ver_results = ver_stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let version = ver_results.into_iter().flatten().next()
+            .and_then(|r| r.try_get::<&str, _>("version").ok().flatten().map(String::from))
+            .unwrap_or_else(|| "SQL Server".to_string());
+
+        let mut conn3 = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let sess_stream = conn3.simple_query(
+            "SELECT count(*) AS cnt FROM sys.dm_exec_sessions WHERE is_user_process = 1"
+        )
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let sess_results = sess_stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let connections_current = sess_results.into_iter().flatten().next()
+            .and_then(|r| r.try_get::<i32, _>("cnt").ok().flatten().map(|v| v.max(0) as u64))
+            .unwrap_or(0);
+
+        Ok(ServerStatus {
+            version,
+            uptime_seconds: 0,
+            connections_current,
+            connections_max: None,
+            queries_per_second: None,
+            cache_hit_ratio: None,
+            extra: std::collections::HashMap::new(),
+        })
+    }
+
+    async fn list_variables(&self) -> Result<Vec<ServerVariable>, RowmanceError> {
+        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn.simple_query(
+            "SELECT name, CAST(value AS NVARCHAR(MAX)) AS value, \
+                    CAST(value_in_use AS NVARCHAR(MAX)) AS value_in_use, \
+                    description, is_dynamic, is_advanced \
+             FROM sys.configurations \
+             ORDER BY name"
+        )
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+        let mut vars = Vec::new();
+        for row_set in results {
+            for row in row_set {
+                let name: Option<&str> = row.try_get("name").ok().flatten();
+                let value: Option<&str> = row.try_get("value_in_use").ok().flatten()
+                    .or_else(|| row.try_get("value").ok().flatten());
+                let desc: Option<&str> = row.try_get("description").ok().flatten();
+                let is_dynamic: Option<bool> = row.try_get("is_dynamic").ok().flatten();
+
+                vars.push(ServerVariable {
+                    name: name.unwrap_or("").to_string(),
+                    value: value.unwrap_or("").to_string(),
+                    scope: VarScope::Global,
+                    is_dynamic: is_dynamic.unwrap_or(false),
+                    restart_required: !is_dynamic.unwrap_or(false),
+                    description: desc.map(String::from),
+                    data_type: None,
+                });
+            }
+        }
+        Ok(vars)
+    }
+
+    async fn set_variable(&self, name: &str, value: &str, _scope: VarScope) -> Result<(), RowmanceError> {
+        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let en = name.replace('\'', "''");
+        let ev = value.parse::<i64>().unwrap_or(0);
+        let sql = format!("EXEC sp_configure N'{en}', {ev}; RECONFIGURE");
+        conn.simple_query(&sql)
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn list_locks(&self) -> Result<Vec<LockInfo>, RowmanceError> {
+        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn.simple_query(
+            "SELECT \
+                w.session_id AS waiting_session, \
+                r.blocking_session_id AS blocker_session, \
+                r.wait_type, \
+                r.wait_time, \
+                OBJECT_NAME(r.object_id) AS object_name \
+             FROM sys.dm_exec_requests r \
+             JOIN sys.dm_os_waiting_tasks w ON r.session_id = w.session_id \
+             WHERE r.blocking_session_id IS NOT NULL AND r.blocking_session_id > 0 \
+             ORDER BY r.wait_time DESC"
+        )
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+        let mut locks = Vec::new();
+        for row_set in results {
+            for (i, row) in row_set.into_iter().enumerate() {
+                let waiting: Option<i16> = row.try_get("waiting_session").ok().flatten();
+                let blocker: Option<i16> = row.try_get("blocker_session").ok().flatten();
+                let wait_type: Option<&str> = row.try_get("wait_type").ok().flatten();
+                let wait_time: Option<i32> = row.try_get("wait_time").ok().flatten();
+                let obj: Option<&str> = row.try_get("object_name").ok().flatten();
+                locks.push(LockInfo {
+                    lock_id: format!("lock-{i}"),
+                    blocker_session_id: blocker.map(|v| v.to_string()),
+                    waiting_session_id: waiting.map(|v| v.to_string()),
+                    lock_type: "SQL Server Lock".to_string(),
+                    lock_mode: wait_type.unwrap_or("UNKNOWN").to_string(),
+                    object_name: obj.map(String::from),
+                    duration_ms: wait_time.map(|v| v.max(0) as u64),
+                });
+            }
+        }
+        Ok(locks)
+    }
+
+    async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
+        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn.simple_query(
+            "SELECT j.job_id, j.name, j.enabled, \
+                    js.next_run_date, js.next_run_time, \
+                    jh.run_date AS last_run_date, jh.run_time AS last_run_time, jh.run_status, \
+                    ss.step_name AS first_step \
+             FROM msdb.dbo.sysjobs j \
+             LEFT JOIN msdb.dbo.sysjobschedules js ON j.job_id = js.job_id \
+             LEFT JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0 \
+             LEFT JOIN msdb.dbo.sysjobsteps ss ON j.job_id = ss.job_id AND ss.step_id = 1 \
+             ORDER BY j.name"
+        )
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+        let mut jobs = Vec::new();
+        for row_set in results {
+            for row in row_set {
+                let id: Option<&[u8]> = row.try_get("job_id").ok().flatten();
+                let name: Option<&str> = row.try_get("name").ok().flatten();
+                let enabled_val: Option<u8> = row.try_get("enabled").ok().flatten();
+                let next_run_date: Option<i32> = row.try_get("next_run_date").ok().flatten();
+                let last_run_date: Option<i32> = row.try_get("last_run_date").ok().flatten();
+
+                let job_id = id.map(|b| b.iter().map(|byte| format!("{byte:02x}")).collect::<String>()).unwrap_or_default();
+                let next_run = next_run_date.filter(|&d| d > 0).map(|d| d.to_string());
+                let last_run = last_run_date.filter(|&d| d > 0).map(|d| d.to_string());
+
+                jobs.push(ScheduledJob {
+                    id: job_id,
+                    name: name.unwrap_or("").to_string(),
+                    schedule: "See SQL Server Agent".to_string(),
+                    enabled: enabled_val.unwrap_or(0u8) != 0,
+                    last_run,
+                    next_run,
+                    body: None,
+                });
+            }
+        }
+        Ok(jobs)
     }
 }
 

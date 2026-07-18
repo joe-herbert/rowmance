@@ -16,6 +16,7 @@ pub mod speed_analysis;
 pub mod ssh;
 pub mod themes;
 pub mod updater;
+pub mod server_admin;
 pub mod users;
 pub mod virtual_relations;
 pub mod window;

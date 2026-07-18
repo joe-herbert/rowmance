@@ -345,6 +345,249 @@ pub struct DbUser {
     pub is_locked: bool,
 }
 
+// ── Server admin types ────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum CapabilityStatus {
+    Supported,
+    NotSupported,
+    InsufficientPrivileges,
+    #[serde(rename_all = "camelCase")]
+    ExtensionRequired { extension: String },
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ServerAdminCapabilityFlags {
+    #[serde(rename = "processList")]
+    pub process_list: CapabilityStatus,
+    #[serde(rename = "killSession")]
+    pub kill_session: CapabilityStatus,
+    #[serde(rename = "cancelSession")]
+    pub cancel_session: CapabilityStatus,
+    #[serde(rename = "serverStatus")]
+    pub server_status: CapabilityStatus,
+    pub variables: CapabilityStatus,
+    #[serde(rename = "setVariable")]
+    pub set_variable: CapabilityStatus,
+    #[serde(rename = "scheduledJobs")]
+    pub scheduled_jobs: CapabilityStatus,
+    pub locks: CapabilityStatus,
+    #[serde(rename = "innodbStatus")]
+    pub innodb_status: CapabilityStatus,
+    #[serde(rename = "vacuumStatus")]
+    pub vacuum_status: CapabilityStatus,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ProcessInfo {
+    pub id: String,
+    pub user: Option<String>,
+    pub host: Option<String>,
+    pub database: Option<String>,
+    pub command: Option<String>,
+    #[serde(rename = "timeSeconds")]
+    pub time_seconds: Option<u64>,
+    pub state: Option<String>,
+    pub info: Option<String>,
+    #[serde(rename = "canKill")]
+    pub can_kill: bool,
+    #[serde(rename = "canCancel")]
+    pub can_cancel: bool,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ServerStatus {
+    pub version: String,
+    #[serde(rename = "uptimeSeconds")]
+    pub uptime_seconds: u64,
+    #[serde(rename = "connectionsCurrent")]
+    pub connections_current: u64,
+    #[serde(rename = "connectionsMax")]
+    pub connections_max: Option<u64>,
+    #[serde(rename = "queriesPerSecond")]
+    pub queries_per_second: Option<f64>,
+    #[serde(rename = "cacheHitRatio")]
+    pub cache_hit_ratio: Option<f64>,
+    pub extra: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum VarScope {
+    Session,
+    Global,
+    Both,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ServerVariable {
+    pub name: String,
+    pub value: String,
+    pub scope: VarScope,
+    #[serde(rename = "isDynamic")]
+    pub is_dynamic: bool,
+    #[serde(rename = "restartRequired")]
+    pub restart_required: bool,
+    pub description: Option<String>,
+    #[serde(rename = "dataType")]
+    pub data_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct LockInfo {
+    #[serde(rename = "lockId")]
+    pub lock_id: String,
+    #[serde(rename = "blockerSessionId")]
+    pub blocker_session_id: Option<String>,
+    #[serde(rename = "waitingSessionId")]
+    pub waiting_session_id: Option<String>,
+    #[serde(rename = "lockType")]
+    pub lock_type: String,
+    #[serde(rename = "lockMode")]
+    pub lock_mode: String,
+    #[serde(rename = "objectName")]
+    pub object_name: Option<String>,
+    #[serde(rename = "durationMs")]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ScheduledJob {
+    pub id: String,
+    pub name: String,
+    pub schedule: String,
+    pub enabled: bool,
+    #[serde(rename = "lastRun")]
+    pub last_run: Option<String>,
+    #[serde(rename = "nextRun")]
+    pub next_run: Option<String>,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct VacuumInfo {
+    pub table: String,
+    #[serde(rename = "lastVacuum")]
+    pub last_vacuum: Option<String>,
+    #[serde(rename = "lastAutoVacuum")]
+    pub last_auto_vacuum: Option<String>,
+    #[serde(rename = "deadTuples")]
+    pub dead_tuples: i64,
+    #[serde(rename = "liveTuples")]
+    pub live_tuples: i64,
+    #[serde(rename = "bloatEstimateBytes")]
+    pub bloat_estimate_bytes: Option<i64>,
+}
+
+#[cfg(test)]
+mod server_admin_type_tests {
+    use super::*;
+
+    // ── CapabilityStatus serialization ────────────────────────────────────────
+
+    #[test]
+    fn capability_status_supported_serializes() {
+        let json = serde_json::to_string(&CapabilityStatus::Supported).unwrap();
+        assert_eq!(json, r#"{"status":"supported"}"#);
+    }
+
+    #[test]
+    fn capability_status_not_supported_serializes() {
+        let json = serde_json::to_string(&CapabilityStatus::NotSupported).unwrap();
+        assert_eq!(json, r#"{"status":"notSupported"}"#);
+    }
+
+    #[test]
+    fn capability_status_insufficient_privileges_serializes() {
+        let json = serde_json::to_string(&CapabilityStatus::InsufficientPrivileges).unwrap();
+        assert_eq!(json, r#"{"status":"insufficientPrivileges"}"#);
+    }
+
+    #[test]
+    fn capability_status_extension_required_serializes() {
+        let status = CapabilityStatus::ExtensionRequired { extension: "pg_cron".to_string() };
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, r#"{"status":"extensionRequired","extension":"pg_cron"}"#);
+    }
+
+    #[test]
+    fn capability_status_eq() {
+        assert_eq!(CapabilityStatus::Supported, CapabilityStatus::Supported);
+        assert_ne!(CapabilityStatus::Supported, CapabilityStatus::NotSupported);
+        assert_eq!(
+            CapabilityStatus::ExtensionRequired { extension: "x".to_string() },
+            CapabilityStatus::ExtensionRequired { extension: "x".to_string() },
+        );
+        assert_ne!(
+            CapabilityStatus::ExtensionRequired { extension: "a".to_string() },
+            CapabilityStatus::ExtensionRequired { extension: "b".to_string() },
+        );
+    }
+
+    // ── VarScope serialization / deserialization ──────────────────────────────
+
+    #[test]
+    fn var_scope_session_serializes() {
+        let json = serde_json::to_string(&VarScope::Session).unwrap();
+        assert_eq!(json, r#""session""#);
+    }
+
+    #[test]
+    fn var_scope_global_serializes() {
+        let json = serde_json::to_string(&VarScope::Global).unwrap();
+        assert_eq!(json, r#""global""#);
+    }
+
+    #[test]
+    fn var_scope_both_serializes() {
+        let json = serde_json::to_string(&VarScope::Both).unwrap();
+        assert_eq!(json, r#""both""#);
+    }
+
+    #[test]
+    fn var_scope_deserializes_from_camel_case() {
+        let session: VarScope = serde_json::from_str(r#""session""#).unwrap();
+        assert_eq!(session, VarScope::Session);
+
+        let global: VarScope = serde_json::from_str(r#""global""#).unwrap();
+        assert_eq!(global, VarScope::Global);
+
+        let both: VarScope = serde_json::from_str(r#""both""#).unwrap();
+        assert_eq!(both, VarScope::Both);
+    }
+
+    // ── ServerAdminCapabilityFlags field name serialization ───────────────────
+
+    #[test]
+    fn capability_flags_fields_use_camel_case_keys() {
+        let flags = ServerAdminCapabilityFlags {
+            process_list: CapabilityStatus::Supported,
+            kill_session: CapabilityStatus::NotSupported,
+            cancel_session: CapabilityStatus::NotSupported,
+            server_status: CapabilityStatus::Supported,
+            variables: CapabilityStatus::Supported,
+            set_variable: CapabilityStatus::Supported,
+            scheduled_jobs: CapabilityStatus::InsufficientPrivileges,
+            locks: CapabilityStatus::Supported,
+            innodb_status: CapabilityStatus::NotSupported,
+            vacuum_status: CapabilityStatus::NotSupported,
+        };
+        let json = serde_json::to_value(&flags).unwrap();
+        assert!(json.get("processList").is_some(), "processList key missing");
+        assert!(json.get("killSession").is_some(), "killSession key missing");
+        assert!(json.get("cancelSession").is_some(), "cancelSession key missing");
+        assert!(json.get("serverStatus").is_some(), "serverStatus key missing");
+        assert!(json.get("setVariable").is_some(), "setVariable key missing");
+        assert!(json.get("scheduledJobs").is_some(), "scheduledJobs key missing");
+        assert!(json.get("innodbStatus").is_some(), "innodbStatus key missing");
+        assert!(json.get("vacuumStatus").is_some(), "vacuumStatus key missing");
+        // snake_case keys must not appear
+        assert!(json.get("process_list").is_none());
+        assert!(json.get("kill_session").is_none());
+    }
+}
+
 /// Flat column row used by `schema_list_all_columns` for bulk column fetching.
 #[derive(Debug, Serialize)]
 pub struct BulkColumnRow {

@@ -7,8 +7,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::connections::types::{
-    BulkColumnRow, ColumnInfo, DbUser, ErdGraph, EngineQueryResult, ExplainResult, ForeignKeyInfo,
-    IndexInfo, RowChange, RowDelete, TableInfo,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, DbUser, ErdGraph, EngineQueryResult,
+    ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange, RowDelete,
+    ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo,
+    VacuumInfo, VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -190,6 +192,69 @@ pub trait DatabaseEngine: Send + Sync {
         Err(RowmanceError::ConnectionNotFound(
             "User management is not supported for this connection type".to_string(),
         ))
+    }
+
+    // ── Server administration ─────────────────────────────────────────────────
+    async fn probe_server_admin_capabilities(
+        &self,
+    ) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+        Ok(ServerAdminCapabilityFlags {
+            process_list: CapabilityStatus::NotSupported,
+            kill_session: CapabilityStatus::NotSupported,
+            cancel_session: CapabilityStatus::NotSupported,
+            server_status: CapabilityStatus::NotSupported,
+            variables: CapabilityStatus::NotSupported,
+            set_variable: CapabilityStatus::NotSupported,
+            scheduled_jobs: CapabilityStatus::NotSupported,
+            locks: CapabilityStatus::NotSupported,
+            innodb_status: CapabilityStatus::NotSupported,
+            vacuum_status: CapabilityStatus::NotSupported,
+        })
+    }
+
+    async fn list_processes(&self) -> Result<Vec<ProcessInfo>, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Process list not supported".to_string()))
+    }
+
+    async fn kill_session(&self, _session_id: &str) -> Result<(), RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Kill session not supported".to_string()))
+    }
+
+    async fn cancel_session(&self, _pid: &str) -> Result<(), RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Cancel session not supported".to_string()))
+    }
+
+    async fn get_server_status(&self) -> Result<ServerStatus, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Server status not supported".to_string()))
+    }
+
+    async fn list_variables(&self) -> Result<Vec<ServerVariable>, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Variables not supported".to_string()))
+    }
+
+    async fn set_variable(
+        &self,
+        _name: &str,
+        _value: &str,
+        _scope: VarScope,
+    ) -> Result<(), RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Set variable not supported".to_string()))
+    }
+
+    async fn list_locks(&self) -> Result<Vec<LockInfo>, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Locks not supported".to_string()))
+    }
+
+    async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Scheduled jobs not supported".to_string()))
+    }
+
+    async fn get_innodb_status(&self) -> Result<String, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("InnoDB status not supported".to_string()))
+    }
+
+    async fn get_vacuum_status(&self) -> Result<Vec<VacuumInfo>, RowmanceError> {
+        Err(RowmanceError::ConnectionNotFound("Vacuum status not supported".to_string()))
     }
 
     // ── Import ────────────────────────────────────────────────────────────────

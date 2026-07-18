@@ -8,8 +8,10 @@ use async_trait::async_trait;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::group_into_tables;
 use crate::connections::types::{
-    BulkColumnRow, ColumnInfo, ColumnMeta, ErdColumn, ErdGraph, ErdRelation, EngineQueryResult,
-    ExplainResult, ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, ErdColumn, ErdGraph, ErdRelation,
+    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
+    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
+    TableInfo, VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -619,6 +621,293 @@ impl DatabaseEngine for OracleEngine {
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
             pool.return_conn(conn);
             Ok(inserted)
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+        let pool = self.pool.clone();
+        let oracle_result = tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let query_result = conn.conn().statement("SELECT COUNT(*) FROM v$session WHERE rownum = 1")
+                .build()
+                .and_then(|mut s| s.query(&[]).map(|_| ()));
+            pool.return_conn(conn);
+            Ok::<_, RowmanceError>(query_result)
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))??;
+
+        let status = match oracle_result {
+            Ok(_) => CapabilityStatus::Supported,
+            Err(e) => {
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("insufficient privileges") || msg.contains("ora-00942") || msg.contains("ora-01031") {
+                    CapabilityStatus::InsufficientPrivileges
+                } else {
+                    CapabilityStatus::NotSupported
+                }
+            }
+        };
+
+        Ok(ServerAdminCapabilityFlags {
+            process_list: status,
+            kill_session: CapabilityStatus::Supported,
+            cancel_session: CapabilityStatus::NotSupported,
+            server_status: CapabilityStatus::Supported,
+            variables: CapabilityStatus::Supported,
+            set_variable: CapabilityStatus::Supported,
+            scheduled_jobs: CapabilityStatus::Supported,
+            locks: CapabilityStatus::Supported,
+            innodb_status: CapabilityStatus::NotSupported,
+            vacuum_status: CapabilityStatus::NotSupported,
+        })
+    }
+
+    async fn list_processes(&self) -> Result<Vec<ProcessInfo>, RowmanceError> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let sql = "SELECT sid, serial#, username, machine, status, last_call_et, \
+                              sql_text \
+                       FROM v$session \
+                       WHERE type = 'USER' \
+                       ORDER BY last_call_et DESC";
+            let mut stmt = conn.conn().statement(sql).build()
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt.query(&[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+            let mut result = Vec::new();
+            for row_result in rows {
+                let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                let sid: i64 = row.get(0).unwrap_or(0);
+                let serial: i64 = row.get(1).unwrap_or(0);
+                let username: Option<String> = row.get(2).ok();
+                let machine: Option<String> = row.get(3).ok();
+                let status: Option<String> = row.get(4).ok();
+                let last_call_et: Option<i64> = row.get(5).ok();
+                let sql_text: Option<String> = row.get(6).ok();
+                result.push(ProcessInfo {
+                    id: format!("{sid},{serial}"),
+                    user: username,
+                    host: machine,
+                    database: None,
+                    command: status.clone(),
+                    time_seconds: last_call_et.map(|v| v.max(0) as u64),
+                    state: status,
+                    info: sql_text,
+                    can_kill: true,
+                    can_cancel: false,
+                });
+            }
+            pool.return_conn(conn);
+            Ok(result)
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn kill_session(&self, session_id: &str) -> Result<(), RowmanceError> {
+        let pool = self.pool.clone();
+        let session_id = session_id.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            if !crate::commands::server_admin::is_valid_oracle_session_id(&session_id) {
+                return Err(RowmanceError::ConnectionNotFound("Invalid session id".to_string()));
+            }
+            let sql = format!("ALTER SYSTEM KILL SESSION '{session_id}' IMMEDIATE");
+            conn.conn().execute(&sql, &[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            pool.return_conn(conn);
+            Ok(())
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn get_server_status(&self) -> Result<ServerStatus, RowmanceError> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+
+            let mut stmt = conn.conn().statement("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%'").build()
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let version = rows.into_iter().next()
+                .and_then(|r| r.ok())
+                .and_then(|r| { let v: Option<String> = r.get(0).ok(); v })
+                .unwrap_or_else(|| "Oracle".to_string());
+
+            let mut uptime_stmt = conn.conn().statement(
+                "SELECT (SYSDATE - startup_time) * 86400 AS uptime_secs FROM v$instance"
+            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let uptime_rows = uptime_stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let uptime_seconds = uptime_rows.into_iter().next()
+                .and_then(|r| r.ok())
+                .and_then(|r| { let v: Option<f64> = r.get(0).ok(); v })
+                .map(|v| v.max(0.0) as u64)
+                .unwrap_or(0);
+
+            let mut sess_stmt = conn.conn().statement(
+                "SELECT COUNT(*) FROM v$session WHERE type = 'USER'"
+            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let sess_rows = sess_stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let connections_current = sess_rows.into_iter().next()
+                .and_then(|r| r.ok())
+                .and_then(|r| { let v: Option<i64> = r.get(0).ok(); v })
+                .map(|v| v.max(0) as u64)
+                .unwrap_or(0);
+
+            pool.return_conn(conn);
+            Ok(ServerStatus {
+                version,
+                uptime_seconds,
+                connections_current,
+                connections_max: None,
+                queries_per_second: None,
+                cache_hit_ratio: None,
+                extra: std::collections::HashMap::new(),
+            })
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_variables(&self) -> Result<Vec<ServerVariable>, RowmanceError> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let mut stmt = conn.conn().statement(
+                "SELECT name, value, description, isses_modifiable, issys_modifiable \
+                 FROM v$parameter \
+                 ORDER BY name"
+            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+            let mut vars = Vec::new();
+            for row_result in rows {
+                let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                let name: String = row.get(0).unwrap_or_default();
+                let value: String = row.get(1).unwrap_or_default();
+                let desc: Option<String> = row.get(2).ok();
+                let ses_mod: String = row.get(3).unwrap_or_default();
+                let sys_mod: String = row.get(4).unwrap_or_default();
+
+                let is_dynamic = ses_mod == "IMMEDIATE" || sys_mod == "IMMEDIATE" || sys_mod == "DEFERRED";
+                let restart_required = sys_mod == "FALSE" && ses_mod == "FALSE";
+
+                vars.push(ServerVariable {
+                    name,
+                    value,
+                    scope: VarScope::Global,
+                    is_dynamic,
+                    restart_required,
+                    description: desc,
+                    data_type: None,
+                });
+            }
+            pool.return_conn(conn);
+            Ok(vars)
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn set_variable(&self, name: &str, value: &str, _scope: VarScope) -> Result<(), RowmanceError> {
+        let pool = self.pool.clone();
+        let name = name.to_string();
+        let value = value.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                return Err(RowmanceError::ConnectionNotFound("Invalid parameter name".to_string()));
+            }
+            let ev = value.replace('\'', "''");
+            let sql = format!("ALTER SYSTEM SET {name} = '{ev}' SCOPE=BOTH");
+            conn.conn().execute(&sql, &[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            pool.return_conn(conn);
+            Ok(())
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_locks(&self) -> Result<Vec<LockInfo>, RowmanceError> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let mut stmt = conn.conn().statement(
+                "SELECT l.sid, l.type, l.lmode, l.request, o.object_name, \
+                        l.block, l.id1, l.id2 \
+                 FROM v$lock l \
+                 LEFT JOIN dba_objects o ON o.object_id = l.id1 \
+                 WHERE l.block > 0 OR l.request > 0 \
+                 ORDER BY l.block DESC, l.sid"
+            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+            let mut locks = Vec::new();
+            for (i, row_result) in rows.into_iter().enumerate() {
+                let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                let sid: i64 = row.get(0).unwrap_or(0);
+                let lock_type: String = row.get(1).unwrap_or_default();
+                let lmode: i64 = row.get(2).unwrap_or(0);
+                let request: i64 = row.get(3).unwrap_or(0);
+                let object_name: Option<String> = row.get(4).ok();
+                let block: i64 = row.get(5).unwrap_or(0);
+
+                locks.push(LockInfo {
+                    lock_id: format!("lock-{i}"),
+                    blocker_session_id: if block > 0 { Some(sid.to_string()) } else { None },
+                    waiting_session_id: if request > 0 { Some(sid.to_string()) } else { None },
+                    lock_type,
+                    lock_mode: lmode.to_string(),
+                    object_name,
+                    duration_ms: None,
+                });
+            }
+            pool.return_conn(conn);
+            Ok(locks)
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let mut stmt = conn.conn().statement(
+                "SELECT job_name, enabled, last_start_date, next_run_date, \
+                        repeat_interval \
+                 FROM dba_scheduler_jobs \
+                 ORDER BY job_name"
+            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+            let mut jobs = Vec::new();
+            for row_result in rows {
+                let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                let name: String = row.get(0).unwrap_or_default();
+                let enabled: String = row.get(1).unwrap_or_default();
+                let last_run: Option<String> = row.get(2).ok().and_then(|v: Option<String>| v);
+                let next_run: Option<String> = row.get(3).ok().and_then(|v: Option<String>| v);
+                let schedule: String = row.get(4).unwrap_or_else(|_| "ONE TIME".to_string());
+                jobs.push(ScheduledJob {
+                    id: name.clone(),
+                    name,
+                    schedule,
+                    enabled: enabled == "TRUE",
+                    last_run,
+                    next_run,
+                    body: None,
+                });
+            }
+            pool.return_conn(conn);
+            Ok(jobs)
         })
         .await
         .map_err(|e| RowmanceError::Pool(e.to_string()))?
