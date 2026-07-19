@@ -6,7 +6,6 @@
   import { useDashboards } from '$lib/stores/dashboards.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
-  import { portal } from '$lib/actions/portal';
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';

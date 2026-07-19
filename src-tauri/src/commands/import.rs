@@ -23,6 +23,7 @@ pub struct CsvPreview {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct ColumnOverride {
     pub name: String,
     #[serde(rename = "dbType")]

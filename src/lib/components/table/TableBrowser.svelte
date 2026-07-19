@@ -109,6 +109,7 @@
   import { loadColPrefs, saveColPrefs } from '$lib/utils/table-prefs';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { isMac } from '$lib/stores/shortcuts.svelte';
+  import { portal } from '$lib/actions/portal';
 
   interface Props {
     connectionId: string;
@@ -792,14 +793,7 @@
     }
   }
 
-  function portal(node: HTMLElement): { destroy(): void } {
-    document.body.appendChild(node);
-    return {
-      destroy() {
-        node.remove();
-      },
-    };
-  }
+
 
   let lastQueryMs = $state<number | null>(null);
 

@@ -126,7 +126,7 @@
     isLoading = true;
     loadError = null;
     try {
-      ddlText = await getDdl(connectionId, database, objectName, objectType, instanceDb);
+      ddlText = await getDdl(connectionId, database, objectName, instanceDb);
     } catch (err) {
       loadError = errorMessage(err);
     } finally {

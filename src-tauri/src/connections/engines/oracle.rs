@@ -100,7 +100,9 @@ impl OraclePool {
 
 pub struct OracleEngine {
     pub pool: Arc<OraclePool>,
+    #[allow(dead_code)]
     pub read_only: bool,
+    #[allow(dead_code)]
     pub initial_schema: String,
 }
 

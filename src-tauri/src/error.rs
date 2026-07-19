@@ -38,12 +38,14 @@ pub enum RowmanceError {
     #[error("Connection not active: {0}")]
     ConnectionNotActive(String),
 
+    #[allow(dead_code)]
     #[error("Read-only mode: mutating statements are not allowed")]
     ReadOnlyViolation,
 
     #[error("Pool error: {0}")]
     Pool(String),
 
+    #[allow(dead_code)]
     #[error("Keychain error: {0}")]
     Keychain(String),
 

@@ -16,6 +16,7 @@ use crate::error::RowmanceError;
 pub struct TunnelHandle {
     pub local_port: u16,
     /// Dropping kill_tx signals the background watcher to kill the process.
+    #[allow(dead_code)]
     kill_tx: oneshot::Sender<()>,
     /// Becomes true when the SSH process has exited (expected or not).
     pub exited_rx: watch::Receiver<bool>,

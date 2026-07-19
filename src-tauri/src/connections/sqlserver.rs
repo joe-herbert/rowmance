@@ -1,6 +1,6 @@
 /// SQL Server-specific schema introspection queries using tiberius.
 use futures::TryStreamExt;
-use tiberius::{Client, ColumnData, QueryItem};
+use tiberius::{Client, QueryItem};
 use tokio_util::compat::Compat;
 
 use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
@@ -27,64 +27,6 @@ pub async fn exec_simple(conn: &mut MssqlConn, sql: &str) -> Result<(), Rowmance
     Ok(())
 }
 
-/// Convert a tiberius ColumnData value to a JSON value.
-fn column_data_to_string(data: ColumnData<'_>) -> Option<String> {
-    match data {
-        ColumnData::String(v) => v.map(|s| s.into_owned()),
-        ColumnData::I16(v) => v.map(|n| n.to_string()),
-        ColumnData::I32(v) => v.map(|n| n.to_string()),
-        ColumnData::I64(v) => v.map(|n| n.to_string()),
-        ColumnData::U8(v) => v.map(|n| n.to_string()),
-        ColumnData::Bit(v) => v.map(|b| if b { "1".to_string() } else { "0".to_string() }),
-        _ => None,
-    }
-}
-
-fn col_string(row: &tiberius::Row, idx: usize) -> Option<String> {
-    column_data_to_string(row.get_value(idx).unwrap_or(ColumnData::String(None)))
-}
-
-fn col_i32(row: &tiberius::Row, idx: usize) -> Option<i32> {
-    match row.get_value(idx).unwrap_or(ColumnData::I32(None)) {
-        ColumnData::I32(v) => v,
-        ColumnData::I16(v) => v.map(|n| n as i32),
-        ColumnData::U8(v) => v.map(|n| n as i32),
-        ColumnData::I64(v) => v.map(|n| n as i32),
-        ColumnData::Bit(v) => v.map(|b| if b { 1 } else { 0 }),
-        _ => None,
-    }
-}
-
-fn col_i64(row: &tiberius::Row, idx: usize) -> Option<i64> {
-    match row.get_value(idx).unwrap_or(ColumnData::I64(None)) {
-        ColumnData::I64(v) => v,
-        ColumnData::I32(v) => v.map(|n| n as i64),
-        ColumnData::I16(v) => v.map(|n| n as i64),
-        ColumnData::U8(v) => v.map(|n| n as i64),
-        _ => None,
-    }
-}
-
-trait RowExt {
-    fn get_value(&self, idx: usize) -> Option<ColumnData<'_>>;
-}
-
-impl RowExt for tiberius::Row {
-    fn get_value(&self, idx: usize) -> Option<ColumnData<'_>> {
-        // tiberius Row implements Index by column name or position.
-        // We use the public API: columns() to get names, then get by name.
-        let cols = self.columns();
-        if idx >= cols.len() {
-            return None;
-        }
-        let col_name = cols[idx].name();
-        // We can't easily extract ColumnData by index directly in tiberius without
-        // consuming the row, so we use the typed get approach.
-        // Instead, just return None and let the caller use typed getters.
-        let _ = col_name;
-        None
-    }
-}
 
 /// Helper: get a string value from a tiberius Row by column index using typed access.
 fn get_str(row: &tiberius::Row, idx: usize) -> Option<String> {

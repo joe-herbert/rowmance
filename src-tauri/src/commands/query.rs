@@ -922,6 +922,7 @@ const UNBOUNDED: u32 = 0;
 /// Returns the SQL unchanged when `page_size` is `UNBOUNDED` (0) or when the query
 /// already contains a top-level LIMIT clause (respecting the user's explicit limit).
 /// Otherwise appends `LIMIT {page_size} OFFSET {offset}`.
+#[allow(dead_code)]
 fn build_paginated_sql(sql: &str, page_size: u32, offset: u32) -> String {
     if page_size == UNBOUNDED || sql_has_top_level_limit(sql) {
         sql.to_string()
@@ -932,6 +933,7 @@ fn build_paginated_sql(sql: &str, page_size: u32, offset: u32) -> String {
 
 /// Returns true if `sql` has a LIMIT keyword at the top level
 /// (i.e., not inside quoted strings, block comments, or nested parentheses).
+#[allow(dead_code)]
 fn sql_has_top_level_limit(sql: &str) -> bool {
     let bytes = sql.as_bytes();
     let len = bytes.len();

@@ -64,6 +64,7 @@ struct PolymorphicVrRow {
 }
 
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct PolymorphicMappingRow {
     id: String,
     relation_id: String,

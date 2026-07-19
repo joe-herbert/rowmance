@@ -72,24 +72,24 @@ describe('listForeignKeys', () => {
 });
 
 describe('getDdl', () => {
-  it('invokes schema_get_ddl with all four arguments', async () => {
+  it('invokes schema_get_ddl', async () => {
     mockInvoke.mockResolvedValue('CREATE TABLE ...');
-    const result = await getDdl('conn-1', 'my_db', 'users', 'table');
+    const result = await getDdl('conn-1', 'my_db', 'users');
     expect(mockInvoke).toHaveBeenCalledWith('schema_get_ddl', {
       connectionId: 'conn-1',
       database: 'my_db',
       objectName: 'users',
-      objectType: 'table',
+      instanceDb: null,
     });
     expect(result).toBe('CREATE TABLE ...');
   });
 
-  it('accepts "view" as objectType', async () => {
+  it('passes instanceDb when provided', async () => {
     mockInvoke.mockResolvedValue('CREATE VIEW ...');
-    await getDdl('conn-1', 'my_db', 'active_users', 'view');
+    await getDdl('conn-1', 'my_db', 'active_users', 'instance_db');
     expect(mockInvoke).toHaveBeenCalledWith(
       'schema_get_ddl',
-      expect.objectContaining({ objectType: 'view' }),
+      expect.objectContaining({ instanceDb: 'instance_db' }),
     );
   });
 });

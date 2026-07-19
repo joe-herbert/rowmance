@@ -25,12 +25,15 @@ pub trait DatabaseEngine: Send + Sync {
 
     /// Return the parameter placeholder for the nth bind position (1-indexed).
     /// MySQL/SQLite: `?`, PostgreSQL: `$1`, `$2`, …, SQL Server: `@P1`, `@P2`, …
+    #[allow(dead_code)]
     fn placeholder(&self, n: usize) -> String;
 
     /// Wrap a SELECT statement with engine-appropriate pagination syntax.
+    #[allow(dead_code)]
     fn build_pagination(&self, sql: &str, limit: u64, offset: u64) -> String;
 
     /// Return true if this SQL string is expected to return rows.
+    #[allow(dead_code)]
     fn parse_returns_rows(&self, sql: &str) -> bool;
 
     // ── Schema introspection ──────────────────────────────────────────────────
@@ -102,6 +105,7 @@ pub trait DatabaseEngine: Send + Sync {
     ) -> Result<(u64, u64, u64), RowmanceError>;
 
     // ── Connection lifecycle ──────────────────────────────────────────────────
+    #[allow(dead_code)]
     async fn ping(&self) -> bool;
 
     // ── Transactions ──────────────────────────────────────────────────────────
@@ -303,6 +307,7 @@ pub trait EngineTransaction: Send {
         deletes: &[RowDelete],
     ) -> Result<(u64, u64, u64), RowmanceError>;
 
+    #[allow(dead_code)]
     async fn execute_raw(&mut self, sql: &str) -> Result<(), RowmanceError>;
 
     async fn commit(&mut self) -> Result<(), RowmanceError>;

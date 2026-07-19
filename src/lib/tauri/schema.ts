@@ -61,8 +61,7 @@ export async function getDdl(
   connectionId: string,
   database: string,
   objectName: string,
-  objectType: 'table' | 'view',
   instanceDb?: string | null,
 ): Promise<string> {
-  return invoke<string>('schema_get_ddl', { connectionId, database, objectName, objectType, instanceDb: instanceDb ?? null });
+  return invoke<string>('schema_get_ddl', { connectionId, database, objectName, instanceDb: instanceDb ?? null });
 }

@@ -21,6 +21,7 @@ type MssqlConn = tiberius::Client<tokio_util::compat::Compat<tokio::net::TcpStre
 
 pub struct SqlServerEngine {
     pub pool: MssqlPool,
+    #[allow(dead_code)]
     pub read_only: bool,
     pub initial_catalog: String,
 }

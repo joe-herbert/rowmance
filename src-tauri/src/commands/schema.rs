@@ -182,7 +182,6 @@ pub async fn schema_get_ddl(
     connection_id: String,
     database: String,
     object_name: String,
-    #[allow(unused_variables)] object_type: String,
     instance_db: Option<String>,
 ) -> Result<String, AppError> {
     let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
