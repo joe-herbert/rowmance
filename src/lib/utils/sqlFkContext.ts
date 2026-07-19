@@ -38,7 +38,7 @@ function slotAt(state: EditorState, parens: SyntaxNode, pos: number): number {
   const text = state.sliceDoc(parens.from + 1, Math.min(pos, parens.to));
   for (const ch of text) {
     if ('([{'.includes(ch)) depth++;
-    else if (')]}' .includes(ch)) depth--;
+    else if (')]}'.includes(ch)) depth--;
     else if (ch === ',' && depth === 0) slot++;
   }
   return slot;
@@ -60,8 +60,8 @@ export function getFkValueContext(state: EditorState, pos: number): FkValueConte
 
   const children = childList(stmt);
   const kws = children
-    .filter(n => n.name === 'Keyword')
-    .map(n => ({ n, upper: state.sliceDoc(n.from, n.to).toUpperCase() }));
+    .filter((n) => n.name === 'Keyword')
+    .map((n) => ({ n, upper: state.sliceDoc(n.from, n.to).toUpperCase() }));
 
   const first = kws[0]?.upper;
   if (first === 'INSERT') return detectInsert(state, children, kws, pos);
@@ -75,13 +75,17 @@ function detectInsert(
   kws: { n: SyntaxNode; upper: string }[],
   pos: number,
 ): FkValueContext | null {
-  const valKw = kws.find(k => k.upper === 'VALUES');
-  const intoKw = kws.find(k => k.upper === 'INTO');
+  const valKw = kws.find((k) => k.upper === 'VALUES');
+  const intoKw = kws.find((k) => k.upper === 'INTO');
   if (!valKw || !intoKw) return null;
 
   // Table name: first Identifier/QuotedIdentifier after INTO
   const tableNode = children.find(
-    n => n.from >= intoKw.n.to && (n.name === 'Identifier' || n.name === 'QuotedIdentifier' || n.name === 'CompositeIdentifier'),
+    (n) =>
+      n.from >= intoKw.n.to &&
+      (n.name === 'Identifier' ||
+        n.name === 'QuotedIdentifier' ||
+        n.name === 'CompositeIdentifier'),
   );
   if (!tableNode) return null;
 
@@ -95,14 +99,12 @@ function detectInsert(
   }
 
   // Column list: Parens that appears before VALUES keyword
-  const colListParens = children.find(
-    n => n.name === 'Parens' && n.to <= valKw.n.from,
-  );
+  const colListParens = children.find((n) => n.name === 'Parens' && n.to <= valKw.n.from);
   if (!colListParens) return null;
 
   // Values Parens: Parens after VALUES keyword that contains the cursor
   const valueParens = children.find(
-    n => n.name === 'Parens' && n.from >= valKw.n.to && pos >= n.from && pos <= n.to,
+    (n) => n.name === 'Parens' && n.from >= valKw.n.to && pos >= n.from && pos <= n.to,
   );
   if (!valueParens) return null;
 
@@ -129,12 +131,16 @@ function detectUpdate(
   pos: number,
 ): FkValueContext | null {
   const updateKw = kws[0]; // UPDATE
-  const setKw = kws.find(k => k.upper === 'SET');
+  const setKw = kws.find((k) => k.upper === 'SET');
   if (!setKw) return null;
 
   // Table name: first Identifier after UPDATE
   const tableNode = children.find(
-    n => n.from >= updateKw.n.to && (n.name === 'Identifier' || n.name === 'QuotedIdentifier' || n.name === 'CompositeIdentifier'),
+    (n) =>
+      n.from >= updateKw.n.to &&
+      (n.name === 'Identifier' ||
+        n.name === 'QuotedIdentifier' ||
+        n.name === 'CompositeIdentifier'),
   );
   if (!tableNode) return null;
 
@@ -147,8 +153,8 @@ function detectUpdate(
   }
 
   // WHERE clause start (or end of statement)
-  const whereKw = kws.find(k => k.upper === 'WHERE');
-  const setEnd = whereKw ? whereKw.n.from : children[children.length - 1]?.to ?? pos;
+  const whereKw = kws.find((k) => k.upper === 'WHERE');
+  const setEnd = whereKw ? whereKw.n.from : (children[children.length - 1]?.to ?? pos);
 
   if (pos < setKw.n.to || pos > setEnd) return null;
 
@@ -160,7 +166,7 @@ function detectUpdate(
   }
 
   // Collect SET-clause children and scan backwards from cursor to find `col =` pattern
-  const setCh = children.filter(n => n.from >= setKw.n.to && n.to <= setEnd);
+  const setCh = children.filter((n) => n.from >= setKw.n.to && n.to <= setEnd);
 
   let colNode: SyntaxNode | null = null;
   let foundEq = false;

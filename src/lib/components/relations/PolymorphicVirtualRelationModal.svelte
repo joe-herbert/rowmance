@@ -66,7 +66,10 @@
   let typeColumnValues = $state<string[]>([]);
 
   async function loadTypeColumnValues(col: string) {
-    if (!col) { typeColumnValues = []; return; }
+    if (!col) {
+      typeColumnValues = [];
+      return;
+    }
     try {
       const d = connectionStore.getById(connectionId)?.dialectInfo ?? defaultDialectInfo;
       const quotedCol = qi(col, d);
@@ -84,24 +87,27 @@
     }
   }
 
-  $effect(() => { loadTypeColumnValues(typeColumn); });
+  $effect(() => {
+    loadTypeColumnValues(typeColumn);
+  });
 
   let mappings = $state<MappingRow[]>(
-    untrack(() =>
-      editRelation?.mappings.map((m) => ({
-        typeValue: m.typeValue,
-        toConnectionId: m.to.connectionId,
-        toDatabase: m.to.database,
-        toTable: m.to.table,
-        toColumn: m.to.column,
-        databases: [],
-        tables: [],
-        columns: [],
-        dbLoading: false,
-        tableLoading: false,
-        colLoading: false,
-        collapsed: true,
-      })) ?? [],
+    untrack(
+      () =>
+        editRelation?.mappings.map((m) => ({
+          typeValue: m.typeValue,
+          toConnectionId: m.to.connectionId,
+          toDatabase: m.to.database,
+          toTable: m.to.table,
+          toColumn: m.to.column,
+          databases: [],
+          tables: [],
+          columns: [],
+          dbLoading: false,
+          tableLoading: false,
+          colLoading: false,
+          collapsed: true,
+        })) ?? [],
     ),
   );
 
@@ -130,9 +136,15 @@
     tableColumnsLoading = true;
     schemaApi
       .listColumns(connectionId, database, table)
-      .then((cols) => { tableColumns = cols.map((c) => c.name); })
-      .catch((err) => { error = errorMessage(err); })
-      .finally(() => { tableColumnsLoading = false; });
+      .then((cols) => {
+        tableColumns = cols.map((c) => c.name);
+      })
+      .catch((err) => {
+        error = errorMessage(err);
+      })
+      .finally(() => {
+        tableColumnsLoading = false;
+      });
   });
 
   // Pre-load cascading data for existing mappings when editing
@@ -149,8 +161,12 @@
           mappings[idx].tables = tbls;
           return schemaApi.listColumns(m.to.connectionId, m.to.database, m.to.table);
         })
-        .then((cols) => { mappings[idx].columns = cols.map((c) => c.name); })
-        .catch((err) => { error = errorMessage(err); });
+        .then((cols) => {
+          mappings[idx].columns = cols.map((c) => c.name);
+        })
+        .catch((err) => {
+          error = errorMessage(err);
+        });
     });
   });
 
@@ -189,9 +205,7 @@
 
   const mappedTypeValues = $derived(new Set(mappings.map((m) => m.typeValue).filter(Boolean)));
 
-  const unmappedTypeValues = $derived(
-    typeColumnValues.filter((v) => !mappedTypeValues.has(v)),
-  );
+  const unmappedTypeValues = $derived(typeColumnValues.filter((v) => !mappedTypeValues.has(v)));
 
   async function addAllMappings() {
     // Snapshot before mutating — unmappedTypeValues is $derived and will
@@ -351,7 +365,9 @@
   /** Type values already committed by other mappings. */
   function otherTypeValues(idx: number): Set<string> {
     const s = new Set<string>();
-    mappings.forEach((m, i) => { if (i !== idx && m.typeValue) s.add(m.typeValue); });
+    mappings.forEach((m, i) => {
+      if (i !== idx && m.typeValue) s.add(m.typeValue);
+    });
     return s;
   }
 
@@ -425,7 +441,9 @@
               id="pvr-type-col"
               bind:value={typeColumn}
               options={columnOptions}
-              onchange={(v) => { typeColumn = v; }}
+              onchange={(v) => {
+                typeColumn = v;
+              }}
               size="md"
               searchable
             />
@@ -436,7 +454,9 @@
               id="pvr-value-col"
               bind:value={valueColumn}
               options={columnOptions}
-              onchange={(v) => { valueColumn = v; }}
+              onchange={(v) => {
+                valueColumn = v;
+              }}
               size="md"
               searchable
             />
@@ -445,7 +465,9 @@
         {#if typeColumn && valueColumn && typeColumn === valueColumn}
           <div class="validation-msg">Type column and value column must be different.</div>
         {:else if duplicateRelationExists}
-          <div class="validation-msg">A polymorphic relation with this type and value column already exists on this table.</div>
+          <div class="validation-msg">
+            A polymorphic relation with this type and value column already exists on this table.
+          </div>
         {/if}
       </div>
 
@@ -469,7 +491,9 @@
                   <span class="compact-arrow">→</span>
                   <div class="compact-target">
                     <span class="compact-path">
-                      {#if mapping.toConnectionId !== connectionId}<span class="compact-conn-prefix">{connName(mapping.toConnectionId)} / </span>{/if}{mapping.toDatabase}.{mapping.toTable}.{mapping.toColumn}
+                      {#if mapping.toConnectionId !== connectionId}<span class="compact-conn-prefix"
+                          >{connName(mapping.toConnectionId)} /
+                        </span>{/if}{mapping.toDatabase}.{mapping.toTable}.{mapping.toColumn}
                     </span>
                   </div>
                 </div>
@@ -478,7 +502,10 @@
                     <PencilIcon width={11} height={11} />
                     Edit
                   </button>
-                  <button class="compact-btn compact-btn--danger" onclick={() => removeMapping(idx)}>
+                  <button
+                    class="compact-btn compact-btn--danger"
+                    onclick={() => removeMapping(idx)}
+                  >
                     <TrashIcon width={11} height={11} />
                     Remove
                   </button>
@@ -490,7 +517,12 @@
                 <div class="mapping-header">
                   <span class="mapping-index">Mapping {idx + 1}</span>
                   <div class="mapping-header-actions">
-                    <button class="icon-btn icon-btn--danger" onclick={() => removeMapping(idx)} aria-label="Remove mapping" title="Remove">
+                    <button
+                      class="icon-btn icon-btn--danger"
+                      onclick={() => removeMapping(idx)}
+                      aria-label="Remove mapping"
+                      title="Remove"
+                    >
                       <CloseIcon width={12} height={12} />
                     </button>
                   </div>
@@ -502,11 +534,17 @@
                     id="pvr-type-val-{idx}"
                     bind:value={mapping.typeValue}
                     suggestions={suggestionsFor(idx)}
-                    placeholder={typeColumnValues.length > 0 ? 'Choose or type a value…' : 'e.g. Post, Article…'}
-                    onchange={(v) => { mapping.typeValue = v; }}
+                    placeholder={typeColumnValues.length > 0
+                      ? 'Choose or type a value…'
+                      : 'e.g. Post, Article…'}
+                    onchange={(v) => {
+                      mapping.typeValue = v;
+                    }}
                   />
                   {#if isDuplicate(idx)}
-                    <span class="field-error">This type value is already used in another mapping.</span>
+                    <span class="field-error"
+                      >This type value is already used in another mapping.</span
+                    >
                   {/if}
                 </div>
 
@@ -573,7 +611,12 @@
                 </div>
 
                 {#if isComplete(mapping)}
-                  <button class="confirm-btn" onclick={() => { mapping.collapsed = true; }}>
+                  <button
+                    class="confirm-btn"
+                    onclick={() => {
+                      mapping.collapsed = true;
+                    }}
+                  >
                     Confirm
                   </button>
                 {/if}
@@ -703,9 +746,16 @@
     font-size: var(--font-size-sm);
   }
 
-  .chip-sep { color: var(--color-text-muted); }
-  .chip-db { color: var(--color-text-secondary); }
-  .chip-table { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+  .chip-sep {
+    color: var(--color-text-muted);
+  }
+  .chip-db {
+    color: var(--color-text-secondary);
+  }
+  .chip-table {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
+  }
 
   .two-col {
     display: grid;
@@ -1029,7 +1079,10 @@
     white-space: nowrap;
   }
 
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   .btn--primary {
     background: var(--color-accent);
@@ -1037,7 +1090,9 @@
     border: 1px solid transparent;
   }
 
-  .btn--primary:not(:disabled):hover { background: var(--color-accent-hover); }
+  .btn--primary:not(:disabled):hover {
+    background: var(--color-accent-hover);
+  }
 
   .btn--ghost {
     background: transparent;

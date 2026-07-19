@@ -84,9 +84,7 @@ export async function generateSqlUpdate(
     const pkCols = columns.filter((c) => c.isPrimaryKey);
     const dataCols = columns.filter((c) => !c.isPrimaryKey);
     const setCols = dataCols.length > 0 ? dataCols : columns;
-    const setClauses = setCols
-      .map((c) => `    ${qi(c.name, profile.dialectInfo)} = `)
-      .join(',\n');
+    const setClauses = setCols.map((c) => `    ${qi(c.name, profile.dialectInfo)} = `).join(',\n');
     const whereClauses =
       pkCols.length > 0
         ? pkCols.map((c) => `${qi(c.name, profile.dialectInfo)} = `).join(' AND ')

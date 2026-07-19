@@ -10,7 +10,13 @@ export async function exportResultToClipboard(
   tableName?: string,
   connectionId?: string,
 ): Promise<void> {
-  return invoke<void>('export_result_to_clipboard', { rows, columns, format, tableName, connectionId });
+  return invoke<void>('export_result_to_clipboard', {
+    rows,
+    columns,
+    format,
+    tableName,
+    connectionId,
+  });
 }
 
 export async function exportResultToFile(
@@ -21,5 +27,12 @@ export async function exportResultToFile(
   tableName?: string,
   connectionId?: string,
 ): Promise<void> {
-  return invoke<void>('export_result_to_file', { rows, columns, format, filePath, tableName, connectionId });
+  return invoke<void>('export_result_to_file', {
+    rows,
+    columns,
+    format,
+    filePath,
+    tableName,
+    connectionId,
+  });
 }

@@ -144,6 +144,7 @@
 
   {#if showNewForm}
     <div class="new-form">
+      <!-- svelte-ignore a11y_autofocus -->
       <input
         class="new-name-input"
         type="text"
@@ -151,7 +152,9 @@
         bind:value={newName}
         onkeydown={(e) => {
           if (e.key === 'Enter') createDashboard();
-          if (e.key === 'Escape') { showNewForm = false; }
+          if (e.key === 'Escape') {
+            showNewForm = false;
+          }
         }}
         autofocus
       />
@@ -160,8 +163,15 @@
         <IconPicker value={newIcon} onchange={(s) => (newIcon = s)} />
       </div>
       <div class="new-form-actions">
-        <button class="action-btn" onclick={() => (showNewForm = false)} type="button">Cancel</button>
-        <button class="action-btn action-btn--primary" onclick={createDashboard} disabled={!newName.trim()} type="button">Create</button>
+        <button class="action-btn" onclick={() => (showNewForm = false)} type="button"
+          >Cancel</button
+        >
+        <button
+          class="action-btn action-btn--primary"
+          onclick={createDashboard}
+          disabled={!newName.trim()}
+          type="button">Create</button
+        >
       </div>
     </div>
   {/if}
@@ -185,7 +195,9 @@
                 onblur={commitRename}
                 onkeydown={(e) => {
                   if (e.key === 'Enter') commitRename();
-                  if (e.key === 'Escape') { renamingId = null; }
+                  if (e.key === 'Escape') {
+                    renamingId = null;
+                  }
                 }}
               />
             </div>
@@ -207,7 +219,11 @@
                 class="pin-btn"
                 class:pin-btn--active={isPinned}
                 onclick={() => dashboardsStore.togglePin(dashboard.id)}
-                title={isPinned ? 'Unpin from title bar' : canPin ? 'Pin to title bar' : 'Max 3 pinned'}
+                title={isPinned
+                  ? 'Unpin from title bar'
+                  : canPin
+                    ? 'Pin to title bar'
+                    : 'Max 3 pinned'}
                 disabled={!isPinned && !canPin}
                 aria-label={isPinned ? 'Unpin' : 'Pin to title bar'}
                 type="button"
@@ -234,18 +250,22 @@
     {@const d = dashboardsStore.getById(ctxMenu.id)}
     <CtxItem onclick={() => openDashboard(ctxMenu!.id)}>Open</CtxItem>
     <CtxItem onclick={() => startRename(ctxMenu!.id, ctxMenu!.name)}>Rename</CtxItem>
-    <CtxItem onclick={() => {
-      if (!d) return;
-      dashboardsStore.togglePin(ctxMenu!.id);
-      ctxMenu = null;
-    }}>
+    <CtxItem
+      onclick={() => {
+        if (!d) return;
+        dashboardsStore.togglePin(ctxMenu!.id);
+        ctxMenu = null;
+      }}
+    >
       {d?.pinned ? 'Unpin from title bar' : 'Pin to title bar'}
     </CtxItem>
-    <CtxItem onclick={() => {
-      if (!d) return;
-      ctxMenu = null;
-      void exportDashboard(d, (id) => connectionsStore.getById(id));
-    }}>Export to file</CtxItem>
+    <CtxItem
+      onclick={() => {
+        if (!d) return;
+        ctxMenu = null;
+        void exportDashboard(d, (id) => connectionsStore.getById(id));
+      }}>Export to file</CtxItem
+    >
     <CtxSep />
     <CtxItem danger onclick={() => startDelete(ctxMenu!.id, ctxMenu!.name)}>Delete</CtxItem>
   {/if}

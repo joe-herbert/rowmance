@@ -132,12 +132,12 @@
       transform var(--transition-fast);
   }
 
-  .checkbox-wrapper--sm .checkbox-check {
+  .checkbox-wrapper--sm :global(.checkbox-check) {
     width: 8px;
     height: 6px;
   }
 
-  .checkbox-box--checked .checkbox-check {
+  .checkbox-box--checked :global(.checkbox-check) {
     opacity: 1;
     transform: scale(1);
   }

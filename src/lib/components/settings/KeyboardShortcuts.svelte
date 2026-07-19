@@ -394,7 +394,7 @@
     gap: var(--spacing-1);
   }
 
-  .conflict-icon {
+  :global(.conflict-icon) {
     color: var(--color-danger);
     flex-shrink: 0;
   }

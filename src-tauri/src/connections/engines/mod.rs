@@ -4,8 +4,8 @@ pub mod postgres;
 pub mod sqlite;
 pub mod sqlserver;
 
-use crate::connections::types::DialectInfo;
 use crate::connections::engine::PoolAdapter;
+use crate::connections::types::DialectInfo;
 use crate::error::RowmanceError;
 
 /// Return dialect metadata for the given db_type string.
@@ -22,18 +22,28 @@ pub fn dialect_for_db_type(db_type: &str) -> DialectInfo {
 /// The frontend uses this to populate the engine type dropdown.
 pub fn all_known_dialects() -> Vec<(String, DialectInfo)> {
     vec![
-        ("mysql".to_owned(),     mysql::dialect_info("mysql").unwrap()),
-        ("mariadb".to_owned(),   mysql::dialect_info("mariadb").unwrap()),
-        ("postgres".to_owned(),  postgres::dialect_info("postgres").unwrap()),
-        ("sqlite".to_owned(),    sqlite::dialect_info("sqlite").unwrap()),
-        ("sqlserver".to_owned(), sqlserver::dialect_info("sqlserver").unwrap()),
-        ("oracle".to_owned(),    oracle::dialect_info("oracle").unwrap()),
+        ("mysql".to_owned(), mysql::dialect_info("mysql").unwrap()),
+        (
+            "mariadb".to_owned(),
+            mysql::dialect_info("mariadb").unwrap(),
+        ),
+        (
+            "postgres".to_owned(),
+            postgres::dialect_info("postgres").unwrap(),
+        ),
+        ("sqlite".to_owned(), sqlite::dialect_info("sqlite").unwrap()),
+        (
+            "sqlserver".to_owned(),
+            sqlserver::dialect_info("sqlserver").unwrap(),
+        ),
+        ("oracle".to_owned(), oracle::dialect_info("oracle").unwrap()),
     ]
 }
 
 /// Open a connection pool for the given db_type.
 /// All engine-specific code lives in the engine file; only this dispatch
 /// needs updating when adding a new engine.
+#[allow(clippy::too_many_arguments)]
 pub async fn connect_for_db_type(
     db_type: &str,
     host: &str,
@@ -50,21 +60,69 @@ pub async fn connect_for_db_type(
 ) -> Result<Box<dyn PoolAdapter>, RowmanceError> {
     match db_type {
         "mysql" | "mariadb" => {
-            mysql::create_pool(host, port, database, username, password, pool_max, ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path, read_only).await
+            mysql::create_pool(
+                host,
+                port,
+                database,
+                username,
+                password,
+                pool_max,
+                ssl_enabled,
+                ssl_ca_path,
+                ssl_cert_path,
+                ssl_key_path,
+                read_only,
+            )
+            .await
         }
         "postgres" => {
-            postgres::create_pool(host, port, database, username, password, pool_max, ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path, read_only).await
+            postgres::create_pool(
+                host,
+                port,
+                database,
+                username,
+                password,
+                pool_max,
+                ssl_enabled,
+                ssl_ca_path,
+                ssl_cert_path,
+                ssl_key_path,
+                read_only,
+            )
+            .await
         }
-        "sqlite" => {
-            sqlite::create_pool(host, pool_max, read_only).await
-        }
+        "sqlite" => sqlite::create_pool(host, pool_max, read_only).await,
         "sqlserver" => {
-            sqlserver::create_pool(host, port, database, username, password, pool_max, ssl_enabled, ssl_ca_path, read_only).await
+            sqlserver::create_pool(
+                host,
+                port,
+                database,
+                username,
+                password,
+                pool_max,
+                ssl_enabled,
+                ssl_ca_path,
+                read_only,
+            )
+            .await
         }
         "oracle" => {
-            oracle::create_pool(host, port, database, username, password, pool_max, ssl_enabled, ssl_ca_path, read_only).await
+            oracle::create_pool(
+                host,
+                port,
+                database,
+                username,
+                password,
+                pool_max,
+                ssl_enabled,
+                ssl_ca_path,
+                read_only,
+            )
+            .await
         }
-        other => Err(RowmanceError::ConnectionNotFound(format!("Unknown db_type: {other}")))
+        other => Err(RowmanceError::ConnectionNotFound(format!(
+            "Unknown db_type: {other}"
+        ))),
     }
 }
 
@@ -87,7 +145,12 @@ fn default_dialect(db_type: &str) -> DialectInfo {
         warns_tx_database_mismatch: false,
         display_name: db_type.to_string(),
         default_column_type: "TEXT".into(),
-        common_column_types: vec!["TEXT".into(), "INTEGER".into(), "REAL".into(), "BOOLEAN".into()],
+        common_column_types: vec![
+            "TEXT".into(),
+            "INTEGER".into(),
+            "REAL".into(),
+            "BOOLEAN".into(),
+        ],
         supports_auto_increment: false,
         supports_column_comment: false,
         supports_change_column: false,

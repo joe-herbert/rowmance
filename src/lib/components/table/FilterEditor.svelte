@@ -427,16 +427,6 @@
     pickerTriggerEl = null;
   }
 
-  function formatDateDisplay(value: string, category: 'datetime' | 'date' | 'time'): string {
-    if (!value)
-      return category === 'datetime'
-        ? 'Pick date & time…'
-        : category === 'time'
-          ? 'Pick time…'
-          : 'Pick date…';
-    return value;
-  }
-
   function isBooleanColumn(columnName: string): boolean {
     const col = columns.find((c) => c.name === columnName);
     if (!col) return false;
@@ -770,7 +760,11 @@
                               class="fe-date-picker-btn"
                               type="button"
                               aria-label="Open date picker"
-                              onclick={(e) => openPicker(rule.id, e.currentTarget.closest('.fe-date-input-wrap') as HTMLElement)}
+                              onclick={(e) =>
+                                openPicker(
+                                  rule.id,
+                                  e.currentTarget.closest('.fe-date-input-wrap') as HTMLElement,
+                                )}
                             >
                               <CalendarIcon width={11} height={11} />
                             </button>
@@ -808,8 +802,7 @@
                     class="rule-remove-btn"
                     onclick={() => removeRule(group.id, rule.id)}
                     aria-label="Remove filter"
-                    title="Remove"
-                    ><CloseIcon width={10} height={10} strokeWidth={2.5} /></button
+                    title="Remove"><CloseIcon width={10} height={10} strokeWidth={2.5} /></button
                   >
                 </div>
               {/each}
@@ -857,7 +850,9 @@
           : quoteIdentifier(tableName)}
         <div class="sql-preview-hint">
           Executed as: <code class="sql-preview-code"
-            ><SqlHighlight sql={`SELECT * FROM ${tableRef} WHERE ${draft.sql.trim() || '…'}`} /></code
+            ><SqlHighlight
+              sql={`SELECT * FROM ${tableRef} WHERE ${draft.sql.trim() || '…'}`}
+            /></code
           >
         </div>
       {/if}

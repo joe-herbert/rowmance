@@ -55,8 +55,8 @@ struct DashboardRow {
 
 impl From<DashboardRow> for Dashboard {
     fn from(r: DashboardRow) -> Self {
-        let widgets = serde_json::from_str(&r.widgets_json)
-            .unwrap_or(serde_json::Value::Array(vec![]));
+        let widgets =
+            serde_json::from_str(&r.widgets_json).unwrap_or(serde_json::Value::Array(vec![]));
         Self {
             id: r.id,
             name: r.name,
@@ -73,15 +73,11 @@ impl From<DashboardRow> for Dashboard {
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn dashboards_list(
-    sqlite: State<'_, SqlitePool>,
-) -> Result<Vec<Dashboard>, AppError> {
-    let rows = sqlx::query_as::<_, DashboardRow>(
-        "SELECT * FROM dashboards ORDER BY created_at",
-    )
-    .fetch_all(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+pub async fn dashboards_list(sqlite: State<'_, SqlitePool>) -> Result<Vec<Dashboard>, AppError> {
+    let rows = sqlx::query_as::<_, DashboardRow>("SELECT * FROM dashboards ORDER BY created_at")
+        .fetch_all(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     Ok(rows.into_iter().map(Dashboard::from).collect())
 }
@@ -123,8 +119,7 @@ pub async fn dashboards_update(
     input: DashboardUpdateInput,
 ) -> Result<Dashboard, AppError> {
     let now = chrono::Utc::now().to_rfc3339();
-    let widgets_json = serde_json::to_string(&input.widgets)
-        .unwrap_or_else(|_| "[]".to_string());
+    let widgets_json = serde_json::to_string(&input.widgets).unwrap_or_else(|_| "[]".to_string());
     let pinned_i = input.pinned as i64;
 
     sqlx::query(
@@ -153,10 +148,7 @@ pub async fn dashboards_update(
 }
 
 #[tauri::command]
-pub async fn dashboards_delete(
-    sqlite: State<'_, SqlitePool>,
-    id: String,
-) -> Result<(), AppError> {
+pub async fn dashboards_delete(sqlite: State<'_, SqlitePool>, id: String) -> Result<(), AppError> {
     sqlx::query("DELETE FROM dashboards WHERE id = ?")
         .bind(&id)
         .execute(sqlite.inner())

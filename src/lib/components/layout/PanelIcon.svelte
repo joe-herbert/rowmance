@@ -30,8 +30,10 @@
 {#if content.kind === 'table_browser'}
   <TableIcon
     {size}
-    system={isSystemDatabase(content.database, [...settingsStore.settings.systemDatabases, ...getAllSystemDatabases()]) ||
-      isSystemTable(content.table, settingsStore.settings.systemTablePatterns)}
+    system={isSystemDatabase(content.database, [
+      ...settingsStore.settings.systemDatabases,
+      ...getAllSystemDatabases(),
+    ]) || isSystemTable(content.table, settingsStore.settings.systemTablePatterns)}
   />
 {:else if content.kind === 'table_structure'}
   <TableColumnsIcon {size} />

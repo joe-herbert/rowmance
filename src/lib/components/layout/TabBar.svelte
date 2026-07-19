@@ -185,10 +185,14 @@
       ? (queryEditorCache.get(item.content.editorId)?.sql ?? item.content.initialSql ?? '')
       : (item.content.initialSql ?? '');
     const currentDescription = item.content.editorId
-      ? (queryEditorCache.get(item.content.editorId)?.description ?? item.content.initialDescription ?? null)
+      ? (queryEditorCache.get(item.content.editorId)?.description ??
+        item.content.initialDescription ??
+        null)
       : (item.content.initialDescription ?? null);
     const currentAnnotations = item.content.editorId
-      ? (queryEditorCache.get(item.content.editorId)?.annotations ?? item.content.initialAnnotations ?? null)
+      ? (queryEditorCache.get(item.content.editorId)?.annotations ??
+        item.content.initialAnnotations ??
+        null)
       : (item.content.initialAnnotations ?? null);
     try {
       const updated = await savedQueriesApi.fileUpdateSavedQuery(item.content.savedQueryId, {
@@ -310,7 +314,9 @@
             onblur={() => commitRename(item)}
           />
         {:else}
-          <span class="tab-label" title={panelLabel(item.content, dashboardsById)}>{panelLabel(item.content, dashboardsById)}</span>
+          <span class="tab-label" title={panelLabel(item.content, dashboardsById)}
+            >{panelLabel(item.content, dashboardsById)}</span
+          >
         {/if}
         {#if itemIsDirty(item)}
           <span class="dirty-dot" title="Unsaved changes" aria-label="Has unsaved changes"></span>
@@ -361,9 +367,8 @@
       onclose={() => (contextMenuItemId = null)}
       onrename={(item) => {
         renamingItemId = item.id;
-        renameValue = item.content.kind === 'query_editor'
-          ? (item.content.savedQueryName ?? 'Query')
-          : '';
+        renameValue =
+          item.content.kind === 'query_editor' ? (item.content.savedQueryName ?? 'Query') : '';
       }}
     />
   {/if}

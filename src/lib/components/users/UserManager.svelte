@@ -983,7 +983,9 @@
             <Checkbox
               size="sm"
               checked={form.isSuperuser}
-              onchange={(c) => { addUserForm!.isSuperuser = c; }}
+              onchange={(c) => {
+                addUserForm!.isSuperuser = c;
+              }}
             />
             <span class="form-check-label">Superuser</span>
           </label>
@@ -991,7 +993,9 @@
             <Checkbox
               size="sm"
               checked={form.canCreateDb}
-              onchange={(c) => { addUserForm!.canCreateDb = c; }}
+              onchange={(c) => {
+                addUserForm!.canCreateDb = c;
+              }}
             />
             <span class="form-check-label">Can Create DB</span>
           </label>
@@ -999,7 +1003,9 @@
             <Checkbox
               size="sm"
               checked={form.canCreateRole}
-              onchange={(c) => { addUserForm!.canCreateRole = c; }}
+              onchange={(c) => {
+                addUserForm!.canCreateRole = c;
+              }}
             />
             <span class="form-check-label">Can Create Role</span>
           </label>

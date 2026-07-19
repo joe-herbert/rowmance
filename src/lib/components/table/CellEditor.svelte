@@ -478,8 +478,7 @@
       class="action-btn open-modal-btn"
       onclick={() => onOpenModal!(getConfirmedValue())}
       title="Open in modal"
-      aria-label="Open in modal"
-      ><ExpandIcon width={12} height={12} /></button
+      aria-label="Open in modal"><ExpandIcon width={12} height={12} /></button
     >
   {/if}
   {#if inputType !== 'boolean' && showPicker}

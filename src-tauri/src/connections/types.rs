@@ -354,7 +354,9 @@ pub enum CapabilityStatus {
     NotSupported,
     InsufficientPrivileges,
     #[serde(rename_all = "camelCase")]
-    ExtensionRequired { extension: String },
+    ExtensionRequired {
+        extension: String,
+    },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -506,9 +508,14 @@ mod server_admin_type_tests {
 
     #[test]
     fn capability_status_extension_required_serializes() {
-        let status = CapabilityStatus::ExtensionRequired { extension: "pg_cron".to_string() };
+        let status = CapabilityStatus::ExtensionRequired {
+            extension: "pg_cron".to_string(),
+        };
         let json = serde_json::to_string(&status).unwrap();
-        assert_eq!(json, r#"{"status":"extensionRequired","extension":"pg_cron"}"#);
+        assert_eq!(
+            json,
+            r#"{"status":"extensionRequired","extension":"pg_cron"}"#
+        );
     }
 
     #[test]
@@ -516,12 +523,20 @@ mod server_admin_type_tests {
         assert_eq!(CapabilityStatus::Supported, CapabilityStatus::Supported);
         assert_ne!(CapabilityStatus::Supported, CapabilityStatus::NotSupported);
         assert_eq!(
-            CapabilityStatus::ExtensionRequired { extension: "x".to_string() },
-            CapabilityStatus::ExtensionRequired { extension: "x".to_string() },
+            CapabilityStatus::ExtensionRequired {
+                extension: "x".to_string()
+            },
+            CapabilityStatus::ExtensionRequired {
+                extension: "x".to_string()
+            },
         );
         assert_ne!(
-            CapabilityStatus::ExtensionRequired { extension: "a".to_string() },
-            CapabilityStatus::ExtensionRequired { extension: "b".to_string() },
+            CapabilityStatus::ExtensionRequired {
+                extension: "a".to_string()
+            },
+            CapabilityStatus::ExtensionRequired {
+                extension: "b".to_string()
+            },
         );
     }
 
@@ -576,12 +591,27 @@ mod server_admin_type_tests {
         let json = serde_json::to_value(&flags).unwrap();
         assert!(json.get("processList").is_some(), "processList key missing");
         assert!(json.get("killSession").is_some(), "killSession key missing");
-        assert!(json.get("cancelSession").is_some(), "cancelSession key missing");
-        assert!(json.get("serverStatus").is_some(), "serverStatus key missing");
+        assert!(
+            json.get("cancelSession").is_some(),
+            "cancelSession key missing"
+        );
+        assert!(
+            json.get("serverStatus").is_some(),
+            "serverStatus key missing"
+        );
         assert!(json.get("setVariable").is_some(), "setVariable key missing");
-        assert!(json.get("scheduledJobs").is_some(), "scheduledJobs key missing");
-        assert!(json.get("innodbStatus").is_some(), "innodbStatus key missing");
-        assert!(json.get("vacuumStatus").is_some(), "vacuumStatus key missing");
+        assert!(
+            json.get("scheduledJobs").is_some(),
+            "scheduledJobs key missing"
+        );
+        assert!(
+            json.get("innodbStatus").is_some(),
+            "innodbStatus key missing"
+        );
+        assert!(
+            json.get("vacuumStatus").is_some(),
+            "vacuumStatus key missing"
+        );
         // snake_case keys must not appear
         assert!(json.get("process_list").is_none());
         assert!(json.get("kill_session").is_none());

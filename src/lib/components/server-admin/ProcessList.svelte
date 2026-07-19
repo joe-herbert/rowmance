@@ -234,7 +234,9 @@
     flex-shrink: 0;
   }
 
-  .spacer { flex: 1; }
+  .spacer {
+    flex: 1;
+  }
 
   .last-updated {
     font-size: var(--font-size-xs);
@@ -250,11 +252,19 @@
     background: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
-  .icon-btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
-  .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .icon-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 
   .text-btn {
     padding: 3px 10px;
@@ -266,7 +276,9 @@
     border: 1px solid var(--color-border);
     transition: background var(--transition-fast);
   }
-  .text-btn:hover { background: var(--color-bg-hover); }
+  .text-btn:hover {
+    background: var(--color-bg-hover);
+  }
 
   .interval-label {
     display: flex;
@@ -276,14 +288,17 @@
     color: var(--color-text-muted);
   }
 
-  .error-msg, .empty-msg {
+  .error-msg,
+  .empty-msg {
     padding: 24px;
     text-align: center;
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
   }
 
-  .error-msg { color: var(--color-danger, #e53e3e); }
+  .error-msg {
+    color: var(--color-danger, #e53e3e);
+  }
 
   .table-wrap {
     flex: 1;
@@ -296,7 +311,8 @@
     font-size: var(--font-size-xs);
   }
 
-  .data-table th, .data-table td {
+  .data-table th,
+  .data-table td {
     padding: 6px 10px;
     text-align: left;
     border-bottom: 1px solid var(--color-border);
@@ -314,11 +330,17 @@
     z-index: 1;
   }
 
-  .data-table tbody tr:hover { background: var(--color-bg-hover); }
+  .data-table tbody tr:hover {
+    background: var(--color-bg-hover);
+  }
 
-  .mono { font-family: var(--font-family-mono, monospace); }
+  .mono {
+    font-family: var(--font-family-mono, monospace);
+  }
 
-  .query-col { width: 40%; }
+  .query-col {
+    width: 40%;
+  }
   .query-cell {
     max-width: 400px;
     overflow: hidden;
@@ -328,8 +350,13 @@
     font-family: var(--font-family-mono, monospace);
   }
 
-  .actions-col { width: 100px; }
-  .actions-cell { display: flex; gap: 4px; }
+  .actions-col {
+    width: 100px;
+  }
+  .actions-cell {
+    display: flex;
+    gap: 4px;
+  }
 
   .action-btn {
     padding: 2px 8px;

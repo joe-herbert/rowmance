@@ -169,13 +169,8 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let help_whats_new_item = MenuItem::with_id(
-                app,
-                "help-whats-new",
-                "What's New…",
-                true,
-                None::<&str>,
-            )?;
+            let help_whats_new_item =
+                MenuItem::with_id(app, "help-whats-new", "What's New…", true, None::<&str>)?;
             let help_submenu = Submenu::with_items(
                 app,
                 "Help",

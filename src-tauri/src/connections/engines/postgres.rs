@@ -2,21 +2,21 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use sqlparser::dialect::PostgreSqlDialect;
+use sqlparser::parser::Parser;
 use sqlx::Column;
 use sqlx::Executor;
 use sqlx::Row;
 use sqlx::Statement;
 use sqlx::TypeInfo;
-use sqlparser::dialect::PostgreSqlDialect;
-use sqlparser::parser::Parser;
 
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::{build_edges_from_fk_rows, group_into_tables, FkNorm};
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, DbUser, ErdColumn, ErdGraph,
-    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
-    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
-    TableInfo, VacuumInfo, VarScope,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, DbUser, EngineQueryResult, ErdColumn,
+    ErdGraph, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange,
+    RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo,
+    VacuumInfo, VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -30,7 +30,9 @@ impl DatabaseEngine for PostgresEngine {
         format!("\"{}\"", ident.replace('"', "\"\""))
     }
 
-    fn boolean_literals(&self) -> bool { true }
+    fn boolean_literals(&self) -> bool {
+        true
+    }
 
     fn placeholder(&self, n: usize) -> String {
         format!("${n}")
@@ -55,7 +57,11 @@ impl DatabaseEngine for PostgresEngine {
         crate::connections::postgres::list_databases(&self.pool).await
     }
 
-    async fn list_tables(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError> {
+    async fn list_tables(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<TableInfo>, RowmanceError> {
         crate::connections::postgres::list_tables(&self.pool, database).await
     }
 
@@ -68,7 +74,11 @@ impl DatabaseEngine for PostgresEngine {
         crate::connections::postgres::list_columns(&self.pool, database, table).await
     }
 
-    async fn list_all_columns(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<BulkColumnRow>, RowmanceError> {
+    async fn list_all_columns(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkColumnRow>, RowmanceError> {
         let pairs = crate::connections::postgres::list_all_columns(&self.pool, database).await?;
         Ok(pairs
             .into_iter()
@@ -104,11 +114,21 @@ impl DatabaseEngine for PostgresEngine {
         crate::connections::postgres::list_foreign_keys(&self.pool, database, table).await
     }
 
-    async fn count_table(&self, database: &str, table: &str, _instance_db: Option<&str>) -> Result<i64, RowmanceError> {
+    async fn count_table(
+        &self,
+        database: &str,
+        table: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<i64, RowmanceError> {
         crate::connections::postgres::count_table(&self.pool, database, table).await
     }
 
-    async fn get_ddl(&self, database: &str, table: &str, _instance_db: Option<&str>) -> Result<String, RowmanceError> {
+    async fn get_ddl(
+        &self,
+        database: &str,
+        table: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<String, RowmanceError> {
         crate::connections::postgres::get_ddl(&self.pool, database, table).await
     }
 
@@ -142,7 +162,12 @@ impl DatabaseEngine for PostgresEngine {
             .map_err(RowmanceError::Database)
     }
 
-    async fn count_query_rows(&self, sql: &str, database: Option<&str>, _instance_db: Option<&str>) -> Option<i64> {
+    async fn count_query_rows(
+        &self,
+        sql: &str,
+        database: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Option<i64> {
         let sql_trimmed = sql.trim_end_matches(';');
         let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
         let mut conn = self.pool.acquire().await.ok()?;
@@ -179,7 +204,8 @@ impl DatabaseEngine for PostgresEngine {
             .await
             .map_err(RowmanceError::Database)?;
 
-        let result = apply_all_postgres(&mut conn, database, table, updates, inserts, deletes).await;
+        let result =
+            apply_all_postgres(&mut conn, database, table, updates, inserts, deletes).await;
 
         match result {
             Ok(counts) => {
@@ -216,7 +242,12 @@ impl DatabaseEngine for PostgresEngine {
         Ok(Box::new(PostgresTransaction { conn }))
     }
 
-    async fn explain(&self, sql: &str, database: Option<&str>, _instance_db: Option<&str>) -> Result<ExplainResult, RowmanceError> {
+    async fn explain(
+        &self,
+        sql: &str,
+        database: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<ExplainResult, RowmanceError> {
         let mut conn = self
             .pool
             .acquire()
@@ -258,7 +289,11 @@ impl DatabaseEngine for PostgresEngine {
         Ok(Box::new(PostgresTransaction { conn }))
     }
 
-    async fn get_erd_graph(&self, schema: &str, _instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError> {
+    async fn get_erd_graph(
+        &self,
+        schema: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<ErdGraph, RowmanceError> {
         #[derive(sqlx::FromRow)]
         struct ColRow {
             table_name: Option<String>,
@@ -406,10 +441,26 @@ impl DatabaseEngine for PostgresEngine {
         let mut grants: Vec<String> = Vec::new();
 
         if let Some(a) = attrs {
-            let super_str = if a.rolsuper { "SUPERUSER" } else { "NOSUPERUSER" };
-            let createdb_str = if a.rolcreatedb { "CREATEDB" } else { "NOCREATEDB" };
-            let createrole_str = if a.rolcreaterole { "CREATEROLE" } else { "NOCREATEROLE" };
-            let bypassrls_str = if a.rolbypassrls { "BYPASSRLS" } else { "NOBYPASSRLS" };
+            let super_str = if a.rolsuper {
+                "SUPERUSER"
+            } else {
+                "NOSUPERUSER"
+            };
+            let createdb_str = if a.rolcreatedb {
+                "CREATEDB"
+            } else {
+                "NOCREATEDB"
+            };
+            let createrole_str = if a.rolcreaterole {
+                "CREATEROLE"
+            } else {
+                "NOCREATEROLE"
+            };
+            let bypassrls_str = if a.rolbypassrls {
+                "BYPASSRLS"
+            } else {
+                "NOBYPASSRLS"
+            };
             grants.push(format!(
                 "ALTER ROLE \"{username}\" {super_str} {createdb_str} {createrole_str} {bypassrls_str};"
             ));
@@ -466,11 +517,7 @@ impl DatabaseEngine for PostgresEngine {
             .map_err(RowmanceError::Database)
     }
 
-    async fn drop_user(
-        &self,
-        username: &str,
-        _host: Option<&str>,
-    ) -> Result<(), RowmanceError> {
+    async fn drop_user(&self, username: &str, _host: Option<&str>) -> Result<(), RowmanceError> {
         let sql = format!("DROP USER \"{username}\"");
         sqlx::query(&sql)
             .execute(&self.pool)
@@ -584,10 +631,14 @@ impl DatabaseEngine for PostgresEngine {
         Ok(inserted)
     }
 
-    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
-        let process_list = match sqlx::query("SELECT 1 FROM pg_stat_activity WHERE pid != pg_backend_pid() LIMIT 1")
-            .fetch_optional(&self.pool)
-            .await
+    async fn probe_server_admin_capabilities(
+        &self,
+    ) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+        let process_list = match sqlx::query(
+            "SELECT 1 FROM pg_stat_activity WHERE pid != pg_backend_pid() LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
         {
             Ok(_) => CapabilityStatus::Supported,
             Err(e) => {
@@ -605,7 +656,9 @@ impl DatabaseEngine for PostgresEngine {
             .await
         {
             Ok(Some(_)) => CapabilityStatus::Supported,
-            _ => CapabilityStatus::ExtensionRequired { extension: "pg_cron".to_string() },
+            _ => CapabilityStatus::ExtensionRequired {
+                extension: "pg_cron".to_string(),
+            },
         };
 
         Ok(ServerAdminCapabilityFlags {
@@ -635,25 +688,33 @@ impl DatabaseEngine for PostgresEngine {
         .await
         .map_err(RowmanceError::Database)?;
 
-        Ok(rows.iter().map(|r| {
-            let pid: i32 = r.try_get("pid").unwrap_or(0);
-            ProcessInfo {
-                id: pid.to_string(),
-                user: r.try_get("usename").ok(),
-                host: r.try_get::<Option<String>, _>("client_addr").ok().flatten(),
-                database: r.try_get("datname").ok(),
-                command: r.try_get("wait_event_type").ok().flatten(),
-                time_seconds: r.try_get::<Option<i64>, _>("elapsed_secs").ok().flatten().map(|v| v.max(0) as u64),
-                state: r.try_get("state").ok(),
-                info: r.try_get("query_text").ok(),
-                can_kill: true,
-                can_cancel: true,
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let pid: i32 = r.try_get("pid").unwrap_or(0);
+                ProcessInfo {
+                    id: pid.to_string(),
+                    user: r.try_get("usename").ok(),
+                    host: r.try_get::<Option<String>, _>("client_addr").ok().flatten(),
+                    database: r.try_get("datname").ok(),
+                    command: r.try_get("wait_event_type").ok().flatten(),
+                    time_seconds: r
+                        .try_get::<Option<i64>, _>("elapsed_secs")
+                        .ok()
+                        .flatten()
+                        .map(|v| v.max(0) as u64),
+                    state: r.try_get("state").ok(),
+                    info: r.try_get("query_text").ok(),
+                    can_kill: true,
+                    can_cancel: true,
+                }
+            })
+            .collect())
     }
 
     async fn kill_session(&self, pid: &str) -> Result<(), RowmanceError> {
-        let pid_num: i32 = pid.parse()
+        let pid_num: i32 = pid
+            .parse()
             .map_err(|_| RowmanceError::ConnectionNotFound("Invalid pid".to_string()))?;
         sqlx::query("SELECT pg_terminate_backend($1)")
             .bind(pid_num)
@@ -664,7 +725,8 @@ impl DatabaseEngine for PostgresEngine {
     }
 
     async fn cancel_session(&self, pid: &str) -> Result<(), RowmanceError> {
-        let pid_num: i32 = pid.parse()
+        let pid_num: i32 = pid
+            .parse()
             .map_err(|_| RowmanceError::ConnectionNotFound("Invalid pid".to_string()))?;
         sqlx::query("SELECT pg_cancel_backend($1)")
             .bind(pid_num)
@@ -743,45 +805,53 @@ impl DatabaseEngine for PostgresEngine {
         .await
         .map_err(RowmanceError::Database)?;
 
-        Ok(rows.iter().map(|r| {
-            let name: String = r.try_get("name").unwrap_or_default();
-            let setting: String = r.try_get("setting").unwrap_or_default();
-            let unit: Option<String> = r.try_get("unit").ok().flatten();
-            let context: String = r.try_get("context").unwrap_or_default();
-            let short_desc: Option<String> = r.try_get("short_desc").ok();
-            let vartype: String = r.try_get("vartype").unwrap_or_default();
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let name: String = r.try_get("name").unwrap_or_default();
+                let setting: String = r.try_get("setting").unwrap_or_default();
+                let unit: Option<String> = r.try_get("unit").ok().flatten();
+                let context: String = r.try_get("context").unwrap_or_default();
+                let short_desc: Option<String> = r.try_get("short_desc").ok();
+                let vartype: String = r.try_get("vartype").unwrap_or_default();
 
-            let value = if let Some(u) = &unit {
-                format!("{setting} {u}")
-            } else {
-                setting
-            };
+                let value = if let Some(u) = &unit {
+                    format!("{setting} {u}")
+                } else {
+                    setting
+                };
 
-            let (is_dynamic, restart_required) = match context.as_str() {
-                "user" | "superuser" | "backend" | "superuser-backend" => (true, false),
-                "sighup" => (true, false),
-                "postmaster" => (false, true),
-                _ => (false, false),
-            };
+                let (is_dynamic, restart_required) = match context.as_str() {
+                    "user" | "superuser" | "backend" | "superuser-backend" => (true, false),
+                    "sighup" => (true, false),
+                    "postmaster" => (false, true),
+                    _ => (false, false),
+                };
 
-            let scope = match context.as_str() {
-                "user" | "backend" => VarScope::Session,
-                _ => VarScope::Global,
-            };
+                let scope = match context.as_str() {
+                    "user" | "backend" => VarScope::Session,
+                    _ => VarScope::Global,
+                };
 
-            ServerVariable {
-                name,
-                value,
-                scope,
-                is_dynamic,
-                restart_required,
-                description: short_desc,
-                data_type: Some(vartype),
-            }
-        }).collect())
+                ServerVariable {
+                    name,
+                    value,
+                    scope,
+                    is_dynamic,
+                    restart_required,
+                    description: short_desc,
+                    data_type: Some(vartype),
+                }
+            })
+            .collect())
     }
 
-    async fn set_variable(&self, name: &str, value: &str, scope: VarScope) -> Result<(), RowmanceError> {
+    async fn set_variable(
+        &self,
+        name: &str,
+        value: &str,
+        scope: VarScope,
+    ) -> Result<(), RowmanceError> {
         let en = name.replace('"', "\"\"");
         let ev = escape_sql_string(value);
         let sql = match scope {
@@ -817,15 +887,23 @@ impl DatabaseEngine for PostgresEngine {
         .await
         .map_err(RowmanceError::Database)?;
 
-        Ok(rows.iter().enumerate().map(|(i, r)| LockInfo {
-            lock_id: format!("lock-{i}"),
-            blocker_session_id: r.try_get("blocker_pid").ok().flatten(),
-            waiting_session_id: r.try_get("waiting_pid").ok(),
-            lock_type: r.try_get("locktype").unwrap_or_default(),
-            lock_mode: r.try_get("mode").unwrap_or_default(),
-            object_name: r.try_get("object_name").ok().flatten(),
-            duration_ms: r.try_get::<Option<f64>, _>("duration_ms").ok().flatten().map(|v| v.max(0.0) as u64),
-        }).collect())
+        Ok(rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| LockInfo {
+                lock_id: format!("lock-{i}"),
+                blocker_session_id: r.try_get("blocker_pid").ok().flatten(),
+                waiting_session_id: r.try_get("waiting_pid").ok(),
+                lock_type: r.try_get("locktype").unwrap_or_default(),
+                lock_mode: r.try_get("mode").unwrap_or_default(),
+                object_name: r.try_get("object_name").ok().flatten(),
+                duration_ms: r
+                    .try_get::<Option<f64>, _>("duration_ms")
+                    .ok()
+                    .flatten()
+                    .map(|v| v.max(0.0) as u64),
+            })
+            .collect())
     }
 
     async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
@@ -846,22 +924,25 @@ impl DatabaseEngine for PostgresEngine {
         .await
         .map_err(RowmanceError::Database)?;
 
-        Ok(rows.iter().map(|r| {
-            let id: String = r.try_get("job_id").unwrap_or_default();
-            let name: String = r.try_get("jobname").unwrap_or_default();
-            let schedule: String = r.try_get("schedule").unwrap_or_default();
-            let enabled: bool = r.try_get("active").unwrap_or(false);
-            let last_run: Option<String> = r.try_get("last_run_details").ok().flatten();
-            ScheduledJob {
-                id,
-                name,
-                schedule,
-                enabled,
-                last_run,
-                next_run: None,
-                body: None,
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let id: String = r.try_get("job_id").unwrap_or_default();
+                let name: String = r.try_get("jobname").unwrap_or_default();
+                let schedule: String = r.try_get("schedule").unwrap_or_default();
+                let enabled: bool = r.try_get("active").unwrap_or(false);
+                let last_run: Option<String> = r.try_get("last_run_details").ok().flatten();
+                ScheduledJob {
+                    id,
+                    name,
+                    schedule,
+                    enabled,
+                    last_run,
+                    next_run: None,
+                    body: None,
+                }
+            })
+            .collect())
     }
 
     async fn get_vacuum_status(&self) -> Result<Vec<VacuumInfo>, RowmanceError> {
@@ -880,14 +961,17 @@ impl DatabaseEngine for PostgresEngine {
         .await
         .map_err(RowmanceError::Database)?;
 
-        Ok(rows.iter().map(|r| VacuumInfo {
-            table: r.try_get("table_name").unwrap_or_default(),
-            last_vacuum: r.try_get("last_vacuum").ok().flatten(),
-            last_auto_vacuum: r.try_get("last_autovacuum").ok().flatten(),
-            dead_tuples: r.try_get("n_dead_tup").unwrap_or(0),
-            live_tuples: r.try_get("n_live_tup").unwrap_or(0),
-            bloat_estimate_bytes: None,
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| VacuumInfo {
+                table: r.try_get("table_name").unwrap_or_default(),
+                last_vacuum: r.try_get("last_vacuum").ok().flatten(),
+                last_auto_vacuum: r.try_get("last_autovacuum").ok().flatten(),
+                dead_tuples: r.try_get("n_dead_tup").unwrap_or(0),
+                live_tuples: r.try_get("n_live_tup").unwrap_or(0),
+                bloat_estimate_bytes: None,
+            })
+            .collect())
     }
 }
 
@@ -1362,11 +1446,25 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             display_name: "PostgreSQL".into(),
             default_column_type: "SERIAL".into(),
             common_column_types: vec![
-                "INTEGER", "BIGINT", "SMALLINT",
-                "VARCHAR(255)", "TEXT",
-                "TIMESTAMP", "DATE", "REAL", "NUMERIC(10,2)",
-                "BOOLEAN", "JSON", "JSONB", "UUID", "SERIAL", "BIGSERIAL",
-            ].into_iter().map(String::from).collect(),
+                "INTEGER",
+                "BIGINT",
+                "SMALLINT",
+                "VARCHAR(255)",
+                "TEXT",
+                "TIMESTAMP",
+                "DATE",
+                "REAL",
+                "NUMERIC(10,2)",
+                "BOOLEAN",
+                "JSON",
+                "JSONB",
+                "UUID",
+                "SERIAL",
+                "BIGSERIAL",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             supports_auto_increment: false,
             supports_column_comment: false,
             supports_change_column: false,
@@ -1385,7 +1483,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
                 table_pattern: r#"on table "([^"]+)""#.into(),
                 column_pair_pattern: None,
                 column_value_pattern: Some(
-                    r"Key \(([^)]+)\)=\(([^)]+)\) is still referenced from".into()
+                    r"Key \(([^)]+)\)=\(([^)]+)\) is still referenced from".into(),
                 ),
             }),
             editor_dialect: "postgresql".into(),
@@ -1406,12 +1504,16 @@ pub struct PostgresPoolAdapter {
 
 #[async_trait]
 impl crate::connections::engine::PoolAdapter for PostgresPoolAdapter {
-    async fn disconnect(&self) { self.pool.close().await; }
+    async fn disconnect(&self) {
+        self.pool.close().await;
+    }
     async fn ping(&self) -> bool {
         sqlx::query("SELECT 1").execute(&self.pool).await.is_ok()
     }
     fn get_engine(&self) -> std::sync::Arc<dyn crate::connections::engine::DatabaseEngine> {
-        std::sync::Arc::new(PostgresEngine { pool: self.pool.clone() })
+        std::sync::Arc::new(PostgresEngine {
+            pool: self.pool.clone(),
+        })
     }
 }
 
@@ -1437,8 +1539,8 @@ pub async fn create_pool(
     ssl_key_path: Option<&str>,
     read_only: bool,
 ) -> Result<Box<dyn crate::connections::engine::PoolAdapter>, crate::error::RowmanceError> {
-    use std::path::Path;
     use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
+    use std::path::Path;
 
     let mut opts = PgConnectOptions::new()
         .host(host)

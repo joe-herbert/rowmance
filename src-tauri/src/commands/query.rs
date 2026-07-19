@@ -86,6 +86,7 @@ pub struct UpdateResult {
 }
 
 /// Execute a batch of row-level DELETE statements.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn query_delete_rows(
     sqlite: State<'_, sqlx::SqlitePool>,
@@ -136,7 +137,9 @@ pub async fn query_delete_rows(
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         total_deleted += deleted;
     } else {
-        let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+        let engine = connections
+            .get_engine(&connection_id)
+            .map_err(AppError::from)?;
         let (_, _, deleted) = engine
             .apply_changes(&database, &table, instance_db.as_deref(), &[], &[], &rows)
             .await
@@ -150,6 +153,7 @@ pub async fn query_delete_rows(
 }
 
 /// Execute a batch of row-level UPDATE statements for inline cell editing.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn query_update_rows(
     sqlite: State<'_, sqlx::SqlitePool>,
@@ -196,14 +200,30 @@ pub async fn query_update_rows(
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         let (updated, _, _) = guard
-            .apply_changes(&database, &table, instance_db.as_deref(), &changes, &[], &[])
+            .apply_changes(
+                &database,
+                &table,
+                instance_db.as_deref(),
+                &changes,
+                &[],
+                &[],
+            )
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         total_updated += updated;
     } else {
-        let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+        let engine = connections
+            .get_engine(&connection_id)
+            .map_err(AppError::from)?;
         let (updated, _, _) = engine
-            .apply_changes(&database, &table, instance_db.as_deref(), &changes, &[], &[])
+            .apply_changes(
+                &database,
+                &table,
+                instance_db.as_deref(),
+                &changes,
+                &[],
+                &[],
+            )
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         total_updated += updated;
@@ -215,6 +235,7 @@ pub async fn query_update_rows(
 }
 
 /// Insert a new row into a table.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn query_insert_row(
     sqlite: State<'_, sqlx::SqlitePool>,
@@ -260,13 +281,29 @@ pub async fn query_insert_row(
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         guard
-            .apply_changes(&database, &table, instance_db.as_deref(), &[], &[values], &[])
+            .apply_changes(
+                &database,
+                &table,
+                instance_db.as_deref(),
+                &[],
+                &[values],
+                &[],
+            )
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     } else {
-        let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+        let engine = connections
+            .get_engine(&connection_id)
+            .map_err(AppError::from)?;
         engine
-            .apply_changes(&database, &table, instance_db.as_deref(), &[], &[values], &[])
+            .apply_changes(
+                &database,
+                &table,
+                instance_db.as_deref(),
+                &[],
+                &[values],
+                &[],
+            )
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     }
@@ -336,7 +373,14 @@ pub async fn query_save_table_changes(
     if let Some(tx) = transactions.get(&connection_id) {
         let mut guard = tx.lock().await;
         let (u, i, d) = guard
-            .apply_changes(&database, &table, instance_db.as_deref(), &updates, &inserts, &deletes)
+            .apply_changes(
+                &database,
+                &table,
+                instance_db.as_deref(),
+                &updates,
+                &inserts,
+                &deletes,
+            )
             .await
             .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
         return Ok(SaveChangesResult {
@@ -347,9 +391,18 @@ pub async fn query_save_table_changes(
     }
 
     // No active user transaction — delegate to the engine (handles transaction internally).
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     let (u, i, d) = engine
-        .apply_changes(&database, &table, instance_db.as_deref(), &updates, &inserts, &deletes)
+        .apply_changes(
+            &database,
+            &table,
+            instance_db.as_deref(),
+            &updates,
+            &inserts,
+            &deletes,
+        )
         .await
         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     updated_count += u;
@@ -551,7 +604,9 @@ pub async fn query_execute_multi(
 
     // No active transaction or session — execute each statement via the engine.
     // The engine handles database switching and transaction wrapping internally.
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
 
     for stmt in &statements {
         let query_id = uuid::Uuid::new_v4().to_string();
@@ -611,8 +666,21 @@ pub async fn query_execute_multi(
                     let qid = query_id.clone();
                     let app_clone = app.clone();
                     tokio::spawn(async move {
-                        if let Some(total) = engine_clone.count_query_rows(&stmt_clone, db_clone.as_deref(), inst_db_clone.as_deref()).await {
-                            let _ = app_clone.emit("query-count-updated", QueryCountPayload { query_id: qid, total_rows: total });
+                        if let Some(total) = engine_clone
+                            .count_query_rows(
+                                &stmt_clone,
+                                db_clone.as_deref(),
+                                inst_db_clone.as_deref(),
+                            )
+                            .await
+                        {
+                            let _ = app_clone.emit(
+                                "query-count-updated",
+                                QueryCountPayload {
+                                    query_id: qid,
+                                    total_rows: total,
+                                },
+                            );
                         }
                     });
                 }
@@ -760,11 +828,19 @@ pub async fn query_execute(
         .await);
     }
 
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
 
     let t = std::time::Instant::now();
     let exec_result = engine
-        .execute(&sql, database.as_deref(), instance_db.as_deref(), page_size, offset)
+        .execute(
+            &sql,
+            database.as_deref(),
+            instance_db.as_deref(),
+            page_size,
+            offset,
+        )
         .await
         .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
     let execution_us = t.elapsed().as_micros() as u64;
@@ -818,8 +894,17 @@ pub async fn query_execute(
         let inst_db_clone = instance_db.clone();
         let qid = query_id_clone;
         tokio::spawn(async move {
-            if let Some(total) = engine.count_query_rows(&sql_clone, db_clone.as_deref(), inst_db_clone.as_deref()).await {
-                let _ = app.emit("query-count-updated", QueryCountPayload { query_id: qid, total_rows: total });
+            if let Some(total) = engine
+                .count_query_rows(&sql_clone, db_clone.as_deref(), inst_db_clone.as_deref())
+                .await
+            {
+                let _ = app.emit(
+                    "query-count-updated",
+                    QueryCountPayload {
+                        query_id: qid,
+                        total_rows: total,
+                    },
+                );
             }
         });
     }
@@ -885,6 +970,7 @@ async fn build_query_result(
 }
 
 /// Run a selection/fragment of SQL (no pagination wrapper).
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn query_execute_selection(
     app: tauri::AppHandle,
@@ -988,9 +1074,8 @@ fn sql_has_top_level_limit(sql: &str) -> bool {
                 if depth == 0 && i + 5 <= len {
                     let word = &sql[i..i + 5];
                     if word.eq_ignore_ascii_case("limit") {
-                        let before_ok = i == 0
-                            || !bytes[i - 1].is_ascii_alphabetic()
-                                && bytes[i - 1] != b'_';
+                        let before_ok =
+                            i == 0 || !bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_';
                         let after_ok = bytes
                             .get(i + 5)
                             .is_none_or(|b| !b.is_ascii_alphanumeric() && *b != b'_');
@@ -1034,8 +1119,13 @@ pub async fn query_explain(
     database: Option<String>,
     instance_db: Option<String>,
 ) -> Result<crate::connections::types::ExplainResult, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.explain(&sql, database.as_deref(), instance_db.as_deref()).await.map_err(AppError::from)
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .explain(&sql, database.as_deref(), instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
 }
 
 /// Write a query execution record to the local history table.

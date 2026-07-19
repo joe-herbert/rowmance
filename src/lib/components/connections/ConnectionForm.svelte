@@ -412,7 +412,10 @@
             <Select
               id="conn-type"
               bind:value={dbType}
-              options={getAllDialects().map(({ dbType, dialect }) => ({ value: dbType, label: dialect.displayName }))}
+              options={getAllDialects().map(({ dbType, dialect }) => ({
+                value: dbType,
+                label: dialect.displayName,
+              }))}
               size="md"
               onchange={handleDbTypeChange}
             />
@@ -543,7 +546,10 @@
                   class="btn btn--ghost btn--sm btn--icon"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onclick={() => (showPassword = !showPassword)}
-                  >{#if showPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon width={14} height={14} />{/if}</button
+                  >{#if showPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon
+                      width={14}
+                      height={14}
+                    />{/if}</button
                 >
               </div>
             </div>
@@ -643,7 +649,10 @@
                     class="btn btn--ghost btn--sm btn--icon"
                     aria-label={showSshPassword ? 'Hide password' : 'Show password'}
                     onclick={() => (showSshPassword = !showSshPassword)}
-                    >{#if showSshPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon width={14} height={14} />{/if}</button
+                    >{#if showSshPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon
+                        width={14}
+                        height={14}
+                      />{/if}</button
                   >
                 </div>
               </div>
@@ -794,7 +803,9 @@
             placeholder="Disabled"
             autocomplete="off"
           />
-          <p class="tab-hint">Periodically checks the connection is still alive. Leave empty to disable.</p>
+          <p class="tab-hint">
+            Periodically checks the connection is still alive. Leave empty to disable.
+          </p>
         </div>
 
         <div class="field field--inline">
@@ -810,7 +821,11 @@
           class:test-result--success={testResult.success}
           class:test-result--fail={!testResult.success}
         >
-          {#if testResult.success}<CheckIcon width={13} height={13} strokeWidth={2.5} />{:else}<CloseIcon width={13} height={13} strokeWidth={2.5} />{/if}
+          {#if testResult.success}<CheckIcon
+              width={13}
+              height={13}
+              strokeWidth={2.5}
+            />{:else}<CloseIcon width={13} height={13} strokeWidth={2.5} />{/if}
           {testResult.message}
           {#if testResult.latencyMs !== null}
             <span class="latency">{testResult.latencyMs}ms</span>

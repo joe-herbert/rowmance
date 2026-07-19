@@ -15,7 +15,7 @@
   import ThemeEditor from '$lib/components/settings/ThemeEditor.svelte';
   import * as themesApi from '$lib/tauri/themes';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
-  import type { AppSettings, ThemeMeta, SoftDeleteCondition, SoftDeleteConditionType } from '$lib/types';
+  import type { AppSettings, ThemeMeta, SoftDeleteConditionType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -27,7 +27,14 @@
   import type { ThemeData } from '$lib/types';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
 
-  type Section = 'general' | 'table-view' | 'editor' | 'keyboard' | 'connections' | 'appearance' | 'ai';
+  type Section =
+    | 'general'
+    | 'table-view'
+    | 'editor'
+    | 'keyboard'
+    | 'connections'
+    | 'appearance'
+    | 'ai';
 
   let activeSection = $state<Section>(lastActiveSection as Section);
   let settingsContentEl = $state<HTMLElement | null>(null);
@@ -49,7 +56,15 @@
   const settings = $derived(settingsStore.settings);
   const toast = useToast();
 
-  const BUILTIN_THEMES = ['system', 'light', 'dark', 'high-contrast', 'ssms', 'modern-light', 'modern-dark'];
+  const BUILTIN_THEMES = [
+    'system',
+    'light',
+    'dark',
+    'high-contrast',
+    'ssms',
+    'modern-light',
+    'modern-dark',
+  ];
 
   let userThemes = $state<ThemeMeta[]>([]);
   let themeError = $state<string | null>(null);
@@ -363,7 +378,9 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Check for Updates Automatically</span>
-            <span class="label-hint">Check for new versions at startup and periodically when open</span>
+            <span class="label-hint"
+              >Check for new versions at startup and periodically when open</span
+            >
           </div>
           <Checkbox
             checked={settings.autoUpdateCheck}
@@ -522,7 +539,8 @@
           <div class="setting-label">
             <span class="label-text">Highlight Soft-Deleted Rows</span>
             <span class="label-hint"
-              >Apply a coloured left border and background to rows that appear to be soft-deleted. You can set these colours in your Theme Editor.</span
+              >Apply a coloured left border and background to rows that appear to be soft-deleted.
+              You can set these colours in your Theme Editor.</span
             >
           </div>
           <Checkbox
@@ -533,7 +551,9 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Strike Through Soft-Deleted Rows</span>
-            <span class="label-hint">Apply strikethrough text to rows that appear to be soft-deleted</span>
+            <span class="label-hint"
+              >Apply strikethrough text to rows that appear to be soft-deleted</span
+            >
           </div>
           <Checkbox
             checked={settings.softDeleteStrikethrough}
@@ -558,7 +578,10 @@
                 value={condition.column}
                 onchange={(e) => {
                   const updated = [...settings.softDeleteConditions];
-                  updated[i] = { ...updated[i], column: (e.currentTarget as HTMLInputElement).value.trim() };
+                  updated[i] = {
+                    ...updated[i],
+                    column: (e.currentTarget as HTMLInputElement).value.trim(),
+                  };
                   update('softDeleteConditions', updated);
                 }}
               />
@@ -586,7 +609,10 @@
                   value={condition.value ?? ''}
                   onchange={(e) => {
                     const updated = [...settings.softDeleteConditions];
-                    updated[i] = { ...updated[i], value: (e.currentTarget as HTMLInputElement).value };
+                    updated[i] = {
+                      ...updated[i],
+                      value: (e.currentTarget as HTMLInputElement).value,
+                    };
                     update('softDeleteConditions', updated);
                   }}
                 />
@@ -680,12 +706,11 @@
         <div class="setting-row">
           <div class="setting-label">
             <span class="label-text">Save on Run</span>
-            <span class="label-hint">Automatically save a saved query when it is run and has unsaved changes</span>
+            <span class="label-hint"
+              >Automatically save a saved query when it is run and has unsaved changes</span
+            >
           </div>
-          <Checkbox
-            checked={settings.saveOnRun}
-            onchange={(c) => update('saveOnRun', c)}
-          />
+          <Checkbox checked={settings.saveOnRun} onchange={(c) => update('saveOnRun', c)} />
         </div>
       </div>
 
@@ -980,7 +1005,8 @@
     {:else if activeSection === 'ai'}
       <h2 class="section-title">AI</h2>
       <p class="section-description">
-        Connect to an AI provider to generate queries from natural language, explain queries, and describe tables.
+        Connect to an AI provider to generate queries from natural language, explain queries, and
+        describe tables.
       </p>
 
       <div class="setting-group">
@@ -1025,14 +1051,21 @@
             <div class="setting-row">
               <div class="setting-label">
                 <span class="label-text">Base URL</span>
-                <span class="label-hint">{settings.aiProvider === 'ollama' ? 'Ollama server URL (default: http://localhost:11434)' : 'Base URL for the OpenAI-compatible API'}</span>
+                <span class="label-hint"
+                  >{settings.aiProvider === 'ollama'
+                    ? 'Ollama server URL (default: http://localhost:11434)'
+                    : 'Base URL for the OpenAI-compatible API'}</span
+                >
               </div>
               <input
                 class="setting-input"
                 type="text"
                 value={settings.aiBaseUrl}
-                placeholder={settings.aiProvider === 'ollama' ? 'http://localhost:11434' : 'https://…'}
-                onchange={(e) => update('aiBaseUrl', (e.currentTarget as HTMLInputElement).value.trim())}
+                placeholder={settings.aiProvider === 'ollama'
+                  ? 'http://localhost:11434'
+                  : 'https://…'}
+                onchange={(e) =>
+                  update('aiBaseUrl', (e.currentTarget as HTMLInputElement).value.trim())}
                 spellcheck={false}
               />
             </div>
@@ -1042,15 +1075,25 @@
             <div class="setting-label">
               <span class="label-text">Model</span>
               <span class="label-hint">
-                {#if settings.aiProvider === 'claude'}claude-opus-4-5, claude-sonnet-4-5, etc.{:else if settings.aiProvider === 'openai'}gpt-4o, gpt-4o-mini, etc.{:else if settings.aiProvider === 'gemini'}gemini-1.5-pro, gemini-1.5-flash, etc.{:else if settings.aiProvider === 'ollama'}llama3.2, mistral, codellama, etc.{:else}Model name for the API{/if}
+                {#if settings.aiProvider === 'claude'}claude-opus-4-5, claude-sonnet-4-5, etc.{:else if settings.aiProvider === 'openai'}gpt-4o,
+                  gpt-4o-mini, etc.{:else if settings.aiProvider === 'gemini'}gemini-1.5-pro,
+                  gemini-1.5-flash, etc.{:else if settings.aiProvider === 'ollama'}llama3.2,
+                  mistral, codellama, etc.{:else}Model name for the API{/if}
               </span>
             </div>
             <input
               class="setting-input"
               type="text"
               value={settings.aiModel}
-              placeholder={settings.aiProvider === 'claude' ? 'claude-opus-4-5' : settings.aiProvider === 'openai' ? 'gpt-4o' : settings.aiProvider === 'gemini' ? 'gemini-1.5-pro' : 'llama3.2'}
-              onchange={(e) => update('aiModel', (e.currentTarget as HTMLInputElement).value.trim())}
+              placeholder={settings.aiProvider === 'claude'
+                ? 'claude-opus-4-5'
+                : settings.aiProvider === 'openai'
+                  ? 'gpt-4o'
+                  : settings.aiProvider === 'gemini'
+                    ? 'gemini-1.5-pro'
+                    : 'llama3.2'}
+              onchange={(e) =>
+                update('aiModel', (e.currentTarget as HTMLInputElement).value.trim())}
               spellcheck={false}
             />
           </div>
@@ -1060,7 +1103,8 @@
       {#if settings.aiProvider !== 'none'}
         <h3 class="subsection-title">Data Access</h3>
         <p class="section-description">
-          Control what information the AI can see. This setting is strictly enforced — the AI will never receive database structure or data beyond what you allow here.
+          Control what information the AI can see. This setting is strictly enforced — the AI will
+          never receive database structure or data beyond what you allow here.
         </p>
 
         <div class="setting-group">
@@ -1084,7 +1128,9 @@
             <div class="setting-row">
               <div class="setting-label">
                 <span class="label-text">Sample Rows</span>
-                <span class="label-hint">Number of rows per table sent to the AI as sample data</span>
+                <span class="label-hint"
+                  >Number of rows per table sent to the AI as sample data</span
+                >
               </div>
               <input
                 class="setting-input setting-input--sm"
@@ -1093,7 +1139,10 @@
                 max="20"
                 value={settings.aiDataSampleRows}
                 onchange={(e) =>
-                  update('aiDataSampleRows', parseInt((e.currentTarget as HTMLInputElement).value, 10) || 3)}
+                  update(
+                    'aiDataSampleRows',
+                    parseInt((e.currentTarget as HTMLInputElement).value, 10) || 3,
+                  )}
               />
             </div>
           {/if}
@@ -1117,7 +1166,12 @@
         <div class="modal-field">
           <label class="modal-label" for="new-theme-base">Base theme</label>
           <span class="modal-hint">Your new theme starts as a copy of this</span>
-          <Select id="new-theme-base" bind:value={newThemeBase} options={themeBaseOptions} searchable />
+          <Select
+            id="new-theme-base"
+            bind:value={newThemeBase}
+            options={themeBaseOptions}
+            searchable
+          />
         </div>
 
         <div class="modal-field">

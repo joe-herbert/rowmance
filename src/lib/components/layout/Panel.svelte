@@ -97,7 +97,11 @@
       {splitId}
     />
   {:else if panel.content.kind === 'erd'}
-    <ErdCanvas connectionId={panel.content.connectionId} database={panel.content.database} instanceDb={panel.content.instanceDb} />
+    <ErdCanvas
+      connectionId={panel.content.connectionId}
+      database={panel.content.database}
+      instanceDb={panel.content.instanceDb}
+    />
   {:else if panel.content.kind === 'explain'}
     <ExplainCanvas rawJson={panel.content.sql} dialect={panel.content.dialect} />
   {:else if panel.content.kind === 'settings'}

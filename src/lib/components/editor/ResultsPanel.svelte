@@ -593,7 +593,12 @@
         </button>
         <button class="toolbar-btn" onclick={openLocalSearch}> Search </button>
         {#if settingsStore.settings.aiProvider !== 'none' && settingsStore.settings.aiContextLevel === 'structure_and_data'}
-          <button class="toolbar-btn" onclick={() => { showAiSummarise = true; }}>
+          <button
+            class="toolbar-btn"
+            onclick={() => {
+              showAiSummarise = true;
+            }}
+          >
             AI Summarise
           </button>
         {/if}
@@ -823,7 +828,9 @@
     rows={result.rows}
     connectionId={connectionId ?? ''}
     database={database ?? ''}
-    onclose={() => { showAiSummarise = false; }}
+    onclose={() => {
+      showAiSummarise = false;
+    }}
   />
 {/if}
 
@@ -891,18 +898,6 @@
 
   .tab-list::-webkit-scrollbar {
     display: none;
-  }
-
-  .status-ok {
-    font-size: var(--font-size-xs);
-    color: var(--color-success, #22c55e);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .status-err {
-    font-size: var(--font-size-xs);
-    color: var(--color-danger);
-    font-variant-numeric: tabular-nums;
   }
 
   .tab-sql-wrap {

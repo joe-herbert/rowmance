@@ -7,10 +7,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, DbUser, ErdGraph, EngineQueryResult,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, DbUser, EngineQueryResult, ErdGraph,
     ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange, RowDelete,
-    ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo,
-    VacuumInfo, VarScope,
+    ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo, VacuumInfo,
+    VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -21,7 +21,9 @@ pub trait DatabaseEngine: Send + Sync {
     fn quote(&self, ident: &str) -> String;
 
     /// Return true if this engine uses TRUE/FALSE boolean literals rather than 1/0.
-    fn boolean_literals(&self) -> bool { false }
+    fn boolean_literals(&self) -> bool {
+        false
+    }
 
     /// Return the parameter placeholder for the nth bind position (1-indexed).
     /// MySQL/SQLite: `?`, PostgreSQL: `$1`, `$2`, …, SQL Server: `@P1`, `@P2`, …
@@ -45,7 +47,11 @@ pub trait DatabaseEngine: Send + Sync {
             "This engine does not support instance-level database navigation".to_string(),
         ))
     }
-    async fn list_tables(&self, database: &str, instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError>;
+    async fn list_tables(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<TableInfo>, RowmanceError>;
     async fn list_columns(
         &self,
         database: &str,
@@ -69,8 +75,18 @@ pub trait DatabaseEngine: Send + Sync {
         table: &str,
         instance_db: Option<&str>,
     ) -> Result<Vec<ForeignKeyInfo>, RowmanceError>;
-    async fn count_table(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<i64, RowmanceError>;
-    async fn get_ddl(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<String, RowmanceError>;
+    async fn count_table(
+        &self,
+        database: &str,
+        table: &str,
+        instance_db: Option<&str>,
+    ) -> Result<i64, RowmanceError>;
+    async fn get_ddl(
+        &self,
+        database: &str,
+        table: &str,
+        instance_db: Option<&str>,
+    ) -> Result<String, RowmanceError>;
 
     // ── Query execution ───────────────────────────────────────────────────────
     /// Execute a SQL statement, switching to `database` context first if provided.
@@ -90,7 +106,12 @@ pub trait DatabaseEngine: Send + Sync {
 
     /// Count the total rows a SELECT would return, ignoring pagination.
     /// Returns None if counting is not practical (e.g., non-SELECT statements).
-    async fn count_query_rows(&self, sql: &str, database: Option<&str>, instance_db: Option<&str>) -> Option<i64>;
+    async fn count_query_rows(
+        &self,
+        sql: &str,
+        database: Option<&str>,
+        instance_db: Option<&str>,
+    ) -> Option<i64>;
 
     // ── Row mutations ─────────────────────────────────────────────────────────
     /// Apply a batch of UPDATEs, INSERTs, and DELETEs atomically.
@@ -129,7 +150,11 @@ pub trait DatabaseEngine: Send + Sync {
 
     // ── Entity-relationship diagram ───────────────────────────────────────────
     /// Build the full entity-relationship graph for a database/schema.
-    async fn get_erd_graph(&self, database: &str, instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError>;
+    async fn get_erd_graph(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<ErdGraph, RowmanceError>;
 
     // ── User management ───────────────────────────────────────────────────────
     async fn list_users(&self) -> Result<Vec<DbUser>, RowmanceError> {
@@ -159,11 +184,7 @@ pub trait DatabaseEngine: Send + Sync {
             "User management is not supported for this connection type".to_string(),
         ))
     }
-    async fn drop_user(
-        &self,
-        _username: &str,
-        _host: Option<&str>,
-    ) -> Result<(), RowmanceError> {
+    async fn drop_user(&self, _username: &str, _host: Option<&str>) -> Result<(), RowmanceError> {
         Err(RowmanceError::ConnectionNotFound(
             "User management is not supported for this connection type".to_string(),
         ))
@@ -189,10 +210,7 @@ pub trait DatabaseEngine: Send + Sync {
             "User management is not supported for this connection type".to_string(),
         ))
     }
-    async fn execute_grant(
-        &self,
-        _sql: &str,
-    ) -> Result<(), RowmanceError> {
+    async fn execute_grant(&self, _sql: &str) -> Result<(), RowmanceError> {
         Err(RowmanceError::ConnectionNotFound(
             "User management is not supported for this connection type".to_string(),
         ))
@@ -217,23 +235,33 @@ pub trait DatabaseEngine: Send + Sync {
     }
 
     async fn list_processes(&self) -> Result<Vec<ProcessInfo>, RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Process list not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Process list not supported".to_string(),
+        ))
     }
 
     async fn kill_session(&self, _session_id: &str) -> Result<(), RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Kill session not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Kill session not supported".to_string(),
+        ))
     }
 
     async fn cancel_session(&self, _pid: &str) -> Result<(), RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Cancel session not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Cancel session not supported".to_string(),
+        ))
     }
 
     async fn get_server_status(&self) -> Result<ServerStatus, RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Server status not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Server status not supported".to_string(),
+        ))
     }
 
     async fn list_variables(&self) -> Result<Vec<ServerVariable>, RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Variables not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Variables not supported".to_string(),
+        ))
     }
 
     async fn set_variable(
@@ -242,23 +270,33 @@ pub trait DatabaseEngine: Send + Sync {
         _value: &str,
         _scope: VarScope,
     ) -> Result<(), RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Set variable not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Set variable not supported".to_string(),
+        ))
     }
 
     async fn list_locks(&self) -> Result<Vec<LockInfo>, RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Locks not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Locks not supported".to_string(),
+        ))
     }
 
     async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Scheduled jobs not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Scheduled jobs not supported".to_string(),
+        ))
     }
 
     async fn get_innodb_status(&self) -> Result<String, RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("InnoDB status not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "InnoDB status not supported".to_string(),
+        ))
     }
 
     async fn get_vacuum_status(&self) -> Result<Vec<VacuumInfo>, RowmanceError> {
-        Err(RowmanceError::ConnectionNotFound("Vacuum status not supported".to_string()))
+        Err(RowmanceError::ConnectionNotFound(
+            "Vacuum status not supported".to_string(),
+        ))
     }
 
     // ── Import ────────────────────────────────────────────────────────────────

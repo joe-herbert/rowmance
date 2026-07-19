@@ -26,13 +26,21 @@
   }
 
   function openSqlInEditor(entry: RevertEntry) {
-    panels.openInFocused({ kind: 'query_editor', connectionId: entry.connectionId, initialSql: entry.sql });
+    panels.openInFocused({
+      kind: 'query_editor',
+      connectionId: entry.connectionId,
+      initialSql: entry.sql,
+    });
     close();
   }
 
   function openRevertSqlInEditor(entry: RevertEntry) {
     if (!entry.revertSql) return;
-    panels.openInFocused({ kind: 'query_editor', connectionId: entry.connectionId, initialSql: entry.revertSql });
+    panels.openInFocused({
+      kind: 'query_editor',
+      connectionId: entry.connectionId,
+      initialSql: entry.revertSql,
+    });
     close();
   }
 
@@ -85,7 +93,11 @@
   }
 
   function formatTime(d: Date): string {
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
   }
 </script>
 
@@ -93,7 +105,9 @@
   <div class="modal-card">
     <div class="modal-header">
       <span class="modal-title">Revert Mode</span>
-      <span class="entry-count">{revert.entries.length} {revert.entries.length === 1 ? 'change' : 'changes'}</span>
+      <span class="entry-count"
+        >{revert.entries.length} {revert.entries.length === 1 ? 'change' : 'changes'}</span
+      >
       <div class="header-actions">
         {#if revert.entries.length > 0}
           <button class="btn" onclick={() => revert.clear()}>Clear All</button>
@@ -109,7 +123,13 @@
           {@const isExpanded = expandedIds.has(entry.id)}
           <div class="entry" class:entry--reverted={entry.reverted}>
             <button class="entry-header" onclick={() => toggleExpand(entry.id)}>
-              <ChevronIcon class="chevron{isExpanded ? ' chevron--open' : ''}" direction="down" width={10} height={10} strokeWidth={2.5} />
+              <ChevronIcon
+                class="chevron{isExpanded ? ' chevron--open' : ''}"
+                direction="down"
+                width={10}
+                height={10}
+                strokeWidth={2.5}
+              />
               <span class="entry-table">
                 {#if entry.source === 'query'}
                   <span class="source-badge source-badge--query">Query</span>
@@ -117,7 +137,9 @@
                   <span class="source-badge source-badge--table">Table</span>
                 {/if}
                 {#if entry.table}
-                  <span class="entry-table-name">{entry.database ? entry.database + '.' : ''}{entry.table}</span>
+                  <span class="entry-table-name"
+                    >{entry.database ? entry.database + '.' : ''}{entry.table}</span
+                  >
                 {/if}
               </span>
               <span class="entry-summary">{entrySummary(entry)}</span>
@@ -134,7 +156,9 @@
                   {#each entry.rows as row, ri (ri)}
                     <div class="row-change">
                       <div class="row-change-header">
-                        <span class="op-badge op-badge--{row.operation}">{operationLabel(row.operation)}</span>
+                        <span class="op-badge op-badge--{row.operation}"
+                          >{operationLabel(row.operation)}</span
+                        >
                         {#if Object.keys(row.pkValues).length > 0}
                           <span class="pk-values">{formatPk(row.pkValues)}</span>
                         {:else if row.operation === 'insert'}
@@ -153,14 +177,22 @@
                           {#each row.columnChanges as change (change.column)}
                             <tr>
                               <td class="col-name">{change.column}</td>
-                              <td class="val-prev" class:val-null={change.previousValue === null || change.previousValue === undefined}>
+                              <td
+                                class="val-prev"
+                                class:val-null={change.previousValue === null ||
+                                  change.previousValue === undefined}
+                              >
                                 {#if row.operation === 'insert'}
                                   <span class="val-badge val-badge--none">(new row)</span>
                                 {:else}
                                   {formatValue(change.previousValue)}
                                 {/if}
                               </td>
-                              <td class="val-new" class:val-null={change.newValue === null || change.newValue === undefined}>
+                              <td
+                                class="val-new"
+                                class:val-null={change.newValue === null ||
+                                  change.newValue === undefined}
+                              >
                                 {#if row.operation === 'delete'}
                                   <span class="val-badge val-badge--removed">(deleted)</span>
                                 {:else}
@@ -174,7 +206,9 @@
                     </div>
                   {/each}
                 {:else if entry.source === 'query'}
-                  <div class="no-details">Row-level details not available for query editor statements.</div>
+                  <div class="no-details">
+                    Row-level details not available for query editor statements.
+                  </div>
                 {/if}
 
                 <div class="section-label">Executed SQL</div>
@@ -182,7 +216,9 @@
 
                 {#if entry.revertSql}
                   <div class="section-label">Revert SQL</div>
-                  <pre class="sql-block sql-block--revert"><SqlHighlight sql={entry.revertSql.trim()} /></pre>
+                  <pre class="sql-block sql-block--revert"><SqlHighlight
+                      sql={entry.revertSql.trim()}
+                    /></pre>
                 {/if}
 
                 {#if revertErrors[entry.id]}
@@ -192,7 +228,9 @@
                 <div class="entry-actions">
                   <button class="btn" onclick={() => openSqlInEditor(entry)}>Open SQL</button>
                   {#if entry.revertSql}
-                    <button class="btn" onclick={() => openRevertSqlInEditor(entry)}>Open Revert SQL</button>
+                    <button class="btn" onclick={() => openRevertSqlInEditor(entry)}
+                      >Open Revert SQL</button
+                    >
                     {#if !entry.reverted}
                       <button
                         class="btn btn--danger"
@@ -233,8 +271,14 @@
   }
 
   @keyframes modal-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-6px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   .modal-header {

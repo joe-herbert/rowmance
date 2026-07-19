@@ -739,14 +739,19 @@
 
   function ctxNewTableInSchema() {
     if (!schemaCtx) return;
-    const { connectionId, instanceDb, schema } = schemaCtx;
+    const { connectionId, schema } = schemaCtx;
     const profile = connectionStore.getById(connectionId);
     schemaCtx = null;
     if (!profile) return;
     createTableName = '';
     createTableError = '';
     createTableColumns = [
-      { name: 'id', type: profile.dialectInfo.defaultColumnType, nullable: false, primaryKey: true },
+      {
+        name: 'id',
+        type: profile.dialectInfo.defaultColumnType,
+        nullable: false,
+        primaryKey: true,
+      },
     ];
     createTableFks = [];
     fkRefColumns = new Map();
@@ -973,7 +978,9 @@
       kind: 'query_editor',
       connectionId,
       database,
-      initialSql: profile.dialectInfo.selectTop ? `SELECT TOP  * FROM ${ref}` : `SELECT * FROM ${ref} LIMIT `,
+      initialSql: profile.dialectInfo.selectTop
+        ? `SELECT TOP  * FROM ${ref}`
+        : `SELECT * FROM ${ref} LIMIT `,
     });
   }
 
@@ -1165,7 +1172,6 @@
 
   // ── Create table ──────────────────────────────────────────────────────────
 
-
   function ctxNewTable() {
     if (!dbCtx) return;
     const { connectionId, database } = dbCtx;
@@ -1175,7 +1181,12 @@
     createTableName = '';
     createTableError = '';
     createTableColumns = [
-      { name: 'id', type: profile.dialectInfo.defaultColumnType, nullable: false, primaryKey: true },
+      {
+        name: 'id',
+        type: profile.dialectInfo.defaultColumnType,
+        nullable: false,
+        primaryKey: true,
+      },
     ];
     createTableFks = [];
     fkRefColumns = new Map();
@@ -1202,7 +1213,7 @@
         'All foreign keys must have a local column, referenced table, and referenced column';
       return;
     }
-    const { connectionId, database, dbType } = createTableModal;
+    const { connectionId, database } = createTableModal;
     const prof = connectionStore.getById(connectionId);
     const d = prof?.dialectInfo;
     const q = (n: string) => (d ? qi(n, d) : `"${n}"`);
@@ -1297,7 +1308,10 @@
   // ── System database / table detection ────────────────────────────────────
 
   function checkSystemDatabase(name: string) {
-    return isSystemDatabase(name, [...settingsStore.settings.systemDatabases, ...getAllSystemDatabases()]);
+    return isSystemDatabase(name, [
+      ...settingsStore.settings.systemDatabases,
+      ...getAllSystemDatabases(),
+    ]);
   }
   function checkSystemTable(name: string) {
     return isSystemTable(name, settingsStore.settings.systemTablePatterns);
@@ -1333,7 +1347,8 @@
     const q = filterQuery.toLowerCase();
     if (database.toLowerCase().includes(q)) return true;
     return globalSearchCache.tableEntries.some(
-      (e) => e.connectionId === profileId && e.database === database && e.name.toLowerCase().includes(q),
+      (e) =>
+        e.connectionId === profileId && e.database === database && e.name.toLowerCase().includes(q),
     );
   }
 
@@ -1482,7 +1497,11 @@
         {#if filteredUngrouped.length > 0}
           <div class="group-section">
             <button class="group-row" onclick={() => (ungroupedExpanded = !ungroupedExpanded)}>
-              <span class="chevron" class:open={ungroupedExpanded || !!filterQuery} aria-hidden="true">
+              <span
+                class="chevron"
+                class:open={ungroupedExpanded || !!filterQuery}
+                aria-hidden="true"
+              >
                 <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
               </span>
               <span class="group-name">Ungrouped</span>
@@ -1504,7 +1523,9 @@
       <!-- Named groups -->
       {#each grouped().groups as group (group.id)}
         {@const isExpanded = expandedGroups.has(group.id)}
-        {@const groupProfiles = (grouped().byGroup.get(group.id) ?? []).filter(profileMatchesFilter)}
+        {@const groupProfiles = (grouped().byGroup.get(group.id) ?? []).filter(
+          profileMatchesFilter,
+        )}
         {#if !filterQuery || groupProfiles.length > 0}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
@@ -1681,11 +1702,14 @@
                 </button>
 
                 {#if isInstExpanded}
-                  {#each (instanceSchemaCache.get(profile.id)?.get(instanceDb) ?? []).filter((s) => settingsStore.settings.showSystemItems || !checkSystemDatabase(s)) as schema}
+                  {#each (instanceSchemaCache
+                      .get(profile.id)
+                      ?.get(instanceDb) ?? []).filter((s) => settingsStore.settings.showSystemItems || !checkSystemDatabase(s)) as schema}
                     {@const schemaKey = `${profile.id}/${instanceDb}/${schema}`}
                     {@const isSchemaExpanded = expandedSchemas.has(schemaKey)}
                     {@const isSchemaLoading = loadingKeys.has(schemaKey)}
-                    {@const schemaTables = schemaCache.get(profile.id)?.get(`${instanceDb}/${schema}`) ?? []}
+                    {@const schemaTables =
+                      schemaCache.get(profile.id)?.get(`${instanceDb}/${schema}`) ?? []}
                     <div class="db-item schema-item">
                       <button
                         class="db-row schema-row"
@@ -1713,7 +1737,11 @@
                               class:system-item={isTableSystem}
                               class:active={isTableActive(profile.id, schema, table.name)}
                               onclick={(e) => {
-                                if (tabDrag.isDragging) { e.preventDefault(); tabDrag.end(); return; }
+                                if (tabDrag.isDragging) {
+                                  e.preventDefault();
+                                  tabDrag.end();
+                                  return;
+                                }
                                 openTable(profile.id, schema, table.name, instanceDb);
                               }}
                               oncontextmenu={(e) => showTableCtx(e, profile.id, schema, table)}
@@ -1753,7 +1781,11 @@
                   oncontextmenu={(e) => showStaticDbCtx(e, profile.id, profile.database)}
                   aria-label="{isDbNodeExpanded ? 'Collapse' : 'Expand'} {profile.database}"
                 >
-                  <span class="chevron" class:open={isDbNodeExpanded || !!filterQuery} aria-hidden="true">
+                  <span
+                    class="chevron"
+                    class:open={isDbNodeExpanded || !!filterQuery}
+                    aria-hidden="true"
+                  >
                     <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
                   </span>
                   <DbIcon system={false} aria-hidden="true" />
@@ -1775,8 +1807,17 @@
                           oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
                           aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
                         >
-                          <span class="chevron" class:open={isDbExpanded || !!filterQuery} aria-hidden="true">
-                            <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
+                          <span
+                            class="chevron"
+                            class:open={isDbExpanded || !!filterQuery}
+                            aria-hidden="true"
+                          >
+                            <ChevronIcon
+                              direction="right"
+                              width={10}
+                              height={10}
+                              strokeWidth={2.2}
+                            />
                           </span>
                           <SchemaIcon aria-hidden="true" />
                           <span class="db-name">{database}</span>
@@ -1785,7 +1826,9 @@
 
                         {#if (isDbExpanded || filterQuery) && tables.length > 0}
                           <div class="table-list">
-                            {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !checkSystemTable(t.name)) && (!filterQuery || t.name.toLowerCase().includes(filterQuery.toLowerCase()))) as table}
+                            {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !checkSystemTable(t.name)) && (!filterQuery || t.name
+                                    .toLowerCase()
+                                    .includes(filterQuery.toLowerCase()))) as table}
                               {@const isTableSystem = checkSystemTable(table.name)}
                               <button
                                 class="table-row"
@@ -1797,11 +1840,16 @@
                                   tabDrag.dragContent.database === database &&
                                   tabDrag.dragContent.table === table.name}
                                 onclick={(e) => {
-                                  if (tabDrag.isDragging) { e.preventDefault(); tabDrag.end(); return; }
+                                  if (tabDrag.isDragging) {
+                                    e.preventDefault();
+                                    tabDrag.end();
+                                    return;
+                                  }
                                   openTable(profile.id, database, table.name);
                                 }}
                                 oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
-                                onpointerdown={(e) => onTablePointerDown(e, profile.id, database, table.name)}
+                                onpointerdown={(e) =>
+                                  onTablePointerDown(e, profile.id, database, table.name)}
                                 onpointermove={onTablePointerMove}
                                 onpointerup={onTablePointerUp}
                                 title={table.name}
@@ -1838,7 +1886,11 @@
                     oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
                     aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
                   >
-                    <span class="chevron" class:open={isDbExpanded || !!filterQuery} aria-hidden="true">
+                    <span
+                      class="chevron"
+                      class:open={isDbExpanded || !!filterQuery}
+                      aria-hidden="true"
+                    >
                       <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
                     </span>
                     <DbIcon system={isDbSystem} aria-hidden="true" />
@@ -1850,7 +1902,9 @@
 
                   {#if (isDbExpanded || filterQuery) && tables.length > 0}
                     <div class="table-list">
-                      {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) && (!filterQuery || t.name.toLowerCase().includes(filterQuery.toLowerCase()))) as table}
+                      {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) && (!filterQuery || t.name
+                              .toLowerCase()
+                              .includes(filterQuery.toLowerCase()))) as table}
                         {@const isTableSystem = isDbSystem || checkSystemTable(table.name)}
                         <button
                           class="table-row"
@@ -1870,7 +1924,8 @@
                             openTable(profile.id, database, table.name);
                           }}
                           oncontextmenu={(e) => showTableCtx(e, profile.id, database, table)}
-                          onpointerdown={(e) => onTablePointerDown(e, profile.id, database, table.name)}
+                          onpointerdown={(e) =>
+                            onTablePointerDown(e, profile.id, database, table.name)}
                           onpointermove={onTablePointerMove}
                           onpointerup={onTablePointerUp}
                           title={table.name}
@@ -2042,7 +2097,10 @@
     <CtxItem
       onclick={() => {
         if (staticDbCtx) {
-          panelStore.openInFocused({ kind: 'query_editor', connectionId: staticDbCtx.connectionId });
+          panelStore.openInFocused({
+            kind: 'query_editor',
+            connectionId: staticDbCtx.connectionId,
+          });
           staticDbCtx = null;
         }
       }}>New Query Editor</CtxItem
@@ -2278,7 +2336,8 @@
 {/if}
 
 {#if createDbModal}
-  {@const dbLabel = connectionStore.getById(createDbModal.connectionId)?.dialectInfo.dbLabel ?? 'Database'}
+  {@const dbLabel =
+    connectionStore.getById(createDbModal.connectionId)?.dialectInfo.dbLabel ?? 'Database'}
   <Modal
     label="New {dbLabel}"
     onbackdropclick={() => {
@@ -2356,7 +2415,11 @@
       </div>
       <div class="create-modal-footer">
         <button class="btn" onclick={() => (createSchemaModal = null)}>Cancel</button>
-        <button class="btn btn--primary" onclick={executeCreateSchema} disabled={createSchemaLoading}>
+        <button
+          class="btn btn--primary"
+          onclick={executeCreateSchema}
+          disabled={createSchemaLoading}
+        >
           {createSchemaLoading ? 'Creating…' : 'Create'}
         </button>
       </div>
@@ -2448,7 +2511,8 @@
 {/if}
 
 {#if createTableModal}
-  {@const types = connectionStore.getById(createTableModal.connectionId)?.dialectInfo.commonColumnTypes ?? []}
+  {@const types =
+    connectionStore.getById(createTableModal.connectionId)?.dialectInfo.commonColumnTypes ?? []}
   <Modal
     label="New Table"
     onbackdropclick={() => {
@@ -2567,9 +2631,11 @@
                   <span class="fk-arrow">→</span>
                   <Select
                     bind:value={fk.refTable}
-                    options={(schemaCache
-                      .get(createTableModal!.connectionId)
-                      ?.get(createTableModal!.database) ?? []).map((t) => ({
+                    options={(
+                      schemaCache
+                        .get(createTableModal!.connectionId)
+                        ?.get(createTableModal!.database) ?? []
+                    ).map((t) => ({
                       value: t.name,
                       label: t.name,
                     }))}
@@ -3028,7 +3094,6 @@
     font-style: italic;
   }
 
-
   /* ── Table rows ── */
 
   .table-list {
@@ -3143,7 +3208,6 @@
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
   }
-
 
   @keyframes pulse {
     0%,
@@ -3446,11 +3510,6 @@
     flex-shrink: 0;
     font-size: 12px;
     color: var(--color-text-muted);
-  }
-
-  .fk-input {
-    flex: 1;
-    min-width: 0;
   }
 
   .fk-actions-row {

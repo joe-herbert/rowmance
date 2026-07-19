@@ -87,7 +87,6 @@
   const supportsChangeColumn = $derived(dialect?.supportsChangeColumn ?? false);
   const supportsRoles = $derived(dialect?.supportsRoles ?? false);
   const schemaless = $derived(!(dialect?.usesSchema ?? true));
-  const dropIndexOnTable = $derived(dialect?.dropIndexSyntax === 'on_table_no_schema');
 
   // ── Data state ─────────────────────────────────────────────────────────────
 
@@ -139,7 +138,9 @@
   let saveError = $state<string | null>(null);
 
   // Name, Type, Key, Null, Uniq, Default, [Actions], [Drag handle]
-  const colTableColCount = $derived(6 + (editMode ? 1 : 0) + (editMode && supportsChangeColumn ? 1 : 0));
+  const colTableColCount = $derived(
+    6 + (editMode ? 1 : 0) + (editMode && supportsChangeColumn ? 1 : 0),
+  );
 
   interface ColForm {
     mode: 'add' | 'edit';
@@ -231,7 +232,8 @@
     if (!form.nullable) s += ' NOT NULL';
     if (dialect?.supportsAutoIncrement && form.autoIncrement) s += ' AUTO_INCREMENT';
     if (form.defaultValue.trim()) s += ` DEFAULT ${form.defaultValue.trim()}`;
-    if (dialect?.supportsColumnComment && form.comment.trim()) s += ` COMMENT ${escStr(form.comment.trim())}`;
+    if (dialect?.supportsColumnComment && form.comment.trim())
+      s += ` COMMENT ${escStr(form.comment.trim())}`;
     return s;
   }
 
@@ -617,9 +619,7 @@
   const tablePolymorphicRelations = $derived(
     vrStore.polymorphicRelations.filter(
       (pvr) =>
-        pvr.connectionId === connectionId &&
-        pvr.database === database &&
-        pvr.table === table,
+        pvr.connectionId === connectionId && pvr.database === database && pvr.table === table,
     ),
   );
 
@@ -638,6 +638,7 @@
 <div class="structure-viewer">
   <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
   <div class="toolbar">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span
       class="object-label"
       title="Drag to open in another split"
@@ -735,7 +736,11 @@
                       >{/if}
                   </td>
                   <td class="col-null center-cell"
-                    >{#if col.nullable}<CheckIcon width={12} height={12} strokeWidth={2.5} />{/if}</td
+                    >{#if col.nullable}<CheckIcon
+                        width={12}
+                        height={12}
+                        strokeWidth={2.5}
+                      />{/if}</td
                   >
                   <td class="col-unique center-cell">
                     {#if uniqueColumns.has(col.name) || col.isPrimaryKey}
@@ -884,8 +889,7 @@
             <div class="section-header section-header--flex">
               <span>Virtual relations ({tableVirtualRelations.length})</span>
               {#if editMode}
-                <button class="add-btn" onclick={openAddVrFromHeader}
-                  >+ Add Virtual relation</button
+                <button class="add-btn" onclick={openAddVrFromHeader}>+ Add Virtual relation</button
                 >
               {/if}
             </div>
@@ -952,17 +956,32 @@
             <div class="section-header section-header--flex">
               <span>Polymorphic Virtual Relations ({tablePolymorphicRelations.length})</span>
               {#if editMode}
-                <button class="add-btn" onclick={() => { pvrCreateModal = true; }}>+ Add Polymorphic Relation</button>
+                <button
+                  class="add-btn"
+                  onclick={() => {
+                    pvrCreateModal = true;
+                  }}>+ Add Polymorphic Relation</button
+                >
               {/if}
             </div>
             <div class="fk-list">
               {#each tablePolymorphicRelations as pvr (pvr.id)}
                 <div class="fk-card vr-card">
                   <div class="vr-actions">
-                    <button class="act-btn" title="Edit relation" onclick={() => { pvrEditModal = pvr; }}>
+                    <button
+                      class="act-btn"
+                      title="Edit relation"
+                      onclick={() => {
+                        pvrEditModal = pvr;
+                      }}
+                    >
                       <PencilSmIcon />
                     </button>
-                    <button class="act-btn act-btn--danger" title="Remove relation" onclick={() => vrStore.removePolymorphic(pvr.id)}>
+                    <button
+                      class="act-btn act-btn--danger"
+                      title="Remove relation"
+                      onclick={() => vrStore.removePolymorphic(pvr.id)}
+                    >
                       <TrashSmIcon />
                     </button>
                   </div>
@@ -982,7 +1001,9 @@
                         <span class="pvr-type-badge">{mapping.typeValue}</span>
                         <span class="fk-arrow">→</span>
                         <span class="mono pvr-target">
-                          {#if mapping.to.connectionId !== connectionId}<span class="vr-conn-hint">{connName(mapping.to.connectionId)}/</span>{/if}{mapping.to.database}.{mapping.to.table}.{mapping.to.column}
+                          {#if mapping.to.connectionId !== connectionId}<span class="vr-conn-hint"
+                              >{connName(mapping.to.connectionId)}/</span
+                            >{/if}{mapping.to.database}.{mapping.to.table}.{mapping.to.column}
                         </span>
                       </div>
                     {/each}

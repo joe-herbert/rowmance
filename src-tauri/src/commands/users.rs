@@ -11,7 +11,9 @@ pub async fn users_list(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
 ) -> Result<Vec<DbUser>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine.list_users().await.map_err(AppError::from)
 }
 
@@ -22,7 +24,9 @@ pub async fn users_get_grants(
     username: String,
     host: Option<String>,
 ) -> Result<Vec<String>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine
         .get_user_grants(&username, host.as_deref())
         .await
@@ -41,7 +45,9 @@ pub async fn users_create(
     can_create_db: bool,
     can_create_role: bool,
 ) -> Result<(), AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine
         .create_user(
             &username,
@@ -62,7 +68,9 @@ pub async fn users_drop(
     username: String,
     host: Option<String>,
 ) -> Result<(), AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine
         .drop_user(&username, host.as_deref())
         .await
@@ -77,7 +85,9 @@ pub async fn users_set_password(
     host: Option<String>,
     password: String,
 ) -> Result<(), AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine
         .update_user_password(&username, host.as_deref(), &password)
         .await
@@ -93,7 +103,9 @@ pub async fn users_rename(
     new_username: String,
     new_host: Option<String>,
 ) -> Result<(), AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine
         .rename_user(
             &username,
@@ -111,6 +123,8 @@ pub async fn users_execute_grant(
     connection_id: String,
     sql: String,
 ) -> Result<(), AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine.execute_grant(&sql).await.map_err(AppError::from)
 }

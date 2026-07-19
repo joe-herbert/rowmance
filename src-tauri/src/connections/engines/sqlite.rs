@@ -2,18 +2,18 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use sqlparser::dialect::SQLiteDialect;
+use sqlparser::parser::Parser;
 use sqlx::Column;
 use sqlx::Executor;
 use sqlx::Row;
 use sqlx::Statement;
 use sqlx::TypeInfo;
-use sqlparser::dialect::SQLiteDialect;
-use sqlparser::parser::Parser;
 
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::types::{
-    BulkColumnRow, ColumnInfo, ColumnMeta, ErdColumn, ErdGraph, ErdRelation, ErdTable,
-    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
+    BulkColumnRow, ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn, ErdGraph, ErdRelation,
+    ErdTable, ExplainResult, ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
 };
 use crate::error::RowmanceError;
 
@@ -50,7 +50,11 @@ impl DatabaseEngine for SqliteEngine {
         crate::connections::sqlite::list_databases(&self.pool).await
     }
 
-    async fn list_tables(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError> {
+    async fn list_tables(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<TableInfo>, RowmanceError> {
         crate::connections::sqlite::list_tables(&self.pool, database).await
     }
 
@@ -63,7 +67,11 @@ impl DatabaseEngine for SqliteEngine {
         crate::connections::sqlite::list_columns(&self.pool, database, table).await
     }
 
-    async fn list_all_columns(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<BulkColumnRow>, RowmanceError> {
+    async fn list_all_columns(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkColumnRow>, RowmanceError> {
         let pairs = crate::connections::sqlite::list_all_columns(&self.pool, database).await?;
         Ok(pairs
             .into_iter()
@@ -99,11 +107,21 @@ impl DatabaseEngine for SqliteEngine {
         crate::connections::sqlite::list_foreign_keys(&self.pool, database, table).await
     }
 
-    async fn count_table(&self, _database: &str, table: &str, _instance_db: Option<&str>) -> Result<i64, RowmanceError> {
+    async fn count_table(
+        &self,
+        _database: &str,
+        table: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<i64, RowmanceError> {
         crate::connections::sqlite::count_table(&self.pool, table).await
     }
 
-    async fn get_ddl(&self, _database: &str, table: &str, _instance_db: Option<&str>) -> Result<String, RowmanceError> {
+    async fn get_ddl(
+        &self,
+        _database: &str,
+        table: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<String, RowmanceError> {
         crate::connections::sqlite::get_ddl(&self.pool, table).await
     }
 
@@ -132,7 +150,12 @@ impl DatabaseEngine for SqliteEngine {
             .map_err(RowmanceError::Database)
     }
 
-    async fn count_query_rows(&self, sql: &str, _database: Option<&str>, _instance_db: Option<&str>) -> Option<i64> {
+    async fn count_query_rows(
+        &self,
+        sql: &str,
+        _database: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Option<i64> {
         let sql_trimmed = sql.trim_end_matches(';');
         let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
         let mut conn = self.pool.acquire().await.ok()?;
@@ -199,7 +222,12 @@ impl DatabaseEngine for SqliteEngine {
         Ok(Box::new(SqliteTransaction { conn }))
     }
 
-    async fn explain(&self, sql: &str, _database: Option<&str>, _instance_db: Option<&str>) -> Result<ExplainResult, RowmanceError> {
+    async fn explain(
+        &self,
+        sql: &str,
+        _database: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<ExplainResult, RowmanceError> {
         let mut conn = self
             .pool
             .acquire()
@@ -236,7 +264,11 @@ impl DatabaseEngine for SqliteEngine {
         Ok(Box::new(SqliteTransaction { conn }))
     }
 
-    async fn get_erd_graph(&self, _database: &str, _instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError> {
+    async fn get_erd_graph(
+        &self,
+        _database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<ErdGraph, RowmanceError> {
         #[derive(sqlx::FromRow)]
         struct TableRow {
             name: String,
@@ -749,8 +781,8 @@ fn sql_has_top_level_limit(sql: &str) -> bool {
                 if depth == 0 && i + 5 <= len {
                     let word = &sql[i..i + 5];
                     if word.eq_ignore_ascii_case("limit") {
-                        let before_ok = i == 0
-                            || (!bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_');
+                        let before_ok =
+                            i == 0 || (!bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_');
                         let after_ok = bytes
                             .get(i + 5)
                             .is_none_or(|b| !b.is_ascii_alphanumeric() && *b != b'_');
@@ -831,9 +863,10 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             warns_tx_database_mismatch: false,
             display_name: "SQLite".into(),
             default_column_type: "INTEGER".into(),
-            common_column_types: vec![
-                "INTEGER", "TEXT", "REAL", "BLOB", "NUMERIC",
-            ].into_iter().map(String::from).collect(),
+            common_column_types: vec!["INTEGER", "TEXT", "REAL", "BLOB", "NUMERIC"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
             supports_auto_increment: false,
             supports_column_comment: false,
             supports_change_column: false,
@@ -866,10 +899,16 @@ pub struct SqlitePoolAdapter {
 
 #[async_trait]
 impl crate::connections::engine::PoolAdapter for SqlitePoolAdapter {
-    async fn disconnect(&self) { self.pool.close().await; }
-    async fn ping(&self) -> bool { true } // local file, always alive
+    async fn disconnect(&self) {
+        self.pool.close().await;
+    }
+    async fn ping(&self) -> bool {
+        true
+    } // local file, always alive
     fn get_engine(&self) -> std::sync::Arc<dyn crate::connections::engine::DatabaseEngine> {
-        std::sync::Arc::new(SqliteEngine { pool: self.pool.clone() })
+        std::sync::Arc::new(SqliteEngine {
+            pool: self.pool.clone(),
+        })
     }
 }
 

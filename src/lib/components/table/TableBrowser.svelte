@@ -51,7 +51,11 @@
   import { listen } from '@tauri-apps/api/event';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useRecording } from '$lib/stores/recording.svelte';
-  import { useRevert, type RevertRowChange, type RevertColumnChange } from '$lib/stores/revert.svelte';
+  import {
+    useRevert,
+    type RevertRowChange,
+    type RevertColumnChange,
+  } from '$lib/stores/revert.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
@@ -79,8 +83,12 @@
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
   import SqlPreviewModal from '$lib/components/table/SqlPreviewModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
-  import type { DbType } from '$lib/types';
-  import { qi as dialectQi, formatSqlValue as dialectFmtVal, castToText as dialectCastToText, defaultDialectInfo } from '$lib/utils/dialect';
+  import {
+    qi as dialectQi,
+    formatSqlValue as dialectFmtVal,
+    castToText as dialectCastToText,
+    defaultDialectInfo,
+  } from '$lib/utils/dialect';
   import { parseFkViolationError, type FkNavigationInfo } from '$lib/utils/fk-error';
   import {
     exportResultToFile,
@@ -122,7 +130,16 @@
     splitId?: string;
   }
 
-  let { connectionId, database, table, instanceDb, initialFilter, isFocused = false, itemId = '', splitId = '' }: Props = $props();
+  let {
+    connectionId,
+    database,
+    table,
+    instanceDb,
+    initialFilter,
+    isFocused = false,
+    itemId = '',
+    splitId = '',
+  }: Props = $props();
 
   const connections = useConnections();
   const cellSelectionStore = useCellSelection();
@@ -390,7 +407,9 @@
     const lines: string[] = [];
     for (const row of rows) {
       if (row.operation === 'update') {
-        const set = row.columnChanges.map((c) => `${q(c.column)} = ${v(c.previousValue)}`).join(', ');
+        const set = row.columnChanges
+          .map((c) => `${q(c.column)} = ${v(c.previousValue)}`)
+          .join(', ');
         const where = Object.entries(row.pkValues)
           .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
           .join(' AND ');
@@ -431,8 +450,12 @@
     const target = d?.usesSchema ? `${q(db)}.${q(tbl)}` : q(tbl);
     const lines: string[] = [];
     for (const { primaryKeys, changes } of updates) {
-      const set = Object.entries(changes).map(([c, val]) => `${q(c)} = ${v(val)}`).join(', ');
-      const where = Object.entries(primaryKeys).map(([c, val]) => val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`).join(' AND ');
+      const set = Object.entries(changes)
+        .map(([c, val]) => `${q(c)} = ${v(val)}`)
+        .join(', ');
+      const where = Object.entries(primaryKeys)
+        .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
+        .join(' AND ');
       lines.push(`UPDATE ${target} SET ${set} WHERE ${where};`);
     }
     for (const vals of inserts) {
@@ -441,7 +464,9 @@
       lines.push(`INSERT INTO ${target} (${cols}) VALUES (${values});`);
     }
     for (const { primaryKeys } of deletes) {
-      const where = Object.entries(primaryKeys).map(([c, val]) => val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`).join(' AND ');
+      const where = Object.entries(primaryKeys)
+        .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
+        .join(' AND ');
       lines.push(`DELETE FROM ${target} WHERE ${where};`);
     }
     return lines.join('\n');
@@ -476,7 +501,9 @@
             insertValues.push(vals);
             // Capture revert data for insert: use PK values if present in the inserted data
             const pkVals: Record<string, unknown> = {};
-            pkColumns.forEach((pkCol) => { if (pkCol in vals) pkVals[pkCol] = vals[pkCol]; });
+            pkColumns.forEach((pkCol) => {
+              if (pkCol in vals) pkVals[pkCol] = vals[pkCol];
+            });
             const colChanges: RevertColumnChange[] = Object.entries(vals).map(([col, newVal]) => ({
               column: col,
               previousValue: undefined,
@@ -503,9 +530,17 @@
           const colChanges: RevertColumnChange[] = [];
           for (const [col, newVal] of colMap) {
             const idx = result!.columns.findIndex((c) => c.name === col);
-            colChanges.push({ column: col, previousValue: idx >= 0 ? (origRow[idx] ?? null) : null, newValue: newVal });
+            colChanges.push({
+              column: col,
+              previousValue: idx >= 0 ? (origRow[idx] ?? null) : null,
+              newValue: newVal,
+            });
           }
-          revertRows.push({ operation: 'update', pkValues: { ...primaryKeys }, columnChanges: colChanges });
+          revertRows.push({
+            operation: 'update',
+            pkValues: { ...primaryKeys },
+            columnChanges: colChanges,
+          });
         } else {
           // No PK: identify the row by all its original column values.
           // The backend will use IS NULL for null values and = ? for non-null,
@@ -518,9 +553,17 @@
           const colChanges: RevertColumnChange[] = [];
           for (const [col, newVal] of colMap) {
             const idx = result!.columns.findIndex((c) => c.name === col);
-            colChanges.push({ column: col, previousValue: idx >= 0 ? (origRow[idx] ?? null) : null, newValue: newVal });
+            colChanges.push({
+              column: col,
+              previousValue: idx >= 0 ? (origRow[idx] ?? null) : null,
+              newValue: newVal,
+            });
           }
-          revertRows.push({ operation: 'update', pkValues: { ...primaryKeys }, columnChanges: colChanges });
+          revertRows.push({
+            operation: 'update',
+            pkValues: { ...primaryKeys },
+            columnChanges: colChanges,
+          });
         }
 
         const changes: Record<string, unknown> = {};
@@ -552,7 +595,11 @@
           previousValue: origRow[i] ?? null,
           newValue: undefined,
         }));
-        revertRows.push({ operation: 'delete', pkValues: { ...primaryKeys }, columnChanges: colChanges });
+        revertRows.push({
+          operation: 'delete',
+          pkValues: { ...primaryKeys },
+          columnChanges: colChanges,
+        });
       }
 
       await saveTableChanges(
@@ -653,7 +700,6 @@
 
   // ── DB type + SQL helpers ─────────────────────────────────────────────────
 
-  let dbType = $derived(connections.getById(connectionId)?.dbType ?? 'mysql');
   let dialect = $derived(connections.getById(connectionId)?.dialectInfo);
   let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
 
@@ -772,8 +818,7 @@
 
   function handleQuickFilter(colName: string, operator: FilterOperator): void {
     const valueless = operator === 'IS NULL' || operator === 'IS NOT NULL';
-    const existingGroups =
-      filterEditorState.mode === 'builder' ? filterEditorState.groups : [];
+    const existingGroups = filterEditorState.mode === 'builder' ? filterEditorState.groups : [];
     const newGroup: FilterGroup = {
       id: crypto.randomUUID(),
       conjunction: 'AND',
@@ -792,8 +837,6 @@
       openFilterEditor();
     }
   }
-
-
 
   let lastQueryMs = $state<number | null>(null);
 
@@ -889,7 +932,9 @@
         : Promise.all([
             listColumns(connectionId, database, table, instanceDb).catch((): ColumnInfo[] => []),
             listIndexes(connectionId, database, table, instanceDb).catch((): IndexInfo[] => []),
-            listForeignKeys(connectionId, database, table, instanceDb).catch((): ForeignKeyInfo[] => []),
+            listForeignKeys(connectionId, database, table, instanceDb).catch(
+              (): ForeignKeyInfo[] => [],
+            ),
           ]).then(([columns, indexes, fks]) => {
             const schema = { columns, indexes, foreignKeys: fks };
             tableSchemaCache.set(schemaKey, schema);
@@ -906,7 +951,9 @@
           instanceDb,
         ),
         schemaPromise,
-        filterActive ? executeSelection(connectionId, countSql, database, instanceDb) : Promise.resolve(null),
+        filterActive
+          ? executeSelection(connectionId, countSql, database, instanceDb)
+          : Promise.resolve(null),
       ]);
       const { columns: schemaColumns, indexes, foreignKeys: fks } = schema;
       foreignKeys = fks;
@@ -1218,10 +1265,23 @@
           filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
         });
         if (!filePath) return;
-        await exportResultToFile(getExportRows(), getExportColumns(), format, filePath, tblName, connectionId);
+        await exportResultToFile(
+          getExportRows(),
+          getExportColumns(),
+          format,
+          filePath,
+          tblName,
+          connectionId,
+        );
         toast.addToast('Exported to file', 'success', 2000);
       } else {
-        await exportResultToClipboard(getExportRows(), getExportColumns(), format, tblName, connectionId);
+        await exportResultToClipboard(
+          getExportRows(),
+          getExportColumns(),
+          format,
+          tblName,
+          connectionId,
+        );
         toast.addToast('Copied to clipboard', 'success', 2000);
       }
     } catch (err) {
@@ -1284,7 +1344,8 @@
     rowContext: Record<string, CellValue>,
   ): boolean {
     if (foreignKeys.some((f) => f.columns.includes(colName))) return true;
-    if (vrStore.forwardFrom({ connectionId, database, table, column: colName }).length > 0) return true;
+    if (vrStore.forwardFrom({ connectionId, database, table, column: colName }).length > 0)
+      return true;
     const pvr = vrStore.findPolymorphicForValueColumn(connectionId, database, table, colName);
     if (pvr) {
       const typeValue = String(rowContext[pvr.typeColumn] ?? '');
@@ -1330,7 +1391,9 @@
         await connections.connect(targetConnId);
       }
       const targetDialect = connections.getById(targetConnId)?.dialectInfo;
-      const quotedCol = targetDialect ? dialectQi(vr.to.column, targetDialect) : `\`${vr.to.column}\``;
+      const quotedCol = targetDialect
+        ? dialectQi(vr.to.column, targetDialect)
+        : `\`${vr.to.column}\``;
       let filter: string;
       if (typeof value === 'number' || typeof value === 'boolean') {
         filter = `${quotedCol} = ${value}`;
@@ -1649,7 +1712,10 @@
       tabindex="0"
       onpointerdown={onTableNamePointerDown}
       onclick={() => {
-        if (tableNameDragDidDrag) { tableNameDragDidDrag = false; return; }
+        if (tableNameDragDidDrag) {
+          tableNameDragDidDrag = false;
+          return;
+        }
         navigator.clipboard
           .writeText(`${database}.${table}`)
           .then(() => toast.addToast(`Copied ${database}.${table} to clipboard`, 'success'));
@@ -2039,7 +2105,8 @@
       <button
         class="local-search-highlight-toggle"
         class:active={settings.settings.localSearchHighlight}
-        onclick={() => settings.set('localSearchHighlight', !settings.settings.localSearchHighlight)}
+        onclick={() =>
+          settings.set('localSearchHighlight', !settings.settings.localSearchHighlight)}
         aria-label="Toggle search highlighting"
         aria-pressed={settings.settings.localSearchHighlight}
         title={settings.settings.localSearchHighlight ? 'Highlighting on' : 'Highlighting off'}
@@ -2135,8 +2202,7 @@
           saveError = null;
           fkNavigationInfo = null;
         }}
-        aria-label="Dismiss"
-        ><CloseIcon width={11} height={11} strokeWidth={2.5} /></button
+        aria-label="Dismiss"><CloseIcon width={11} height={11} strokeWidth={2.5} /></button
       >
     </div>
   {/if}

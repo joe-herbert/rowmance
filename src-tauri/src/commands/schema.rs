@@ -25,7 +25,9 @@ pub async fn schema_list_databases(
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
 ) -> Result<Vec<String>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine.list_databases().await.map_err(AppError::from)
 }
 
@@ -36,8 +38,13 @@ pub async fn schema_list_schemas(
     connection_id: String,
     instance_db: String,
 ) -> Result<Vec<String>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_schemas(&instance_db).await.map_err(AppError::from)
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_schemas(&instance_db)
+        .await
+        .map_err(AppError::from)
 }
 
 /// List all tables in the given database/schema.
@@ -52,8 +59,13 @@ pub async fn schema_list_tables(
     database: String,
     instance_db: Option<String>,
 ) -> Result<Vec<TableInfo>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    let tables = engine.list_tables(&database, instance_db.as_deref()).await.map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    let tables = engine
+        .list_tables(&database, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)?;
 
     let names: Vec<String> = tables
         .iter()
@@ -95,8 +107,13 @@ pub async fn schema_list_columns(
     table: String,
     instance_db: Option<String>,
 ) -> Result<Vec<ColumnInfo>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_columns(&database, &table, instance_db.as_deref()).await.map_err(AppError::from)
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_columns(&database, &table, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
 }
 
 /// List all columns for every table and view in a database in one round-trip.
@@ -108,8 +125,13 @@ pub async fn schema_list_all_columns(
     database: String,
     instance_db: Option<String>,
 ) -> Result<Vec<BulkColumnRow>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_all_columns(&database, instance_db.as_deref()).await.map_err(AppError::from)
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_all_columns(&database, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
 }
 
 /// List all indexes for a given table.
@@ -121,8 +143,13 @@ pub async fn schema_list_indexes(
     table: String,
     instance_db: Option<String>,
 ) -> Result<Vec<IndexInfo>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_indexes(&database, &table, instance_db.as_deref()).await.map_err(AppError::from)
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_indexes(&database, &table, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
 }
 
 /// List all foreign keys for a given table.
@@ -134,8 +161,13 @@ pub async fn schema_list_foreign_keys(
     table: String,
     instance_db: Option<String>,
 ) -> Result<Vec<ForeignKeyInfo>, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.list_foreign_keys(&database, &table, instance_db.as_deref()).await.map_err(AppError::from)
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_foreign_keys(&database, &table, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
 }
 
 /// Execute a DDL statement (ALTER TABLE, CREATE INDEX, etc.) against the connection.
@@ -171,7 +203,9 @@ pub async fn schema_execute_ddl(
         _ => {}
     }
 
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     engine.execute_ddl(&sql).await.map_err(AppError::from)
 }
 
@@ -184,6 +218,11 @@ pub async fn schema_get_ddl(
     object_name: String,
     instance_db: Option<String>,
 ) -> Result<String, AppError> {
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
-    engine.get_ddl(&database, &object_name, instance_db.as_deref()).await.map_err(AppError::from)
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .get_ddl(&database, &object_name, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
 }

@@ -14,20 +14,101 @@
   let { sql, class: className = '' }: Props = $props();
 
   const KEYWORDS = new Set([
-    'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'CROSS', 'FULL',
-    'ON', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'ILIKE', 'BETWEEN', 'IS', 'NULL', 'AS',
-    'GROUP', 'ORDER', 'BY', 'HAVING', 'LIMIT', 'OFFSET', 'DISTINCT', 'ALL', 'TOP',
-    'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
-    'CREATE', 'TABLE', 'VIEW', 'DROP', 'ALTER', 'ADD', 'COLUMN', 'INDEX', 'REPLACE',
-    'BEGIN', 'COMMIT', 'ROLLBACK', 'TRANSACTION', 'SAVEPOINT',
-    'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
-    'EXISTS', 'ANY', 'SOME', 'WITH', 'UNION', 'INTERSECT', 'EXCEPT',
-    'RETURNING', 'EXPLAIN', 'TRUNCATE', 'DESCRIBE', 'SHOW', 'USE',
-    'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'CONSTRAINT',
-    'ASC', 'DESC', 'NULLS', 'FIRST', 'LAST',
-    'CAST', 'COALESCE', 'NULLIF', 'IF', 'IFNULL', 'OVER', 'PARTITION',
-    'TRUE', 'FALSE', 'DEFAULT', 'AUTO_INCREMENT', 'AUTOINCREMENT',
-    'INNER', 'NATURAL', 'USING', 'LATERAL',
+    'SELECT',
+    'FROM',
+    'WHERE',
+    'JOIN',
+    'LEFT',
+    'RIGHT',
+    'INNER',
+    'OUTER',
+    'CROSS',
+    'FULL',
+    'ON',
+    'AND',
+    'OR',
+    'NOT',
+    'IN',
+    'LIKE',
+    'ILIKE',
+    'BETWEEN',
+    'IS',
+    'NULL',
+    'AS',
+    'GROUP',
+    'ORDER',
+    'BY',
+    'HAVING',
+    'LIMIT',
+    'OFFSET',
+    'DISTINCT',
+    'ALL',
+    'TOP',
+    'INSERT',
+    'INTO',
+    'VALUES',
+    'UPDATE',
+    'SET',
+    'DELETE',
+    'CREATE',
+    'TABLE',
+    'VIEW',
+    'DROP',
+    'ALTER',
+    'ADD',
+    'COLUMN',
+    'INDEX',
+    'REPLACE',
+    'BEGIN',
+    'COMMIT',
+    'ROLLBACK',
+    'TRANSACTION',
+    'SAVEPOINT',
+    'CASE',
+    'WHEN',
+    'THEN',
+    'ELSE',
+    'END',
+    'EXISTS',
+    'ANY',
+    'SOME',
+    'WITH',
+    'UNION',
+    'INTERSECT',
+    'EXCEPT',
+    'RETURNING',
+    'EXPLAIN',
+    'TRUNCATE',
+    'DESCRIBE',
+    'SHOW',
+    'USE',
+    'PRIMARY',
+    'KEY',
+    'FOREIGN',
+    'REFERENCES',
+    'UNIQUE',
+    'CONSTRAINT',
+    'ASC',
+    'DESC',
+    'NULLS',
+    'FIRST',
+    'LAST',
+    'CAST',
+    'COALESCE',
+    'NULLIF',
+    'IF',
+    'IFNULL',
+    'OVER',
+    'PARTITION',
+    'TRUE',
+    'FALSE',
+    'DEFAULT',
+    'AUTO_INCREMENT',
+    'AUTOINCREMENT',
+    'INNER',
+    'NATURAL',
+    'USING',
+    'LATERAL',
   ]);
 
   function tokenize(input: string): Token[] {
@@ -60,8 +141,14 @@
       if (ch === "'") {
         let j = i + 1;
         while (j < input.length) {
-          if (input[j] === "'" && input[j + 1] === "'") { j += 2; continue; }
-          if (input[j] === "'") { j++; break; }
+          if (input[j] === "'" && input[j + 1] === "'") {
+            j += 2;
+            continue;
+          }
+          if (input[j] === "'") {
+            j++;
+            break;
+          }
           j++;
         }
         out.push({ text: input.slice(i, j), type: 'string' });
@@ -73,8 +160,14 @@
       if (ch === '"') {
         let j = i + 1;
         while (j < input.length) {
-          if (input[j] === '"' && input[j + 1] === '"') { j += 2; continue; }
-          if (input[j] === '"') { j++; break; }
+          if (input[j] === '"' && input[j + 1] === '"') {
+            j += 2;
+            continue;
+          }
+          if (input[j] === '"') {
+            j++;
+            break;
+          }
           j++;
         }
         out.push({ text: input.slice(i, j), type: 'string' });

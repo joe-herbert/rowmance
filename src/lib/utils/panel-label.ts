@@ -1,6 +1,9 @@
 import type { PanelKind } from '$lib/types';
 
-export function panelLabel(content: PanelKind, dashboardsById: Map<string, { name: string }>): string {
+export function panelLabel(
+  content: PanelKind,
+  dashboardsById: Map<string, { name: string }>,
+): string {
   switch (content.kind) {
     case 'query_editor':
       return content.savedQueryName ?? 'Query';

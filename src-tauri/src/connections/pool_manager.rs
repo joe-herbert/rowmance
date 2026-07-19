@@ -5,8 +5,8 @@
 /// many Tauri commands run concurrently on the Tokio runtime and all need
 /// to look up the pool on every query.
 use dashmap::DashMap;
-use uuid;
 use std::sync::Arc;
+use uuid;
 
 use crate::connections::engine::DatabaseEngine;
 use crate::error::RowmanceError;
@@ -57,10 +57,22 @@ impl ConnectionManager {
         read_only: bool,
     ) -> Result<(), RowmanceError> {
         let adapter = crate::connections::engines::connect_for_db_type(
-            db_type, host, port, database, username, password, pool_max,
-            ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path, read_only,
-        ).await?;
-        self.pools.insert(id.to_owned(), RemotePool(Arc::from(adapter)));
+            db_type,
+            host,
+            port,
+            database,
+            username,
+            password,
+            pool_max,
+            ssl_enabled,
+            ssl_ca_path,
+            ssl_cert_path,
+            ssl_key_path,
+            read_only,
+        )
+        .await?;
+        self.pools
+            .insert(id.to_owned(), RemotePool(Arc::from(adapter)));
         self.names.insert(id.to_owned(), name.to_owned());
         Ok(())
     }
@@ -107,17 +119,17 @@ impl ConnectionManager {
     /// Close and remove the pool for the given connection id.
     pub async fn disconnect(&self, id: &str) {
         if let Some((_, pool)) = self.pools.remove(id) {
-            let _ = tokio::time::timeout(
-                std::time::Duration::from_secs(3),
-                pool.0.disconnect(),
-            ).await;
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(3), pool.0.disconnect()).await;
         }
     }
 
     /// Send a lightweight ping to check the connection is still alive.
     /// Returns false if no pool exists or the query fails.
     pub async fn ping(&self, id: &str) -> bool {
-        let Ok(pool) = self.get(id) else { return false; };
+        let Ok(pool) = self.get(id) else {
+            return false;
+        };
         let adapter = pool.0.clone();
         drop(pool);
         adapter.ping().await
@@ -207,7 +219,7 @@ mod tests {
                 .connect(
                     "id",
                     "name",
-                    "oracle",
+                    "badtype",
                     "localhost",
                     1521,
                     "db",
@@ -237,7 +249,7 @@ mod tests {
                 .connect(
                     "id",
                     "name",
-                    "oracle",
+                    "badtype",
                     "localhost",
                     1521,
                     "db",

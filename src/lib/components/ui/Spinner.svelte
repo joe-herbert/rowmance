@@ -1,5 +1,9 @@
 <script lang="ts">
-  interface Props { size?: number; label?: string; class?: string; }
+  interface Props {
+    size?: number;
+    label?: string;
+    class?: string;
+  }
   let { size = 10, label, class: className = '' }: Props = $props();
 </script>
 
@@ -22,6 +26,8 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

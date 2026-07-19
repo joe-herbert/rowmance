@@ -45,7 +45,9 @@ pub async fn session_acquire(
 ) -> Result<(), AppError> {
     sessions.remove(&session_id);
 
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     let session = engine.begin_session().await.map_err(AppError::from)?;
 
     sessions

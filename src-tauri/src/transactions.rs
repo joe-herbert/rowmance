@@ -52,7 +52,9 @@ pub async fn transaction_begin(
         ));
     }
 
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     let tx = engine
         .begin_transaction(database.as_deref())
         .await

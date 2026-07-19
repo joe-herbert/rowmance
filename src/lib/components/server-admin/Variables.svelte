@@ -8,7 +8,10 @@
   import RefreshIcon from '$lib/components/icons/RefreshIcon.svelte';
   import Modal from '$lib/components/Modal.svelte';
 
-  interface Props { connectionId: string; canSet: boolean; }
+  interface Props {
+    connectionId: string;
+    canSet: boolean;
+  }
   const { connectionId, canSet }: Props = $props();
 
   const toast = useToast();
@@ -46,10 +49,7 @@
         !searchQuery ||
         v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         v.value.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesScope =
-        scopeFilter === 'all' ||
-        v.scope === scopeFilter ||
-        v.scope === 'both';
+      const matchesScope = scopeFilter === 'all' || v.scope === scopeFilter || v.scope === 'both';
       return matchesSearch && matchesScope;
     }),
   );
@@ -87,7 +87,7 @@
       bind:value={searchQuery}
     />
     <div class="scope-filter">
-      {#each (['all', 'session', 'global'] as const) as s}
+      {#each ['all', 'session', 'global'] as const as s}
         <button
           class="scope-btn"
           class:active={scopeFilter === s}
@@ -194,77 +194,190 @@
 {/if}
 
 <style>
-  .variables { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-  .toolbar {
-    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-    border-bottom: 1px solid var(--color-border); flex-shrink: 0; flex-wrap: wrap;
+  .variables {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
   }
-  .spacer { flex: 1; }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .spacer {
+    flex: 1;
+  }
   .search-input {
-    height: 28px; padding: 0 10px; border-radius: var(--radius-md);
-    border: 1px solid var(--color-border); background: var(--color-bg-secondary);
-    color: var(--color-text-primary); font-size: var(--font-size-sm); min-width: 200px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    min-width: 200px;
     outline: none;
   }
-  .search-input:focus { border-color: var(--color-accent); }
+  .search-input:focus {
+    border-color: var(--color-accent);
+  }
 
-  .scope-filter { display: flex; gap: 2px; }
+  .scope-filter {
+    display: flex;
+    gap: 2px;
+  }
   .scope-btn {
-    padding: 3px 10px; border-radius: var(--radius-sm); font-size: var(--font-size-xs);
-    cursor: pointer; background: transparent; color: var(--color-text-muted);
-    border: 1px solid var(--color-border); transition: all var(--transition-fast);
+    padding: 3px 10px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    transition: all var(--transition-fast);
   }
   .scope-btn.active {
-    background: var(--color-accent-subtle); color: var(--color-accent);
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
     border-color: var(--color-accent);
   }
 
   .icon-btn {
-    display: grid; place-items: center; width: 26px; height: 26px;
-    border-radius: var(--radius-md); background: transparent; color: var(--color-text-muted);
-    cursor: pointer; transition: background var(--transition-fast), color var(--transition-fast);
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
-  .icon-btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
-  .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .error-msg, .loading-msg {
-    flex: 1; display: flex; align-items: center; justify-content: center;
-    color: var(--color-text-muted); font-size: var(--font-size-sm);
+  .icon-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
-  .error-msg { color: var(--color-danger, #e53e3e); }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 
-  .table-wrap { flex: 1; overflow: auto; }
-  .data-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-xs); }
-  .data-table th, .data-table td {
-    padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--color-border);
+  .error-msg,
+  .loading-msg {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+  }
+  .error-msg {
+    color: var(--color-danger, #e53e3e);
+  }
+
+  .table-wrap {
+    flex: 1;
+    overflow: auto;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-xs);
+  }
+  .data-table th,
+  .data-table td {
+    padding: 5px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
   }
   .data-table th {
-    font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--color-text-muted);
-    background: var(--color-bg-secondary); position: sticky; top: 0; z-index: 1;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    background: var(--color-bg-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 1;
   }
-  .data-table tbody tr:hover { background: var(--color-bg-hover); }
-  .mono { font-family: var(--font-family-mono, monospace); }
-  .name-cell { white-space: nowrap; color: var(--color-text-primary); }
-  .value-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-family-mono, monospace); color: var(--color-text-secondary); }
-  .flags-cell { display: flex; gap: 4px; align-items: center; }
-  .edit-col { width: 60px; }
+  .data-table tbody tr:hover {
+    background: var(--color-bg-hover);
+  }
+  .mono {
+    font-family: var(--font-family-mono, monospace);
+  }
+  .name-cell {
+    white-space: nowrap;
+    color: var(--color-text-primary);
+  }
+  .value-cell {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-family-mono, monospace);
+    color: var(--color-text-secondary);
+  }
+  .flags-cell {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .edit-col {
+    width: 60px;
+  }
 
   .badge {
-    display: inline-block; padding: 1px 6px; border-radius: 99px; font-size: 10px;
-    font-weight: 600; letter-spacing: 0.03em; white-space: nowrap;
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 99px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
   }
-  .badge.scope-session { background: color-mix(in srgb, var(--color-accent) 12%, transparent); color: var(--color-accent); }
-  .badge.scope-global { background: color-mix(in srgb, var(--color-success, #22c55e) 12%, transparent); color: var(--color-success, #22c55e); }
-  .badge.scope-both { background: var(--color-bg-secondary); color: var(--color-text-muted); }
-  .badge.restart { background: color-mix(in srgb, var(--color-warning, #f59e0b) 15%, transparent); color: var(--color-warning, #f59e0b); }
-  .badge.static { background: var(--color-bg-secondary); color: var(--color-text-disabled); }
+  .badge.scope-session {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+  }
+  .badge.scope-global {
+    background: color-mix(in srgb, var(--color-success, #22c55e) 12%, transparent);
+    color: var(--color-success, #22c55e);
+  }
+  .badge.scope-both {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-muted);
+  }
+  .badge.restart {
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 15%, transparent);
+    color: var(--color-warning, #f59e0b);
+  }
+  .badge.static {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-disabled);
+  }
 
   .edit-btn {
-    padding: 2px 8px; border-radius: var(--radius-sm); font-size: 11px; cursor: pointer;
-    background: var(--color-bg-secondary); color: var(--color-text-secondary);
-    border: 1px solid var(--color-border); transition: background var(--transition-fast);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    cursor: pointer;
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    transition: background var(--transition-fast);
   }
-  .edit-btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+  .edit-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
 
   .modal-card {
     background: var(--color-bg-overlay);
@@ -284,33 +397,84 @@
     border-bottom: 1px solid var(--color-border);
   }
 
-  .edit-modal { display: flex; flex-direction: column; gap: 12px; padding: var(--spacing-4); }
-  .var-desc { font-size: var(--font-size-sm); color: var(--color-text-muted); margin: 0; }
+  .edit-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: var(--spacing-4);
+  }
+  .var-desc {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin: 0;
+  }
   .warning-notice {
-    padding: 8px 12px; border-radius: var(--radius-md); font-size: var(--font-size-sm);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
     background: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, transparent);
-    color: var(--color-text-primary); border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent);
+    color: var(--color-text-primary);
+    border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent);
   }
-  .field-label { display: flex; flex-direction: column; gap: 4px; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
-  .field-input, .field-select {
-    height: 32px; padding: 0 10px; border-radius: var(--radius-md);
-    border: 1px solid var(--color-border); background: var(--color-bg-secondary);
-    color: var(--color-text-primary); font-size: var(--font-size-sm); outline: none; font-family: var(--font-family-mono, monospace);
+  .field-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
   }
-  .field-input:focus, .field-select:focus { border-color: var(--color-accent); }
-  .edit-error { font-size: var(--font-size-sm); color: var(--color-danger, #e53e3e); }
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .field-input,
+  .field-select {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    outline: none;
+    font-family: var(--font-family-mono, monospace);
+  }
+  .field-input:focus,
+  .field-select:focus {
+    border-color: var(--color-accent);
+  }
+  .edit-error {
+    font-size: var(--font-size-sm);
+    color: var(--color-danger, #e53e3e);
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
   .btn-primary {
-    padding: 6px 16px; border-radius: var(--radius-md); font-size: var(--font-size-sm);
-    background: var(--color-accent); color: white; cursor: pointer;
-    transition: opacity var(--transition-fast); border: none;
+    padding: 6px 16px;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    background: var(--color-accent);
+    color: white;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+    border: none;
   }
-  .btn-primary:hover { opacity: 0.88; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary:hover {
+    opacity: 0.88;
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .btn-secondary {
-    padding: 6px 16px; border-radius: var(--radius-md); font-size: var(--font-size-sm);
-    background: var(--color-bg-secondary); color: var(--color-text-secondary);
-    border: 1px solid var(--color-border); cursor: pointer;
+    padding: 6px 16px;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
   }
-  .btn-secondary:hover { background: var(--color-bg-hover); }
+  .btn-secondary:hover {
+    background: var(--color-bg-hover);
+  }
 </style>

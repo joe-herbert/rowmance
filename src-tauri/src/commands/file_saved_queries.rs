@@ -99,7 +99,8 @@ fn parse_header(content: &str) -> (FileHeader, String) {
                         header.position = opt.and_then(|v| v.parse().ok());
                     }
                     "description" => {
-                        header.description = opt.and_then(|v| serde_json::from_str::<String>(&v).ok());
+                        header.description =
+                            opt.and_then(|v| serde_json::from_str::<String>(&v).ok());
                     }
                     "annotations" => {
                         header.annotations = opt;

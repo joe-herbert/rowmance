@@ -57,7 +57,9 @@ export function parseFkViolationError(
     if (valMatch) {
       const referencedCol = valMatch[1];
       const rawValue = valMatch[2];
-      const quotedCol = dialect ? qi(referencedCol, dialect) : `"${referencedCol.replace(/"/g, '""')}"`;
+      const quotedCol = dialect
+        ? qi(referencedCol, dialect)
+        : `"${referencedCol.replace(/"/g, '""')}"`;
       filterSql = /^\d+$/.test(rawValue)
         ? `${quotedCol} = ${rawValue}`
         : `${quotedCol} = '${rawValue.replace(/'/g, "''")}'`;

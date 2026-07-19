@@ -456,7 +456,13 @@ export type PanelKind =
       instanceDb?: string;
       initialFilter?: string;
     }
-  | { kind: 'table_structure'; connectionId: string; database: string; table: string; instanceDb?: string }
+  | {
+      kind: 'table_structure';
+      connectionId: string;
+      database: string;
+      table: string;
+      instanceDb?: string;
+    }
   | {
       kind: 'ddl_viewer';
       connectionId: string;

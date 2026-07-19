@@ -34,7 +34,9 @@
     }
   }
 
-  const showFormatJson = $derived(value !== null && (isJsonType || contentLooksLikeJson(textValue)));
+  const showFormatJson = $derived(
+    value !== null && (isJsonType || contentLooksLikeJson(textValue)),
+  );
 
   const hasInvalidJson = $derived(
     isJsonType &&

@@ -2,21 +2,21 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use sqlparser::dialect::MySqlDialect;
+use sqlparser::parser::Parser;
 use sqlx::Column;
 use sqlx::Executor;
 use sqlx::Row;
 use sqlx::Statement;
 use sqlx::TypeInfo;
-use sqlparser::dialect::MySqlDialect;
-use sqlparser::parser::Parser;
 
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::{build_edges_from_fk_rows, group_into_tables, FkNorm};
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, DbUser, ErdColumn, ErdGraph,
-    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
-    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
-    TableInfo, VarScope,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, DbUser, EngineQueryResult, ErdColumn,
+    ErdGraph, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange,
+    RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo,
+    VarScope,
 };
 use crate::error::RowmanceError;
 
@@ -54,7 +54,11 @@ impl DatabaseEngine for MySqlEngine {
         crate::connections::mysql::list_databases(&self.pool).await
     }
 
-    async fn list_tables(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError> {
+    async fn list_tables(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<TableInfo>, RowmanceError> {
         crate::connections::mysql::list_tables(&self.pool, database).await
     }
 
@@ -67,7 +71,11 @@ impl DatabaseEngine for MySqlEngine {
         crate::connections::mysql::list_columns(&self.pool, database, table).await
     }
 
-    async fn list_all_columns(&self, database: &str, _instance_db: Option<&str>) -> Result<Vec<BulkColumnRow>, RowmanceError> {
+    async fn list_all_columns(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkColumnRow>, RowmanceError> {
         let pairs = crate::connections::mysql::list_all_columns(&self.pool, database).await?;
         Ok(pairs
             .into_iter()
@@ -103,11 +111,21 @@ impl DatabaseEngine for MySqlEngine {
         crate::connections::mysql::list_foreign_keys(&self.pool, database, table).await
     }
 
-    async fn count_table(&self, database: &str, table: &str, _instance_db: Option<&str>) -> Result<i64, RowmanceError> {
+    async fn count_table(
+        &self,
+        database: &str,
+        table: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<i64, RowmanceError> {
         crate::connections::mysql::count_table(&self.pool, database, table).await
     }
 
-    async fn get_ddl(&self, database: &str, table: &str, _instance_db: Option<&str>) -> Result<String, RowmanceError> {
+    async fn get_ddl(
+        &self,
+        database: &str,
+        table: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<String, RowmanceError> {
         crate::connections::mysql::get_ddl(&self.pool, database, table).await
     }
 
@@ -143,7 +161,12 @@ impl DatabaseEngine for MySqlEngine {
             .map_err(RowmanceError::Database)
     }
 
-    async fn count_query_rows(&self, sql: &str, database: Option<&str>, _instance_db: Option<&str>) -> Option<i64> {
+    async fn count_query_rows(
+        &self,
+        sql: &str,
+        database: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Option<i64> {
         let sql_trimmed = sql.trim_end_matches(';');
         let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
         let mut conn = self.pool.acquire().await.ok()?;
@@ -209,7 +232,11 @@ impl DatabaseEngine for MySqlEngine {
     ) -> Result<Box<dyn EngineTransaction>, RowmanceError> {
         use sqlx::ConnectOptions;
         let opts = (*self.pool.connect_options()).clone();
-        let opts = if let Some(db) = database { opts.database(db) } else { opts };
+        let opts = if let Some(db) = database {
+            opts.database(db)
+        } else {
+            opts
+        };
         let mut conn = opts
             .connect()
             .await
@@ -221,7 +248,12 @@ impl DatabaseEngine for MySqlEngine {
         Ok(Box::new(MySqlTransaction { conn }))
     }
 
-    async fn explain(&self, sql: &str, database: Option<&str>, _instance_db: Option<&str>) -> Result<ExplainResult, RowmanceError> {
+    async fn explain(
+        &self,
+        sql: &str,
+        database: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<ExplainResult, RowmanceError> {
         let mut conn = self
             .pool
             .acquire()
@@ -248,7 +280,10 @@ impl DatabaseEngine for MySqlEngine {
             .first()
             .and_then(|row| row.try_get::<String, _>(0).ok())
             .unwrap_or_default();
-        Ok(ExplainResult { raw_json: raw, dialect: "mysql_json".to_string() })
+        Ok(ExplainResult {
+            raw_json: raw,
+            dialect: "mysql_json".to_string(),
+        })
     }
 
     async fn begin_session(&self) -> Result<Box<dyn EngineTransaction>, RowmanceError> {
@@ -261,7 +296,11 @@ impl DatabaseEngine for MySqlEngine {
         Ok(Box::new(MySqlTransaction { conn }))
     }
 
-    async fn get_erd_graph(&self, database: &str, _instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError> {
+    async fn get_erd_graph(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<ErdGraph, RowmanceError> {
         #[derive(sqlx::FromRow)]
         struct ColRow {
             table_name: Option<String>,
@@ -417,11 +456,7 @@ impl DatabaseEngine for MySqlEngine {
             .map_err(RowmanceError::Database)
     }
 
-    async fn drop_user(
-        &self,
-        username: &str,
-        host: Option<&str>,
-    ) -> Result<(), RowmanceError> {
+    async fn drop_user(&self, username: &str, host: Option<&str>) -> Result<(), RowmanceError> {
         let h = host.unwrap_or("%");
         let eu = escape_sql_string(username);
         let eh = escape_sql_string(h);
@@ -546,7 +581,9 @@ impl DatabaseEngine for MySqlEngine {
         Ok(inserted)
     }
 
-    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+    async fn probe_server_admin_capabilities(
+        &self,
+    ) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
         let process_list = match sqlx::query("SELECT 1 FROM information_schema.PROCESSLIST LIMIT 1")
             .fetch_optional(&self.pool)
             .await
@@ -641,17 +678,30 @@ impl DatabaseEngine for MySqlEngine {
             .and_then(|r| r.get::<Option<String>, _>("Value"))
             .and_then(|v| v.parse::<u64>().ok());
 
-        let uptime_seconds = status_map.get("Uptime").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
-        let connections_current = status_map.get("Threads_connected").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+        let uptime_seconds = status_map
+            .get("Uptime")
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        let connections_current = status_map
+            .get("Threads_connected")
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
 
         let qps = if uptime_seconds > 0 {
-            status_map.get("Questions").and_then(|v| v.parse::<f64>().ok()).map(|q| q / uptime_seconds as f64)
+            status_map
+                .get("Questions")
+                .and_then(|v| v.parse::<f64>().ok())
+                .map(|q| q / uptime_seconds as f64)
         } else {
             None
         };
 
-        let buf_requests = status_map.get("Innodb_buffer_pool_read_requests").and_then(|v| v.parse::<f64>().ok());
-        let buf_reads = status_map.get("Innodb_buffer_pool_reads").and_then(|v| v.parse::<f64>().ok());
+        let buf_requests = status_map
+            .get("Innodb_buffer_pool_read_requests")
+            .and_then(|v| v.parse::<f64>().ok());
+        let buf_reads = status_map
+            .get("Innodb_buffer_pool_reads")
+            .and_then(|v| v.parse::<f64>().ok());
         let cache_hit_ratio = match (buf_requests, buf_reads) {
             (Some(req), Some(rd)) if req > 0.0 => Some((req - rd) / req * 100.0),
             _ => None,
@@ -696,7 +746,11 @@ impl DatabaseEngine for MySqlEngine {
         let mut vars: Vec<ServerVariable> = Vec::new();
         for (name, value) in &global_map {
             let in_session = session_map.contains_key(name.as_str());
-            let scope = if in_session { VarScope::Both } else { VarScope::Global };
+            let scope = if in_session {
+                VarScope::Both
+            } else {
+                VarScope::Global
+            };
             vars.push(ServerVariable {
                 name: name.clone(),
                 value: value.clone(),
@@ -725,7 +779,12 @@ impl DatabaseEngine for MySqlEngine {
         Ok(vars)
     }
 
-    async fn set_variable(&self, name: &str, value: &str, scope: VarScope) -> Result<(), RowmanceError> {
+    async fn set_variable(
+        &self,
+        name: &str,
+        value: &str,
+        scope: VarScope,
+    ) -> Result<(), RowmanceError> {
         let scope_str = match scope {
             VarScope::Session => "SESSION",
             VarScope::Global | VarScope::Both => "GLOBAL",
@@ -752,17 +811,22 @@ impl DatabaseEngine for MySqlEngine {
         .await;
 
         match rows_result {
-            Ok(rows) => {
-                Ok(rows.iter().map(|r| LockInfo {
+            Ok(rows) => Ok(rows
+                .iter()
+                .map(|r| LockInfo {
                     lock_id: r.try_get::<String, _>("LOCK_ID").unwrap_or_default(),
                     blocker_session_id: None,
-                    waiting_session_id: r.try_get::<Option<u64>, _>("ENGINE_TRANSACTION_ID").ok().flatten().map(|v| v.to_string()),
+                    waiting_session_id: r
+                        .try_get::<Option<u64>, _>("ENGINE_TRANSACTION_ID")
+                        .ok()
+                        .flatten()
+                        .map(|v| v.to_string()),
                     lock_type: r.try_get::<String, _>("LOCK_TYPE").unwrap_or_default(),
                     lock_mode: r.try_get::<String, _>("LOCK_MODE").unwrap_or_default(),
                     object_name: r.try_get("OBJECT_NAME").ok(),
                     duration_ms: None,
-                }).collect())
-            }
+                })
+                .collect()),
             Err(_) => {
                 let rows2 = sqlx::query(
                     "SELECT \
@@ -780,15 +844,26 @@ impl DatabaseEngine for MySqlEngine {
                 .await
                 .map_err(RowmanceError::Database)?;
 
-                Ok(rows2.iter().map(|r| LockInfo {
-                    lock_id: r.try_get::<String, _>("waiting_trx_id").unwrap_or_default(),
-                    blocker_session_id: r.try_get::<Option<u64>, _>("blocking_thread").ok().flatten().map(|v| v.to_string()),
-                    waiting_session_id: r.try_get::<Option<u64>, _>("waiting_thread").ok().flatten().map(|v| v.to_string()),
-                    lock_type: "InnoDB".to_string(),
-                    lock_mode: "LOCK".to_string(),
-                    object_name: None,
-                    duration_ms: None,
-                }).collect())
+                Ok(rows2
+                    .iter()
+                    .map(|r| LockInfo {
+                        lock_id: r.try_get::<String, _>("waiting_trx_id").unwrap_or_default(),
+                        blocker_session_id: r
+                            .try_get::<Option<u64>, _>("blocking_thread")
+                            .ok()
+                            .flatten()
+                            .map(|v| v.to_string()),
+                        waiting_session_id: r
+                            .try_get::<Option<u64>, _>("waiting_thread")
+                            .ok()
+                            .flatten()
+                            .map(|v| v.to_string()),
+                        lock_type: "InnoDB".to_string(),
+                        lock_mode: "LOCK".to_string(),
+                        object_name: None,
+                        duration_ms: None,
+                    })
+                    .collect())
             }
         }
     }
@@ -804,29 +879,32 @@ impl DatabaseEngine for MySqlEngine {
         .await
         .map_err(RowmanceError::Database)?;
 
-        Ok(rows.iter().map(|r| {
-            let schema: String = r.try_get("EVENT_SCHEMA").unwrap_or_default();
-            let name: String = r.try_get("EVENT_NAME").unwrap_or_default();
-            let status: String = r.try_get("STATUS").unwrap_or_default();
-            let interval_value: Option<String> = r.try_get("INTERVAL_VALUE").ok().flatten();
-            let interval_field: Option<String> = r.try_get("INTERVAL_FIELD").ok().flatten();
-            let schedule = match (interval_value, interval_field) {
-                (Some(v), Some(f)) => format!("EVERY {v} {f}"),
-                _ => "ONE TIME".to_string(),
-            };
-            let last_run: Option<String> = r.try_get("LAST_EXECUTED").ok().flatten();
-            let next_run: Option<String> = r.try_get("EXECUTE_AT").ok().flatten();
-            let body: Option<String> = r.try_get("EVENT_DEFINITION").ok();
-            ScheduledJob {
-                id: format!("{schema}.{name}"),
-                name: format!("{schema}.{name}"),
-                schedule,
-                enabled: status == "ENABLED",
-                last_run,
-                next_run,
-                body,
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let schema: String = r.try_get("EVENT_SCHEMA").unwrap_or_default();
+                let name: String = r.try_get("EVENT_NAME").unwrap_or_default();
+                let status: String = r.try_get("STATUS").unwrap_or_default();
+                let interval_value: Option<String> = r.try_get("INTERVAL_VALUE").ok().flatten();
+                let interval_field: Option<String> = r.try_get("INTERVAL_FIELD").ok().flatten();
+                let schedule = match (interval_value, interval_field) {
+                    (Some(v), Some(f)) => format!("EVERY {v} {f}"),
+                    _ => "ONE TIME".to_string(),
+                };
+                let last_run: Option<String> = r.try_get("LAST_EXECUTED").ok().flatten();
+                let next_run: Option<String> = r.try_get("EXECUTE_AT").ok().flatten();
+                let body: Option<String> = r.try_get("EVENT_DEFINITION").ok();
+                ScheduledJob {
+                    id: format!("{schema}.{name}"),
+                    name: format!("{schema}.{name}"),
+                    schedule,
+                    enabled: status == "ENABLED",
+                    last_run,
+                    next_run,
+                    body,
+                }
+            })
+            .collect())
     }
 
     async fn get_innodb_status(&self) -> Result<String, RowmanceError> {
@@ -970,7 +1048,11 @@ async fn execute_on_mysql_conn(
 
         let data: Vec<Vec<serde_json::Value>> = rows
             .iter()
-            .map(|row| (0..row.len()).map(|i| mysql_value_to_json(row, i)).collect())
+            .map(|row| {
+                (0..row.len())
+                    .map(|i| mysql_value_to_json(row, i))
+                    .collect()
+            })
             .collect();
 
         Ok(EngineQueryResult {
@@ -1287,8 +1369,8 @@ fn sql_has_top_level_limit(sql: &str) -> bool {
                 if depth == 0 && i + 5 <= len {
                     let word = &sql[i..i + 5];
                     if word.eq_ignore_ascii_case("limit") {
-                        let before_ok = i == 0
-                            || (!bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_');
+                        let before_ok =
+                            i == 0 || (!bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_');
                         let after_ok = bytes
                             .get(i + 5)
                             .is_none_or(|b| !b.is_ascii_alphanumeric() && *b != b'_');
@@ -1367,14 +1449,31 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             supports_roles: false,
             detects_sql_variables: true,
             warns_tx_database_mismatch: true,
-            display_name: if db_type == "mariadb" { "MariaDB".into() } else { "MySQL".into() },
+            display_name: if db_type == "mariadb" {
+                "MariaDB".into()
+            } else {
+                "MySQL".into()
+            },
             default_column_type: "INT".into(),
             common_column_types: vec![
-                "INT", "BIGINT", "SMALLINT", "TINYINT",
-                "VARCHAR(255)", "TEXT", "LONGTEXT",
-                "DATETIME", "DATE", "FLOAT", "DOUBLE", "DECIMAL(10,2)",
-                "BOOLEAN", "JSON",
-            ].into_iter().map(String::from).collect(),
+                "INT",
+                "BIGINT",
+                "SMALLINT",
+                "TINYINT",
+                "VARCHAR(255)",
+                "TEXT",
+                "LONGTEXT",
+                "DATETIME",
+                "DATE",
+                "FLOAT",
+                "DOUBLE",
+                "DECIMAL(10,2)",
+                "BOOLEAN",
+                "JSON",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             supports_auto_increment: true,
             supports_column_comment: true,
             supports_change_column: true,
@@ -1396,7 +1495,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
                 detect: "constraint fails".into(),
                 table_pattern: r"constraint fails \(`[^`]*`\.`([^`]+)`".into(),
                 column_pair_pattern: Some(
-                    r"FOREIGN KEY \(`([^`]+)`\) REFERENCES `[^`]+` \(`([^`]+)`\)".into()
+                    r"FOREIGN KEY \(`([^`]+)`\) REFERENCES `[^`]+` \(`([^`]+)`\)".into(),
                 ),
                 column_value_pattern: None,
             }),
@@ -1431,7 +1530,10 @@ impl crate::connections::engine::PoolAdapter for MySqlPoolAdapter {
         sqlx::query("SELECT 1").execute(&self.pool).await.is_ok()
     }
     fn get_engine(&self) -> std::sync::Arc<dyn crate::connections::engine::DatabaseEngine> {
-        std::sync::Arc::new(MySqlEngine { pool: self.pool.clone(), read_only: self.read_only })
+        std::sync::Arc::new(MySqlEngine {
+            pool: self.pool.clone(),
+            read_only: self.read_only,
+        })
     }
 }
 
@@ -1457,8 +1559,8 @@ pub async fn create_pool(
     ssl_key_path: Option<&str>,
     read_only: bool,
 ) -> Result<Box<dyn crate::connections::engine::PoolAdapter>, crate::error::RowmanceError> {
-    use std::path::Path;
     use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode};
+    use std::path::Path;
 
     let mut opts = MySqlConnectOptions::new()
         .host(host)

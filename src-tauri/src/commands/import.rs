@@ -187,7 +187,9 @@ async fn csv_execute_from_text(
         .collect::<Result<_, _>>()
         .map_err(|e| AppError::new("CSV_ERROR", e.to_string()))?;
 
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
     let count = engine
         .import_csv("", &table_name, None, &headers, &all_records, create_table)
         .await
@@ -259,7 +261,9 @@ async fn sql_execute_from_text(
 
     let statements = crate::lib_sql::split_sql_statements(&content);
     let total = statements.len() as u32;
-    let engine = connections.get_engine(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
 
     let mut executed = 0u32;
     let mut errors = 0u32;

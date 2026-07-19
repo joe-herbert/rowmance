@@ -30,7 +30,7 @@
       capabilities = await api.getCapabilities(connectionId);
       // Auto-select first supported tab
       const tabs = visibleTabs();
-      if (tabs.length > 0 && !tabs.some(t => t.id === activeTab)) {
+      if (tabs.length > 0 && !tabs.some((t) => t.id === activeTab)) {
         activeTab = tabs[0].id;
       }
     } catch (e) {
@@ -53,7 +53,7 @@
       { id: 'innodb', label: 'InnoDB', capability: capabilities.innodbStatus },
       { id: 'vacuum', label: 'Vacuum', capability: capabilities.vacuumStatus },
     ];
-    return tabs.filter(t => t.capability.status !== 'notSupported');
+    return tabs.filter((t) => t.capability.status !== 'notSupported');
   }
 </script>
 
@@ -99,7 +99,9 @@
             </div>
           {:else if capabilities.processList.status === 'extensionRequired'}
             <div class="capability-notice">
-              Extension required: {(capabilities.processList as { status: 'extensionRequired'; extension: string }).extension}
+              Extension required: {(
+                capabilities.processList as { status: 'extensionRequired'; extension: string }
+              ).extension}
             </div>
           {:else}
             <ProcessList
@@ -110,7 +112,9 @@
           {/if}
         {:else if activeTab === 'status'}
           {#if capabilities.serverStatus.status === 'insufficientPrivileges'}
-            <div class="capability-notice warning">Insufficient privileges to view server status.</div>
+            <div class="capability-notice warning">
+              Insufficient privileges to view server status.
+            </div>
           {:else}
             <ServerStatus {connectionId} />
           {/if}
@@ -128,10 +132,14 @@
           {/if}
         {:else if activeTab === 'jobs'}
           {#if capabilities.scheduledJobs.status === 'insufficientPrivileges'}
-            <div class="capability-notice warning">Insufficient privileges to view scheduled jobs.</div>
+            <div class="capability-notice warning">
+              Insufficient privileges to view scheduled jobs.
+            </div>
           {:else if capabilities.scheduledJobs.status === 'extensionRequired'}
             <div class="capability-notice">
-              Extension required: {(capabilities.scheduledJobs as { status: 'extensionRequired'; extension: string }).extension}
+              Extension required: {(
+                capabilities.scheduledJobs as { status: 'extensionRequired'; extension: string }
+              ).extension}
             </div>
           {:else}
             <ScheduledJobs {connectionId} />
@@ -168,7 +176,9 @@
     letter-spacing: 0.01em;
   }
 
-  .loading-state, .error-state, .not-supported {
+  .loading-state,
+  .error-state,
+  .not-supported {
     flex: 1;
     display: flex;
     align-items: center;
@@ -193,7 +203,9 @@
     border-bottom: 2px solid transparent;
     cursor: pointer;
     white-space: nowrap;
-    transition: color var(--transition-fast), border-color var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     background: transparent;
     border-top: none;
     border-left: none;

@@ -12,7 +12,11 @@
   import { getErdGraph } from '$lib/tauri/erd';
   import { executeQuery } from '$lib/tauri/query';
   import type { ErdRelation } from '$lib/types';
-  import { qi as dialectQi, tableRef as dialectTableRef, defaultDialectInfo } from '$lib/utils/dialect';
+  import {
+    qi as dialectQi,
+    tableRef as dialectTableRef,
+    defaultDialectInfo,
+  } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import Loader from '$lib/components/ui/Loader.svelte';
@@ -77,12 +81,13 @@
 
   $effect(() => {
     if (!panelEl) return;
-    panelEl.addEventListener('scroll', updateHeaderPositions, { passive: true });
+    const el = panelEl;
+    el.addEventListener('scroll', updateHeaderPositions, { passive: true });
     const ro = new ResizeObserver(updateHeaderPositions);
-    ro.observe(panelEl);
+    ro.observe(el);
     updateHeaderPositions();
     return () => {
-      panelEl.removeEventListener('scroll', updateHeaderPositions);
+      el.removeEventListener('scroll', updateHeaderPositions);
       ro.disconnect();
     };
   });
@@ -111,6 +116,8 @@
   }
 
   async function loadRelations(sel: CellSelection) {
+    const { columnName, cellValue } = sel;
+    if (!columnName || cellValue === undefined) return;
     globalLoading = true;
     relations = [];
 
@@ -120,15 +127,15 @@
 
       // Forward: edges where this table is the source
       for (const edge of graph.edges) {
-        if (edge.fromTable === sel.table && edge.fromColumns.includes(sel.columnName)) {
-          const colIdx = edge.fromColumns.indexOf(sel.columnName);
+        if (edge.fromTable === sel.table && edge.fromColumns.includes(columnName)) {
+          const colIdx = edge.fromColumns.indexOf(columnName);
           const refCol = edge.toColumns[colIdx] ?? edge.toColumns[0];
           entries.push({
             edge,
             direction: 'forward',
             targetTable: edge.toTable,
             filterColumn: refCol,
-            filterValue: sel.cellValue,
+            filterValue: cellValue,
             rows: [],
             columnNames: [],
             totalRows: null,
@@ -142,15 +149,15 @@
 
       // Reverse: edges where this table is the target
       for (const edge of graph.edges) {
-        if (edge.toTable === sel.table && edge.toColumns.includes(sel.columnName)) {
-          const colIdx = edge.toColumns.indexOf(sel.columnName);
+        if (edge.toTable === sel.table && edge.toColumns.includes(columnName)) {
+          const colIdx = edge.toColumns.indexOf(columnName);
           const fkCol = edge.fromColumns[colIdx] ?? edge.fromColumns[0];
           entries.push({
             edge,
             direction: 'reverse',
             targetTable: edge.fromTable,
             filterColumn: fkCol,
-            filterValue: sel.cellValue,
+            filterValue: cellValue,
             rows: [],
             columnNames: [],
             totalRows: null,
@@ -167,7 +174,7 @@
         connectionId: sel.connectionId,
         database: sel.database,
         table: sel.table,
-        column: sel.columnName,
+        column: columnName,
       });
       for (const vr of vrForward) {
         entries.push({
@@ -175,10 +182,11 @@
           direction: 'forward',
           targetTable: vr.to.table,
           filterColumn: vr.to.column,
-          filterValue: sel.cellValue,
+          filterValue: cellValue,
           rows: [],
           columnNames: [],
           totalRows: null,
+          queryId: null,
           loading: true,
           error: null,
           expanded: true,
@@ -194,7 +202,7 @@
         connectionId: sel.connectionId,
         database: sel.database,
         table: sel.table,
-        column: sel.columnName,
+        column: columnName,
       });
       for (const vr of vrReverse) {
         entries.push({
@@ -202,10 +210,11 @@
           direction: 'reverse',
           targetTable: vr.from.table,
           filterColumn: vr.from.column,
-          filterValue: sel.cellValue,
+          filterValue: cellValue,
           rows: [],
           columnNames: [],
           totalRows: null,
+          queryId: null,
           loading: true,
           error: null,
           expanded: true,
@@ -347,7 +356,11 @@
       <div class="relations-list">
         {#if forwardRelations.length > 0}
           <div class="section">
-            <div class="section-header section-header-spacer" aria-hidden="true" bind:this={fwdSpacerEl}>
+            <div
+              class="section-header section-header-spacer"
+              aria-hidden="true"
+              bind:this={fwdSpacerEl}
+            >
               <div class="section-icon forward-icon"></div>
               <div class="section-info">
                 <span class="section-label">References</span>
@@ -373,7 +386,12 @@
                   <span class="section-desc">{sel.table} → foreign key targets</span>
                 </div>
                 <span class="section-count">{forwardRelations.length}</span>
-                <ChevronIcon class="section-chevron {!forwardExpanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
+                <ChevronIcon
+                  class="section-chevron {!forwardExpanded ? 'collapsed' : ''}"
+                  width={16}
+                  height={16}
+                  strokeWidth={1.5}
+                />
               </button>
             {/if}
 
@@ -402,7 +420,9 @@
                         {/if}
                       </span>
                       {#if !rel.loading}
-                        <span class="card-row-count">{(rel.totalRows ?? rel.rows.length).toLocaleString()}</span>
+                        <span class="card-row-count"
+                          >{(rel.totalRows ?? rel.rows.length).toLocaleString()}</span
+                        >
                       {/if}
                       <button
                         class="card-open-btn"
@@ -414,7 +434,12 @@
                       >
                         <OpenInPanelIcon />
                       </button>
-                      <ChevronIcon class="card-chevron {!rel.expanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
+                      <ChevronIcon
+                        class="card-chevron {!rel.expanded ? 'collapsed' : ''}"
+                        width={16}
+                        height={16}
+                        strokeWidth={1.5}
+                      />
                     </div>
 
                     <div class="card-collapse" class:collapsed={!rel.expanded}>
@@ -468,7 +493,11 @@
 
         {#if reverseRelations.length > 0}
           <div class="section">
-            <div class="section-header section-header-spacer" aria-hidden="true" bind:this={revSpacerEl}>
+            <div
+              class="section-header section-header-spacer"
+              aria-hidden="true"
+              bind:this={revSpacerEl}
+            >
               <div class="section-icon reverse-icon"></div>
               <div class="section-info">
                 <span class="section-label">Referenced by</span>
@@ -494,7 +523,12 @@
                   <span class="section-desc">tables pointing to {sel.table}</span>
                 </div>
                 <span class="section-count">{reverseRelations.length}</span>
-                <ChevronIcon class="section-chevron {!reverseExpanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
+                <ChevronIcon
+                  class="section-chevron {!reverseExpanded ? 'collapsed' : ''}"
+                  width={16}
+                  height={16}
+                  strokeWidth={1.5}
+                />
               </button>
             {/if}
 
@@ -523,7 +557,9 @@
                         {/if}
                       </span>
                       {#if !rel.loading}
-                        <span class="card-row-count">{(rel.totalRows ?? rel.rows.length).toLocaleString()}</span>
+                        <span class="card-row-count"
+                          >{(rel.totalRows ?? rel.rows.length).toLocaleString()}</span
+                        >
                       {/if}
                       <button
                         class="card-open-btn"
@@ -535,7 +571,12 @@
                       >
                         <OpenInPanelIcon />
                       </button>
-                      <ChevronIcon class="card-chevron {!rel.expanded ? 'collapsed' : ''}" width={16} height={16} strokeWidth={1.5} />
+                      <ChevronIcon
+                        class="card-chevron {!rel.expanded ? 'collapsed' : ''}"
+                        width={16}
+                        height={16}
+                        strokeWidth={1.5}
+                      />
                     </div>
 
                     <div class="card-collapse" class:collapsed={!rel.expanded}>
@@ -614,7 +655,7 @@
     flex: 1;
   }
 
-  .empty-icon {
+  :global(.empty-icon) {
     width: 28px;
     height: 28px;
     opacity: 0.4;
@@ -755,7 +796,7 @@
     background: color-mix(in srgb, var(--color-bg-tertiary) 80%, transparent);
   }
 
-  .section-chevron {
+  :global(.section-chevron) {
     width: 13px;
     height: 13px;
     color: var(--color-text-muted);
@@ -763,7 +804,7 @@
     transition: transform 180ms ease;
   }
 
-  .section-chevron.collapsed {
+  :global(.section-chevron.collapsed) {
     transform: rotate(-90deg);
   }
 
@@ -877,7 +918,7 @@
     background: var(--color-bg-tertiary);
   }
 
-  .card-chevron {
+  :global(.card-chevron) {
     width: 12px;
     height: 12px;
     color: var(--color-text-muted);
@@ -885,11 +926,11 @@
     transition: transform 180ms ease;
   }
 
-  .card-chevron.collapsed {
+  :global(.card-chevron.collapsed) {
     transform: rotate(-90deg);
   }
 
-  .table-icon {
+  :global(.table-icon) {
     width: 13px;
     height: 13px;
     color: var(--color-text-muted);

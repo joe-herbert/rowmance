@@ -74,14 +74,23 @@ fn format_sql_insert(
     out
 }
 
-fn format_sql_in_clause(rows: &[Vec<serde_json::Value>], columns: &[String], boolean_literals: bool) -> String {
+fn format_sql_in_clause(
+    rows: &[Vec<serde_json::Value>],
+    columns: &[String],
+    boolean_literals: bool,
+) -> String {
     if rows.is_empty() || columns.is_empty() {
         return String::new();
     }
     // Use the first column only.
     let vals: Vec<String> = rows
         .iter()
-        .map(|row| sql_value(row.first().unwrap_or(&serde_json::Value::Null), boolean_literals))
+        .map(|row| {
+            sql_value(
+                row.first().unwrap_or(&serde_json::Value::Null),
+                boolean_literals,
+            )
+        })
         .collect();
     format!("({})", vals.join(", "))
 }
@@ -126,9 +135,17 @@ fn sql_value(v: &serde_json::Value, boolean_literals: bool) -> String {
         serde_json::Value::Null => "NULL".to_owned(),
         serde_json::Value::Bool(b) => {
             if boolean_literals {
-                if *b { "TRUE".to_owned() } else { "FALSE".to_owned() }
+                if *b {
+                    "TRUE".to_owned()
+                } else {
+                    "FALSE".to_owned()
+                }
             } else {
-                if *b { "1".to_owned() } else { "0".to_owned() }
+                if *b {
+                    "1".to_owned()
+                } else {
+                    "0".to_owned()
+                }
             }
         }
         serde_json::Value::Number(n) => n.to_string(),
@@ -150,7 +167,13 @@ fn apply_format(
         "json" => Ok(format_json(rows, columns)),
         "sql_insert" => {
             let table = table_name.unwrap_or("table_name");
-            Ok(format_sql_insert(rows, columns, table, quote, boolean_literals))
+            Ok(format_sql_insert(
+                rows,
+                columns,
+                table,
+                quote,
+                boolean_literals,
+            ))
         }
         "sql_in_clause" => Ok(format_sql_in_clause(rows, columns, boolean_literals)),
         "tab_separated" => Ok(format_tab_separated(rows, columns)),
@@ -163,12 +186,12 @@ fn apply_format(
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
+#[allow(clippy::type_complexity)]
 fn resolve_dialect(
     connections: &ConnectionManager,
     connection_id: Option<&str>,
 ) -> (Box<dyn Fn(&str) -> String>, bool) {
-    let engine = connection_id
-        .and_then(|id| connections.get_engine(id).ok());
+    let engine = connection_id.and_then(|id| connections.get_engine(id).ok());
     match engine {
         Some(e) => {
             let boolean_literals = e.boolean_literals();
@@ -196,7 +219,14 @@ pub async fn export_result_to_clipboard(
     connection_id: Option<String>,
 ) -> Result<(), AppError> {
     let (quote, boolean_literals) = resolve_dialect(&connections, connection_id.as_deref());
-    let content = apply_format(&rows, &columns, &format, table_name.as_deref(), quote.as_ref(), boolean_literals)?;
+    let content = apply_format(
+        &rows,
+        &columns,
+        &format,
+        table_name.as_deref(),
+        quote.as_ref(),
+        boolean_literals,
+    )?;
 
     // Use arboard for clipboard access.
     let mut clipboard =
@@ -220,7 +250,14 @@ pub async fn export_result_to_file(
     connection_id: Option<String>,
 ) -> Result<(), AppError> {
     let (quote, boolean_literals) = resolve_dialect(&connections, connection_id.as_deref());
-    let content = apply_format(&rows, &columns, &format, table_name.as_deref(), quote.as_ref(), boolean_literals)?;
+    let content = apply_format(
+        &rows,
+        &columns,
+        &format,
+        table_name.as_deref(),
+        quote.as_ref(),
+        boolean_literals,
+    )?;
 
     let mut file = std::fs::File::create(&file_path)
         .map_err(|e| AppError::new("IO_ERROR", format!("Cannot create {file_path}: {e}")))?;
@@ -274,7 +311,13 @@ mod tests {
 
     #[test]
     fn sql_insert_format() {
-        let out = format_sql_insert(&sample_rows(), &sample_cols(), "users", &backtick_quote, false);
+        let out = format_sql_insert(
+            &sample_rows(),
+            &sample_cols(),
+            "users",
+            &backtick_quote,
+            false,
+        );
         assert!(out.contains("INSERT INTO `users`"));
         assert!(out.contains("VALUES (1, 'Alice', NULL)"));
     }

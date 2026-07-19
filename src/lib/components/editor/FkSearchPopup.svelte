@@ -14,7 +14,7 @@
     /** Pixel coords to anchor the popup near (cursor position) */
     anchorX: number;
     anchorY: number;
-    onselect: (value: string) => void;
+    onselect: (_value: string) => void;
     onclose: () => void;
   }
 
@@ -71,7 +71,7 @@
       return `SELECT * FROM ${table}`;
     }
     const term = escapeLike(search);
-    const conditions = searchableColumns.map(col => `${q(col)} LIKE '%${term}%'`).join(' OR ');
+    const conditions = searchableColumns.map((col) => `${q(col)} LIKE '%${term}%'`).join(' OR ');
     return `SELECT * FROM ${table} WHERE ${conditions}`;
   }
 
@@ -82,7 +82,13 @@
 
     const attempt = async (sql: string, qc: string): Promise<QueryResult> => {
       quoteChar = qc;
-      return executeQuery(connectionId, sql.replace(/`/g, qc === '"' ? '"' : '`'), 0, PAGE_SIZE, db);
+      return executeQuery(
+        connectionId,
+        sql.replace(/`/g, qc === '"' ? '"' : '`'),
+        0,
+        PAGE_SIZE,
+        db,
+      );
     };
 
     try {
@@ -92,7 +98,7 @@
       } else {
         result = r;
         if (searchableColumns.length === 0) {
-          searchableColumns = r.columns.map(c => c.name);
+          searchableColumns = r.columns.map((c) => c.name);
         }
       }
     } catch {
@@ -105,7 +111,7 @@
         } else {
           result = r2;
           if (searchableColumns.length === 0) {
-            searchableColumns = r2.columns.map(c => c.name);
+            searchableColumns = r2.columns.map((c) => c.name);
           }
         }
       } catch (e2) {
@@ -144,7 +150,7 @@
 
   // Index of the referenced column in the result columns
   const refColIndex = $derived(
-    result?.columns.findIndex(c => c.name.toLowerCase() === referencedColumn.toLowerCase()) ?? -1,
+    result?.columns.findIndex((c) => c.name.toLowerCase() === referencedColumn.toLowerCase()) ?? -1,
   );
 
   function handleSelect(row: (string | number | boolean | null)[]): void {
@@ -233,7 +239,12 @@
               role="button"
               tabindex="0"
               onclick={() => handleSelect(row)}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelect(row); } }}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleSelect(row);
+                }
+              }}
             >
               {#each displayColumns as _col, i}
                 <td
@@ -275,8 +286,14 @@
   }
 
   @keyframes fk-popup-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   .fk-popup-header {

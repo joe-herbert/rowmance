@@ -9,8 +9,8 @@ use sqlparser::parser::Parser;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::group_into_tables;
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, ErdColumn, ErdGraph, ErdRelation,
-    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn,
+    ErdGraph, ErdRelation, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
     RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
     TableInfo, VarScope,
 };
@@ -51,7 +51,9 @@ impl DatabaseEngine for SqlServerEngine {
         if sql_has_top_level_order_by(sql) {
             format!("{sql} OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY")
         } else {
-            format!("{sql} ORDER BY (SELECT NULL) OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY")
+            format!(
+                "{sql} ORDER BY (SELECT NULL) OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
+            )
         }
     }
 
@@ -80,7 +82,11 @@ impl DatabaseEngine for SqlServerEngine {
         crate::connections::sqlserver::list_schemas_in_database(&mut conn, instance_db).await
     }
 
-    async fn list_tables(&self, database: &str, instance_db: Option<&str>) -> Result<Vec<TableInfo>, RowmanceError> {
+    async fn list_tables(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<TableInfo>, RowmanceError> {
         let mut conn = self
             .pool
             .get()
@@ -103,13 +109,19 @@ impl DatabaseEngine for SqlServerEngine {
         crate::connections::sqlserver::list_columns(&mut conn, database, table, instance_db).await
     }
 
-    async fn list_all_columns(&self, database: &str, instance_db: Option<&str>) -> Result<Vec<BulkColumnRow>, RowmanceError> {
+    async fn list_all_columns(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<BulkColumnRow>, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let pairs = crate::connections::sqlserver::list_all_columns(&mut conn, database, instance_db).await?;
+        let pairs =
+            crate::connections::sqlserver::list_all_columns(&mut conn, database, instance_db)
+                .await?;
         Ok(pairs
             .into_iter()
             .map(|(table_name, col)| BulkColumnRow {
@@ -151,10 +163,16 @@ impl DatabaseEngine for SqlServerEngine {
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        crate::connections::sqlserver::list_foreign_keys(&mut conn, database, table, instance_db).await
+        crate::connections::sqlserver::list_foreign_keys(&mut conn, database, table, instance_db)
+            .await
     }
 
-    async fn count_table(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<i64, RowmanceError> {
+    async fn count_table(
+        &self,
+        database: &str,
+        table: &str,
+        instance_db: Option<&str>,
+    ) -> Result<i64, RowmanceError> {
         let mut conn = self
             .pool
             .get()
@@ -163,7 +181,12 @@ impl DatabaseEngine for SqlServerEngine {
         crate::connections::sqlserver::count_table(&mut conn, database, table, instance_db).await
     }
 
-    async fn get_ddl(&self, database: &str, table: &str, instance_db: Option<&str>) -> Result<String, RowmanceError> {
+    async fn get_ddl(
+        &self,
+        database: &str,
+        table: &str,
+        instance_db: Option<&str>,
+    ) -> Result<String, RowmanceError> {
         let mut conn = self
             .pool
             .get()
@@ -188,7 +211,9 @@ impl DatabaseEngine for SqlServerEngine {
 
         if let Some(db) = instance_db {
             let db_esc = db.replace(']', "]]");
-            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]")).await.ok();
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]"))
+                .await
+                .ok();
         }
 
         // SQL Server has no session-level SET search_path equivalent. The closest
@@ -207,7 +232,9 @@ impl DatabaseEngine for SqlServerEngine {
 
         if instance_db.is_some() {
             let cat_esc = self.initial_catalog.replace(']', "]]");
-            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]"))
+                .await
+                .ok();
         }
 
         result
@@ -222,13 +249,20 @@ impl DatabaseEngine for SqlServerEngine {
         crate::connections::sqlserver::exec_simple(&mut conn, sql).await
     }
 
-    async fn count_query_rows(&self, sql: &str, database: Option<&str>, instance_db: Option<&str>) -> Option<i64> {
+    async fn count_query_rows(
+        &self,
+        sql: &str,
+        database: Option<&str>,
+        instance_db: Option<&str>,
+    ) -> Option<i64> {
         let sql_trimmed = sql.trim_end_matches(';');
         let count_sql = format!("SELECT COUNT(*) FROM ({sql_trimmed}) AS _count_query");
         let mut conn = self.pool.get().await.ok()?;
         if let Some(db) = instance_db {
             let db_esc = db.replace(']', "]]");
-            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]")).await.ok();
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]"))
+                .await
+                .ok();
         }
         if let Some(schema) = database {
             let schema_escaped = schema.replace(']', "]]");
@@ -250,7 +284,9 @@ impl DatabaseEngine for SqlServerEngine {
         };
         if instance_db.is_some() {
             let cat_esc = self.initial_catalog.replace(']', "]]");
-            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]"))
+                .await
+                .ok();
         }
         result
     }
@@ -272,7 +308,8 @@ impl DatabaseEngine for SqlServerEngine {
 
         if let Some(db) = instance_db {
             let db_esc = db.replace(']', "]]");
-            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]")).await?;
+            crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{db_esc}]"))
+                .await?;
         }
 
         crate::connections::sqlserver::exec_simple(&mut conn, "BEGIN TRANSACTION").await?;
@@ -283,10 +320,14 @@ impl DatabaseEngine for SqlServerEngine {
         let cat_esc = self.initial_catalog.replace(']', "]]");
         match result {
             Ok(counts) => {
-                crate::connections::sqlserver::exec_simple(&mut conn, "COMMIT TRANSACTION")
-                    .await?;
+                crate::connections::sqlserver::exec_simple(&mut conn, "COMMIT TRANSACTION").await?;
                 if instance_db.is_some() {
-                    crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
+                    crate::connections::sqlserver::exec_simple(
+                        &mut conn,
+                        &format!("USE [{cat_esc}]"),
+                    )
+                    .await
+                    .ok();
                 }
                 Ok(counts)
             }
@@ -295,7 +336,12 @@ impl DatabaseEngine for SqlServerEngine {
                     .await
                     .ok();
                 if instance_db.is_some() {
-                    crate::connections::sqlserver::exec_simple(&mut conn, &format!("USE [{cat_esc}]")).await.ok();
+                    crate::connections::sqlserver::exec_simple(
+                        &mut conn,
+                        &format!("USE [{cat_esc}]"),
+                    )
+                    .await
+                    .ok();
                 }
                 Err(e)
             }
@@ -322,7 +368,12 @@ impl DatabaseEngine for SqlServerEngine {
         Ok(Box::new(SqlServerTransaction { conn }))
     }
 
-    async fn explain(&self, sql: &str, _database: Option<&str>, _instance_db: Option<&str>) -> Result<ExplainResult, RowmanceError> {
+    async fn explain(
+        &self,
+        sql: &str,
+        _database: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<ExplainResult, RowmanceError> {
         let mut conn = self
             .pool
             .get()
@@ -347,7 +398,10 @@ impl DatabaseEngine for SqlServerEngine {
             }
         }
         let plans = serde_json::json!([{ "xml": plan_xml }]);
-        Ok(ExplainResult { raw_json: plans.to_string(), dialect: "sqlserver_xml".to_string() })
+        Ok(ExplainResult {
+            raw_json: plans.to_string(),
+            dialect: "sqlserver_xml".to_string(),
+        })
     }
 
     async fn begin_session(&self) -> Result<Box<dyn EngineTransaction>, RowmanceError> {
@@ -359,15 +413,19 @@ impl DatabaseEngine for SqlServerEngine {
         Ok(Box::new(SqlServerTransaction { conn }))
     }
 
-    async fn get_erd_graph(&self, schema: &str, instance_db: Option<&str>) -> Result<ErdGraph, RowmanceError> {
+    async fn get_erd_graph(
+        &self,
+        schema: &str,
+        instance_db: Option<&str>,
+    ) -> Result<ErdGraph, RowmanceError> {
         let mut conn = self
             .pool
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
-        let all_cols = crate::connections::sqlserver::list_all_columns(&mut conn, schema, instance_db)
-            .await?;
+        let all_cols =
+            crate::connections::sqlserver::list_all_columns(&mut conn, schema, instance_db).await?;
 
         let col_pairs: Vec<(String, ErdColumn)> = all_cols
             .into_iter()
@@ -386,9 +444,13 @@ impl DatabaseEngine for SqlServerEngine {
 
         let mut all_fk_edges: Vec<ErdRelation> = Vec::new();
         for table in &nodes {
-            let fks =
-                crate::connections::sqlserver::list_foreign_keys(&mut conn, schema, &table.name, instance_db)
-                    .await?;
+            let fks = crate::connections::sqlserver::list_foreign_keys(
+                &mut conn,
+                schema,
+                &table.name,
+                instance_db,
+            )
+            .await?;
             for fk in fks {
                 all_fk_edges.push(ErdRelation {
                     from_table: table.name.clone(),
@@ -455,8 +517,10 @@ impl DatabaseEngine for SqlServerEngine {
                 .iter()
                 .map(|s| -> Box<dyn tiberius::ToSql + Send> { Box::new(s.clone()) })
                 .collect();
-            let params_refs: Vec<&dyn tiberius::ToSql> =
-                params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+            let params_refs: Vec<&dyn tiberius::ToSql> = params
+                .iter()
+                .map(|p| p.as_ref() as &dyn tiberius::ToSql)
+                .collect();
             conn.execute(sql.as_str(), &params_refs)
                 .await
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
@@ -466,7 +530,9 @@ impl DatabaseEngine for SqlServerEngine {
         Ok(inserted)
     }
 
-    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+    async fn probe_server_admin_capabilities(
+        &self,
+    ) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
         Ok(ServerAdminCapabilityFlags {
             process_list: CapabilityStatus::Supported,
             kill_session: CapabilityStatus::Supported,
@@ -482,9 +548,14 @@ impl DatabaseEngine for SqlServerEngine {
     }
 
     async fn list_processes(&self) -> Result<Vec<ProcessInfo>, RowmanceError> {
-        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let stream = conn.simple_query(
-            "SELECT s.session_id, s.login_name, s.host_name, s.database_id, \
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn
+            .simple_query(
+                "SELECT s.session_id, s.login_name, s.host_name, s.database_id, \
                     s.status, r.command, r.wait_type, \
                     DB_NAME(s.database_id) AS db_name, \
                     DATEDIFF(SECOND, s.last_request_start_time, GETDATE()) AS elapsed_secs, \
@@ -493,11 +564,14 @@ impl DatabaseEngine for SqlServerEngine {
              LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id \
              OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) st \
              WHERE s.is_user_process = 1 \
-             ORDER BY s.session_id"
-        )
-        .await
-        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+             ORDER BY s.session_id",
+            )
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream
+            .into_results()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
         let mut processes = Vec::new();
         for row_set in results {
@@ -529,9 +603,14 @@ impl DatabaseEngine for SqlServerEngine {
     }
 
     async fn kill_session(&self, session_id: &str) -> Result<(), RowmanceError> {
-        let id: i32 = session_id.parse()
+        let id: i32 = session_id
+            .parse()
             .map_err(|_| RowmanceError::ConnectionNotFound("Invalid session id".to_string()))?;
-        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
         conn.simple_query(format!("KILL {id}").as_str())
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
@@ -539,24 +618,56 @@ impl DatabaseEngine for SqlServerEngine {
     }
 
     async fn get_server_status(&self) -> Result<ServerStatus, RowmanceError> {
-        let mut conn2 = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let ver_stream = conn2.simple_query("SELECT @@VERSION AS version, @@SERVERNAME AS server_name")
+        let mut conn2 = self
+            .pool
+            .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let ver_results = ver_stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let version = ver_results.into_iter().flatten().next()
-            .and_then(|r| r.try_get::<&str, _>("version").ok().flatten().map(String::from))
+        let ver_stream = conn2
+            .simple_query("SELECT @@VERSION AS version, @@SERVERNAME AS server_name")
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let ver_results = ver_stream
+            .into_results()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let version = ver_results
+            .into_iter()
+            .flatten()
+            .next()
+            .and_then(|r| {
+                r.try_get::<&str, _>("version")
+                    .ok()
+                    .flatten()
+                    .map(String::from)
+            })
             .unwrap_or_else(|| "SQL Server".to_string());
 
-        let mut conn3 = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let sess_stream = conn3.simple_query(
-            "SELECT count(*) AS cnt FROM sys.dm_exec_sessions WHERE is_user_process = 1"
-        )
-        .await
-        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let sess_results = sess_stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let connections_current = sess_results.into_iter().flatten().next()
-            .and_then(|r| r.try_get::<i32, _>("cnt").ok().flatten().map(|v| v.max(0) as u64))
+        let mut conn3 = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let sess_stream = conn3
+            .simple_query(
+                "SELECT count(*) AS cnt FROM sys.dm_exec_sessions WHERE is_user_process = 1",
+            )
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let sess_results = sess_stream
+            .into_results()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let connections_current = sess_results
+            .into_iter()
+            .flatten()
+            .next()
+            .and_then(|r| {
+                r.try_get::<i32, _>("cnt")
+                    .ok()
+                    .flatten()
+                    .map(|v| v.max(0) as u64)
+            })
             .unwrap_or(0);
 
         Ok(ServerStatus {
@@ -571,23 +682,34 @@ impl DatabaseEngine for SqlServerEngine {
     }
 
     async fn list_variables(&self) -> Result<Vec<ServerVariable>, RowmanceError> {
-        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let stream = conn.simple_query(
-            "SELECT name, CAST(value AS NVARCHAR(MAX)) AS value, \
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn
+            .simple_query(
+                "SELECT name, CAST(value AS NVARCHAR(MAX)) AS value, \
                     CAST(value_in_use AS NVARCHAR(MAX)) AS value_in_use, \
                     description, is_dynamic, is_advanced \
              FROM sys.configurations \
-             ORDER BY name"
-        )
-        .await
-        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+             ORDER BY name",
+            )
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream
+            .into_results()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
         let mut vars = Vec::new();
         for row_set in results {
             for row in row_set {
                 let name: Option<&str> = row.try_get("name").ok().flatten();
-                let value: Option<&str> = row.try_get("value_in_use").ok().flatten()
+                let value: Option<&str> = row
+                    .try_get("value_in_use")
+                    .ok()
+                    .flatten()
                     .or_else(|| row.try_get("value").ok().flatten());
                 let desc: Option<&str> = row.try_get("description").ok().flatten();
                 let is_dynamic: Option<bool> = row.try_get("is_dynamic").ok().flatten();
@@ -606,8 +728,17 @@ impl DatabaseEngine for SqlServerEngine {
         Ok(vars)
     }
 
-    async fn set_variable(&self, name: &str, value: &str, _scope: VarScope) -> Result<(), RowmanceError> {
-        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+    async fn set_variable(
+        &self,
+        name: &str,
+        value: &str,
+        _scope: VarScope,
+    ) -> Result<(), RowmanceError> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
         let en = name.replace('\'', "''");
         let ev = value.parse::<i64>().unwrap_or(0);
         let sql = format!("EXEC sp_configure N'{en}', {ev}; RECONFIGURE");
@@ -618,9 +749,14 @@ impl DatabaseEngine for SqlServerEngine {
     }
 
     async fn list_locks(&self) -> Result<Vec<LockInfo>, RowmanceError> {
-        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let stream = conn.simple_query(
-            "SELECT \
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn
+            .simple_query(
+                "SELECT \
                 w.session_id AS waiting_session, \
                 r.blocking_session_id AS blocker_session, \
                 r.wait_type, \
@@ -629,11 +765,14 @@ impl DatabaseEngine for SqlServerEngine {
              FROM sys.dm_exec_requests r \
              JOIN sys.dm_os_waiting_tasks w ON r.session_id = w.session_id \
              WHERE r.blocking_session_id IS NOT NULL AND r.blocking_session_id > 0 \
-             ORDER BY r.wait_time DESC"
-        )
-        .await
-        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+             ORDER BY r.wait_time DESC",
+            )
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream
+            .into_results()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
         let mut locks = Vec::new();
         for row_set in results {
@@ -658,9 +797,14 @@ impl DatabaseEngine for SqlServerEngine {
     }
 
     async fn list_scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, RowmanceError> {
-        let mut conn = self.pool.get().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let stream = conn.simple_query(
-            "SELECT j.job_id, j.name, j.enabled, \
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let stream = conn
+            .simple_query(
+                "SELECT j.job_id, j.name, j.enabled, \
                     js.next_run_date, js.next_run_time, \
                     jh.run_date AS last_run_date, jh.run_time AS last_run_time, jh.run_status, \
                     ss.step_name AS first_step \
@@ -668,11 +812,14 @@ impl DatabaseEngine for SqlServerEngine {
              LEFT JOIN msdb.dbo.sysjobschedules js ON j.job_id = js.job_id \
              LEFT JOIN msdb.dbo.sysjobhistory jh ON j.job_id = jh.job_id AND jh.step_id = 0 \
              LEFT JOIN msdb.dbo.sysjobsteps ss ON j.job_id = ss.job_id AND ss.step_id = 1 \
-             ORDER BY j.name"
-        )
-        .await
-        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-        let results = stream.into_results().await.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+             ORDER BY j.name",
+            )
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let results = stream
+            .into_results()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
         let mut jobs = Vec::new();
         for row_set in results {
@@ -683,7 +830,13 @@ impl DatabaseEngine for SqlServerEngine {
                 let next_run_date: Option<i32> = row.try_get("next_run_date").ok().flatten();
                 let last_run_date: Option<i32> = row.try_get("last_run_date").ok().flatten();
 
-                let job_id = id.map(|b| b.iter().map(|byte| format!("{byte:02x}")).collect::<String>()).unwrap_or_default();
+                let job_id = id
+                    .map(|b| {
+                        b.iter()
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default();
                 let next_run = next_run_date.filter(|&d| d > 0).map(|d| d.to_string());
                 let last_run = last_run_date.filter(|&d| d > 0).map(|d| d.to_string());
 
@@ -745,8 +898,7 @@ impl EngineTransaction for SqlServerTransaction {
 
     async fn switch_context(&mut self, database: &str) -> Result<(), RowmanceError> {
         let db_esc = database.replace(']', "]]");
-        crate::connections::sqlserver::exec_simple(&mut self.conn, &format!("USE [{db_esc}]"))
-            .await
+        crate::connections::sqlserver::exec_simple(&mut self.conn, &format!("USE [{db_esc}]")).await
     }
 }
 
@@ -900,8 +1052,10 @@ async fn apply_all_sqlserver(
         let mut all_bind: Vec<&serde_json::Value> = change.changes.values().collect();
         all_bind.extend(where_bind.iter().copied());
         let params = build_mssql_params(&all_bind);
-        let params_refs: Vec<&dyn tiberius::ToSql> =
-            params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+        let params_refs: Vec<&dyn tiberius::ToSql> = params
+            .iter()
+            .map(|p| p.as_ref() as &dyn tiberius::ToSql)
+            .collect();
         let result = conn
             .execute(sql.as_str(), &params_refs)
             .await
@@ -962,8 +1116,10 @@ async fn apply_all_sqlserver(
             );
             let vals: Vec<&serde_json::Value> = cols.iter().map(|(_, v)| *v).collect();
             let params = build_mssql_params(&vals);
-            let params_refs: Vec<&dyn tiberius::ToSql> =
-                params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+            let params_refs: Vec<&dyn tiberius::ToSql> = params
+                .iter()
+                .map(|p| p.as_ref() as &dyn tiberius::ToSql)
+                .collect();
             conn.execute(sql.as_str(), &params_refs)
                 .await
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
@@ -996,8 +1152,10 @@ async fn apply_all_sqlserver(
             where_parts.join(" AND ")
         );
         let params = build_mssql_params(&where_bind);
-        let params_refs: Vec<&dyn tiberius::ToSql> =
-            params.iter().map(|p| p.as_ref() as &dyn tiberius::ToSql).collect();
+        let params_refs: Vec<&dyn tiberius::ToSql> = params
+            .iter()
+            .map(|p| p.as_ref() as &dyn tiberius::ToSql)
+            .collect();
         let result = conn
             .execute(sql.as_str(), &params_refs)
             .await
@@ -1087,9 +1245,7 @@ fn mssql_column_data_to_json(data: tiberius::ColumnData<'_>) -> serde_json::Valu
             .map(serde_json::Value::from)
             .unwrap_or(serde_json::Value::Null),
         ColumnData::F32(v) => v
-            .and_then(|f| {
-                serde_json::Number::from_f64(f as f64).map(serde_json::Value::Number)
-            })
+            .and_then(|f| serde_json::Number::from_f64(f as f64).map(serde_json::Value::Number))
             .unwrap_or(serde_json::Value::Null),
         ColumnData::F64(v) => v
             .and_then(|f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
@@ -1102,9 +1258,7 @@ fn mssql_column_data_to_json(data: tiberius::ColumnData<'_>) -> serde_json::Valu
             .unwrap_or(serde_json::Value::Null),
         ColumnData::Binary(v) => v
             .map(|b| {
-                serde_json::Value::String(
-                    b.iter().map(|byte| format!("{:02x}", byte)).collect(),
-                )
+                serde_json::Value::String(b.iter().map(|byte| format!("{:02x}", byte)).collect())
             })
             .unwrap_or(serde_json::Value::Null),
         ColumnData::Numeric(v) => v
@@ -1151,8 +1305,7 @@ fn mssql_column_data_to_json(data: tiberius::ColumnData<'_>) -> serde_json::Valu
             .map(|dt| {
                 let epoch = chrono::NaiveDate::from_ymd_opt(1, 1, 1).unwrap();
                 let date = epoch + chrono::Duration::days(dt.date().days() as i64);
-                let nanos =
-                    dt.time().increments() as i64 * 10i64.pow(9 - dt.time().scale() as u32);
+                let nanos = dt.time().increments() as i64 * 10i64.pow(9 - dt.time().scale() as u32);
                 let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
                     + chrono::Duration::nanoseconds(nanos);
                 serde_json::Value::String(chrono::NaiveDateTime::new(date, time).to_string())
@@ -1161,8 +1314,7 @@ fn mssql_column_data_to_json(data: tiberius::ColumnData<'_>) -> serde_json::Valu
         ColumnData::DateTimeOffset(v) => v
             .map(|dto| {
                 let epoch = chrono::NaiveDate::from_ymd_opt(1, 1, 1).unwrap();
-                let date =
-                    epoch + chrono::Duration::days(dto.datetime2().date().days() as i64);
+                let date = epoch + chrono::Duration::days(dto.datetime2().date().days() as i64);
                 let nanos = dto.datetime2().time().increments() as i64
                     * 10i64.pow(9 - dto.datetime2().time().scale() as u32);
                 let time = chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
@@ -1242,8 +1394,8 @@ fn sql_has_top_level_order_by(sql: &str) -> bool {
                 if depth == 0 && i + 8 <= len {
                     let word = &sql[i..i + 8];
                     if word.eq_ignore_ascii_case("order by") {
-                        let before_ok = i == 0
-                            || (!bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_');
+                        let before_ok =
+                            i == 0 || (!bytes[i - 1].is_ascii_alphabetic() && bytes[i - 1] != b'_');
                         let after_ok = bytes
                             .get(i + 8)
                             .is_none_or(|b| b.is_ascii_whitespace() || !b.is_ascii_alphanumeric());
@@ -1325,10 +1477,26 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             display_name: "SQL Server".into(),
             default_column_type: "INT IDENTITY(1,1)".into(),
             common_column_types: vec![
-                "INT", "BIGINT", "SMALLINT", "TINYINT", "INT IDENTITY(1,1)",
-                "NVARCHAR(255)", "NVARCHAR(MAX)", "VARCHAR(255)", "NTEXT",
-                "DATETIME2", "DATE", "TIME", "FLOAT", "DECIMAL(10,2)", "MONEY", "BIT",
-            ].into_iter().map(String::from).collect(),
+                "INT",
+                "BIGINT",
+                "SMALLINT",
+                "TINYINT",
+                "INT IDENTITY(1,1)",
+                "NVARCHAR(255)",
+                "NVARCHAR(MAX)",
+                "VARCHAR(255)",
+                "NTEXT",
+                "DATETIME2",
+                "DATE",
+                "TIME",
+                "FLOAT",
+                "DECIMAL(10,2)",
+                "MONEY",
+                "BIT",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
             supports_auto_increment: false,
             supports_column_comment: false,
             supports_change_column: false,
@@ -1421,9 +1589,11 @@ pub async fn create_pool(
         use tokio_util::compat::TokioAsyncWriteCompatExt;
         let tcp = tokio::net::TcpStream::connect((host, port))
             .await
-            .map_err(|e| crate::error::RowmanceError::Pool(
-                format!("Cannot reach SQL Server at {host}:{port}: {e}")
-            ))?;
+            .map_err(|e| {
+                crate::error::RowmanceError::Pool(format!(
+                    "Cannot reach SQL Server at {host}:{port}: {e}"
+                ))
+            })?;
         tiberius::Client::connect(config.clone(), tcp.compat_write())
             .await
             .map_err(|e| crate::error::RowmanceError::Pool(e.to_string()))?;
@@ -1438,5 +1608,9 @@ pub async fn create_pool(
         .await
         .map_err(|e| crate::error::RowmanceError::Pool(e.to_string()))?;
 
-    Ok(Box::new(SqlServerPoolAdapter { pool, read_only, initial_catalog: database.to_string() }))
+    Ok(Box::new(SqlServerPoolAdapter {
+        pool,
+        read_only,
+        initial_catalog: database.to_string(),
+    }))
 }

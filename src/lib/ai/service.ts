@@ -110,9 +110,7 @@ async function callAi(
   const { provider, model, apiKey, baseUrl } = config;
 
   if (provider === 'claude') {
-    const messages: { role: string; content: string }[] = [
-      { role: 'user', content: userMessage },
-    ];
+    const messages: { role: string; content: string }[] = [{ role: 'user', content: userMessage }];
     if (assistantPrefill) {
       messages.push({ role: 'assistant', content: assistantPrefill });
     }
@@ -131,11 +129,11 @@ async function callAi(
       }),
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error?.message ?? `Claude API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `Claude API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    const text = (data as any).content?.[0]?.text ?? '';
+    const data = (await resp.json()) as { content?: { text?: string }[] };
+    const text = data.content?.[0]?.text ?? '';
     return assistantPrefill ? assistantPrefill + text : text;
   }
 
@@ -163,11 +161,11 @@ async function callAi(
       }),
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error?.message ?? `OpenAI API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `OpenAI API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    const text = (data as any).choices?.[0]?.message?.content ?? '';
+    const data = (await resp.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = data.choices?.[0]?.message?.content ?? '';
     return assistantPrefill ? assistantPrefill + text : text;
   }
 
@@ -185,11 +183,13 @@ async function callAi(
       },
     );
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error?.message ?? `Gemini API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `Gemini API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    return (data as any).candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const data = (await resp.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 
   if (provider === 'ollama') {
@@ -207,11 +207,11 @@ async function callAi(
       }),
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error ?? `Ollama API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err?.error ?? `Ollama API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    return (data as any).message?.content ?? '';
+    const data = (await resp.json()) as { message?: { content?: string } };
+    return data.message?.content ?? '';
   }
 
   throw new Error('No AI provider configured');
@@ -226,7 +226,12 @@ export async function generateQuery(
 ): Promise<string> {
   if (config.provider === 'none') throw new Error('No AI provider configured');
 
-  console.log('[AI] generateQuery called — contextLevel:', config.contextLevel, '| database:', JSON.stringify(database));
+  console.log(
+    '[AI] generateQuery called — contextLevel:',
+    config.contextLevel,
+    '| database:',
+    JSON.stringify(database),
+  );
 
   let schemaContext = '';
   if (config.contextLevel !== 'none' && database) {
@@ -239,7 +244,12 @@ export async function generateQuery(
     );
     console.log('[AI] schema context length:', schemaContext.length);
   } else {
-    console.warn('[AI] schema context SKIPPED — contextLevel:', config.contextLevel, '| database:', JSON.stringify(database));
+    console.warn(
+      '[AI] schema context SKIPPED — contextLevel:',
+      config.contextLevel,
+      '| database:',
+      JSON.stringify(database),
+    );
   }
 
   // For SQL generation, strip sample data — structure is all that's needed and

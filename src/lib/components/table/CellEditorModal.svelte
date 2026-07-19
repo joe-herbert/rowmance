@@ -140,9 +140,13 @@
     }
   }
 
-  const initialLooksLikeJson = contentLooksLikeJson(value === null ? '' : String(value));
+  const initialLooksLikeJson = contentLooksLikeJson(
+    untrack(() => (value === null ? '' : String(value))),
+  );
 
-  const showFormatJson = $derived(inputType === 'text' && (isJsonType || contentLooksLikeJson(textValue)));
+  const showFormatJson = $derived(
+    inputType === 'text' && (isJsonType || contentLooksLikeJson(textValue)),
+  );
 
   const hasInvalidJson = $derived(
     (isJsonType || initialLooksLikeJson) &&

@@ -27,7 +27,6 @@ pub async fn exec_simple(conn: &mut MssqlConn, sql: &str) -> Result<(), Rowmance
     Ok(())
 }
 
-
 /// Helper: get a string value from a tiberius Row by column index using typed access.
 fn get_str(row: &tiberius::Row, idx: usize) -> Option<String> {
     // Try as &str first (NVarChar, VarChar), then owned String
@@ -118,7 +117,8 @@ pub async fn list_schemas_in_database(
     instance_db: &str,
 ) -> Result<Vec<String>, RowmanceError> {
     let db_esc = instance_db.replace(']', "]]");
-    let sql = format!("
+    let sql = format!(
+        "
         SELECT SCHEMA_NAME
         FROM [{db_esc}].INFORMATION_SCHEMA.SCHEMATA
         WHERE SCHEMA_NAME NOT IN (
@@ -128,7 +128,8 @@ pub async fn list_schemas_in_database(
             'db_denydatareader', 'db_denydatawriter'
         )
         ORDER BY SCHEMA_NAME
-    ");
+    "
+    );
     let rows = collect_rows_simple(conn, &sql).await?;
     Ok(rows.iter().filter_map(|r| get_str(r, 0)).collect())
 }
@@ -338,7 +339,8 @@ pub async fn list_indexes(
     instance_db: Option<&str>,
 ) -> Result<Vec<IndexInfo>, RowmanceError> {
     let prefix = db_prefix(instance_db);
-    let sql = format!("
+    let sql = format!(
+        "
         SELECT
             i.name AS index_name,
             c.name AS column_name,
@@ -353,7 +355,9 @@ pub async fn list_indexes(
             AND i.name IS NOT NULL
             AND i.is_hypothetical = 0
         ORDER BY i.name, ic.key_ordinal
-    ", prefix = prefix);
+    ",
+        prefix = prefix
+    );
     let rows = collect_rows(conn, &sql, &[&schema, &table]).await?;
 
     let mut map: std::collections::BTreeMap<String, IndexInfo> = std::collections::BTreeMap::new();
@@ -381,7 +385,8 @@ pub async fn list_foreign_keys(
     instance_db: Option<&str>,
 ) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
     let prefix = db_prefix(instance_db);
-    let sql = format!("
+    let sql = format!(
+        "
         SELECT
             fk.name AS constraint_name,
             c_parent.name AS column_name,
@@ -400,7 +405,9 @@ pub async fn list_foreign_keys(
             AND fkc.referenced_column_id = c_ref.column_id
         WHERE fk.parent_object_id = OBJECT_ID(N'{prefix}[' + @P1 + N'].[' + @P2 + N']')
         ORDER BY fk.name, fkc.constraint_column_id
-    ", prefix = prefix);
+    ",
+        prefix = prefix
+    );
     let rows = collect_rows(conn, &sql, &[&schema, &table]).await?;
 
     let mut map: std::collections::BTreeMap<String, ForeignKeyInfo> =
@@ -434,14 +441,17 @@ pub async fn count_table(
     instance_db: Option<&str>,
 ) -> Result<i64, RowmanceError> {
     let prefix = db_prefix(instance_db);
-    let sql = format!("
+    let sql = format!(
+        "
         SELECT SUM(p.rows)
         FROM {prefix}sys.indexes i
         JOIN {prefix}sys.partitions p
             ON i.object_id = p.object_id AND i.index_id = p.index_id
         WHERE i.object_id = OBJECT_ID(N'{prefix}[' + @P1 + N'].[' + @P2 + N']')
             AND i.index_id <= 1
-    ", prefix = prefix);
+    ",
+        prefix = prefix
+    );
     let rows = collect_rows(conn, &sql, &[&schema, &table]).await?;
     if let Some(r) = rows.first() {
         return Ok(get_i64(r, 0).unwrap_or(0));
@@ -473,7 +483,8 @@ pub async fn get_ddl(
     }
 
     // It's a table — construct DDL from columns.
-    let col_sql = format!("
+    let col_sql = format!(
+        "
         SELECT
             c.name,
             tp.name AS type_name,
@@ -488,11 +499,14 @@ pub async fn get_ddl(
         JOIN {prefix}sys.types tp ON c.user_type_id = tp.user_type_id
         WHERE c.object_id = OBJECT_ID(N'{prefix}[' + @P1 + N'].[' + @P2 + N']')
         ORDER BY c.column_id
-    ", prefix = prefix);
+    ",
+        prefix = prefix
+    );
     let col_rows = collect_rows(conn, &col_sql, &[&schema, &table]).await?;
 
     // Primary keys
-    let pk_sql = format!("
+    let pk_sql = format!(
+        "
         SELECT c.name
         FROM {prefix}sys.indexes i
         JOIN {prefix}sys.index_columns ic
@@ -502,7 +516,9 @@ pub async fn get_ddl(
         WHERE i.object_id = OBJECT_ID(N'{prefix}[' + @P1 + N'].[' + @P2 + N']')
             AND i.is_primary_key = 1
         ORDER BY ic.key_ordinal
-    ", prefix = prefix);
+    ",
+        prefix = prefix
+    );
     let pk_rows = collect_rows(conn, &pk_sql, &[&schema, &table]).await?;
     let pk_cols: Vec<String> = pk_rows.iter().filter_map(|r| get_str(r, 0)).collect();
 

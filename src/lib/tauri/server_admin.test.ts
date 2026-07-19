@@ -13,7 +13,15 @@ import {
   getInnodbStatus,
   getVacuumStatus,
 } from './server_admin';
-import type { ServerAdminCapabilityFlags, ProcessInfo, ServerStatus, ServerVariable, LockInfo, ScheduledJob, VacuumInfo } from '$lib/types';
+import type {
+  ServerAdminCapabilityFlags,
+  ProcessInfo,
+  ServerStatus,
+  ServerVariable,
+  LockInfo,
+  ScheduledJob,
+  VacuumInfo,
+} from '$lib/types';
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -100,7 +108,9 @@ describe('getCapabilities', () => {
   it('invokes server_admin_get_capabilities with connectionId', async () => {
     mockInvoke.mockResolvedValue(stubCapabilities);
     await getCapabilities('conn-1');
-    expect(mockInvoke).toHaveBeenCalledWith('server_admin_get_capabilities', { connectionId: 'conn-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('server_admin_get_capabilities', {
+      connectionId: 'conn-1',
+    });
   });
 
   it('returns the capability flags from invoke', async () => {
@@ -114,7 +124,9 @@ describe('listProcesses', () => {
   it('invokes server_admin_list_processes with connectionId', async () => {
     mockInvoke.mockResolvedValue([stubProcess]);
     await listProcesses('conn-1');
-    expect(mockInvoke).toHaveBeenCalledWith('server_admin_list_processes', { connectionId: 'conn-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('server_admin_list_processes', {
+      connectionId: 'conn-1',
+    });
   });
 
   it('returns the process list from invoke', async () => {
@@ -166,7 +178,9 @@ describe('listVariables', () => {
   it('invokes server_admin_list_variables with connectionId', async () => {
     mockInvoke.mockResolvedValue([stubVariable]);
     await listVariables('conn-1');
-    expect(mockInvoke).toHaveBeenCalledWith('server_admin_list_variables', { connectionId: 'conn-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('server_admin_list_variables', {
+      connectionId: 'conn-1',
+    });
   });
 
   it('returns the variable list from invoke', async () => {
@@ -219,7 +233,9 @@ describe('listScheduledJobs', () => {
   it('invokes server_admin_list_scheduled_jobs with connectionId', async () => {
     mockInvoke.mockResolvedValue([stubJob]);
     await listScheduledJobs('conn-1');
-    expect(mockInvoke).toHaveBeenCalledWith('server_admin_list_scheduled_jobs', { connectionId: 'conn-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('server_admin_list_scheduled_jobs', {
+      connectionId: 'conn-1',
+    });
   });
 
   it('returns the job list from invoke', async () => {
@@ -234,7 +250,9 @@ describe('getInnodbStatus', () => {
   it('invokes server_admin_get_innodb_status with connectionId', async () => {
     mockInvoke.mockResolvedValue('================\nINNODB STATUS\n================');
     await getInnodbStatus('conn-1');
-    expect(mockInvoke).toHaveBeenCalledWith('server_admin_get_innodb_status', { connectionId: 'conn-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('server_admin_get_innodb_status', {
+      connectionId: 'conn-1',
+    });
   });
 
   it('returns the raw InnoDB status string from invoke', async () => {
@@ -249,7 +267,9 @@ describe('getVacuumStatus', () => {
   it('invokes server_admin_get_vacuum_status with connectionId', async () => {
     mockInvoke.mockResolvedValue([stubVacuum]);
     await getVacuumStatus('conn-1');
-    expect(mockInvoke).toHaveBeenCalledWith('server_admin_get_vacuum_status', { connectionId: 'conn-1' });
+    expect(mockInvoke).toHaveBeenCalledWith('server_admin_get_vacuum_status', {
+      connectionId: 'conn-1',
+    });
   });
 
   it('returns the vacuum info list from invoke', async () => {

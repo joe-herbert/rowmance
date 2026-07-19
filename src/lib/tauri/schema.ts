@@ -15,7 +15,11 @@ export async function listTables(
   database: string,
   instanceDb?: string | null,
 ): Promise<TableInfo[]> {
-  return invoke<TableInfo[]>('schema_list_tables', { connectionId, database, instanceDb: instanceDb ?? null });
+  return invoke<TableInfo[]>('schema_list_tables', {
+    connectionId,
+    database,
+    instanceDb: instanceDb ?? null,
+  });
 }
 
 export async function listColumns(
@@ -24,7 +28,12 @@ export async function listColumns(
   table: string,
   instanceDb?: string | null,
 ): Promise<ColumnInfo[]> {
-  return invoke<ColumnInfo[]>('schema_list_columns', { connectionId, database, table, instanceDb: instanceDb ?? null });
+  return invoke<ColumnInfo[]>('schema_list_columns', {
+    connectionId,
+    database,
+    table,
+    instanceDb: instanceDb ?? null,
+  });
 }
 
 export async function listAllColumns(
@@ -32,7 +41,11 @@ export async function listAllColumns(
   database: string,
   instanceDb?: string | null,
 ): Promise<BulkColumnInfo[]> {
-  return invoke<BulkColumnInfo[]>('schema_list_all_columns', { connectionId, database, instanceDb: instanceDb ?? null });
+  return invoke<BulkColumnInfo[]>('schema_list_all_columns', {
+    connectionId,
+    database,
+    instanceDb: instanceDb ?? null,
+  });
 }
 
 export async function listIndexes(
@@ -41,7 +54,12 @@ export async function listIndexes(
   table: string,
   instanceDb?: string | null,
 ): Promise<IndexInfo[]> {
-  return invoke<IndexInfo[]>('schema_list_indexes', { connectionId, database, table, instanceDb: instanceDb ?? null });
+  return invoke<IndexInfo[]>('schema_list_indexes', {
+    connectionId,
+    database,
+    table,
+    instanceDb: instanceDb ?? null,
+  });
 }
 
 export async function listForeignKeys(
@@ -50,7 +68,12 @@ export async function listForeignKeys(
   table: string,
   instanceDb?: string | null,
 ): Promise<ForeignKeyInfo[]> {
-  return invoke<ForeignKeyInfo[]>('schema_list_foreign_keys', { connectionId, database, table, instanceDb: instanceDb ?? null });
+  return invoke<ForeignKeyInfo[]>('schema_list_foreign_keys', {
+    connectionId,
+    database,
+    table,
+    instanceDb: instanceDb ?? null,
+  });
 }
 
 export async function executeDdl(connectionId: string, sql: string): Promise<void> {
@@ -63,5 +86,10 @@ export async function getDdl(
   objectName: string,
   instanceDb?: string | null,
 ): Promise<string> {
-  return invoke<string>('schema_get_ddl', { connectionId, database, objectName, instanceDb: instanceDb ?? null });
+  return invoke<string>('schema_get_ddl', {
+    connectionId,
+    database,
+    objectName,
+    instanceDb: instanceDb ?? null,
+  });
 }

@@ -230,8 +230,10 @@ export function stripLineComments(sql: string): string {
       let j = i + 1;
       while (j < len) {
         if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
-        else if (sql[j] === "'") { j++; break; }
-        else j++;
+        else if (sql[j] === "'") {
+          j++;
+          break;
+        } else j++;
       }
       result += sql.slice(i, j);
       i = j;
@@ -242,8 +244,10 @@ export function stripLineComments(sql: string): string {
       let j = i + 1;
       while (j < len) {
         if (sql[j] === '"' && sql[j + 1] === '"') j += 2;
-        else if (sql[j] === '"') { j++; break; }
-        else j++;
+        else if (sql[j] === '"') {
+          j++;
+          break;
+        } else j++;
       }
       result += sql.slice(i, j);
       i = j;
@@ -254,8 +258,10 @@ export function stripLineComments(sql: string): string {
       let j = i + 1;
       while (j < len) {
         if (sql[j] === '`' && sql[j + 1] === '`') j += 2;
-        else if (sql[j] === '`') { j++; break; }
-        else j++;
+        else if (sql[j] === '`') {
+          j++;
+          break;
+        } else j++;
       }
       result += sql.slice(i, j);
       i = j;

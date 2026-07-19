@@ -128,7 +128,10 @@
     </header>
 
     <div class="modal-body">
-      <span class="import-note">This will run your SQL statements against the active database.<br>To open a SQL file in the query editor, use the 'Open File...' option.</span>
+      <span class="import-note"
+        >This will run your SQL statements against the active database.<br />To open a SQL file in
+        the query editor, use the 'Open File...' option.</span
+      >
       {#if phase === 'pick'}
         <div class="pick-step">
           {#if source === 'clipboard'}

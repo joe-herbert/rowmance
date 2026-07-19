@@ -332,7 +332,11 @@ pub async fn count_table(
 }
 
 /// Return the CREATE TABLE / CREATE VIEW DDL for an object.
-pub async fn get_ddl(pool: &MySqlPool, database: &str, table: &str) -> Result<String, RowmanceError> {
+pub async fn get_ddl(
+    pool: &MySqlPool,
+    database: &str,
+    table: &str,
+) -> Result<String, RowmanceError> {
     // SHOW CREATE TABLE works for both tables and views in MySQL/MariaDB.
     let row = sqlx::query(&format!("SHOW CREATE TABLE `{database}`.`{table}`"))
         .fetch_one(pool)

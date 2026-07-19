@@ -8,8 +8,8 @@ use async_trait::async_trait;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::group_into_tables;
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, ErdColumn, ErdGraph, ErdRelation,
-    EngineQueryResult, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
+    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn,
+    ErdGraph, ErdRelation, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
     RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
     TableInfo, VarScope,
 };
@@ -80,8 +80,9 @@ impl OraclePool {
             }
         }
         // Create a new connection
-        let mut conn = oracle::Connection::connect(&self.username, &self.password, &self.connect_string)
-            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let mut conn =
+            oracle::Connection::connect(&self.username, &self.password, &self.connect_string)
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
         // Disable auto-commit so we control transactions explicitly
         conn.set_autocommit(false);
         Ok(OracleConnWrapper::new(conn))
@@ -321,7 +322,10 @@ impl DatabaseEngine for OracleEngine {
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
             if let Some(ref s) = schema {
-                let alter_sql = format!("ALTER SESSION SET CURRENT_SCHEMA = \"{}\"", s.replace('"', "\"\""));
+                let alter_sql = format!(
+                    "ALTER SESSION SET CURRENT_SCHEMA = \"{}\"",
+                    s.replace('"', "\"\"")
+                );
                 let _ = conn.conn().execute(&alter_sql, &[]);
             }
             let result = execute_on_oracle_conn(conn.conn(), &sql, page_size, offset);
@@ -361,7 +365,10 @@ impl DatabaseEngine for OracleEngine {
         tokio::task::spawn_blocking(move || -> Option<i64> {
             let conn = pool.get().ok()?;
             if let Some(ref s) = schema {
-                let alter_sql = format!("ALTER SESSION SET CURRENT_SCHEMA = \"{}\"", s.replace('"', "\"\""));
+                let alter_sql = format!(
+                    "ALTER SESSION SET CURRENT_SCHEMA = \"{}\"",
+                    s.replace('"', "\"\"")
+                );
                 let _ = conn.conn().execute(&alter_sql, &[]);
             }
             let count_sql = format!("SELECT COUNT(*) FROM ({sql})");
@@ -392,10 +399,13 @@ impl DatabaseEngine for OracleEngine {
 
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
-            let result = apply_all_oracle(conn.conn(), &owner, &table, &updates, &inserts, &deletes);
+            let result =
+                apply_all_oracle(conn.conn(), &owner, &table, &updates, &inserts, &deletes);
             match result {
                 Ok(counts) => {
-                    conn.conn().commit().map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                    conn.conn()
+                        .commit()
+                        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
                     pool.return_conn(conn);
                     Ok(counts)
                 }
@@ -417,7 +427,10 @@ impl DatabaseEngine for OracleEngine {
                 Ok(c) => c,
                 Err(_) => return false,
             };
-            let ok = conn.conn().query_row_as::<i64>("SELECT 1 FROM DUAL", &[]).is_ok();
+            let ok = conn
+                .conn()
+                .query_row_as::<i64>("SELECT 1 FROM DUAL", &[])
+                .is_ok();
             pool.return_conn(conn);
             ok
         })
@@ -431,31 +444,38 @@ impl DatabaseEngine for OracleEngine {
     ) -> Result<Box<dyn EngineTransaction>, RowmanceError> {
         let pool = self.pool.clone();
         let schema = database.map(|s| s.to_string());
-        tokio::task::spawn_blocking(move || -> Result<Box<dyn EngineTransaction>, RowmanceError> {
-            let conn = pool.get()?;
-            if let Some(ref s) = schema {
-                let alter_sql = format!("ALTER SESSION SET CURRENT_SCHEMA = \"{}\"", s.replace('"', "\"\""));
-                let _ = conn.conn().execute(&alter_sql, &[]);
-            }
-            // Oracle starts transactions implicitly on first DML; no BEGIN needed.
-            Ok(Box::new(OracleTransaction {
-                conn: Some(conn),
-                pool,
-            }))
-        })
+        tokio::task::spawn_blocking(
+            move || -> Result<Box<dyn EngineTransaction>, RowmanceError> {
+                let conn = pool.get()?;
+                if let Some(ref s) = schema {
+                    let alter_sql = format!(
+                        "ALTER SESSION SET CURRENT_SCHEMA = \"{}\"",
+                        s.replace('"', "\"\"")
+                    );
+                    let _ = conn.conn().execute(&alter_sql, &[]);
+                }
+                // Oracle starts transactions implicitly on first DML; no BEGIN needed.
+                Ok(Box::new(OracleTransaction {
+                    conn: Some(conn),
+                    pool,
+                }))
+            },
+        )
         .await
         .map_err(|e| RowmanceError::Pool(e.to_string()))?
     }
 
     async fn begin_session(&self) -> Result<Box<dyn EngineTransaction>, RowmanceError> {
         let pool = self.pool.clone();
-        tokio::task::spawn_blocking(move || -> Result<Box<dyn EngineTransaction>, RowmanceError> {
-            let conn = pool.get()?;
-            Ok(Box::new(OracleTransaction {
-                conn: Some(conn),
-                pool,
-            }))
-        })
+        tokio::task::spawn_blocking(
+            move || -> Result<Box<dyn EngineTransaction>, RowmanceError> {
+                let conn = pool.get()?;
+                Ok(Box::new(OracleTransaction {
+                    conn: Some(conn),
+                    pool,
+                }))
+            },
+        )
         .await
         .map_err(|e| RowmanceError::Pool(e.to_string()))?
     }
@@ -472,7 +492,10 @@ impl DatabaseEngine for OracleEngine {
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
             if let Some(ref s) = schema {
-                let alter_sql = format!("ALTER SESSION SET CURRENT_SCHEMA = \"{}\"", s.replace('"', "\"\""));
+                let alter_sql = format!(
+                    "ALTER SESSION SET CURRENT_SCHEMA = \"{}\"",
+                    s.replace('"', "\"\"")
+                );
                 let _ = conn.conn().execute(&alter_sql, &[]);
             }
             let explain_sql = format!("EXPLAIN PLAN FOR {sql}");
@@ -480,7 +503,8 @@ impl DatabaseEngine for OracleEngine {
                 .execute(&explain_sql, &[])
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
-            let plan_sql = "SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY(NULL, NULL, 'ALL'))";
+            let plan_sql =
+                "SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY(NULL, NULL, 'ALL'))";
             let mut stmt = conn
                 .conn()
                 .statement(plan_sql)
@@ -537,8 +561,11 @@ impl DatabaseEngine for OracleEngine {
 
             let mut all_fk_edges: Vec<ErdRelation> = Vec::new();
             for table in &nodes {
-                let fks =
-                    crate::connections::oracle::list_foreign_keys(conn.conn(), &owner, &table.name)?;
+                let fks = crate::connections::oracle::list_foreign_keys(
+                    conn.conn(),
+                    &owner,
+                    &table.name,
+                )?;
                 for fk in fks {
                     all_fk_edges.push(ErdRelation {
                         from_table: table.name.clone(),
@@ -596,8 +623,7 @@ impl DatabaseEngine for OracleEngine {
             }
 
             let col_list: Vec<String> = headers.iter().map(|h| q(h)).collect();
-            let placeholders: Vec<String> =
-                (1..=headers.len()).map(|i| format!(":{i}")).collect();
+            let placeholders: Vec<String> = (1..=headers.len()).map(|i| format!(":{i}")).collect();
             let sql = format!(
                 "INSERT INTO {}.{} ({}) VALUES ({})",
                 q(&owner),
@@ -628,11 +654,15 @@ impl DatabaseEngine for OracleEngine {
         .map_err(|e| RowmanceError::Pool(e.to_string()))?
     }
 
-    async fn probe_server_admin_capabilities(&self) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
+    async fn probe_server_admin_capabilities(
+        &self,
+    ) -> Result<ServerAdminCapabilityFlags, RowmanceError> {
         let pool = self.pool.clone();
         let oracle_result = tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
-            let query_result = conn.conn().statement("SELECT COUNT(*) FROM v$session WHERE rownum = 1")
+            let query_result = conn
+                .conn()
+                .statement("SELECT COUNT(*) FROM v$session WHERE rownum = 1")
                 .build()
                 .and_then(|mut s| s.query(&[]).map(|_| ()));
             pool.return_conn(conn);
@@ -645,7 +675,10 @@ impl DatabaseEngine for OracleEngine {
             Ok(_) => CapabilityStatus::Supported,
             Err(e) => {
                 let msg = e.to_string().to_lowercase();
-                if msg.contains("insufficient privileges") || msg.contains("ora-00942") || msg.contains("ora-01031") {
+                if msg.contains("insufficient privileges")
+                    || msg.contains("ora-00942")
+                    || msg.contains("ora-01031")
+                {
                     CapabilityStatus::InsufficientPrivileges
                 } else {
                     CapabilityStatus::NotSupported
@@ -676,9 +709,13 @@ impl DatabaseEngine for OracleEngine {
                        FROM v$session \
                        WHERE type = 'USER' \
                        ORDER BY last_call_et DESC";
-            let mut stmt = conn.conn().statement(sql).build()
+            let mut stmt = conn
+                .conn()
+                .statement(sql)
+                .build()
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let rows = stmt.query(&[])
+            let rows = stmt
+                .query(&[])
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
             let mut result = Vec::new();
@@ -717,10 +754,13 @@ impl DatabaseEngine for OracleEngine {
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
             if !crate::commands::server_admin::is_valid_oracle_session_id(&session_id) {
-                return Err(RowmanceError::ConnectionNotFound("Invalid session id".to_string()));
+                return Err(RowmanceError::ConnectionNotFound(
+                    "Invalid session id".to_string(),
+                ));
             }
             let sql = format!("ALTER SYSTEM KILL SESSION '{session_id}' IMMEDIATE");
-            conn.conn().execute(&sql, &[])
+            conn.conn()
+                .execute(&sql, &[])
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
             pool.return_conn(conn);
             Ok(())
@@ -734,31 +774,59 @@ impl DatabaseEngine for OracleEngine {
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
 
-            let mut stmt = conn.conn().statement("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%'").build()
+            let mut stmt = conn
+                .conn()
+                .statement("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%'")
+                .build()
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let version = rows.into_iter().next()
+            let rows = stmt
+                .query(&[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let version = rows
+                .into_iter()
+                .next()
                 .and_then(|r| r.ok())
-                .and_then(|r| { let v: Option<String> = r.get(0).ok(); v })
+                .and_then(|r| {
+                    let v: Option<String> = r.get(0).ok();
+                    v
+                })
                 .unwrap_or_else(|| "Oracle".to_string());
 
-            let mut uptime_stmt = conn.conn().statement(
-                "SELECT (SYSDATE - startup_time) * 86400 AS uptime_secs FROM v$instance"
-            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let uptime_rows = uptime_stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let uptime_seconds = uptime_rows.into_iter().next()
+            let mut uptime_stmt = conn
+                .conn()
+                .statement("SELECT (SYSDATE - startup_time) * 86400 AS uptime_secs FROM v$instance")
+                .build()
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let uptime_rows = uptime_stmt
+                .query(&[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let uptime_seconds = uptime_rows
+                .into_iter()
+                .next()
                 .and_then(|r| r.ok())
-                .and_then(|r| { let v: Option<f64> = r.get(0).ok(); v })
+                .and_then(|r| {
+                    let v: Option<f64> = r.get(0).ok();
+                    v
+                })
                 .map(|v| v.max(0.0) as u64)
                 .unwrap_or(0);
 
-            let mut sess_stmt = conn.conn().statement(
-                "SELECT COUNT(*) FROM v$session WHERE type = 'USER'"
-            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let sess_rows = sess_stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let connections_current = sess_rows.into_iter().next()
+            let mut sess_stmt = conn
+                .conn()
+                .statement("SELECT COUNT(*) FROM v$session WHERE type = 'USER'")
+                .build()
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let sess_rows = sess_stmt
+                .query(&[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let connections_current = sess_rows
+                .into_iter()
+                .next()
                 .and_then(|r| r.ok())
-                .and_then(|r| { let v: Option<i64> = r.get(0).ok(); v })
+                .and_then(|r| {
+                    let v: Option<i64> = r.get(0).ok();
+                    v
+                })
                 .map(|v| v.max(0) as u64)
                 .unwrap_or(0);
 
@@ -781,12 +849,18 @@ impl DatabaseEngine for OracleEngine {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
-            let mut stmt = conn.conn().statement(
-                "SELECT name, value, description, isses_modifiable, issys_modifiable \
+            let mut stmt = conn
+                .conn()
+                .statement(
+                    "SELECT name, value, description, isses_modifiable, issys_modifiable \
                  FROM v$parameter \
-                 ORDER BY name"
-            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                 ORDER BY name",
+                )
+                .build()
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt
+                .query(&[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
             let mut vars = Vec::new();
             for row_result in rows {
@@ -797,7 +871,8 @@ impl DatabaseEngine for OracleEngine {
                 let ses_mod: String = row.get(3).unwrap_or_default();
                 let sys_mod: String = row.get(4).unwrap_or_default();
 
-                let is_dynamic = ses_mod == "IMMEDIATE" || sys_mod == "IMMEDIATE" || sys_mod == "DEFERRED";
+                let is_dynamic =
+                    ses_mod == "IMMEDIATE" || sys_mod == "IMMEDIATE" || sys_mod == "DEFERRED";
                 let restart_required = sys_mod == "FALSE" && ses_mod == "FALSE";
 
                 vars.push(ServerVariable {
@@ -817,18 +892,26 @@ impl DatabaseEngine for OracleEngine {
         .map_err(|e| RowmanceError::Pool(e.to_string()))?
     }
 
-    async fn set_variable(&self, name: &str, value: &str, _scope: VarScope) -> Result<(), RowmanceError> {
+    async fn set_variable(
+        &self,
+        name: &str,
+        value: &str,
+        _scope: VarScope,
+    ) -> Result<(), RowmanceError> {
         let pool = self.pool.clone();
         let name = name.to_string();
         let value = value.to_string();
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
             if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                return Err(RowmanceError::ConnectionNotFound("Invalid parameter name".to_string()));
+                return Err(RowmanceError::ConnectionNotFound(
+                    "Invalid parameter name".to_string(),
+                ));
             }
             let ev = value.replace('\'', "''");
             let sql = format!("ALTER SYSTEM SET {name} = '{ev}' SCOPE=BOTH");
-            conn.conn().execute(&sql, &[])
+            conn.conn()
+                .execute(&sql, &[])
                 .map_err(|e| RowmanceError::Pool(e.to_string()))?;
             pool.return_conn(conn);
             Ok(())
@@ -841,15 +924,21 @@ impl DatabaseEngine for OracleEngine {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
-            let mut stmt = conn.conn().statement(
-                "SELECT l.sid, l.type, l.lmode, l.request, o.object_name, \
+            let mut stmt = conn
+                .conn()
+                .statement(
+                    "SELECT l.sid, l.type, l.lmode, l.request, o.object_name, \
                         l.block, l.id1, l.id2 \
                  FROM v$lock l \
                  LEFT JOIN dba_objects o ON o.object_id = l.id1 \
                  WHERE l.block > 0 OR l.request > 0 \
-                 ORDER BY l.block DESC, l.sid"
-            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                 ORDER BY l.block DESC, l.sid",
+                )
+                .build()
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt
+                .query(&[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
             let mut locks = Vec::new();
             for (i, row_result) in rows.into_iter().enumerate() {
@@ -863,8 +952,16 @@ impl DatabaseEngine for OracleEngine {
 
                 locks.push(LockInfo {
                     lock_id: format!("lock-{i}"),
-                    blocker_session_id: if block > 0 { Some(sid.to_string()) } else { None },
-                    waiting_session_id: if request > 0 { Some(sid.to_string()) } else { None },
+                    blocker_session_id: if block > 0 {
+                        Some(sid.to_string())
+                    } else {
+                        None
+                    },
+                    waiting_session_id: if request > 0 {
+                        Some(sid.to_string())
+                    } else {
+                        None
+                    },
                     lock_type,
                     lock_mode: lmode.to_string(),
                     object_name,
@@ -882,13 +979,19 @@ impl DatabaseEngine for OracleEngine {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
-            let mut stmt = conn.conn().statement(
-                "SELECT job_name, enabled, last_start_date, next_run_date, \
+            let mut stmt = conn
+                .conn()
+                .statement(
+                    "SELECT job_name, enabled, last_start_date, next_run_date, \
                         repeat_interval \
                  FROM dba_scheduler_jobs \
-                 ORDER BY job_name"
-            ).build().map_err(|e| RowmanceError::Pool(e.to_string()))?;
-            let rows = stmt.query(&[]).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+                 ORDER BY job_name",
+                )
+                .build()
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            let rows = stmt
+                .query(&[])
+                .map_err(|e| RowmanceError::Pool(e.to_string()))?;
 
             let mut jobs = Vec::new();
             for row_result in rows {
@@ -964,7 +1067,8 @@ impl EngineTransaction for OracleTransaction {
         let deletes = deletes.to_vec();
 
         let (conn, result) = tokio::task::spawn_blocking(move || {
-            let result = apply_all_oracle(conn.conn(), &owner, &table, &updates, &inserts, &deletes);
+            let result =
+                apply_all_oracle(conn.conn(), &owner, &table, &updates, &inserts, &deletes);
             (conn, result)
         })
         .await
@@ -1067,9 +1171,7 @@ fn execute_on_oracle_conn(
             if upper.contains("FETCH NEXT") || upper.contains("FETCH FIRST") {
                 exec_sql.to_string()
             } else {
-                format!(
-                    "{exec_sql} OFFSET {offset} ROWS FETCH NEXT {page_size} ROWS ONLY"
-                )
+                format!("{exec_sql} OFFSET {offset} ROWS FETCH NEXT {page_size} ROWS ONLY")
             }
         } else {
             exec_sql.to_string()
@@ -1383,7 +1485,10 @@ impl crate::connections::engine::PoolAdapter for OraclePoolAdapter {
                 Ok(c) => c,
                 Err(_) => return false,
             };
-            let ok = conn.conn().query_row_as::<i64>("SELECT 1 FROM DUAL", &[]).is_ok();
+            let ok = conn
+                .conn()
+                .query_row_as::<i64>("SELECT 1 FROM DUAL", &[])
+                .is_ok();
             pool.return_conn(conn);
             ok
         })
