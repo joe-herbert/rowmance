@@ -14,6 +14,7 @@
   import type { ConnectionProfile, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import Modal from '$lib/components/Modal.svelte';
+  import ErrorMessage from '$lib/components/ErrorMessage.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
@@ -400,7 +401,7 @@
                   >Apply</button
                 >
               </div>
-              {#if urlError}<div class="url-error">{urlError}</div>{/if}
+              {#if urlError}<ErrorMessage message={urlError} />{/if}
             </div>
             <div class="url-import-divider"><span>or fill in manually</span></div>
           </div>
@@ -834,7 +835,7 @@
       {/if}
 
       {#if saveError}
-        <div class="save-error">{saveError}</div>
+        <ErrorMessage message={saveError} />
       {/if}
 
       <div class="actions">
@@ -1089,13 +1090,6 @@
     opacity: 0.7;
   }
 
-  .save-error {
-    padding: var(--spacing-2) var(--spacing-3);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    background: var(--color-danger-subtle);
-    color: var(--color-danger);
-  }
 
   .actions {
     display: flex;
@@ -1222,15 +1216,6 @@
     flex: 1;
   }
 
-  .url-error {
-    padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-danger-subtle);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    color: var(--color-danger);
-    margin-top: var(--spacing-1);
-  }
 
   .url-import-divider {
     display: flex;

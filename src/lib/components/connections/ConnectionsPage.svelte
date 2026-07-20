@@ -14,6 +14,7 @@
   import ConnectionForm from './ConnectionForm.svelte';
   import ExportConnectionsDialog from './ExportConnectionsDialog.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import ErrorMessage from '$lib/components/ErrorMessage.svelte';
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
@@ -652,7 +653,7 @@
           }}
         />
         {#if newGroupError}
-          <p class="field-error">{newGroupError}</p>
+          <ErrorMessage message={newGroupError} />
         {/if}
       </div>
       <div class="create-modal-footer">
@@ -702,7 +703,7 @@
           }}
         />
         {#if createDbError}
-          <p class="field-error">{createDbError}</p>
+          <ErrorMessage message={createDbError} />
         {/if}
       </div>
       <div class="create-modal-footer">
@@ -1434,12 +1435,6 @@
 
   .field-input:focus {
     border-color: var(--color-accent);
-  }
-
-  .field-error {
-    font-size: var(--font-size-xs);
-    color: var(--color-danger, #dc2626);
-    margin: 0;
   }
 
   .create-modal-footer {

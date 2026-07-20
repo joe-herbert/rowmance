@@ -17,6 +17,7 @@
   import { errorMessage } from '$lib/utils/errors';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import ErrorMessage from '$lib/components/ErrorMessage.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
   import PolymorphicVirtualRelationModal from '$lib/components/relations/PolymorphicVirtualRelationModal.svelte';
@@ -1228,7 +1229,7 @@
           {/if}
         {/if}
         {#if saveError}
-          <div class="modal-error">{saveError}</div>
+          <ErrorMessage message={saveError} />
         {/if}
       </div>
       <div class="modal-footer">
@@ -1312,7 +1313,7 @@
           </div>
         {/if}
         {#if saveError}
-          <div class="modal-error">{saveError}</div>
+          <ErrorMessage message={saveError} />
         {/if}
       </div>
       <div class="modal-footer">
@@ -1426,7 +1427,7 @@
           </div>
         </div>
         {#if saveError}
-          <div class="modal-error">{saveError}</div>
+          <ErrorMessage message={saveError} />
         {/if}
       </div>
       <div class="modal-footer">
@@ -1449,7 +1450,7 @@
         <p class="confirm-text">This action cannot be undone.</p>
         <div class="preview-sql mono"><SqlHighlight sql={drop.sqls[0]} /></div>
         {#if saveError}
-          <div class="modal-error">{saveError}</div>
+          <ErrorMessage message={saveError} />
         {/if}
       </div>
       <div class="modal-footer">
@@ -2397,18 +2398,6 @@
 
   .btn--danger:hover:not(:disabled) {
     opacity: 0.88;
-  }
-
-  /* ── Modal content helpers ─────────────────────────────────────────────── */
-
-  .modal-error {
-    padding: 8px 10px;
-    background: var(--color-danger-subtle, rgba(239, 68, 68, 0.08));
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    border-radius: var(--radius-md);
-    color: var(--color-danger, #ef4444);
-    font-size: var(--font-size-xs);
-    line-height: var(--line-height-normal);
   }
 
   .confirm-text {

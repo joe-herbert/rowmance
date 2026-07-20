@@ -246,6 +246,24 @@ impl DatabaseEngine for SqlServerEngine {
             .get()
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+        // SQL Server requires statements like CREATE SCHEMA to be the first
+        // (and only) statement in a batch, so a leading "USE [db];" can't be
+        // concatenated into the same batch as the DDL that follows it. Run
+        // it as its own batch on the same connection instead.
+        let trimmed = sql.trim_start();
+        if trimmed.len() > 4 && trimmed[..4].eq_ignore_ascii_case("use ") {
+            if let Some(semi) = trimmed.find(';') {
+                let (use_stmt, rest) = trimmed.split_at(semi);
+                let rest = rest[1..].trim();
+                crate::connections::sqlserver::exec_simple(&mut conn, use_stmt).await?;
+                if !rest.is_empty() {
+                    return crate::connections::sqlserver::exec_simple(&mut conn, rest).await;
+                }
+                return Ok(());
+            }
+        }
+
         crate::connections::sqlserver::exec_simple(&mut conn, sql).await
     }
 

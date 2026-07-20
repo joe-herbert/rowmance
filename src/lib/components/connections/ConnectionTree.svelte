@@ -9,6 +9,7 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import ConnectionForm from './ConnectionForm.svelte';
+  import ErrorMessage from '$lib/components/ErrorMessage.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
   import ShareIcon from '$lib/components/icons/ShareIcon.svelte';
@@ -2336,8 +2337,8 @@
 {/if}
 
 {#if createDbModal}
-  {@const dbLabel =
-    connectionStore.getById(createDbModal.connectionId)?.dialectInfo.dbLabel ?? 'Database'}
+  {@const createDbDialect = connectionStore.getById(createDbModal.connectionId)?.dialectInfo}
+  {@const dbLabel = createDbDialect?.hasInstanceDatabases ? 'Database' : (createDbDialect?.dbLabel ?? 'Database')}
   <Modal
     label="New {dbLabel}"
     onbackdropclick={() => {
@@ -2366,7 +2367,7 @@
           autofocus
         />
         {#if createDbError}
-          <div class="field-error">{createDbError}</div>
+          <ErrorMessage message={createDbError} />
         {/if}
       </div>
       <div class="create-modal-footer">
@@ -2410,7 +2411,7 @@
           autofocus
         />
         {#if createSchemaError}
-          <div class="field-error">{createSchemaError}</div>
+          <ErrorMessage message={createSchemaError} />
         {/if}
       </div>
       <div class="create-modal-footer">
@@ -2456,7 +2457,7 @@
           autofocus
         />
         {#if newGroupError}
-          <div class="field-error">{newGroupError}</div>
+          <ErrorMessage message={newGroupError} />
         {/if}
       </div>
       <div class="create-modal-footer">
@@ -2497,7 +2498,7 @@
           autofocus
         />
         {#if renameError}
-          <div class="field-error">{renameError}</div>
+          <ErrorMessage message={renameError} />
         {/if}
       </div>
       <div class="create-modal-footer">
@@ -2694,7 +2695,7 @@
         {/if}
 
         {#if createTableError}
-          <div class="field-error">{createTableError}</div>
+          <ErrorMessage message={createTableError} />
         {/if}
       </div>
       <div class="create-modal-footer">
@@ -3357,15 +3358,6 @@
 
   .field-input:focus {
     border-color: var(--color-accent);
-  }
-
-  .field-error {
-    padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-danger-subtle);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    color: var(--color-danger);
   }
 
   /* Columns table */

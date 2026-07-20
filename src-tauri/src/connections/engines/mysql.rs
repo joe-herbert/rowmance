@@ -200,8 +200,7 @@ impl DatabaseEngine for MySqlEngine {
             .await
             .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
 
-        sqlx::query("BEGIN")
-            .execute(&mut *conn)
+        conn.execute(sqlx::raw_sql("BEGIN"))
             .await
             .map_err(RowmanceError::Database)?;
 
@@ -209,14 +208,13 @@ impl DatabaseEngine for MySqlEngine {
 
         match result {
             Ok(counts) => {
-                sqlx::query("COMMIT")
-                    .execute(&mut *conn)
+                conn.execute(sqlx::raw_sql("COMMIT"))
                     .await
                     .map_err(RowmanceError::Database)?;
                 Ok(counts)
             }
             Err(e) => {
-                sqlx::query("ROLLBACK").execute(&mut *conn).await.ok();
+                conn.execute(sqlx::raw_sql("ROLLBACK")).await.ok();
                 Err(e)
             }
         }

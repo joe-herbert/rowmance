@@ -1136,6 +1136,17 @@ async fn apply_all_postgres(
 ) -> Result<(u64, u64, u64), RowmanceError> {
     let q = |ident: &str| format!("\"{}\"", ident.replace('"', "\"\""));
 
+    let col_types = fetch_pg_column_types(conn, database, table).await?;
+    let cast_for = |col: &str| -> String {
+        match col_types.get(col) {
+            Some(t) => match t.strip_prefix('_') {
+                Some(base) => format!("::{}[]", q(base)),
+                None => format!("::{}", q(t)),
+            },
+            None => String::new(),
+        }
+    };
+
     let mut updated = 0u64;
     let mut inserted = 0u64;
     let mut deleted = 0u64;
@@ -1150,7 +1161,7 @@ async fn apply_all_postgres(
             .changes
             .keys()
             .map(|col| {
-                let s = format!("{} = ${}", q(col), param_idx);
+                let s = format!("{} = ${}{}", q(col), param_idx, cast_for(col));
                 param_idx += 1;
                 s
             })
@@ -1162,7 +1173,7 @@ async fn apply_all_postgres(
             if val.is_null() {
                 where_parts.push(format!("{} IS NULL", q(col)));
             } else {
-                where_parts.push(format!("{} = ${}", q(col), param_idx));
+                where_parts.push(format!("{} = ${}{}", q(col), param_idx, cast_for(col)));
                 param_idx += 1;
                 where_bind.push(val);
             }
@@ -1195,7 +1206,11 @@ async fn apply_all_postgres(
         }
         let cols: Vec<(&String, &serde_json::Value)> = values.iter().collect();
         let col_list: Vec<String> = cols.iter().map(|(c, _)| q(c)).collect();
-        let placeholders: Vec<String> = (1..=cols.len()).map(|i| format!("${i}")).collect();
+        let placeholders: Vec<String> = cols
+            .iter()
+            .enumerate()
+            .map(|(idx, (c, _))| format!("${}{}", idx + 1, cast_for(c)))
+            .collect();
         let sql = format!(
             "INSERT INTO {}.{} ({}) VALUES ({})",
             q(database),
@@ -1357,6 +1372,37 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
             .unwrap_or(serde_json::Value::Null);
     }
     serde_json::Value::Null
+}
+
+/// Map of column name -> pg_catalog type name (e.g. "int4", "varchar", "_int4" for int4[])
+/// for a given table. Used to cast bound parameters explicitly so Postgres doesn't
+/// reject e.g. a text-bound parameter against an integer column.
+async fn fetch_pg_column_types(
+    conn: &mut sqlx::postgres::PgConnection,
+    schema: &str,
+    table: &str,
+) -> Result<HashMap<String, String>, RowmanceError> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        r#"
+        SELECT a.attname AS column_name, pt.typname AS data_type
+        FROM pg_catalog.pg_class cl
+        JOIN pg_catalog.pg_namespace n ON n.oid = cl.relnamespace
+        JOIN pg_catalog.pg_attribute a ON a.attrelid = cl.oid
+                                       AND a.attnum > 0
+                                       AND NOT a.attisdropped
+        JOIN pg_catalog.pg_type pt ON pt.oid = a.atttypid
+        WHERE n.nspname = $1
+          AND cl.relname = $2
+          AND cl.relkind IN ('r', 'v', 'm', 'p')
+        "#,
+    )
+    .bind(schema)
+    .bind(table)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(RowmanceError::Database)?;
+
+    Ok(rows.into_iter().collect())
 }
 
 fn bind_pg_value<'q>(
