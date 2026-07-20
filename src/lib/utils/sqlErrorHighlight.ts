@@ -1,14 +1,67 @@
 import type { Diagnostic } from '@codemirror/lint';
 
 const SQL_KEYWORDS = [
-  'SELECT', 'FROM', 'WHERE', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'OUTER', 'FULL', 'CROSS',
-  'ON', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'OFFSET', 'DISTINCT', 'ALL',
-  'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE',
-  'CREATE', 'TABLE', 'ALTER', 'DROP', 'INDEX', 'VIEW', 'DATABASE', 'SCHEMA',
-  'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'IS', 'NULL',
-  'AS', 'WITH', 'UNION', 'INTERSECT', 'EXCEPT', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
-  'BEGIN', 'COMMIT', 'ROLLBACK', 'TRANSACTION',
-  'SHOW', 'DESCRIBE', 'EXPLAIN', 'USE', 'TRUNCATE', 'RETURNING',
+  'SELECT',
+  'FROM',
+  'WHERE',
+  'JOIN',
+  'INNER',
+  'LEFT',
+  'RIGHT',
+  'OUTER',
+  'FULL',
+  'CROSS',
+  'ON',
+  'GROUP',
+  'ORDER',
+  'HAVING',
+  'LIMIT',
+  'OFFSET',
+  'DISTINCT',
+  'ALL',
+  'INSERT',
+  'INTO',
+  'VALUES',
+  'UPDATE',
+  'SET',
+  'DELETE',
+  'CREATE',
+  'TABLE',
+  'ALTER',
+  'DROP',
+  'INDEX',
+  'VIEW',
+  'DATABASE',
+  'SCHEMA',
+  'AND',
+  'OR',
+  'NOT',
+  'IN',
+  'EXISTS',
+  'BETWEEN',
+  'LIKE',
+  'IS',
+  'NULL',
+  'AS',
+  'WITH',
+  'UNION',
+  'INTERSECT',
+  'EXCEPT',
+  'CASE',
+  'WHEN',
+  'THEN',
+  'ELSE',
+  'END',
+  'BEGIN',
+  'COMMIT',
+  'ROLLBACK',
+  'TRANSACTION',
+  'SHOW',
+  'DESCRIBE',
+  'EXPLAIN',
+  'USE',
+  'TRUNCATE',
+  'RETURNING',
 ];
 
 function levenshtein(a: string, b: string): number {
@@ -62,9 +115,8 @@ function findTokenInStatement(
 ): { from: number; to: number } | null {
   if (!token) return null;
 
-  const startSearch = lineHint !== undefined && lineHint > 1
-    ? Math.max(0, lineToOffset(statement, lineHint) - 5)
-    : 0;
+  const startSearch =
+    lineHint !== undefined && lineHint > 1 ? Math.max(0, lineToOffset(statement, lineHint) - 5) : 0;
 
   let idx = statement.indexOf(token, startSearch);
   if (idx !== -1) return { from: idx, to: idx + token.length };

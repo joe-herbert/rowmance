@@ -51,9 +51,3 @@ pub struct QueryHistoryRow {
     pub error: Option<String>,
     pub status: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct SettingRow {
-    pub key: String,
-    pub value: String,
-}

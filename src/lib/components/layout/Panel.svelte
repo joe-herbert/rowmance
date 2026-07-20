@@ -16,6 +16,7 @@
   import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
   import Settings from '$lib/components/settings/Settings.svelte';
   import UserManager from '$lib/components/users/UserManager.svelte';
+  import ServerAdmin from '$lib/components/server-admin/ServerAdmin.svelte';
   import SpeedAnalysis from '$lib/components/speed/SpeedAnalysis.svelte';
   import ReleaseNotes from '$lib/components/release/ReleaseNotes.svelte';
   import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
@@ -64,11 +65,12 @@
       />
     {/key}
   {:else if panel.content.kind === 'table_browser'}
-    {#key `${panel.content.connectionId}:${panel.content.database}:${panel.content.table}`}
+    {#key `${panel.content.connectionId}:${panel.content.instanceDb ?? ''}:${panel.content.database}:${panel.content.table}`}
       <TableBrowser
         connectionId={panel.content.connectionId}
         database={panel.content.database}
         table={panel.content.table}
+        instanceDb={panel.content.instanceDb}
         initialFilter={panel.content.initialFilter}
         {isFocused}
         {itemId}
@@ -80,6 +82,7 @@
       connectionId={panel.content.connectionId}
       database={panel.content.database}
       table={panel.content.table}
+      instanceDb={panel.content.instanceDb}
       {itemId}
       {splitId}
     />
@@ -89,17 +92,24 @@
       database={panel.content.database}
       objectName={panel.content.objectName}
       objectType={panel.content.objectType}
+      instanceDb={panel.content.instanceDb}
       {itemId}
       {splitId}
     />
   {:else if panel.content.kind === 'erd'}
-    <ErdCanvas connectionId={panel.content.connectionId} database={panel.content.database} />
+    <ErdCanvas
+      connectionId={panel.content.connectionId}
+      database={panel.content.database}
+      instanceDb={panel.content.instanceDb}
+    />
   {:else if panel.content.kind === 'explain'}
     <ExplainCanvas rawJson={panel.content.sql} dialect={panel.content.dialect} />
   {:else if panel.content.kind === 'settings'}
     <Settings />
   {:else if panel.content.kind === 'user_manager'}
     <UserManager connectionId={panel.content.connectionId} />
+  {:else if panel.content.kind === 'server_admin'}
+    <ServerAdmin connectionId={panel.content.connectionId} />
   {:else if panel.content.kind === 'speed_analysis'}
     <SpeedAnalysis />
   {:else if panel.content.kind === 'release_notes'}

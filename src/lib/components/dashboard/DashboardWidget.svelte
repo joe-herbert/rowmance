@@ -22,8 +22,8 @@
     editMode: boolean;
     onEdit: () => void;
     onDelete: () => void;
-    onDragStart?: (e: PointerEvent) => void;
-    onResizeStart?: (e: PointerEvent) => void;
+    onDragStart?: (_e: PointerEvent) => void;
+    onResizeStart?: (_e: PointerEvent) => void;
   }
 
   const { widget, editMode, onEdit, onDelete, onDragStart, onResizeStart }: Props = $props();
@@ -115,9 +115,7 @@
     if (fmt === 'date' || fmt === 'datetime') {
       const d = new Date(str);
       if (!isNaN(d.getTime())) {
-        return fmt === 'date'
-          ? d.toLocaleDateString()
-          : d.toLocaleString();
+        return fmt === 'date' ? d.toLocaleDateString() : d.toLocaleString();
       }
       return str;
     }
@@ -128,7 +126,10 @@
     }
 
     if (fmt === 'percent' && isNum) {
-      return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 2 }).format(n);
+      return new Intl.NumberFormat(undefined, {
+        style: 'percent',
+        maximumFractionDigits: 2,
+      }).format(n);
     }
 
     if (fmt === 'number' && isNum) {
@@ -191,7 +192,8 @@
     const usableW = chartWidth - CHART_PAD_LEFT;
     const pts = chartData.map((p, i) => {
       const x = CHART_PAD_LEFT + (i / Math.max(chartData.length - 1, 1)) * usableW;
-      const y = CHART_H - CHART_PAD_BOTTOM - (p.value / chartMax) * (CHART_H - CHART_PAD_BOTTOM - 10);
+      const y =
+        CHART_H - CHART_PAD_BOTTOM - (p.value / chartMax) * (CHART_H - CHART_PAD_BOTTOM - 10);
       return `${x},${y}`;
     });
     return `M ${pts.join(' L ')}`;
@@ -227,14 +229,25 @@
   $effect(() => {
     if (widget.displayType === 'countdown') {
       now = Date.now();
-      countdownInterval = setInterval(() => { now = Date.now(); }, 1000);
-      return () => { if (countdownInterval) clearInterval(countdownInterval); };
+      countdownInterval = setInterval(() => {
+        now = Date.now();
+      }, 1000);
+      return () => {
+        if (countdownInterval) clearInterval(countdownInterval);
+      };
     } else {
-      if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
     }
   });
 
-  interface CountdownUnit { value: number; label: string; pad: boolean; }
+  interface CountdownUnit {
+    value: number;
+    label: string;
+    pad: boolean;
+  }
   interface CountdownParts {
     units: CountdownUnit[];
     expired: boolean;
@@ -249,51 +262,58 @@
     if (isNaN(target.getTime())) return null;
     const expired = target.getTime() <= now;
     const base = expired ? target : new Date(now);
-    const end  = expired ? new Date(now) : target;
+    const end = expired ? new Date(now) : target;
 
-    let years   = end.getFullYear()  - base.getFullYear();
-    let months  = end.getMonth()     - base.getMonth();
-    let days    = end.getDate()      - base.getDate();
-    let hours   = end.getHours()     - base.getHours();
-    let minutes = end.getMinutes()   - base.getMinutes();
-    let seconds = end.getSeconds()   - base.getSeconds();
+    let years = end.getFullYear() - base.getFullYear();
+    let months = end.getMonth() - base.getMonth();
+    let days = end.getDate() - base.getDate();
+    let hours = end.getHours() - base.getHours();
+    let minutes = end.getMinutes() - base.getMinutes();
+    let seconds = end.getSeconds() - base.getSeconds();
 
-    if (seconds < 0) { seconds += 60; minutes--; }
-    if (minutes < 0) { minutes += 60; hours--; }
-    if (hours < 0)   { hours += 24; days--; }
+    if (seconds < 0) {
+      seconds += 60;
+      minutes--;
+    }
+    if (minutes < 0) {
+      minutes += 60;
+      hours--;
+    }
+    if (hours < 0) {
+      hours += 24;
+      days--;
+    }
     if (days < 0) {
       const prevMonthDays = new Date(end.getFullYear(), end.getMonth(), 0).getDate();
-      days += prevMonthDays; months--;
+      days += prevMonthDays;
+      months--;
     }
-    if (months < 0) { months += 12; years--; }
+    if (months < 0) {
+      months += 12;
+      years--;
+    }
 
     const all: CountdownUnit[] = [
-      { value: years,   label: years   === 1 ? 'yr'  : 'yrs',  pad: false },
-      { value: months,  label: months  === 1 ? 'mo'  : 'mos',  pad: false },
-      { value: days,    label: days    === 1 ? 'day' : 'days', pad: false },
-      { value: hours,   label: 'hrs',   pad: true },
-      { value: minutes, label: 'min',   pad: true },
-      { value: seconds, label: 'sec',   pad: true },
+      { value: years, label: years === 1 ? 'yr' : 'yrs', pad: false },
+      { value: months, label: months === 1 ? 'mo' : 'mos', pad: false },
+      { value: days, label: days === 1 ? 'day' : 'days', pad: false },
+      { value: hours, label: 'hrs', pad: true },
+      { value: minutes, label: 'min', pad: true },
+      { value: seconds, label: 'sec', pad: true },
     ];
 
     const firstNonZero = all.findIndex((u) => u.value > 0);
-    const units = firstNonZero === -1 ? [{ value: 0, label: 'sec', pad: false }] : all.slice(firstNonZero);
+    const units =
+      firstNonZero === -1 ? [{ value: 0, label: 'sec', pad: false }] : all.slice(firstNonZero);
 
     return { units, expired, targetLabel: target.toLocaleString() };
   });
 </script>
 
-<div
-  class="widget"
-  style="--w: {widget.w}; --h: {widget.h};"
->
+<div class="widget" style="--w: {widget.w}; --h: {widget.h};">
   <div class="widget-header">
     {#if editMode}
-      <button
-        class="drag-handle"
-        aria-label="Drag to reorder"
-        onpointerdown={onDragStart}
-      >
+      <button class="drag-handle" aria-label="Drag to reorder" onpointerdown={onDragStart}>
         <DragHandleIcon />
       </button>
     {/if}
@@ -303,11 +323,21 @@
         <button class="action-btn" onclick={onEdit} title="Edit widget" type="button">
           <EditIcon width={12} height={12} strokeWidth={2} />
         </button>
-        <button class="action-btn action-btn--danger" onclick={onDelete} title="Delete widget" type="button">
+        <button
+          class="action-btn action-btn--danger"
+          onclick={onDelete}
+          title="Delete widget"
+          type="button"
+        >
           <TrashIcon width={12} height={12} strokeWidth={2} />
         </button>
       {:else}
-        <button class="action-btn" onclick={openInEditor} title="Open in query editor" type="button">
+        <button
+          class="action-btn"
+          onclick={openInEditor}
+          title="Open in query editor"
+          type="button"
+        >
           <ExternalLinkIcon width={12} height={12} strokeWidth={2} />
         </button>
         <button class="refresh-btn" onclick={fetchData} title="Refresh" type="button">
@@ -384,14 +414,7 @@
             {#if widget.displayType === 'bar_chart'}
               {#each chartData as point, i}
                 {@const b = barPoints(i, chartData.length, chartWidth)}
-                <rect
-                  x={b.x}
-                  y={b.y}
-                  width={b.w}
-                  height={b.h}
-                  class="bar"
-                  rx="2"
-                />
+                <rect x={b.x} y={b.y} width={b.w} height={b.h} class="bar" rx="2" />
                 <text
                   x={b.x + b.w / 2}
                   y={CHART_H - CHART_PAD_BOTTOM + 14}
@@ -408,19 +431,26 @@
                 {@const firstX = CHART_PAD_LEFT}
                 {@const lastX = chartWidth}
                 {@const baseY = CHART_H - CHART_PAD_BOTTOM}
-                <path
-                  d="{pathD} L {lastX},{baseY} L {firstX},{baseY} Z"
-                  class="line-area"
-                />
+                <path d="{pathD} L {lastX},{baseY} L {firstX},{baseY} Z" class="line-area" />
                 <path d={pathD} class="line-path" />
               {/if}
               <!-- Data points -->
               {#each chartData as point, i}
-                {@const x = CHART_PAD_LEFT + (i / Math.max(chartData.length - 1, 1)) * (chartWidth - CHART_PAD_LEFT)}
-                {@const y = CHART_H - CHART_PAD_BOTTOM - (point.value / chartMax) * (CHART_H - CHART_PAD_BOTTOM - 10)}
+                {@const x =
+                  CHART_PAD_LEFT +
+                  (i / Math.max(chartData.length - 1, 1)) * (chartWidth - CHART_PAD_LEFT)}
+                {@const y =
+                  CHART_H -
+                  CHART_PAD_BOTTOM -
+                  (point.value / chartMax) * (CHART_H - CHART_PAD_BOTTOM - 10)}
                 <circle cx={x} cy={y} r="3" class="line-dot" />
                 {#if i % Math.ceil(chartData.length / 8) === 0}
-                  <text x={x} y={CHART_H - CHART_PAD_BOTTOM + 14} class="axis-label" text-anchor="middle">
+                  <text
+                    {x}
+                    y={CHART_H - CHART_PAD_BOTTOM + 14}
+                    class="axis-label"
+                    text-anchor="middle"
+                  >
                     {formatLabel(point.label)}
                   </text>
                 {/if}
@@ -452,7 +482,9 @@
             {#each countdownValue.units as unit, i}
               {#if i > 0}<span class="countdown-sep">:</span>{/if}
               <div class="countdown-part">
-                <span class="countdown-num">{unit.pad ? String(unit.value).padStart(2, '0') : unit.value}</span>
+                <span class="countdown-num"
+                  >{unit.pad ? String(unit.value).padStart(2, '0') : unit.value}</span
+                >
                 <span class="countdown-unit">{unit.label}</span>
               </div>
             {/each}
@@ -502,7 +534,9 @@
     color: var(--color-text-muted);
     border-radius: var(--radius-sm) 0 var(--radius-sm) 0;
     opacity: 0;
-    transition: opacity var(--transition-fast), color var(--transition-fast);
+    transition:
+      opacity var(--transition-fast),
+      color var(--transition-fast);
     z-index: 10;
     padding: 0;
   }

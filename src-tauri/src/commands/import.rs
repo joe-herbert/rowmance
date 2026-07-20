@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
 
-use crate::connections::pool_manager::{ConnectionManager, RemotePool};
+use crate::connections::pool_manager::ConnectionManager;
 use crate::error::AppError;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ pub struct CsvPreview {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct ColumnOverride {
     pub name: String,
     #[serde(rename = "dbType")]
@@ -166,7 +167,7 @@ async fn csv_execute_from_text(
     csv_text: String,
     table_name: String,
     create_table: bool,
-    column_overrides: Vec<ColumnOverride>,
+    _column_overrides: Vec<ColumnOverride>,
 ) -> Result<u32, AppError> {
     check_read_only(sqlite, &connection_id).await?;
 
@@ -179,171 +180,21 @@ async fn csv_execute_from_text(
         .map(|h| h.to_owned())
         .collect();
 
-    // Build effective column list (use overrides where supplied).
-    let effective_columns: Vec<(String, String)> = headers
-        .iter()
-        .map(|h| {
-            let db_type = column_overrides
-                .iter()
-                .find(|o| o.name == *h)
-                .map(|o| o.db_type.clone())
-                .unwrap_or_else(|| "TEXT".to_owned());
-            (h.clone(), db_type)
-        })
-        .collect();
-
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
-
-    // Collect all records first to avoid holding the pool_ref across await points
-    // with conflicting lifetime rules.
+    // Collect all records.
     let all_records: Vec<Vec<String>> = reader
         .records()
         .map(|r| r.map(|rec| rec.iter().map(|f| f.to_owned()).collect()))
         .collect::<Result<_, _>>()
         .map_err(|e| AppError::new("CSV_ERROR", e.to_string()))?;
 
-    let mut inserted = 0u32;
-
-    match pool_ref.value() {
-        RemotePool::MySql(pool, _) => {
-            if create_table {
-                let col_defs: Vec<String> = effective_columns
-                    .iter()
-                    .map(|(name, db_type)| format!("`{}` {}", name.replace('`', "``"), db_type))
-                    .collect();
-                let ddl = format!(
-                    "CREATE TABLE IF NOT EXISTS `{}` ({})",
-                    table_name.replace('`', "``"),
-                    col_defs.join(", ")
-                );
-                sqlx::query(&ddl)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-            }
-
-            let col_names: Vec<String> = effective_columns
-                .iter()
-                .map(|(n, _)| format!("`{}`", n.replace('`', "``")))
-                .collect();
-            let placeholders: Vec<&str> = vec!["?"; col_names.len()];
-
-            let sql = format!(
-                "INSERT INTO `{}` ({}) VALUES ({})",
-                table_name.replace('`', "``"),
-                col_names.join(", "),
-                placeholders.join(", ")
-            );
-
-            for record in &all_records {
-                let mut q = sqlx::query(&sql);
-                for field in record {
-                    q = q.bind(field);
-                }
-                q.execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                inserted += 1;
-            }
-        }
-        RemotePool::Postgres(pool) => {
-            if create_table {
-                let col_defs: Vec<String> = effective_columns
-                    .iter()
-                    .map(|(name, db_type)| format!("\"{}\" {}", name.replace('"', "\"\""), db_type))
-                    .collect();
-                let ddl = format!(
-                    "CREATE TABLE IF NOT EXISTS \"{}\" ({})",
-                    table_name.replace('"', "\"\""),
-                    col_defs.join(", ")
-                );
-                sqlx::query(&ddl)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-            }
-
-            let col_names: Vec<String> = effective_columns
-                .iter()
-                .map(|(n, _)| format!("\"{}\"", n.replace('"', "\"\"")))
-                .collect();
-
-            let mut param_idx = 1;
-            let placeholders: Vec<String> = col_names
-                .iter()
-                .map(|_| {
-                    let p = format!("${param_idx}");
-                    param_idx += 1;
-                    p
-                })
-                .collect();
-
-            let sql = format!(
-                "INSERT INTO \"{}\" ({}) VALUES ({})",
-                table_name.replace('"', "\"\""),
-                col_names.join(", "),
-                placeholders.join(", ")
-            );
-
-            for record in &all_records {
-                let mut q = sqlx::query(&sql);
-                for field in record {
-                    q = q.bind(field);
-                }
-                q.execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                inserted += 1;
-            }
-        }
-        RemotePool::Sqlite(pool) => {
-            if create_table {
-                let col_defs: Vec<String> = effective_columns
-                    .iter()
-                    .map(|(name, db_type)| format!("\"{}\" {}", name.replace('"', "\"\""), db_type))
-                    .collect();
-                let ddl = format!(
-                    "CREATE TABLE IF NOT EXISTS \"{}\" ({})",
-                    table_name.replace('"', "\"\""),
-                    col_defs.join(", ")
-                );
-                sqlx::query(&ddl)
-                    .execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-            }
-
-            let col_names: Vec<String> = effective_columns
-                .iter()
-                .map(|(n, _)| format!("\"{}\"", n.replace('"', "\"\"")))
-                .collect();
-            let placeholders: Vec<&str> = vec!["?"; col_names.len()];
-
-            let sql = format!(
-                "INSERT INTO \"{}\" ({}) VALUES ({})",
-                table_name.replace('"', "\"\""),
-                col_names.join(", "),
-                placeholders.join(", ")
-            );
-
-            for record in &all_records {
-                let mut q = sqlx::query(&sql);
-                for field in record {
-                    q = q.bind(field.as_str());
-                }
-                q.execute(pool)
-                    .await
-                    .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
-                inserted += 1;
-            }
-        }
-        RemotePool::SqlServer(_, _) => {
-            return Err(AppError::new(
-                "UNSUPPORTED",
-                "CSV import is not yet supported for SQL Server connections",
-            ));
-        }
-    }
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    let count = engine
+        .import_csv("", &table_name, None, &headers, &all_records, create_table)
+        .await
+        .map_err(|e| AppError::new("QUERY_ERROR", e.to_string()))?;
+    let inserted = count as u32;
 
     Ok(inserted)
 }
@@ -410,7 +261,9 @@ async fn sql_execute_from_text(
 
     let statements = crate::lib_sql::split_sql_statements(&content);
     let total = statements.len() as u32;
-    let pool_ref = connections.get(&connection_id).map_err(AppError::from)?;
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
 
     let mut executed = 0u32;
     let mut errors = 0u32;
@@ -421,16 +274,7 @@ async fn sql_execute_from_text(
             continue;
         }
 
-        let result = match pool_ref.value() {
-            RemotePool::MySql(pool, _) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
-            RemotePool::Postgres(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
-            RemotePool::Sqlite(pool) => sqlx::query(stmt).execute(pool).await.map(|_| ()),
-            RemotePool::SqlServer(_, _) => Err(sqlx::Error::Configuration(
-                "SQL Server is not supported for SQL file import".into(),
-            )),
-        };
-
-        let error = result.err().map(|e| e.to_string());
+        let error = engine.execute_ddl(stmt).await.err().map(|e| e.to_string());
 
         let progress = ImportProgress {
             current: i as u32 + 1,

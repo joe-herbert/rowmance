@@ -57,8 +57,8 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
 ];
 
 describe('SHORTCUT_DEFINITIONS', () => {
-  it('contains exactly 39 action definitions', () => {
-    expect(SHORTCUT_DEFINITIONS).toHaveLength(39);
+  it('contains exactly 45 action definitions', () => {
+    expect(SHORTCUT_DEFINITIONS).toHaveLength(45);
   });
 
   it('contains all expected action IDs', () => {

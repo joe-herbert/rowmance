@@ -1,7 +1,8 @@
 /** AI service — builds schema context and calls the configured AI provider. */
-import type { AiProvider, AiContextLevel } from '$lib/types';
+import type { AiProvider, AiContextLevel, DialectInfo } from '$lib/types';
 import * as schemaApi from '$lib/tauri/schema';
 import { executeQuery } from '$lib/tauri/query';
+import { tableRef } from '$lib/utils/dialect';
 
 export interface AiConfig {
   provider: AiProvider;
@@ -18,6 +19,7 @@ async function buildSchemaContext(
   database: string,
   contextLevel: AiContextLevel,
   dataSampleRows: number,
+  dialectInfo: DialectInfo,
 ): Promise<string> {
   const tables = await schemaApi.listTables(connectionId, database);
   const allColumns = await schemaApi.listAllColumns(connectionId, database);
@@ -74,9 +76,10 @@ async function buildSchemaContext(
     context += '\nSample data:\n';
     for (const table of tables.slice(0, 20)) {
       try {
+        const tblRef = tableRef(database, table.name, dialectInfo);
         const result = await executeQuery(
           connectionId,
-          `SELECT * FROM \`${table.name.replace(/`/g, '``')}\` LIMIT ${dataSampleRows}`,
+          `SELECT * FROM ${tblRef} LIMIT ${dataSampleRows}`,
           1,
           dataSampleRows,
           database,
@@ -107,9 +110,7 @@ async function callAi(
   const { provider, model, apiKey, baseUrl } = config;
 
   if (provider === 'claude') {
-    const messages: { role: string; content: string }[] = [
-      { role: 'user', content: userMessage },
-    ];
+    const messages: { role: string; content: string }[] = [{ role: 'user', content: userMessage }];
     if (assistantPrefill) {
       messages.push({ role: 'assistant', content: assistantPrefill });
     }
@@ -128,11 +129,11 @@ async function callAi(
       }),
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error?.message ?? `Claude API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `Claude API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    const text = (data as any).content?.[0]?.text ?? '';
+    const data = (await resp.json()) as { content?: { text?: string }[] };
+    const text = data.content?.[0]?.text ?? '';
     return assistantPrefill ? assistantPrefill + text : text;
   }
 
@@ -160,11 +161,11 @@ async function callAi(
       }),
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error?.message ?? `OpenAI API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `OpenAI API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    const text = (data as any).choices?.[0]?.message?.content ?? '';
+    const data = (await resp.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = data.choices?.[0]?.message?.content ?? '';
     return assistantPrefill ? assistantPrefill + text : text;
   }
 
@@ -182,11 +183,13 @@ async function callAi(
       },
     );
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error?.message ?? `Gemini API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `Gemini API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    return (data as any).candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const data = (await resp.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 
   if (provider === 'ollama') {
@@ -204,11 +207,11 @@ async function callAi(
       }),
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error((err as any)?.error ?? `Ollama API error: ${resp.status}`);
+      const err = (await resp.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err?.error ?? `Ollama API error: ${resp.status}`);
     }
-    const data = await resp.json();
-    return (data as any).message?.content ?? '';
+    const data = (await resp.json()) as { message?: { content?: string } };
+    return data.message?.content ?? '';
   }
 
   throw new Error('No AI provider configured');
@@ -219,11 +222,16 @@ export async function generateQuery(
   prompt: string,
   connectionId: string,
   database: string,
-  dbType: string,
+  dialectInfo: DialectInfo,
 ): Promise<string> {
   if (config.provider === 'none') throw new Error('No AI provider configured');
 
-  console.log('[AI] generateQuery called — contextLevel:', config.contextLevel, '| database:', JSON.stringify(database));
+  console.log(
+    '[AI] generateQuery called — contextLevel:',
+    config.contextLevel,
+    '| database:',
+    JSON.stringify(database),
+  );
 
   let schemaContext = '';
   if (config.contextLevel !== 'none' && database) {
@@ -232,10 +240,16 @@ export async function generateQuery(
       database,
       config.contextLevel,
       config.dataSampleRows,
+      dialectInfo,
     );
     console.log('[AI] schema context length:', schemaContext.length);
   } else {
-    console.warn('[AI] schema context SKIPPED — contextLevel:', config.contextLevel, '| database:', JSON.stringify(database));
+    console.warn(
+      '[AI] schema context SKIPPED — contextLevel:',
+      config.contextLevel,
+      '| database:',
+      JSON.stringify(database),
+    );
   }
 
   // For SQL generation, strip sample data — structure is all that's needed and
@@ -251,7 +265,7 @@ export async function generateQuery(
     : '';
 
   const systemPrompt = [
-    `You are a SQL expert. Your only job is to output a single ${dbType} SQL query.`,
+    `You are a SQL expert. Your only job is to output a single ${dialectInfo.displayName} SQL query.`,
     `Output raw SQL only. No explanation, no markdown, no code fences.`,
   ].join('\n');
 
@@ -286,7 +300,7 @@ export async function explainQuery(
   sql: string,
   connectionId: string,
   database: string,
-  dbType: string,
+  dialectInfo: DialectInfo,
 ): Promise<string> {
   if (config.provider === 'none') throw new Error('No AI provider configured');
 
@@ -297,6 +311,7 @@ export async function explainQuery(
       database,
       config.contextLevel,
       config.dataSampleRows,
+      dialectInfo,
     );
   }
 
@@ -318,7 +333,7 @@ export async function describeTable(
   ddl: string,
   connectionId: string,
   database: string,
-  dbType: string,
+  dialectInfo: DialectInfo,
 ): Promise<string> {
   if (config.provider === 'none') throw new Error('No AI provider configured');
 
@@ -329,6 +344,7 @@ export async function describeTable(
       database,
       config.contextLevel,
       config.dataSampleRows,
+      dialectInfo,
     );
   }
 

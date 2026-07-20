@@ -9,7 +9,12 @@
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { executeSelection } from '$lib/tauri/query';
-  import type { ForeignKeyInfo, DbType } from '$lib/types';
+  import type { ForeignKeyInfo } from '$lib/types';
+  import {
+    qi as dialectQi,
+    tableRef as dialectTableRef,
+    defaultDialectInfo,
+  } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import JsonIcon from '$lib/components/icons/JsonIcon.svelte';
@@ -54,12 +59,6 @@
   let metaKey = $state<string | null>(null);
   let copied = $state(false);
 
-  function quoteId(name: string, dbType: DbType): string {
-    if (dbType === 'postgres') return `"${name.replace(/"/g, '""')}"`;
-    if (dbType === 'sqlserver') return `[${name.replace(/\]/g, ']]')}]`;
-    return `\`${name.replace(/`/g, '``')}\``;
-  }
-
   function escapeStr(val: string): string {
     return val.replace(/'/g, "''");
   }
@@ -71,7 +70,11 @@
     return `'${escapeStr(String(val))}'`;
   }
 
-  async function loadFkTargets(connId: string, db: string, table: string): Promise<Record<string, FkTarget>> {
+  async function loadFkTargets(
+    connId: string,
+    db: string,
+    table: string,
+  ): Promise<Record<string, FkTarget>> {
     const result: Record<string, FkTarget> = {};
     try {
       const fks = await schemaApi.listForeignKeys(connId, db, table);
@@ -83,7 +86,7 @@
           };
         }
       }
-    } catch (_) {
+    } catch {
       // Non-critical
     }
     return result;
@@ -150,7 +153,7 @@
 
     const connId = target.targetConnectionId ?? parentConnId;
     const db = target.targetDatabase ?? parentDb;
-    const dbType = connectionStore.getById(connId)?.dbType ?? 'mysql';
+    const d = connectionStore.getById(connId)?.dialectInfo ?? defaultDialectInfo;
 
     children[colName] = {
       target,
@@ -166,10 +169,11 @@
     };
 
     try {
-      const sql =
-        dbType === 'sqlserver'
-          ? `SELECT TOP 1 * FROM ${quoteId(db, dbType)}.${quoteId(target.targetTable, dbType)} WHERE ${quoteId(target.targetColumn, dbType)} = ${valueLiteral(cellValue)}`
-          : `SELECT * FROM ${quoteId(db, dbType)}.${quoteId(target.targetTable, dbType)} WHERE ${quoteId(target.targetColumn, dbType)} = ${valueLiteral(cellValue)} LIMIT 1`;
+      const tRef = dialectTableRef(db, target.targetTable, d);
+      const qCol = dialectQi(target.targetColumn, d);
+      const sql = d.selectTop
+        ? `SELECT TOP 1 * FROM ${tRef} WHERE ${qCol} = ${valueLiteral(cellValue)}`
+        : `SELECT * FROM ${tRef} WHERE ${qCol} = ${valueLiteral(cellValue)} LIMIT 1`;
       const result = await executeSelection(connId, sql);
       if (result.error) {
         children[colName].error = result.error;
@@ -251,7 +255,11 @@
     await expandRecursively(expansions, visited);
   }
 
-  function buildCopyObject(columnNames: string[], row: CellValue[], children: Record<string, Expansion>): Record<string, unknown> {
+  function buildCopyObject(
+    columnNames: string[],
+    row: CellValue[],
+    children: Record<string, Expansion>,
+  ): Record<string, unknown> {
     const obj: Record<string, unknown> = {};
     for (let i = 0; i < columnNames.length; i++) {
       const col = columnNames[i];
@@ -269,7 +277,11 @@
   function copyAsJson() {
     const sel = cellSelectionStore.current;
     if (!sel) return;
-    const obj = buildCopyObject(sel.columns.map((c) => c.name), sel.row, expansions);
+    const obj = buildCopyObject(
+      sel.columns.map((c) => c.name),
+      sel.row,
+      expansions,
+    );
     navigator.clipboard.writeText(JSON.stringify(obj, null, 2)).then(() => {
       copied = true;
       setTimeout(() => (copied = false), 1500);
@@ -333,7 +345,12 @@
           {@const child = children[col]}
           {@const isExpanded = child?.expanded ?? false}
 
-          <div class="tree-entry" role="treeitem" aria-selected={false} aria-expanded={hasFk ? isExpanded : undefined}>
+          <div
+            class="tree-entry"
+            role="treeitem"
+            aria-selected={false}
+            aria-expanded={hasFk ? isExpanded : undefined}
+          >
             <div class="entry-row">
               <div class="indent" style="--depth: {depth}"></div>
 
@@ -352,7 +369,9 @@
                 <span class="expand-spacer"></span>
               {/if}
 
-              <span class="json-key" class:child-key={depth > 1 && !anySiblingExpanded}>"{col}"</span>
+              <span class="json-key" class:child-key={depth > 1 && !anySiblingExpanded}
+                >"{col}"</span
+              >
               <span class="json-colon">:</span>
 
               <span
@@ -408,7 +427,15 @@
                     {#if i < columns.length - 1}<span class="json-comma">,</span>{/if}
                   </div>
                 {:else if child.row}
-                  {@render entries(child.columnNames, child.row, child.fkTargets, child.children, depth + 1, child.connId, child.db)}
+                  {@render entries(
+                    child.columnNames,
+                    child.row,
+                    child.fkTargets,
+                    child.children,
+                    depth + 1,
+                    child.connId,
+                    child.db,
+                  )}
                   <div class="entry-row">
                     <div class="indent" style="--depth: {depth}"></div>
                     <span class="expand-spacer"></span>
@@ -460,7 +487,7 @@
     flex: 1;
   }
 
-  .empty-icon {
+  :global(.empty-icon) {
     width: 28px;
     height: 28px;
     opacity: 0.4;
@@ -498,7 +525,9 @@
     font-weight: var(--font-weight-medium);
   }
 
-  .toolbar-gap { flex: 1; }
+  .toolbar-gap {
+    flex: 1;
+  }
 
   .icon-btn {
     display: grid;
@@ -510,7 +539,9 @@
     color: var(--color-text-muted);
     cursor: pointer;
     flex-shrink: 0;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .icon-btn:hover {
@@ -529,7 +560,9 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
     white-space: nowrap;
   }
 
@@ -586,7 +619,9 @@
     cursor: pointer;
     border-radius: var(--radius-xs);
     background: transparent;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .expand-btn:hover:not(:disabled) {
@@ -594,7 +629,9 @@
     color: var(--color-text-primary);
   }
 
-  .expand-btn:disabled { cursor: default; }
+  .expand-btn:disabled {
+    cursor: default;
+  }
 
   .expand-btn :global(svg) {
     transition: transform 150ms ease;
@@ -628,8 +665,12 @@
     margin-right: 2px;
   }
 
-  .json-comma { color: var(--color-text-muted); }
-  .json-brace { color: var(--color-text-secondary); }
+  .json-comma {
+    color: var(--color-text-muted);
+  }
+  .json-brace {
+    color: var(--color-text-secondary);
+  }
 
   .json-value {
     white-space: pre;
@@ -637,11 +678,22 @@
     align-items: center;
   }
 
-  .jv-string { color: var(--color-success, #22c55e); }
-  .jv-number { color: color-mix(in srgb, var(--color-accent) 90%, white); }
-  .jv-boolean { color: var(--color-warning, #f59e0b); }
-  .jv-null { color: var(--color-text-muted); font-style: italic; }
-  .jv-object { color: var(--color-text-secondary); }
+  .jv-string {
+    color: var(--color-success, #22c55e);
+  }
+  .jv-number {
+    color: color-mix(in srgb, var(--color-accent) 90%, white);
+  }
+  .jv-boolean {
+    color: var(--color-warning, #f59e0b);
+  }
+  .jv-null {
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+  .jv-object {
+    color: var(--color-text-secondary);
+  }
 
   /* ── FK hint ── */
 
@@ -655,7 +707,9 @@
     gap: 2px;
   }
 
-  .fk-table { color: var(--color-accent); }
+  .fk-table {
+    color: var(--color-accent);
+  }
 
   .virtual-badge {
     font-size: 9px;

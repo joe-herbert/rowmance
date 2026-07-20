@@ -56,13 +56,13 @@
   --color-editor-selection: rgba(49, 106, 197, 0.28);
   --color-editor-active-line: rgba(49, 106, 197, 0.05);
   --color-editor-cursor: #000000;
-  --color-editor-keyword: #0000ff;   /* bright blue — T-SQL reserved words */
-  --color-editor-string: #800000;    /* dark red — string literals */
-  --color-editor-number: #000000;    /* plain black — numbers */
-  --color-editor-comment: #008000;   /* green — line and block comments */
+  --color-editor-keyword: #0000ff; /* bright blue — T-SQL reserved words */
+  --color-editor-string: #800000; /* dark red — string literals */
+  --color-editor-number: #000000; /* plain black — numbers */
+  --color-editor-comment: #008000; /* green — line and block comments */
   --color-editor-operator: #808080;
-  --color-editor-function: #000000;  /* black — user/system functions */
-  --color-editor-type: #000080;      /* dark navy — types */
+  --color-editor-function: #000000; /* black — user/system functions */
+  --color-editor-type: #000080; /* dark navy — types */
   --color-editor-bracket-match: rgba(49, 106, 197, 0.2);
 
   /* Flat scrollbars */
@@ -86,4 +86,3 @@
   /* Tahoma was the SSMS/Windows XP UI font */
   --font-family-ui: Tahoma, 'Segoe UI', system-ui, sans-serif;
 }
-

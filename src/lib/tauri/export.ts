@@ -8,8 +8,15 @@ export async function exportResultToClipboard(
   columns: string[],
   format: ExportFormat,
   tableName?: string,
+  connectionId?: string,
 ): Promise<void> {
-  return invoke<void>('export_result_to_clipboard', { rows, columns, format, tableName });
+  return invoke<void>('export_result_to_clipboard', {
+    rows,
+    columns,
+    format,
+    tableName,
+    connectionId,
+  });
 }
 
 export async function exportResultToFile(
@@ -18,6 +25,14 @@ export async function exportResultToFile(
   format: ExportFormat,
   filePath: string,
   tableName?: string,
+  connectionId?: string,
 ): Promise<void> {
-  return invoke<void>('export_result_to_file', { rows, columns, format, filePath, tableName });
+  return invoke<void>('export_result_to_file', {
+    rows,
+    columns,
+    format,
+    filePath,
+    tableName,
+    connectionId,
+  });
 }

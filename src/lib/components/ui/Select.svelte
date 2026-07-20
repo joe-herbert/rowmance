@@ -84,9 +84,7 @@
     return fuzzy ? fuzzyMatch(label, q) : label.toLowerCase().includes(q.toLowerCase());
   });
 
-  const filteredFlat = $derived(
-    searchQuery.trim() ? flat.filter((o) => matches(o.label)) : flat,
-  );
+  const filteredFlat = $derived(searchQuery.trim() ? flat.filter((o) => matches(o.label)) : flat);
 
   const filteredOptions = $derived(
     searchQuery.trim()
@@ -256,7 +254,9 @@
   onclick={toggle}
   onkeydown={handleTriggerKeydown}
 >
-  <span class="trigger-label" class:trigger-label--placeholder={!selectedLabel && !!placeholder}>{selectedLabel || placeholder}</span>
+  <span class="trigger-label" class:trigger-label--placeholder={!selectedLabel && !!placeholder}
+    >{selectedLabel || placeholder}</span
+  >
   <span class="trigger-chevron" class:trigger-chevron--open={open}><SmallChevronIcon /></span>
 </button>
 

@@ -7,13 +7,14 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useToast } from '$lib/stores/toast.svelte';
-  import { useSettings } from '$lib/stores/settings.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
   import { errorMessage } from '$lib/utils/errors';
+  import { qi as dialectQi } from '$lib/utils/dialect';
   import ConnectionForm from './ConnectionForm.svelte';
   import ExportConnectionsDialog from './ExportConnectionsDialog.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import ErrorMessage from '$lib/components/ErrorMessage.svelte';
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
@@ -38,7 +39,6 @@
   const connectionStore = useConnections();
   const panelStore = usePanels();
   const toast = useToast();
-  const settingsStore = useSettings();
 
   let filterQuery = $state('');
 
@@ -106,12 +106,6 @@
   let createDbError = $state('');
   let createDbLoading = $state(false);
 
-  function qi(name: string, dbType: string): string {
-    if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
-    if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
-    return '"' + name.replace(/"/g, '""') + '"';
-  }
-
   async function executeCreateDatabase() {
     if (!createDbModal) return;
     const name = createDbName.trim();
@@ -119,11 +113,12 @@
       createDbError = 'Name is required';
       return;
     }
-    const { connectionId, dbType } = createDbModal;
-    const isSchema = dbType === 'postgres' || dbType === 'sqlserver';
+    const { connectionId } = createDbModal;
+    const d = connectionStore.getById(connectionId)?.dialectInfo;
+    const isSchema = d?.usesSchema && d.dbLabel === 'Schema';
     const sql = isSchema
-      ? `CREATE SCHEMA ${qi(name, dbType)}`
-      : `CREATE DATABASE ${qi(name, dbType)}`;
+      ? `CREATE SCHEMA ${d ? dialectQi(name, d) : `"${name}"`}`
+      : `CREATE DATABASE ${d ? dialectQi(name, d) : `\`${name}\``}`;
     createDbLoading = true;
     createDbError = '';
     try {
@@ -360,7 +355,7 @@
   }
 
   function hostDisplay(profile: ConnectionProfile): string {
-    if (profile.dbType === 'sqlite') return profile.host;
+    if (!profile.dialectInfo.usesSchema) return profile.host;
     const db = profile.database ? `/${profile.database}` : '';
     return `${profile.host}:${profile.port}${db}`;
   }
@@ -397,7 +392,11 @@
 
       <button
         class="action-btn"
-        onclick={() => { newGroupName = ''; newGroupError = ''; showCreateGroupModal = true; }}
+        onclick={() => {
+          newGroupName = '';
+          newGroupError = '';
+          showCreateGroupModal = true;
+        }}
         title="New folder"
       >
         <FolderPlusIcon width={13} height={13} />
@@ -409,7 +408,10 @@
       </button>
       <button
         class="action-btn"
-        onclick={() => { exportPreselectIds = null; showExportDialog = true; }}
+        onclick={() => {
+          exportPreselectIds = null;
+          showExportDialog = true;
+        }}
         title="Export connections to JSON"
         disabled={connectionStore.profiles.length === 0}
       >
@@ -418,7 +420,11 @@
       </button>
       <button
         class="action-btn action-btn--primary"
-        onclick={() => { editingProfile = undefined; newConnectionGroupId = null; showAddForm = true; }}
+        onclick={() => {
+          editingProfile = undefined;
+          newConnectionGroupId = null;
+          showAddForm = true;
+        }}
       >
         <PlusIcon width={13} height={13} />
         Add Connection
@@ -437,8 +443,12 @@
         <p class="empty-subtitle">Add your first connection to get started</p>
         <button
           class="action-btn action-btn--primary"
-          onclick={() => { editingProfile = undefined; newConnectionGroupId = null; showAddForm = true; }}
-        >Add Connection</button>
+          onclick={() => {
+            editingProfile = undefined;
+            newConnectionGroupId = null;
+            showAddForm = true;
+          }}>Add Connection</button
+        >
       </div>
     {:else if filterQuery && totalVisible === 0}
       <div class="empty-state">
@@ -481,31 +491,73 @@
   {@const connected = isConnected(p.id)}
   {@const hasGroups = connectionStore.groups.length > 0}
   <ContextMenu x={cardCtx.x} y={cardCtx.y} open={true} onclose={() => (cardCtx = null)}>
-    {#if connected && !p.readOnly && p.dbType !== 'sqlite'}
-      <CtxItem onclick={() => { const prof = p; cardCtx = null; handleNewDatabase(prof); }}>
-        New {(p.dbType === 'postgres' || p.dbType === 'sqlserver') ? 'Schema' : 'Database'}
+    {#if connected && !p.readOnly && p.dialectInfo.usesSchema}
+      <CtxItem
+        onclick={() => {
+          const prof = p;
+          cardCtx = null;
+          handleNewDatabase(prof);
+        }}
+      >
+        New {p.dialectInfo.dbLabel}
       </CtxItem>
     {/if}
-    <CtxItem onclick={() => { const prof = p; cardCtx = null; handleManageUsers(prof); }}>
+    <CtxItem
+      onclick={() => {
+        const prof = p;
+        cardCtx = null;
+        handleManageUsers(prof);
+      }}
+    >
       Manage Users
     </CtxItem>
     <CtxSep />
-    <CtxItem onclick={() => { const prof = p; cardCtx = null; handleDuplicate(prof); }}>
+    <CtxItem
+      onclick={() => {
+        const prof = p;
+        cardCtx = null;
+        handleDuplicate(prof);
+      }}
+    >
       Duplicate
     </CtxItem>
-    <CtxItem onclick={() => { const prof = p; cardCtx = null; handleCopyName(prof); }}>
+    <CtxItem
+      onclick={() => {
+        const prof = p;
+        cardCtx = null;
+        handleCopyName(prof);
+      }}
+    >
       Copy Name
     </CtxItem>
     <CtxSep />
     {#if connected}
-      <CtxItem onclick={() => { const prof = p; cardCtx = null; handleDisconnect(prof).then(() => handleConnect(prof)); }}>
+      <CtxItem
+        onclick={() => {
+          const prof = p;
+          cardCtx = null;
+          handleDisconnect(prof).then(() => handleConnect(prof));
+        }}
+      >
         Refresh
       </CtxItem>
-      <CtxItem onclick={() => { const prof = p; cardCtx = null; handleDisconnect(prof); }}>
+      <CtxItem
+        onclick={() => {
+          const prof = p;
+          cardCtx = null;
+          handleDisconnect(prof);
+        }}
+      >
         Disconnect
       </CtxItem>
     {/if}
-    <CtxItem onclick={() => { const prof = p; cardCtx = null; handleCloseAllTabs(prof); }}>
+    <CtxItem
+      onclick={() => {
+        const prof = p;
+        cardCtx = null;
+        handleCloseAllTabs(prof);
+      }}
+    >
       Close All Tabs
     </CtxItem>
     {#if hasGroups}
@@ -514,14 +566,26 @@
       {#if otherGroups.length > 0}
         <CtxSubmenuItem label="Move to">
           {#each otherGroups as g (g.id)}
-            <CtxItem onclick={() => { const prof = p; cardCtx = null; handleMoveToGroup(prof, g.id); }}>
+            <CtxItem
+              onclick={() => {
+                const prof = p;
+                cardCtx = null;
+                handleMoveToGroup(prof, g.id);
+              }}
+            >
               {g.name}
             </CtxItem>
           {/each}
         </CtxSubmenuItem>
       {/if}
       {#if p.groupId !== null}
-        <CtxItem onclick={() => { const prof = p; cardCtx = null; handleMoveToGroup(prof, null); }}>
+        <CtxItem
+          onclick={() => {
+            const prof = p;
+            cardCtx = null;
+            handleMoveToGroup(prof, null);
+          }}
+        >
           Remove from Group
         </CtxItem>
       {/if}
@@ -566,7 +630,10 @@
 
 <!-- New folder modal -->
 {#if showCreateGroupModal}
-  <Modal label="New Folder" onbackdropclick={newGroupLoading ? undefined : () => (showCreateGroupModal = false)}>
+  <Modal
+    label="New Folder"
+    onbackdropclick={newGroupLoading ? undefined : () => (showCreateGroupModal = false)}
+  >
     <div class="create-modal-card">
       <div class="create-modal-title">New Folder</div>
       <div class="create-modal-body">
@@ -586,14 +653,22 @@
           }}
         />
         {#if newGroupError}
-          <p class="field-error">{newGroupError}</p>
+          <ErrorMessage message={newGroupError} />
         {/if}
       </div>
       <div class="create-modal-footer">
-        <button class="btn-secondary" onclick={() => (showCreateGroupModal = false)} disabled={newGroupLoading}>
+        <button
+          class="btn-secondary"
+          onclick={() => (showCreateGroupModal = false)}
+          disabled={newGroupLoading}
+        >
           Cancel
         </button>
-        <button class="btn-primary" onclick={commitCreateGroup} disabled={newGroupLoading || !newGroupName.trim()}>
+        <button
+          class="btn-primary"
+          onclick={commitCreateGroup}
+          disabled={newGroupLoading || !newGroupName.trim()}
+        >
           {newGroupLoading ? 'Creating…' : 'Create Folder'}
         </button>
       </div>
@@ -603,8 +678,12 @@
 
 <!-- New database/schema modal -->
 {#if createDbModal}
-  {@const dbLabel = (createDbModal.dbType === 'postgres' || createDbModal.dbType === 'sqlserver') ? 'Schema' : 'Database'}
-  <Modal label="New {dbLabel}" onbackdropclick={createDbLoading ? undefined : () => (createDbModal = null)}>
+  {@const dbLabel =
+    connectionStore.getById(createDbModal.connectionId)?.dialectInfo.dbLabel ?? 'Database'}
+  <Modal
+    label="New {dbLabel}"
+    onbackdropclick={createDbLoading ? undefined : () => (createDbModal = null)}
+  >
     <div class="create-modal-card">
       <div class="create-modal-title">New {dbLabel}</div>
       <div class="create-modal-body">
@@ -624,11 +703,15 @@
           }}
         />
         {#if createDbError}
-          <p class="field-error">{createDbError}</p>
+          <ErrorMessage message={createDbError} />
         {/if}
       </div>
       <div class="create-modal-footer">
-        <button class="btn-secondary" onclick={() => (createDbModal = null)} disabled={createDbLoading}>
+        <button
+          class="btn-secondary"
+          onclick={() => (createDbModal = null)}
+          disabled={createDbLoading}
+        >
           Cancel
         </button>
         <button class="btn-primary" onclick={executeCreateDatabase} disabled={createDbLoading}>
@@ -695,7 +778,7 @@
     <!-- Connection info -->
     <div class="card-detail">
       <span class="card-host" title={hostDisplay(profile)}>{hostDisplay(profile)}</span>
-      {#if profile.dbType !== 'sqlite' && profile.username}
+      {#if profile.dialectInfo.usesSchema && profile.username}
         <span class="card-user">{profile.username}</span>
       {/if}
     </div>
@@ -719,7 +802,11 @@
           Disconnect
         </button>
       {:else}
-        <button class="card-btn card-btn--connect" onclick={() => handleConnect(profile)} disabled={connecting}>
+        <button
+          class="card-btn card-btn--connect"
+          onclick={() => handleConnect(profile)}
+          disabled={connecting}
+        >
           {connecting ? 'Connecting…' : 'Connect'}
         </button>
       {/if}
@@ -762,7 +849,10 @@
         </button>
         <button
           class="card-icon-btn"
-          onclick={() => { exportPreselectIds = [profile.id]; showExportDialog = true; }}
+          onclick={() => {
+            exportPreselectIds = [profile.id];
+            showExportDialog = true;
+          }}
           title="Export"
           aria-label="Export connection"
         >
@@ -1021,12 +1111,20 @@
   }
 
   .card:hover {
-    border-color: color-mix(in srgb, var(--conn-color, var(--color-accent)) 50%, var(--color-border));
+    border-color: color-mix(
+      in srgb,
+      var(--conn-color, var(--color-accent)) 50%,
+      var(--color-border)
+    );
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
 
   .card--connected {
-    background: color-mix(in srgb, var(--conn-color, var(--color-accent)) 5%, var(--color-bg-secondary));
+    background: color-mix(
+      in srgb,
+      var(--conn-color, var(--color-accent)) 5%,
+      var(--color-bg-secondary)
+    );
   }
 
   .card--error {
@@ -1059,17 +1157,24 @@
   }
 
   .card-dot--connected {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--conn-color, var(--color-accent)) 40%, transparent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--conn-color, var(--color-accent)) 40%, transparent);
   }
 
   .card-dot--connecting {
     animation: dot-pulse 1s ease-in-out infinite;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--conn-color, var(--color-accent)) 40%, transparent);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--conn-color, var(--color-accent)) 40%, transparent);
   }
 
   @keyframes dot-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
   }
 
   .card-name {
@@ -1126,7 +1231,6 @@
     color: var(--color-warning, #f59e0b);
     border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent);
   }
-
 
   /* ── Card detail ─────────────────────────────────────────────────────────── */
 
@@ -1237,15 +1341,6 @@
     background: color-mix(in srgb, var(--conn-color, var(--color-accent)) 10%, transparent);
   }
 
-  .card-btn--open {
-    border-color: var(--color-success, #16a34a);
-    color: var(--color-success, #16a34a);
-  }
-
-  .card-btn--open:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-success, #16a34a) 10%, transparent);
-  }
-
   .card-btn--disconnect {
     border-color: var(--color-danger, #dc2626);
     color: var(--color-danger, #dc2626);
@@ -1340,12 +1435,6 @@
 
   .field-input:focus {
     border-color: var(--color-accent);
-  }
-
-  .field-error {
-    font-size: var(--font-size-xs);
-    color: var(--color-danger, #dc2626);
-    margin: 0;
   }
 
   .create-modal-footer {

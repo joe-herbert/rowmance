@@ -3,7 +3,117 @@ import { BUILTIN_DATABASES, BUILTIN_TABLE_PATTERNS } from '$lib/utils/system-ite
 
 // ── Database connections ────────────────────────────────────────────────────
 
-export type DbType = 'mysql' | 'mariadb' | 'postgres' | 'sqlite' | 'sqlserver';
+export type DbType = string;
+
+/** Engine-specific hints for parsing FK constraint violation errors. */
+export interface FkViolationHint {
+  /** Case-insensitive substring that identifies an FK violation in this engine's errors. */
+  detect: string;
+  /** Regex (no flags) with capture group 1 = referencing table name. */
+  tablePattern: string;
+  /** Regex with groups 1 = FK column (referencing table), 2 = referenced column (current table). */
+  columnPairPattern: string | null;
+  /** Regex with groups 1 = referenced column name, 2 = value embedded in the error text. */
+  columnValuePattern: string | null;
+}
+
+/**
+ * Dialect-specific metadata populated by the backend from db_type.
+ * Every engine-specific UI decision should read a field here instead of
+ * branching on dbType strings, so that new engines require no frontend changes.
+ */
+export interface DialectInfo {
+  // ── Identifier quoting ──────────────────────────────────────────────────────
+  identifierOpen: string;
+  identifierClose: string;
+  identifierEscape: string;
+
+  // ── Schema / namespace ──────────────────────────────────────────────────────
+  /** False for SQLite; true for all other engines. */
+  usesSchema: boolean;
+  /** "Database" or "Schema". */
+  dbLabel: string;
+  /** True for SQL Server: connection tree has Instance Database → Schema → Tables hierarchy. */
+  hasInstanceDatabases: boolean;
+
+  // ── Query syntax ────────────────────────────────────────────────────────────
+  /** SQL Server uses SELECT TOP n; others use LIMIT n. */
+  selectTop: boolean;
+  /** PostgreSQL uses TRUE/FALSE; others use 1/0. */
+  booleanLiterals: boolean;
+  /** PostgreSQL supports case-insensitive ILIKE; others use LIKE. */
+  usesIlike: boolean;
+  /** CAST template with {col} placeholder, e.g. "CAST({col} AS TEXT)". */
+  castToText: string;
+
+  // ── User management ─────────────────────────────────────────────────────────
+  supportsUserManagement: boolean;
+  /** MySQL/MariaDB identify users as username@host. */
+  hostBasedUsers: boolean;
+  /** PostgreSQL supports role-based grants. */
+  supportsRoles: boolean;
+
+  // ── Editor behaviour ────────────────────────────────────────────────────────
+  /** Scan SQL for @varname variables (MySQL/MariaDB). */
+  detectsSqlVariables: boolean;
+  /** Warn when USE db is issued inside a transaction (MySQL/MariaDB). */
+  warnsTxDatabaseMismatch: boolean;
+
+  // ── Display ─────────────────────────────────────────────────────────────────
+  /** e.g. "PostgreSQL", "MySQL", "SQLite", "SQL Server". */
+  displayName: string;
+
+  // ── Create-table UI ─────────────────────────────────────────────────────────
+  defaultColumnType: string;
+  commonColumnTypes: string[];
+
+  // ── Schema editor capabilities ───────────────────────────────────────────────
+  supportsAutoIncrement: boolean;
+  supportsColumnComment: boolean;
+  /** ALTER TABLE … CHANGE COLUMN syntax (MySQL/MariaDB). */
+  supportsChangeColumn: boolean;
+  /** ALTER TABLE … RENAME COLUMN syntax. */
+  supportsRenameColumn: boolean;
+  /** Uses FOREIGN KEY keyword in DROP (MySQL); others use CONSTRAINT. */
+  usesForeignKeyKeyword: boolean;
+  /** "on_table" | "schema_qualified" | "on_table_no_schema" | "simple" */
+  dropIndexSyntax: string;
+  defaultNewColumnType: string;
+
+  // ── Database/schema DDL ─────────────────────────────────────────────────────
+  /** True for MySQL/MariaDB (CREATE DATABASE / DROP DATABASE); false for schema-based engines. */
+  usesDatabaseKeyword: boolean;
+  /** True for PostgreSQL (DROP SCHEMA … CASCADE); false for SQL Server and others. */
+  dropSchemaCascade: boolean;
+
+  // ── Connection form ─────────────────────────────────────────────────────────
+  /** True when the engine connects to a file path (SQLite) rather than host/port. */
+  isFileBased: boolean;
+  /** Default TCP port shown in the connection form, or 0 for file-based engines. */
+  defaultPort: number;
+  /** URL schemes that identify this engine in a pasted connection URL. */
+  urlSchemes: string[];
+  /** URL template for generating a connection URL. Placeholders: {username} {password} {host} {port} {database}. */
+  urlTemplate: string;
+
+  // ── FK violation navigation ─────────────────────────────────────────────────
+  /** Hints for parsing FK constraint errors to offer "navigate to referencing table". Null when not supported. */
+  fkViolation: FkViolationHint | null;
+
+  // ── SQL editor ────────────────────────────────────────────────────────────
+  /** Syntax highlighter dialect for the SQL editor: "mysql" | "postgresql" | "sql". */
+  editorDialect: string;
+  /** How to parse EXPLAIN output: "mysql_json" | "postgres_json" | "sqlite_queryplan" | "sqlserver_xml". */
+  explainFormat: string;
+
+  // ── System-object filtering ─────────────────────────────────────────────────
+  /** Database names this engine considers internal/system (e.g. "information_schema"). */
+  systemDatabases: string[];
+
+  // ── File-based engine support ───────────────────────────────────────────────
+  /** File extensions this engine recognises (e.g. ["sqlite", "db", "sqlite3"]). Empty for network engines. */
+  fileExtensions: string[];
+}
 
 /** A connection profile as stored in the local SQLite database. */
 export interface ConnectionProfile {
@@ -32,6 +142,7 @@ export interface ConnectionProfile {
   pingInterval: number | null;
   createdAt: string;
   updatedAt: string;
+  dialectInfo: DialectInfo;
 }
 
 /** Input type for creating or updating a connection profile.
@@ -342,20 +453,29 @@ export type PanelKind =
       connectionId: string;
       database: string;
       table: string;
+      instanceDb?: string;
       initialFilter?: string;
     }
-  | { kind: 'table_structure'; connectionId: string; database: string; table: string }
+  | {
+      kind: 'table_structure';
+      connectionId: string;
+      database: string;
+      table: string;
+      instanceDb?: string;
+    }
   | {
       kind: 'ddl_viewer';
       connectionId: string;
       database: string;
       objectName: string;
       objectType: 'table' | 'view';
+      instanceDb?: string;
     }
-  | { kind: 'erd'; connectionId: string; database: string }
+  | { kind: 'erd'; connectionId: string; database: string; instanceDb?: string }
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'settings' }
   | { kind: 'user_manager'; connectionId: string }
+  | { kind: 'server_admin'; connectionId: string }
   | { kind: 'speed_analysis' }
   | { kind: 'release_notes'; version: string; notes: string }
   | { kind: 'connections' }
@@ -564,6 +684,91 @@ export interface Dashboard {
   widgets: DashboardWidget[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Server Admin ─────────────────────────────────────────────────────────────
+
+export type CapabilityStatus =
+  | { status: 'supported' }
+  | { status: 'notSupported' }
+  | { status: 'insufficientPrivileges' }
+  | { status: 'extensionRequired'; extension: string };
+
+export interface ServerAdminCapabilityFlags {
+  processList: CapabilityStatus;
+  killSession: CapabilityStatus;
+  cancelSession: CapabilityStatus;
+  serverStatus: CapabilityStatus;
+  variables: CapabilityStatus;
+  setVariable: CapabilityStatus;
+  scheduledJobs: CapabilityStatus;
+  locks: CapabilityStatus;
+  innodbStatus: CapabilityStatus;
+  vacuumStatus: CapabilityStatus;
+}
+
+export interface ProcessInfo {
+  id: string;
+  user: string | null;
+  host: string | null;
+  database: string | null;
+  command: string | null;
+  timeSeconds: number | null;
+  state: string | null;
+  info: string | null;
+  canKill: boolean;
+  canCancel: boolean;
+}
+
+export interface ServerStatus {
+  version: string;
+  uptimeSeconds: number;
+  connectionsCurrent: number;
+  connectionsMax: number | null;
+  queriesPerSecond: number | null;
+  cacheHitRatio: number | null;
+  extra: Record<string, string>;
+}
+
+export type VarScope = 'session' | 'global' | 'both';
+
+export interface ServerVariable {
+  name: string;
+  value: string;
+  scope: VarScope;
+  isDynamic: boolean;
+  restartRequired: boolean;
+  description: string | null;
+  dataType: string | null;
+}
+
+export interface LockInfo {
+  lockId: string;
+  blockerSessionId: string | null;
+  waitingSessionId: string | null;
+  lockType: string;
+  lockMode: string;
+  objectName: string | null;
+  durationMs: number | null;
+}
+
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  schedule: string;
+  enabled: boolean;
+  lastRun: string | null;
+  nextRun: string | null;
+  body: string | null;
+}
+
+export interface VacuumInfo {
+  table: string;
+  lastVacuum: string | null;
+  lastAutoVacuum: string | null;
+  deadTuples: number;
+  liveTuples: number;
+  bloatEstimateBytes: number | null;
 }
 
 // ── Errors ───────────────────────────────────────────────────────────────────

@@ -1,34 +1,8 @@
 /// MySQL/MariaDB-specific schema introspection queries.
-use serde::Serialize;
 use sqlx::MySqlPool;
 
+use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
 use crate::error::RowmanceError;
-
-#[derive(Debug, Serialize)]
-pub struct TableInfo {
-    pub name: String,
-    #[serde(rename = "tableType")]
-    pub table_type: String,
-    #[serde(rename = "rowCount")]
-    pub row_count: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ColumnInfo {
-    pub name: String,
-    #[serde(rename = "dataType")]
-    pub data_type: String,
-    pub nullable: bool,
-    #[serde(rename = "defaultValue")]
-    pub default_value: Option<String>,
-    #[serde(rename = "isPrimaryKey")]
-    pub is_primary_key: bool,
-    #[serde(rename = "isAutoIncrement")]
-    pub is_auto_increment: bool,
-    #[serde(rename = "isForeignKey")]
-    pub is_foreign_key: bool,
-    pub comment: Option<String>,
-}
 
 /// List all databases visible to this connection.
 pub async fn list_databases(pool: &MySqlPool) -> Result<Vec<String>, RowmanceError> {
@@ -236,30 +210,6 @@ pub async fn list_all_columns(
         .collect())
 }
 
-#[derive(Debug, Serialize)]
-pub struct IndexInfo {
-    pub name: String,
-    pub columns: Vec<String>,
-    pub unique: bool,
-    #[serde(rename = "indexType")]
-    pub index_type: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ForeignKeyInfo {
-    #[serde(rename = "constraintName")]
-    pub constraint_name: String,
-    pub columns: Vec<String>,
-    #[serde(rename = "referencedTable")]
-    pub referenced_table: String,
-    #[serde(rename = "referencedColumns")]
-    pub referenced_columns: Vec<String>,
-    #[serde(rename = "onDelete")]
-    pub on_delete: String,
-    #[serde(rename = "onUpdate")]
-    pub on_update: String,
-}
-
 /// List all indexes for a given table.
 pub async fn list_indexes(
     pool: &MySqlPool,
@@ -382,7 +332,11 @@ pub async fn count_table(
 }
 
 /// Return the CREATE TABLE / CREATE VIEW DDL for an object.
-pub async fn get_ddl(pool: &MySqlPool, database: &str, table: &str) -> Result<String, RowmanceError> {
+pub async fn get_ddl(
+    pool: &MySqlPool,
+    database: &str,
+    table: &str,
+) -> Result<String, RowmanceError> {
     // SHOW CREATE TABLE works for both tables and views in MySQL/MariaDB.
     let row = sqlx::query(&format!("SHOW CREATE TABLE `{database}`.`{table}`"))
         .fetch_one(pool)

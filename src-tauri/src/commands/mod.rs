@@ -10,6 +10,7 @@ pub mod menu;
 pub mod query;
 pub mod saved_queries;
 pub mod schema;
+pub mod server_admin;
 pub mod settings;
 #[cfg(debug_assertions)]
 pub mod speed_analysis;

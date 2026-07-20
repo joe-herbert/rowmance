@@ -187,7 +187,6 @@
     justify-content: center;
   }
 
-
   .dp-nav {
     width: 24px;
     height: 24px;

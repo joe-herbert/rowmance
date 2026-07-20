@@ -4,7 +4,7 @@
 
 .PHONY: help dev build check lint format test test-watch test-coverage \
         rust-check rust-lint rust-test rust-fmt rust-doc \
-        clean install update ci
+        clean install update ci test-db-up test-db-down
 
 ## Show all available targets
 help:
@@ -76,6 +76,16 @@ rust-fmt:
 ## Build and verify Rust documentation
 rust-doc:
 	SQLX_OFFLINE=true cargo doc --manifest-path src-tauri/Cargo.toml --no-deps
+
+# ── Test databases ────────────────────────────────────────────────────────────
+
+## Start the Postgres/SQL Server/MySQL/MariaDB test databases (docker compose)
+test-db-up:
+	docker compose -f docker-compose.yml up -d
+
+## Stop the test databases and remove their containers
+test-db-down:
+	docker compose -f docker-compose.yml down
 
 # ── Combined ──────────────────────────────────────────────────────────────────
 

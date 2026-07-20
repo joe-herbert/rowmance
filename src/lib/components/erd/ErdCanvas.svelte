@@ -17,9 +17,10 @@
   interface Props {
     connectionId: string;
     database: string;
+    instanceDb?: string;
   }
 
-  const { connectionId, database }: Props = $props();
+  const { connectionId, database, instanceDb }: Props = $props();
   const panelStore = usePanels();
 
   let svgEl = $state<SVGSVGElement | undefined>(undefined);
@@ -42,7 +43,7 @@
 
   onMount(async () => {
     try {
-      const graph = await erdApi.getErdGraph(connectionId, database);
+      const graph = await erdApi.getErdGraph(connectionId, database, instanceDb);
       const { nodes, edges } = graph;
 
       const elkNodes = nodes.map((table) => ({

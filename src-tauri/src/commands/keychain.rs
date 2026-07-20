@@ -34,8 +34,6 @@ mod macos {
         SecItemAdd, SecItemCopyMatching, SecItemDelete, SecItemUpdate,
     };
 
-    const ERR_SEC_NOT_FOUND: i32 = -25300; // errSecItemNotFound
-
     /// Build the base query attributes for a generic password in the Data
     /// Protection Keychain.  The DPK flag causes macOS to bypass ACL-based
     /// confirmation dialogs entirely.

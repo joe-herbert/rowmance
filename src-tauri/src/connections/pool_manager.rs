@@ -1,45 +1,20 @@
 /// Manages the set of active remote database connection pools.
 ///
-/// Each connection profile gets its own sqlx pool keyed by profile UUID.
+/// Each connection profile gets its own pool keyed by profile UUID.
 /// DashMap provides lock-free concurrent reads, which is important because
 /// many Tauri commands run concurrently on the Tokio runtime and all need
 /// to look up the pool on every query.
 use dashmap::DashMap;
-use sqlx::{
-    mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
-    postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
-    Executor,
-};
-use std::path::Path;
 use std::sync::Arc;
+use uuid;
 
+use crate::connections::engine::DatabaseEngine;
 use crate::error::RowmanceError;
 
-/// Reset MySQL connection to the given database using the text protocol (COM_QUERY).
-/// Extracted as a standalone `async fn` to give the borrow checker a concrete
-/// lifetime, working around the HKT limitation on `raw_sql().execute(&mut conn)`.
-async fn mysql_reset_db(conn: &mut sqlx::mysql::MySqlConnection, use_sql: &str) -> bool {
-    conn.execute(sqlx::raw_sql(use_sql)).await.is_ok()
-}
-
-/// Reset Postgres connection to the given schema using the text protocol.
-async fn pg_reset_schema(conn: &mut sqlx::postgres::PgConnection, set_path_sql: &str) -> bool {
-    conn.execute(sqlx::raw_sql(set_path_sql)).await.is_ok()
-}
-
-/// Unified handle for a pool that may be MySQL/MariaDB, PostgreSQL, SQLite, or SQL Server.
-/// The `bool` on the MySql/SqlServer variants is `read_only`: enforced via after_connect
-/// (`SET SESSION TRANSACTION READ ONLY`) for all pool connections. The
-/// after_release hook resets the database/schema context so released connections
-/// are always clean for the next caller.
+/// Opaque handle for an active connection pool.
+/// The adapter inside handles all engine-specific lifecycle operations.
 #[derive(Debug)]
-pub enum RemotePool {
-    MySql(sqlx::MySqlPool, bool),
-    Postgres(sqlx::PgPool),
-    Sqlite(sqlx::SqlitePool),
-    SqlServer(bb8::Pool<bb8_tiberius::ConnectionManager>, bool),
-}
+pub struct RemotePool(Arc<dyn crate::connections::engine::PoolAdapter>);
 
 /// Thread-safe registry of active remote pools.
 #[derive(Debug, Default)]
@@ -81,247 +56,83 @@ impl ConnectionManager {
         ssl_key_path: Option<&str>,
         read_only: bool,
     ) -> Result<(), RowmanceError> {
-        let pool = match db_type {
-            "mysql" | "mariadb" => {
-                let mut opts = MySqlConnectOptions::new()
-                    .host(host)
-                    .port(port)
-                    .database(database)
-                    .username(username);
-                if !password.is_empty() {
-                    opts = opts.password(password);
-                }
-
-                if ssl_enabled {
-                    let ssl_mode = if ssl_ca_path.is_some() {
-                        MySqlSslMode::VerifyCa
-                    } else {
-                        MySqlSslMode::Required
-                    };
-                    opts = opts.ssl_mode(ssl_mode);
-
-                    if let Some(ca) = ssl_ca_path {
-                        opts = opts.ssl_ca(Path::new(ca));
-                    }
-                    if let Some(cert) = ssl_cert_path {
-                        if let Some(key) = ssl_key_path {
-                            opts = opts
-                                .ssl_client_cert(Path::new(cert))
-                                .ssl_client_key(Path::new(key));
-                        }
-                    }
-                } else {
-                    opts = opts.ssl_mode(MySqlSslMode::Disabled);
-                }
-
-                let mut pool_opts = MySqlPoolOptions::new()
-                    .min_connections(0)
-                    .max_connections(pool_max)
-                    .acquire_timeout(std::time::Duration::from_secs(10))
-                    .test_before_acquire(true);
-                // SET SESSION TRANSACTION READ ONLY on every connection so the
-                // server enforces read-only regardless of what SQL is sent.
-                if read_only {
-                    pool_opts = pool_opts.after_connect(|conn, _meta| {
-                        Box::pin(async move {
-                            sqlx::query("SET SESSION TRANSACTION READ ONLY")
-                                .execute(conn)
-                                .await?;
-                            Ok(())
-                        })
-                    });
-                }
-                // Reset the database context when a connection is released back
-                // to the pool, so other callers always start with the default db.
-                // The USE statement must go over the text protocol (COM_QUERY) —
-                // MySQL rejects it as a prepared statement (error 1295). We build
-                // the SQL once and leak it to obtain a 'static reference, which is
-                // required by the `for<'c>` closure signature of after_release.
-                // One leaked string per pool (i.e., per connection profile) is
-                // negligible — pools live for the process lifetime anyway.
-                let db_esc = database.replace('`', "``");
-                let use_sql: &'static str = Box::leak(format!("USE `{}`", db_esc).into_boxed_str());
-                pool_opts = pool_opts.after_release(move |conn, _meta| {
-                    Box::pin(async move { Ok(mysql_reset_db(conn, use_sql).await) })
-                });
-                let p = pool_opts.connect_with(opts).await?;
-                // Verify credentials and warm up one idle connection.
-                // With min_connections(0) the pool is otherwise fully lazy.
-                p.acquire().await?;
-                RemotePool::MySql(p, read_only)
-            }
-            "postgres" => {
-                let mut opts = PgConnectOptions::new()
-                    .host(host)
-                    .port(port)
-                    .database(database)
-                    .username(username);
-                if !password.is_empty() {
-                    opts = opts.password(password);
-                }
-
-                if ssl_enabled {
-                    let ssl_mode = if ssl_ca_path.is_some() {
-                        PgSslMode::VerifyCa
-                    } else {
-                        PgSslMode::Require
-                    };
-                    opts = opts.ssl_mode(ssl_mode);
-
-                    if let Some(ca) = ssl_ca_path {
-                        opts = opts.ssl_root_cert(Path::new(ca));
-                    }
-                    if let Some(cert) = ssl_cert_path {
-                        opts = opts.ssl_client_cert(Path::new(cert));
-                    }
-                    if let Some(key) = ssl_key_path {
-                        opts = opts.ssl_client_key(Path::new(key));
-                    }
-                }
-
-                // default_transaction_read_only makes the server reject all
-                // writes at the session level, including CTEs and procedures.
-                if read_only {
-                    opts = opts.options([("default_transaction_read_only", "on")]);
-                }
-
-                // Reset the search_path when a connection is released back to
-                // the pool, so other callers always start with the default schema.
-                // Leak the SQL string once to satisfy the `for<'c>` closure bound.
-                let schema_esc = database.replace('\'', "''");
-                let set_path_sql: &'static str =
-                    Box::leak(format!("SET search_path = '{}'", schema_esc).into_boxed_str());
-                let p = PgPoolOptions::new()
-                    .min_connections(0)
-                    .max_connections(pool_max)
-                    .acquire_timeout(std::time::Duration::from_secs(10))
-                    .test_before_acquire(true)
-                    .after_release(move |conn, _meta| {
-                        Box::pin(async move { Ok(pg_reset_schema(conn, set_path_sql).await) })
-                    })
-                    .connect_with(opts)
-                    .await?;
-                // Verify credentials and warm up one idle connection.
-                p.acquire().await?;
-                RemotePool::Postgres(p)
-            }
-            "sqlite" => {
-                // For SQLite, `host` holds the file path (or `:memory:`).
-                // No user/password/SSL needed.
-                // read_only(true) opens the file with O_RDONLY so the OS
-                // prevents any writes even if bypassing our application logic.
-                let opts = SqliteConnectOptions::new()
-                    .filename(host)
-                    .read_only(read_only)
-                    .create_if_missing(!read_only);
-                let p = SqlitePoolOptions::new()
-                    .min_connections(0)
-                    .max_connections(pool_max)
-                    .connect_with(opts)
-                    .await?;
-                RemotePool::Sqlite(p)
-            }
-            "sqlserver" => {
-                use tiberius::{AuthMethod, Config, EncryptionLevel};
-
-                let mut config = Config::new();
-                config.host(host);
-                config.port(port);
-                config.database(database);
-                config.authentication(AuthMethod::sql_server(username, password));
-
-                if ssl_enabled {
-                    config.encryption(EncryptionLevel::Required);
-                    if ssl_ca_path.is_none() {
-                        // Trust self-signed certs when no CA is provided.
-                        config.trust_cert();
-                    }
-                } else {
-                    config.encryption(EncryptionLevel::NotSupported);
-                }
-
-                let manager = bb8_tiberius::ConnectionManager::build(config)
-                    .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
-                let pool = bb8::Pool::builder()
-                    .max_size(pool_max)
-                    .build(manager)
-                    .await
-                    .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
-
-                // Verify the credentials by acquiring one connection.
-                let _ = pool
-                    .get()
-                    .await
-                    .map_err(|e| RowmanceError::ConnectionNotFound(e.to_string()))?;
-
-                RemotePool::SqlServer(pool, read_only)
-            }
-            other => {
-                return Err(RowmanceError::ConnectionNotFound(format!(
-                    "Unknown db_type: {other}"
-                )));
-            }
-        };
-
-        self.pools.insert(id.to_owned(), pool);
+        let adapter = crate::connections::engines::connect_for_db_type(
+            db_type,
+            host,
+            port,
+            database,
+            username,
+            password,
+            pool_max,
+            ssl_enabled,
+            ssl_ca_path,
+            ssl_cert_path,
+            ssl_key_path,
+            read_only,
+        )
+        .await?;
+        self.pools
+            .insert(id.to_owned(), RemotePool(Arc::from(adapter)));
         self.names.insert(id.to_owned(), name.to_owned());
+        Ok(())
+    }
+
+    /// Test a connection without persisting a pool.
+    /// Creates a temporary single-connection pool, verifies credentials, then tears it down.
+    /// All engine-specific logic is delegated to `connect()` — no engine branching here.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn test_connect(
+        &self,
+        db_type: &str,
+        host: &str,
+        port: u16,
+        database: &str,
+        username: &str,
+        password: &str,
+        ssl_enabled: bool,
+        ssl_ca_path: Option<&str>,
+        ssl_cert_path: Option<&str>,
+        ssl_key_path: Option<&str>,
+    ) -> Result<(), crate::error::RowmanceError> {
+        let temp_id = format!("__test__{}", uuid::Uuid::new_v4());
+        self.connect(
+            &temp_id,
+            "__test__",
+            db_type,
+            host,
+            port,
+            database,
+            username,
+            password,
+            1,
+            ssl_enabled,
+            ssl_ca_path,
+            ssl_cert_path,
+            ssl_key_path,
+            false,
+        )
+        .await?;
+        self.disconnect(&temp_id).await;
         Ok(())
     }
 
     /// Close and remove the pool for the given connection id.
     pub async fn disconnect(&self, id: &str) {
         if let Some((_, pool)) = self.pools.remove(id) {
-            let close = async {
-                match pool {
-                    RemotePool::MySql(p, _) => p.close().await,
-                    RemotePool::Postgres(p) => p.close().await,
-                    RemotePool::Sqlite(p) => p.close().await,
-                    RemotePool::SqlServer(_, _) => {
-                        // bb8 pools are dropped automatically; no explicit close needed.
-                    }
-                }
-            };
-            // If the graceful close hangs (e.g. in-flight query or unreachable server),
-            // drop the pool after 3s — connections are forcibly closed on drop anyway.
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), close).await;
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(3), pool.0.disconnect()).await;
         }
     }
 
     /// Send a lightweight ping to check the connection is still alive.
     /// Returns false if no pool exists or the query fails.
-    /// SQLite is always considered alive (local file, no network to lose).
     pub async fn ping(&self, id: &str) -> bool {
         let Ok(pool) = self.get(id) else {
             return false;
         };
-        // Extract what we need before the async work begins so the dashmap ref
-        // (`pool`) is dropped before we hit any await points.
-        enum PingKind {
-            MySql(sqlx::MySqlPool),
-            Postgres(sqlx::PgPool),
-            Sqlite,
-            SqlServer(bb8::Pool<bb8_tiberius::ConnectionManager>),
-        }
-        let kind = match pool.value() {
-            RemotePool::MySql(p, _) => PingKind::MySql(p.clone()),
-            RemotePool::Postgres(p) => PingKind::Postgres(p.clone()),
-            RemotePool::Sqlite(_) => PingKind::Sqlite,
-            RemotePool::SqlServer(p, _) => PingKind::SqlServer(p.clone()),
-        };
+        let adapter = pool.0.clone();
         drop(pool);
-
-        match kind {
-            PingKind::MySql(p) => sqlx::query("SELECT 1").execute(&p).await.is_ok(),
-            PingKind::Postgres(p) => sqlx::query("SELECT 1").execute(&p).await.is_ok(),
-            PingKind::Sqlite => true,
-            PingKind::SqlServer(p) => {
-                if let Ok(mut conn) = p.get().await {
-                    conn.simple_query("SELECT 1").await.is_ok()
-                } else {
-                    false
-                }
-            }
-        }
+        adapter.ping().await
     }
 
     /// Returns true if a pool exists for the given id.
@@ -348,6 +159,13 @@ impl ConnectionManager {
                 .unwrap_or_else(|| id.to_owned());
             RowmanceError::ConnectionNotActive(name)
         })
+    }
+
+    /// Construct a `DatabaseEngine` trait object for the given connection id.
+    /// Clones the underlying pool handle (cheap — pools are internally Arc-wrapped).
+    pub fn get_engine(&self, id: &str) -> Result<Arc<dyn DatabaseEngine>, RowmanceError> {
+        let pool_ref = self.get(id)?;
+        Ok(pool_ref.0.get_engine())
     }
 }
 
@@ -401,7 +219,7 @@ mod tests {
                 .connect(
                     "id",
                     "name",
-                    "oracle",
+                    "badtype",
                     "localhost",
                     1521,
                     "db",
@@ -423,88 +241,6 @@ mod tests {
         ));
     }
 
-    // ── SSL option building tests ─────────────────────────────────────────────
-    // These verify the option-building logic without requiring a real DB.
-
-    #[test]
-    fn mysql_ssl_disabled_uses_no_ssl_options() {
-        // Build options manually as the connect() function would for mysql with ssl off.
-        let opts = MySqlConnectOptions::new()
-            .host("localhost")
-            .port(3306)
-            .database("db")
-            .username("user")
-            .password("pw");
-        // Simply verify the struct can be constructed without error.
-        let _ = opts;
-    }
-
-    #[test]
-    fn mysql_ssl_required_mode_set_when_no_ca() {
-        // When ssl_enabled=true and no CA path, mode should be Required.
-        let opts = MySqlConnectOptions::new()
-            .host("localhost")
-            .port(3306)
-            .database("db")
-            .username("user")
-            .password("pw")
-            .ssl_mode(MySqlSslMode::Required);
-        let _ = opts;
-    }
-
-    #[test]
-    fn mysql_ssl_verify_ca_mode_set_when_ca_present() {
-        // When ssl_enabled=true and CA path is given, mode should be VerifyCa.
-        let opts = MySqlConnectOptions::new()
-            .host("localhost")
-            .port(3306)
-            .database("db")
-            .username("user")
-            .password("pw")
-            .ssl_mode(MySqlSslMode::VerifyCa)
-            .ssl_ca(Path::new("/tmp/ca.pem"));
-        let _ = opts;
-    }
-
-    #[test]
-    fn postgres_ssl_require_mode_set_when_no_ca() {
-        let opts = PgConnectOptions::new()
-            .host("localhost")
-            .port(5432)
-            .database("db")
-            .username("user")
-            .password("pw")
-            .ssl_mode(PgSslMode::Require);
-        let _ = opts;
-    }
-
-    #[test]
-    fn postgres_ssl_verify_ca_mode_set_when_ca_present() {
-        let opts = PgConnectOptions::new()
-            .host("localhost")
-            .port(5432)
-            .database("db")
-            .username("user")
-            .password("pw")
-            .ssl_mode(PgSslMode::VerifyCa)
-            .ssl_root_cert(Path::new("/tmp/ca.pem"));
-        let _ = opts;
-    }
-
-    #[test]
-    fn postgres_ssl_with_client_cert_and_key() {
-        let opts = PgConnectOptions::new()
-            .host("localhost")
-            .port(5432)
-            .database("db")
-            .username("user")
-            .password("pw")
-            .ssl_mode(PgSslMode::Require)
-            .ssl_client_cert(Path::new("/tmp/client.crt"))
-            .ssl_client_key(Path::new("/tmp/client.key"));
-        let _ = opts;
-    }
-
     #[test]
     fn unknown_db_type_errors_even_with_ssl_enabled() {
         let manager = ConnectionManager::new();
@@ -513,7 +249,7 @@ mod tests {
                 .connect(
                     "id",
                     "name",
-                    "oracle",
+                    "badtype",
                     "localhost",
                     1521,
                     "db",

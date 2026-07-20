@@ -42,8 +42,7 @@
         class="toast-dismiss"
         onclick={() => toastStore.dismiss(toast.id)}
         aria-label="Dismiss notification"
-        title="Dismiss"
-        ><CloseIcon width={10} height={10} strokeWidth={2.5} /></button
+        title="Dismiss"><CloseIcon width={10} height={10} strokeWidth={2.5} /></button
       >
     </div>
   {/each}

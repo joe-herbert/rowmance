@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::connections::pool_manager::ConnectionManager;
 use crate::connections::ssh_tunnel::SshTunnelManager;
+use crate::connections::types::DialectInfo;
 use crate::db::models::{ConnectionGroupRow, ConnectionProfileRow};
 use crate::error::AppError;
 
@@ -57,10 +58,13 @@ pub struct ConnectionProfile {
     pub created_at: String,
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
+    #[serde(rename = "dialectInfo")]
+    pub dialect_info: DialectInfo,
 }
 
 impl From<ConnectionProfileRow> for ConnectionProfile {
     fn from(r: ConnectionProfileRow) -> Self {
+        let dialect_info = DialectInfo::for_db_type(&r.db_type);
         Self {
             id: r.id,
             group_id: r.group_id,
@@ -86,6 +90,7 @@ impl From<ConnectionProfileRow> for ConnectionProfile {
             ping_interval: r.ping_interval,
             created_at: r.created_at,
             updated_at: r.updated_at,
+            dialect_info,
         }
     }
 }
@@ -333,6 +338,7 @@ pub async fn connections_delete(sqlite: State<'_, SqlitePool>, id: String) -> Re
 pub async fn connections_test(
     sqlite: State<'_, SqlitePool>,
     tunnels: State<'_, Arc<SshTunnelManager>>,
+    connections: State<'_, Arc<ConnectionManager>>,
     id: String,
     password: Option<String>,
 ) -> Result<ConnectionTestResult, AppError> {
@@ -394,114 +400,43 @@ pub async fn connections_test(
 
     let start = std::time::Instant::now();
 
-    let result = match row.db_type.as_str() {
-        "mysql" | "mariadb" => {
-            let mut opts = sqlx::mysql::MySqlConnectOptions::new()
-                .host(&connect_host)
-                .port(connect_port)
-                .username(&row.username)
-                .database(&row.database);
-            if !password.is_empty() {
-                opts = opts.password(&password);
-            }
-            sqlx::mysql::MySqlPoolOptions::new()
-                .max_connections(1)
-                .connect_with(opts)
-                .await
-                .map(|_| ())
-        }
-        "postgres" => {
-            let mut opts = sqlx::postgres::PgConnectOptions::new()
-                .host(&connect_host)
-                .port(connect_port)
-                .username(&row.username)
-                .database(&row.database);
-            if !password.is_empty() {
-                opts = opts.password(&password);
-            }
-            sqlx::postgres::PgPoolOptions::new()
-                .max_connections(1)
-                .connect_with(opts)
-                .await
-                .map(|_| ())
-        }
-        "sqlite" => {
-            use sqlx::sqlite::SqliteConnectOptions;
-            let opts = SqliteConnectOptions::new()
-                .filename(&row.host)
-                .create_if_missing(true);
-            sqlx::sqlite::SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect_with(opts)
-                .await
-                .map(|_| ())
-        }
-        "sqlserver" => {
-            use tiberius::{AuthMethod, Config, EncryptionLevel};
-            use tokio::net::TcpStream;
-            use tokio_util::compat::TokioAsyncWriteCompatExt;
-            let mut config = Config::new();
-            config.host(&connect_host);
-            config.port(connect_port);
-            config.database(&row.database);
-            config.authentication(AuthMethod::sql_server(&row.username, &password));
-            config.encryption(EncryptionLevel::NotSupported);
-            let test_result = match TcpStream::connect(config.get_addr()).await {
-                Err(e) => Err(e.to_string()),
-                Ok(tcp) => {
-                    tcp.set_nodelay(true).ok();
-                    tiberius::Client::connect(config, tcp.compat_write())
-                        .await
-                        .map(|_| ())
-                        .map_err(|e| e.to_string())
-                }
-            };
-            let latency_ms = start.elapsed().as_millis() as u64;
-            tunnels.destroy_tunnel(&tunnel_key);
-            return Ok(match test_result {
-                Ok(()) => ConnectionTestResult {
-                    success: true,
-                    message: "Connection successful".to_owned(),
-                    latency_ms: Some(latency_ms),
-                },
-                Err(msg) => ConnectionTestResult {
-                    success: false,
-                    message: msg,
-                    latency_ms: None,
-                },
-            });
-        }
-        _ => {
-            tunnels.destroy_tunnel(&tunnel_key);
-            return Ok(ConnectionTestResult {
-                success: false,
-                message: format!("Unknown db_type: {}", row.db_type),
-                latency_ms: None,
-            });
-        }
-    };
+    let test_result = connections
+        .test_connect(
+            &row.db_type,
+            &connect_host,
+            connect_port,
+            &row.database,
+            &row.username,
+            &password,
+            row.ssl_enabled,
+            row.ssl_ca_path.as_deref(),
+            row.ssl_cert_path.as_deref(),
+            row.ssl_key_path.as_deref(),
+        )
+        .await;
 
     tunnels.destroy_tunnel(&tunnel_key);
     let latency_ms = start.elapsed().as_millis() as u64;
 
-    match result {
-        Ok(_) => Ok(ConnectionTestResult {
+    Ok(match test_result {
+        Ok(()) => ConnectionTestResult {
             success: true,
             message: "Connection successful".to_owned(),
             latency_ms: Some(latency_ms),
-        }),
-        Err(e) => Ok(ConnectionTestResult {
+        },
+        Err(e) => ConnectionTestResult {
             success: false,
             message: e.to_string(),
             latency_ms: None,
-        }),
-    }
+        },
+    })
 }
 
 /// Test a connection from raw input without saving it to the database.
 #[tauri::command]
 pub async fn connections_test_unsaved(
     tunnels: State<'_, Arc<SshTunnelManager>>,
+    connections: State<'_, Arc<ConnectionManager>>,
     input: ConnectionProfileInput,
     password: Option<String>,
     ssh_password: Option<String>,
@@ -543,104 +478,36 @@ pub async fn connections_test_unsaved(
 
     let start = std::time::Instant::now();
 
-    let result = match input.db_type.as_str() {
-        "mysql" | "mariadb" => {
-            let opts = sqlx::mysql::MySqlConnectOptions::new()
-                .host(&connect_host)
-                .port(connect_port)
-                .username(&input.username)
-                .password(&password)
-                .database(&input.database);
-            sqlx::mysql::MySqlPoolOptions::new()
-                .max_connections(1)
-                .connect_with(opts)
-                .await
-                .map(|_| ())
-        }
-        "postgres" => {
-            let opts = sqlx::postgres::PgConnectOptions::new()
-                .host(&connect_host)
-                .port(connect_port)
-                .username(&input.username)
-                .password(&password)
-                .database(&input.database);
-            sqlx::postgres::PgPoolOptions::new()
-                .max_connections(1)
-                .connect_with(opts)
-                .await
-                .map(|_| ())
-        }
-        "sqlite" => {
-            use sqlx::sqlite::SqliteConnectOptions;
-            let opts = SqliteConnectOptions::new()
-                .filename(&input.host)
-                .create_if_missing(true);
-            sqlx::sqlite::SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect_with(opts)
-                .await
-                .map(|_| ())
-        }
-        "sqlserver" => {
-            use tiberius::{AuthMethod, Config, EncryptionLevel};
-            use tokio::net::TcpStream;
-            use tokio_util::compat::TokioAsyncWriteCompatExt;
-            let mut config = Config::new();
-            config.host(&connect_host);
-            config.port(connect_port);
-            config.database(&input.database);
-            config.authentication(AuthMethod::sql_server(&input.username, &password));
-            config.encryption(EncryptionLevel::NotSupported);
-            let test_result = match TcpStream::connect(config.get_addr()).await {
-                Err(e) => Err(e.to_string()),
-                Ok(tcp) => {
-                    tcp.set_nodelay(true).ok();
-                    tiberius::Client::connect(config, tcp.compat_write())
-                        .await
-                        .map(|_| ())
-                        .map_err(|e| e.to_string())
-                }
-            };
-            let latency_ms = start.elapsed().as_millis() as u64;
-            tunnels.destroy_tunnel(&tunnel_key);
-            return Ok(match test_result {
-                Ok(()) => ConnectionTestResult {
-                    success: true,
-                    message: "Connection successful".to_owned(),
-                    latency_ms: Some(latency_ms),
-                },
-                Err(msg) => ConnectionTestResult {
-                    success: false,
-                    message: msg,
-                    latency_ms: None,
-                },
-            });
-        }
-        _ => {
-            tunnels.destroy_tunnel(&tunnel_key);
-            return Ok(ConnectionTestResult {
-                success: false,
-                message: format!("Unknown db_type: {}", input.db_type),
-                latency_ms: None,
-            });
-        }
-    };
+    let test_result = connections
+        .test_connect(
+            &input.db_type,
+            &connect_host,
+            connect_port,
+            &input.database,
+            &input.username,
+            &password,
+            input.ssl_enabled,
+            input.ssl_ca_path.as_deref(),
+            input.ssl_cert_path.as_deref(),
+            input.ssl_key_path.as_deref(),
+        )
+        .await;
 
     tunnels.destroy_tunnel(&tunnel_key);
     let latency_ms = start.elapsed().as_millis() as u64;
 
-    match result {
-        Ok(_) => Ok(ConnectionTestResult {
+    Ok(match test_result {
+        Ok(()) => ConnectionTestResult {
             success: true,
             message: "Connection successful".to_owned(),
             latency_ms: Some(latency_ms),
-        }),
-        Err(e) => Ok(ConnectionTestResult {
+        },
+        Err(e) => ConnectionTestResult {
             success: false,
             message: e.to_string(),
             latency_ms: None,
-        }),
-    }
+        },
+    })
 }
 
 /// Open a connection pool for the given profile.
@@ -1150,6 +1017,27 @@ pub async fn connections_export(
     Ok(())
 }
 
+// ── Dialect listing command ───────────────────────────────────────────────────
+
+/// Dialect metadata for a single engine type.
+#[derive(Debug, Serialize)]
+pub struct DialectEntry {
+    #[serde(rename = "dbType")]
+    pub db_type: String,
+    pub dialect: DialectInfo,
+}
+
+/// Return dialect metadata for all engines known to this build.
+/// The frontend uses this to drive engine-specific UI (ports, URL schemes, etc.)
+/// without hardcoding engine names in component code.
+#[tauri::command]
+pub async fn connections_list_dialects() -> Vec<DialectEntry> {
+    DialectInfo::all_known()
+        .into_iter()
+        .map(|(db_type, dialect)| DialectEntry { db_type, dialect })
+        .collect()
+}
+
 // ── Database URL command ──────────────────────────────────────────────────────
 
 /// Build a database URL for a connection profile, including the password from
@@ -1169,27 +1057,20 @@ pub async fn connections_get_db_url(
 
     let password = retrieve_keychain_password(&id);
 
-    let url = match row.db_type.as_str() {
-        "mysql" | "mariadb" => format!(
-            "mysql://{}:{}@{}:{}/{}",
-            row.username, password, row.host, row.port, row.database
-        ),
-        "postgres" => format!(
-            "postgres://{}:{}@{}:{}/{}",
-            row.username, password, row.host, row.port, row.database
-        ),
-        "sqlite" => format!("sqlite://{}", row.host),
-        "sqlserver" => format!(
-            "sqlserver://{}:{}@{}:{}/{}",
-            row.username, password, row.host, row.port, row.database
-        ),
-        other => {
-            return Err(AppError::new(
-                "UNSUPPORTED",
-                format!("Unknown db_type: {other}"),
-            ))
-        }
-    };
+    let dialect = DialectInfo::for_db_type(&row.db_type);
+    if dialect.url_template.is_empty() {
+        return Err(AppError::new(
+            "UNSUPPORTED",
+            format!("Unknown db_type: {}", row.db_type),
+        ));
+    }
+    let url = dialect
+        .url_template
+        .replace("{username}", &row.username)
+        .replace("{password}", &password)
+        .replace("{host}", &row.host)
+        .replace("{port}", &row.port.to_string())
+        .replace("{database}", &row.database);
 
     Ok(url)
 }

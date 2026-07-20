@@ -121,7 +121,7 @@
     border-color: var(--color-accent-hover);
   }
 
-  .checkbox-check {
+  :global(.checkbox-check) {
     width: 10px;
     height: 8px;
     color: white;
@@ -132,12 +132,12 @@
       transform var(--transition-fast);
   }
 
-  .checkbox-wrapper--sm .checkbox-check {
+  .checkbox-wrapper--sm :global(.checkbox-check) {
     width: 8px;
     height: 6px;
   }
 
-  .checkbox-box--checked .checkbox-check {
+  .checkbox-box--checked :global(.checkbox-check) {
     opacity: 1;
     transform: scale(1);
   }

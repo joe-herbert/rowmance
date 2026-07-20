@@ -1,6 +1,6 @@
 import type { QueryResult } from '$lib/types';
 
-export type SavedQueryEditorState = {
+type SavedQueryEditorState = {
   sql: string;
   results: QueryResult[];
   executedStatements: string[];

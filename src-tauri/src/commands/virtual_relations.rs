@@ -64,6 +64,7 @@ struct PolymorphicVrRow {
 }
 
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct PolymorphicMappingRow {
     id: String,
     relation_id: String,
@@ -220,10 +221,13 @@ pub async fn polymorphic_vr_update(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    sqlx::query!("DELETE FROM polymorphic_vr_mappings WHERE relation_id = ?", id)
-        .execute(sqlite.inner())
-        .await
-        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    sqlx::query!(
+        "DELETE FROM polymorphic_vr_mappings WHERE relation_id = ?",
+        id
+    )
+    .execute(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     for mapping in &input.mappings {
         let mapping_id = Uuid::new_v4().to_string();
@@ -263,13 +267,10 @@ pub async fn polymorphic_vr_delete(
     sqlite: State<'_, SqlitePool>,
     id: String,
 ) -> Result<(), AppError> {
-    sqlx::query!(
-        "DELETE FROM polymorphic_virtual_relations WHERE id = ?",
-        id
-    )
-    .execute(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    sqlx::query!("DELETE FROM polymorphic_virtual_relations WHERE id = ?", id)
+        .execute(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
     Ok(())
 }
 

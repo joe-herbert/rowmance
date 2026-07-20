@@ -6,7 +6,13 @@ import type {
   ConnectionGroup,
   ConnectionGroupInput,
   ConnectionTestResult,
+  DialectInfo,
 } from '$lib/types';
+
+export interface DialectEntry {
+  dbType: string;
+  dialect: DialectInfo;
+}
 
 export async function listConnections(): Promise<ConnectionProfile[]> {
   return invoke<ConnectionProfile[]>('connections_list');
@@ -99,4 +105,8 @@ export async function copyConnectionDbUrlToClipboard(id: string): Promise<void> 
 
 export async function duplicateConnection(id: string): Promise<ConnectionProfile> {
   return invoke<ConnectionProfile>('connections_duplicate', { id });
+}
+
+export async function listDialects(): Promise<DialectEntry[]> {
+  return invoke<DialectEntry[]>('connections_list_dialects');
 }

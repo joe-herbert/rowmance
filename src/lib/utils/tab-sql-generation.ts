@@ -1,20 +1,10 @@
 import * as schemaApi from '$lib/tauri/schema';
+import { qi, tableRef } from '$lib/utils/dialect';
 import type { useConnections } from '$lib/stores/connections.svelte';
 import type { usePanels } from '$lib/stores/panels.svelte';
 
 type ConnectionStore = ReturnType<typeof useConnections>;
 type PanelStore = ReturnType<typeof usePanels>;
-
-export function qi(name: string, dbType: string): string {
-  if (dbType === 'mysql' || dbType === 'mariadb') return '`' + name.replace(/`/g, '``') + '`';
-  if (dbType === 'sqlserver') return '[' + name.replace(/\]/g, ']]') + ']';
-  return '"' + name.replace(/"/g, '""') + '"';
-}
-
-export function tableRef(database: string, table: string, dbType: string): string {
-  if (dbType === 'sqlite') return qi(table, dbType);
-  return `${qi(database, dbType)}.${qi(table, dbType)}`;
-}
 
 export function generateSqlSelectAll(
   connectionId: string,
@@ -25,7 +15,7 @@ export function generateSqlSelectAll(
 ) {
   const profile = connectionStore.getById(connectionId);
   if (!profile) return;
-  const ref = tableRef(database, table, profile.dbType);
+  const ref = tableRef(database, table, profile.dialectInfo);
   panelStore.openCopyInFocused({
     kind: 'query_editor',
     connectionId,
@@ -43,11 +33,10 @@ export function generateSqlSelectFirst(
 ) {
   const profile = connectionStore.getById(connectionId);
   if (!profile) return;
-  const ref = tableRef(database, table, profile.dbType);
-  const initialSql =
-    profile.dbType === 'sqlserver'
-      ? `SELECT TOP  * FROM ${ref}`
-      : `SELECT * FROM ${ref} LIMIT `;
+  const ref = tableRef(database, table, profile.dialectInfo);
+  const initialSql = profile.dialectInfo.selectTop
+    ? `SELECT TOP  * FROM ${ref}`
+    : `SELECT * FROM ${ref} LIMIT `;
   panelStore.openCopyInFocused({
     kind: 'query_editor',
     connectionId,
@@ -65,12 +54,12 @@ export async function generateSqlInsert(
 ) {
   const profile = connectionStore.getById(connectionId);
   if (!profile) return;
-  const ref = tableRef(database, table, profile.dbType);
+  const ref = tableRef(database, table, profile.dialectInfo);
   let sql: string;
   try {
     const columns = await schemaApi.listColumns(connectionId, database, table);
     const insertCols = columns.filter((c) => !c.isAutoIncrement);
-    const colList = insertCols.map((c) => qi(c.name, profile.dbType)).join(', ');
+    const colList = insertCols.map((c) => qi(c.name, profile.dialectInfo)).join(', ');
     const valList = insertCols.map(() => '').join(', ');
     sql = `INSERT INTO ${ref} (${colList})\nVALUES (${valList})`;
   } catch {
@@ -88,17 +77,17 @@ export async function generateSqlUpdate(
 ) {
   const profile = connectionStore.getById(connectionId);
   if (!profile) return;
-  const ref = tableRef(database, table, profile.dbType);
+  const ref = tableRef(database, table, profile.dialectInfo);
   let sql: string;
   try {
     const columns = await schemaApi.listColumns(connectionId, database, table);
     const pkCols = columns.filter((c) => c.isPrimaryKey);
     const dataCols = columns.filter((c) => !c.isPrimaryKey);
     const setCols = dataCols.length > 0 ? dataCols : columns;
-    const setClauses = setCols.map((c) => `    ${qi(c.name, profile.dbType)} = `).join(',\n');
+    const setClauses = setCols.map((c) => `    ${qi(c.name, profile.dialectInfo)} = `).join(',\n');
     const whereClauses =
       pkCols.length > 0
-        ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+        ? pkCols.map((c) => `${qi(c.name, profile.dialectInfo)} = `).join(' AND ')
         : '';
     sql = `UPDATE ${ref}\nSET\n${setClauses}\nWHERE ${whereClauses}`;
   } catch {
@@ -116,14 +105,14 @@ export async function generateSqlDelete(
 ) {
   const profile = connectionStore.getById(connectionId);
   if (!profile) return;
-  const ref = tableRef(database, table, profile.dbType);
+  const ref = tableRef(database, table, profile.dialectInfo);
   let sql: string;
   try {
     const columns = await schemaApi.listColumns(connectionId, database, table);
     const pkCols = columns.filter((c) => c.isPrimaryKey);
     const whereClauses =
       pkCols.length > 0
-        ? pkCols.map((c) => `${qi(c.name, profile.dbType)} = `).join(' AND ')
+        ? pkCols.map((c) => `${qi(c.name, profile.dialectInfo)} = `).join(' AND ')
         : '';
     sql = `DELETE FROM ${ref}\nWHERE ${whereClauses}`;
   } catch {

@@ -27,6 +27,7 @@
   import { useRecording } from '$lib/stores/recording.svelte';
   import { useRevert } from '$lib/stores/revert.svelte';
   import { useDashboards } from '$lib/stores/dashboards.svelte';
+  import { getAllFileExtensions } from '$lib/stores/dialects.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
@@ -163,13 +164,14 @@
     panelStore.openInFocused({ kind: 'settings' });
   }
 
-  async function openSqliteFile(filePath: string) {
+  async function openFileBasedDb(filePath: string, dbType: string) {
     const filename = filePath.split('/').pop() ?? filePath;
-    const name = filename.replace(/\.(sqlite3?|db)$/i, '');
+    const extPattern = /\.[^.]+$/i;
+    const name = filename.replace(extPattern, '');
     try {
       const profile = await connectionsStore.create({
         name,
-        dbType: 'sqlite',
+        dbType,
         host: filePath,
         port: 0,
         database: '',
@@ -202,9 +204,10 @@
   }
 
   async function handleFileOpen(filePath: string) {
-    const ext = filePath.split('.').pop()?.toLowerCase();
-    if (ext === 'sqlite' || ext === 'db' || ext === 'sqlite3') {
-      await openSqliteFile(filePath);
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+    const match = getAllFileExtensions().find((e) => e.ext === ext);
+    if (match) {
+      await openFileBasedDb(filePath, match.dbType);
     } else if (ext === 'sql') {
       await openSqlFile(filePath);
     }
@@ -294,11 +297,10 @@
         }
       }),
       listen('menu:open-file', async () => {
+        const dbExts = getAllFileExtensions().map((e) => e.ext);
         const filePath = await openFileDialog({
           multiple: false,
-          filters: [
-            { name: 'Database & SQL Files', extensions: ['sqlite', 'db', 'sqlite3', 'sql'] },
-          ],
+          filters: [{ name: 'Database & SQL Files', extensions: [...dbExts, 'sql'] }],
         });
         if (filePath && typeof filePath === 'string') {
           await handleFileOpen(filePath);
@@ -676,7 +678,11 @@
 
   function openTxQueryInEditor(sql: string) {
     if (!activeConnection) return;
-    panelStore.openInFocused({ kind: 'query_editor', connectionId: activeConnection.id, initialSql: sql });
+    panelStore.openInFocused({
+      kind: 'query_editor',
+      connectionId: activeConnection.id,
+      initialSql: sql,
+    });
     connChipOpen = false;
   }
 
@@ -759,8 +765,7 @@
           <span
             class="conn-chip-dot"
             class:conn-chip-dot--dim={!isConnected}
-            style="background: {activeConnection.color ??
-              'var(--color-accent)'}; {isConnected
+            style="background: {activeConnection.color ?? 'var(--color-accent)'}; {isConnected
               ? `box-shadow: 0 0 0 3px color-mix(in srgb, ${activeConnection.color ?? 'var(--color-accent)'} 26%, transparent)`
               : ''}"
           ></span>
@@ -770,9 +775,19 @@
             <span class="conn-chip-tx-badge" aria-label="Transaction active">TX</span>
           {/if}
           {#if recordingStore.isRecordingConnection(activeConnection.id)}
-            <span class="conn-chip-rec-dot" class:conn-chip-rec-dot--paused={recordingStore.isPaused} aria-label="Recording active"></span>
+            <span
+              class="conn-chip-rec-dot"
+              class:conn-chip-rec-dot--paused={recordingStore.isPaused}
+              aria-label="Recording active"
+            ></span>
           {/if}
-          <ChevronIcon class="conn-chip-chevron" direction="down" width={10} height={10} strokeWidth={2.2} />
+          <ChevronIcon
+            class="conn-chip-chevron"
+            direction="down"
+            width={10}
+            height={10}
+            strokeWidth={2.2}
+          />
         </button>
         <button
           class="read-only-toggle"
@@ -827,7 +842,8 @@
         {#each dashboardsStore.pinned as dashboard (dashboard.id)}
           <button
             class="pinned-dash-btn"
-            onclick={() => panelStore.openInFocused({ kind: 'dashboard', dashboardId: dashboard.id })}
+            onclick={() =>
+              panelStore.openInFocused({ kind: 'dashboard', dashboardId: dashboard.id })}
             title={dashboard.name}
             type="button"
           >
@@ -837,7 +853,7 @@
         {/each}
       </div>
     {/if}
-    
+
     <button
       class="titlebar-btn"
       onclick={openGlobalSearch}
@@ -1018,26 +1034,26 @@
             </span>
           </div>
           <div class="tx-section-actions">
-          {#if !txActive}
-            <button class="tx-btn" onclick={handleBeginTransaction} disabled={txBusy}>
-              Start
-            </button>
-          {:else}
-            <button
-              class="tx-btn tx-btn--commit"
-              onclick={handleCommitTransactionWithReset}
-              disabled={txBusy}
-            >
-              Commit
-            </button>
-            <button
-              class="tx-btn tx-btn--rollback"
-              onclick={handleRollbackTransaction}
-              disabled={txBusy}
-            >
-              Rollback
-            </button>
-          {/if}
+            {#if !txActive}
+              <button class="tx-btn" onclick={handleBeginTransaction} disabled={txBusy}>
+                Start
+              </button>
+            {:else}
+              <button
+                class="tx-btn tx-btn--commit"
+                onclick={handleCommitTransactionWithReset}
+                disabled={txBusy}
+              >
+                Commit
+              </button>
+              <button
+                class="tx-btn tx-btn--rollback"
+                onclick={handleRollbackTransaction}
+                disabled={txBusy}
+              >
+                Rollback
+              </button>
+            {/if}
           </div>
         </div>
         {#if txActive}
@@ -1049,7 +1065,11 @@
                 onclick={() => (txQueriesExpanded = !txQueriesExpanded)}
                 aria-expanded={txQueriesExpanded}
               >
-                <span style="display:flex;transform: rotate({txQueriesExpanded ? 180 : 0}deg); transition: transform 150ms">
+                <span
+                  style="display:flex;transform: rotate({txQueriesExpanded
+                    ? 180
+                    : 0}deg); transition: transform 150ms"
+                >
                   <ChevronIcon direction="down" width={10} height={10} strokeWidth={2.2} />
                 </span>
                 {txQueryList.length}
@@ -1073,8 +1093,12 @@
                     </div>
                   {/each}
                   <div class="tx-queries-actions">
-                    <button class="tx-queries-action-btn" onclick={openAllTxQueriesInEditor}>Open all in editor</button>
-                    <button class="tx-queries-action-btn" onclick={saveTxQueriesAsFile}>Save as SQL</button>
+                    <button class="tx-queries-action-btn" onclick={openAllTxQueriesInEditor}
+                      >Open all in editor</button
+                    >
+                    <button class="tx-queries-action-btn" onclick={saveTxQueriesAsFile}
+                      >Save as SQL</button
+                    >
                   </div>
                 </div>
               {/if}
@@ -1087,15 +1111,24 @@
     {#if isConnected}
       {@const recActive = recordingStore.isRecordingConnection(activeConnection.id)}
       {@const recPaused = recActive && recordingStore.isPaused}
-      <div class="tx-section" class:tx-section--recording={recActive && !recPaused} class:tx-section--rec-paused={recPaused}>
+      <div
+        class="tx-section"
+        class:tx-section--recording={recActive && !recPaused}
+        class:tx-section--rec-paused={recPaused}
+      >
         <div class="tx-section-row">
           <div class="tx-section-header">
-            <span class="rec-indicator" class:rec-indicator--active={recActive && !recPaused} class:rec-indicator--paused={recPaused}></span>
+            <span
+              class="rec-indicator"
+              class:rec-indicator--active={recActive && !recPaused}
+              class:rec-indicator--paused={recPaused}
+            ></span>
             <span class="tx-section-label">
               {#if recPaused}
                 Recording paused
               {:else if recActive}
-                Recording · {recordingStore.statements.length} {recordingStore.statements.length === 1 ? 'statement' : 'statements'}
+                Recording · {recordingStore.statements.length}
+                {recordingStore.statements.length === 1 ? 'statement' : 'statements'}
               {:else}
                 Recording
               {/if}
@@ -1103,21 +1136,51 @@
           </div>
           <div class="tx-section-actions">
             {#if !recActive}
-              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); recordingStore.start(activeConnection.id); }}>
+              <button
+                class="tx-btn"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  recordingStore.start(activeConnection.id);
+                }}
+              >
                 Start
               </button>
             {:else if recPaused}
-              <button class="tx-btn tx-btn--commit" onclick={(e) => { e.stopPropagation(); recordingStore.resume(); }}>
+              <button
+                class="tx-btn tx-btn--commit"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  recordingStore.resume();
+                }}
+              >
                 Resume
               </button>
-              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); recordingStore.stop(); }}>
+              <button
+                class="tx-btn tx-btn--rollback"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  recordingStore.stop();
+                }}
+              >
                 Stop
               </button>
             {:else}
-              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); recordingStore.pause(); }}>
+              <button
+                class="tx-btn"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  recordingStore.pause();
+                }}
+              >
                 Pause
               </button>
-              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); recordingStore.stop(); }}>
+              <button
+                class="tx-btn tx-btn--rollback"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  recordingStore.stop();
+                }}
+              >
                 Stop
               </button>
             {/if}
@@ -1129,15 +1192,25 @@
     {#if isConnected}
       {@const rvActive = revertStore.isRevertingConnection(activeConnection.id)}
       {@const rvPaused = rvActive && revertStore.isPaused}
-      <div class="tx-section" class:tx-section--revert={rvActive && !rvPaused} class:tx-section--revert-paused={rvPaused}>
+      <div
+        class="tx-section"
+        class:tx-section--revert={rvActive && !rvPaused}
+        class:tx-section--revert-paused={rvPaused}
+      >
         <div class="tx-section-row">
           <div class="tx-section-header">
-            <span class="revert-indicator" class:revert-indicator--active={rvActive && !rvPaused} class:revert-indicator--paused={rvPaused}></span>
+            <span
+              class="revert-indicator"
+              class:revert-indicator--active={rvActive && !rvPaused}
+              class:revert-indicator--paused={rvPaused}
+            ></span>
             <span class="tx-section-label">
               {#if rvPaused}
-                Revert paused · {revertStore.entries.length} {revertStore.entries.length === 1 ? 'change' : 'changes'}
+                Revert paused · {revertStore.entries.length}
+                {revertStore.entries.length === 1 ? 'change' : 'changes'}
               {:else if rvActive}
-                Revert · {revertStore.entries.length} {revertStore.entries.length === 1 ? 'change' : 'changes'}
+                Revert · {revertStore.entries.length}
+                {revertStore.entries.length === 1 ? 'change' : 'changes'}
               {:else}
                 Revert Mode
               {/if}
@@ -1145,26 +1218,62 @@
           </div>
           <div class="tx-section-actions">
             {#if !rvActive}
-              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); revertStore.start(activeConnection.id); }}>
+              <button
+                class="tx-btn"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  revertStore.start(activeConnection.id);
+                }}
+              >
                 Start
               </button>
             {:else if rvPaused}
-              <button class="tx-btn tx-btn--commit" onclick={(e) => { e.stopPropagation(); revertStore.resume(); }}>
+              <button
+                class="tx-btn tx-btn--commit"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  revertStore.resume();
+                }}
+              >
                 Resume
               </button>
-              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); revertStore.stop(); }}>
+              <button
+                class="tx-btn tx-btn--rollback"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  revertStore.stop();
+                }}
+              >
                 Stop
               </button>
             {:else}
-              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); revertStore.pause(); }}>
+              <button
+                class="tx-btn"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  revertStore.pause();
+                }}
+              >
                 Pause
               </button>
-              <button class="tx-btn tx-btn--rollback" onclick={(e) => { e.stopPropagation(); revertStore.stop(); }}>
+              <button
+                class="tx-btn tx-btn--rollback"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  revertStore.stop();
+                }}
+              >
                 Stop
               </button>
             {/if}
             {#if rvActive && revertStore.entries.length > 0}
-              <button class="tx-btn" onclick={(e) => { e.stopPropagation(); revertStore.openModal(); }}>
+              <button
+                class="tx-btn"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  revertStore.openModal();
+                }}
+              >
                 View
               </button>
             {/if}
@@ -1329,13 +1438,13 @@
     background: var(--color-bg-hover);
   }
 
-  .conn-chip-chevron {
+  :global(.conn-chip-chevron) {
     color: var(--color-text-muted);
     flex-shrink: 0;
     transition: transform var(--transition-fast);
   }
 
-  .conn-chip--open .conn-chip-chevron {
+  .conn-chip--open :global(.conn-chip-chevron) {
     transform: rotate(180deg);
   }
 
@@ -1367,8 +1476,13 @@
   }
 
   @keyframes rec-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
   }
 
   .tx-section {
@@ -1435,8 +1549,13 @@
   }
 
   @keyframes rec-indicator-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
   }
 
   .tx-section--revert {
@@ -1481,8 +1600,13 @@
   }
 
   @keyframes revert-indicator-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
   }
 
   .tx-section-header {

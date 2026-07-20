@@ -44,7 +44,15 @@
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
 
-  type ActivePanel = 'history' | 'saved' | 'column' | 'table-info' | 'relations' | 'json' | 'dashboards' | null;
+  type ActivePanel =
+    | 'history'
+    | 'saved'
+    | 'column'
+    | 'table-info'
+    | 'relations'
+    | 'json'
+    | 'dashboards'
+    | null;
 
   interface Props {
     initialPanel?: ActivePanel;
@@ -1170,9 +1178,7 @@
                       ></span>
                     {/if}
                   {/if}
-                  <span class="drag-handle" aria-hidden="true"
-                    ><DragHandleIcon /></span
-                  >
+                  <span class="drag-handle" aria-hidden="true"><DragHandleIcon /></span>
                 </button>
               {/if}
             </li>
@@ -1217,11 +1223,14 @@
                     <span class="folder-name">{folder.name}</span>
                     <span class="count-badge">{folderDirectQueries.length}</span>
                     <span class="chevron" class:open={isOpen} aria-hidden="true"
-                      ><ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} /></span
+                      ><ChevronIcon
+                        direction="right"
+                        width={10}
+                        height={10}
+                        strokeWidth={2.2}
+                      /></span
                     >
-                    <span class="drag-handle" aria-hidden="true"
-                      ><DragHandleIcon /></span
-                    >
+                    <span class="drag-handle" aria-hidden="true"><DragHandleIcon /></span>
                   </button>
 
                   {#if isOpen && folderChildItems.length > 0}

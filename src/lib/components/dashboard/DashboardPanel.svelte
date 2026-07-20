@@ -7,7 +7,6 @@
   import type { DashboardWidget } from '$lib/types';
   import { useDashboards } from '$lib/stores/dashboards.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
-  import { useToast } from '$lib/stores/toast.svelte';
   import DashboardWidgetComponent from './DashboardWidget.svelte';
   import WidgetEditor from './WidgetEditor.svelte';
   import IconPicker from './IconPicker.svelte';
@@ -27,7 +26,6 @@
 
   const dashboardsStore = useDashboards();
   const connectionsStore = useConnections();
-  const toast = useToast();
 
   const dashboard = $derived(dashboardsStore.getById(dashboardId));
 
@@ -173,8 +171,10 @@
   // ── Resize ────────────────────────────────────────────────────────────────
 
   let resizingId = $state<string | null>(null);
-  let resizeStartW = 0, resizeStartH = 0;
-  let resizeStartX = 0, resizeStartY = 0;
+  let resizeStartW = 0,
+    resizeStartH = 0;
+  let resizeStartX = 0,
+    resizeStartY = 0;
   let resizeColWidth = 0;
   let resizePreviewW = $state(0);
   let resizePreviewH = $state(0);
@@ -305,7 +305,12 @@
           type="text"
           bind:value={editName}
           onblur={commitName}
-          onkeydown={(e) => { if (e.key === 'Enter') { commitName(); (e.target as HTMLElement).blur(); } }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') {
+              commitName();
+              (e.target as HTMLElement).blur();
+            }
+          }}
         />
       {:else}
         <div class="dash-icon" aria-hidden="true">
@@ -367,7 +372,10 @@
           <p>No widgets yet.</p>
           <button
             class="empty-add-btn"
-            onclick={() => { editMode = true; addingWidget = true; }}
+            onclick={() => {
+              editMode = true;
+              addingWidget = true;
+            }}
             type="button"
           >
             Add a widget
@@ -404,11 +412,7 @@
 {/if}
 
 {#if addingWidget}
-  <WidgetEditor
-    widget={null}
-    onsave={handleAddWidget}
-    oncancel={() => (addingWidget = false)}
-  />
+  <WidgetEditor widget={null} onsave={handleAddWidget} oncancel={() => (addingWidget = false)} />
 {/if}
 
 {#if editingWidget}
@@ -471,7 +475,9 @@
     position: relative;
     flex-shrink: 0;
     color: var(--color-accent);
-    transition: border-color var(--transition-fast), background var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .dash-icon--btn:hover {
@@ -604,7 +610,9 @@
   }
 
   .widget-slot {
-    transition: opacity var(--transition-fast), outline var(--transition-fast);
+    transition:
+      opacity var(--transition-fast),
+      outline var(--transition-fast);
   }
 
   .widget-slot.is-dragging {

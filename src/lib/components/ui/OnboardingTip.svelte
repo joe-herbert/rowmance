@@ -35,7 +35,8 @@
       <div class="tip-body">
         <strong class="tip-title">Welcome to Rowmance!</strong>
         <p class="tip-text">
-          Click the <strong>+ Add Connection</strong> button in the sidebar to add your first database connection.
+          Click the <strong>+ Add Connection</strong> button in the sidebar to add your first database
+          connection.
         </p>
       </div>
     </div>
@@ -43,8 +44,7 @@
       class="tip-dismiss"
       onclick={dismiss}
       aria-label="Dismiss getting started tip"
-      title="Dismiss"
-      ><CloseIcon width={10} height={10} strokeWidth={2.5} /></button
+      title="Dismiss"><CloseIcon width={10} height={10} strokeWidth={2.5} /></button
     >
   </div>
 {/if}

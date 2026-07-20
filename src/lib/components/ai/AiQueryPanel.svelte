@@ -7,6 +7,7 @@
   import { useSettings } from '$lib/stores/settings.svelte';
   import { generateQuery, explainQuery, type AiConfig } from '$lib/ai/service';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { defaultDialectInfo } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
@@ -17,7 +18,7 @@
     connectionId: string;
     database: string;
     currentSql?: string;
-    ongenerated?: (sql: string) => void;
+    ongenerated?: (_sql: string) => void;
     onclose?: () => void;
   }
 
@@ -35,7 +36,7 @@
     dataSampleRows: settingsStore.settings.aiDataSampleRows,
   });
 
-  const dbType = $derived(connections.getById(connectionId)?.dbType ?? 'mysql');
+  const dialectInfo = $derived(connections.getById(connectionId)?.dialectInfo);
 
   let prompt = $state('');
   let result = $state('');
@@ -63,7 +64,13 @@
     error = null;
     result = '';
     try {
-      const sql = await generateQuery(config, prompt, connectionId, database, dbType);
+      const sql = await generateQuery(
+        config,
+        prompt,
+        connectionId,
+        database,
+        dialectInfo ?? defaultDialectInfo,
+      );
       result = sql;
     } catch (err) {
       error = errorMessage(err);
@@ -78,7 +85,13 @@
     error = null;
     result = '';
     try {
-      result = await explainQuery(config, currentSql, connectionId, database, dbType);
+      result = await explainQuery(
+        config,
+        currentSql,
+        connectionId,
+        database,
+        dialectInfo ?? defaultDialectInfo,
+      );
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -153,7 +166,9 @@
       {/if}
       {#if mode === 'generate'}
         <div class="ai-result-actions">
-          <button class="ai-action-btn ai-action-btn--primary" onclick={insertSql}>Insert into editor</button>
+          <button class="ai-action-btn ai-action-btn--primary" onclick={insertSql}
+            >Insert into editor</button
+          >
           <button class="ai-action-btn" onclick={runGenerate}>Regenerate</button>
         </div>
       {/if}
@@ -194,7 +209,9 @@
     border-radius: var(--radius-xs);
     display: flex;
     align-items: center;
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .ai-close-btn:hover {

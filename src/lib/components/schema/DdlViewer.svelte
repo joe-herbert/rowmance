@@ -22,11 +22,20 @@
     database: string;
     objectName: string;
     objectType: 'table' | 'view';
+    instanceDb?: string;
     itemId?: string;
     splitId?: string;
   }
 
-  const { connectionId, database, objectName, objectType, itemId = '', splitId = '' }: Props = $props();
+  const {
+    connectionId,
+    database,
+    objectName,
+    objectType,
+    instanceDb,
+    itemId = '',
+    splitId = '',
+  }: Props = $props();
 
   const tabDrag = useTabDrag();
   const settingsStore = useSettings();
@@ -46,7 +55,13 @@
         if (itemId && splitId) {
           tabDrag.start(itemId, splitId);
         } else {
-          tabDrag.startContent({ kind: 'ddl_viewer', connectionId, database, objectName, objectType });
+          tabDrag.startContent({
+            kind: 'ddl_viewer',
+            connectionId,
+            database,
+            objectName,
+            objectType,
+          });
         }
       }
     }
@@ -125,7 +140,7 @@
     isLoading = true;
     loadError = null;
     try {
-      ddlText = await getDdl(connectionId, database, objectName, objectType);
+      ddlText = await getDdl(connectionId, database, objectName, instanceDb);
     } catch (err) {
       loadError = errorMessage(err);
     } finally {
@@ -176,6 +191,7 @@
 
 <div class="ddl-viewer">
   <div class="toolbar">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span
       class="object-label"
       title="Drag to open in another split"
@@ -189,7 +205,9 @@
     {#if settingsStore.settings.aiProvider !== 'none' && settingsStore.settings.aiContextLevel !== 'none'}
       <button
         class="copy-btn"
-        onclick={() => { showAiDescribeModal = true; }}
+        onclick={() => {
+          showAiDescribeModal = true;
+        }}
         disabled={isLoading || !!loadError}
         title="Describe table with AI"
       >
@@ -213,7 +231,9 @@
       ddl={ddlText}
       {connectionId}
       {database}
-      onclose={() => { showAiDescribeModal = false; }}
+      onclose={() => {
+        showAiDescribeModal = false;
+      }}
     />
   {/if}
 
@@ -322,11 +342,6 @@
   .copy-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-  }
-
-  .copy-btn--active {
-    color: var(--color-accent);
-    background: var(--color-accent-subtle);
   }
 
   .content {

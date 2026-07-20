@@ -22,7 +22,7 @@
     open: boolean;
     minWidth?: number;
     onclose: () => void;
-    onrename: (item: OpenItem) => void;
+    onrename: (_item: OpenItem) => void;
   }
 
   const { item, splitId, x, y, open, minWidth, onclose, onrename }: Props = $props();
@@ -42,7 +42,12 @@
 
 <ContextMenu {x} {y} {open} {onclose} {minWidth}>
   {#if item.content.kind === 'query_editor' && item.content.savedQueryId}
-    <CtxItem onclick={() => { onclose(); onrename(item); }}>Rename</CtxItem>
+    <CtxItem
+      onclick={() => {
+        onclose();
+        onrename(item);
+      }}>Rename</CtxItem
+    >
     <CtxSep />
   {/if}
   {#if item.content.kind === 'table_browser'}
@@ -62,19 +67,37 @@
     <CtxItem
       onclick={async () => {
         onclose();
-        await generateSqlInsert(tb.connectionId, tb.database, tb.table, connectionStore, panelStore);
+        await generateSqlInsert(
+          tb.connectionId,
+          tb.database,
+          tb.table,
+          connectionStore,
+          panelStore,
+        );
       }}>Insert Row</CtxItem
     >
     <CtxItem
       onclick={async () => {
         onclose();
-        await generateSqlUpdate(tb.connectionId, tb.database, tb.table, connectionStore, panelStore);
+        await generateSqlUpdate(
+          tb.connectionId,
+          tb.database,
+          tb.table,
+          connectionStore,
+          panelStore,
+        );
       }}>Update Rows</CtxItem
     >
     <CtxItem
       onclick={async () => {
         onclose();
-        await generateSqlDelete(tb.connectionId, tb.database, tb.table, connectionStore, panelStore);
+        await generateSqlDelete(
+          tb.connectionId,
+          tb.database,
+          tb.table,
+          connectionStore,
+          panelStore,
+        );
       }}>Delete Rows</CtxItem
     >
     <CtxSep />

@@ -160,10 +160,14 @@
       ? (queryEditorCache.get(item.content.editorId)?.sql ?? item.content.initialSql ?? '')
       : (item.content.initialSql ?? '');
     const currentDescription = item.content.editorId
-      ? (queryEditorCache.get(item.content.editorId)?.description ?? item.content.initialDescription ?? null)
+      ? (queryEditorCache.get(item.content.editorId)?.description ??
+        item.content.initialDescription ??
+        null)
       : (item.content.initialDescription ?? null);
     const currentAnnotations = item.content.editorId
-      ? (queryEditorCache.get(item.content.editorId)?.annotations ?? item.content.initialAnnotations ?? null)
+      ? (queryEditorCache.get(item.content.editorId)?.annotations ??
+        item.content.initialAnnotations ??
+        null)
       : (item.content.initialAnnotations ?? null);
     try {
       const updated = await savedQueriesApi.fileUpdateSavedQuery(item.content.savedQueryId, {

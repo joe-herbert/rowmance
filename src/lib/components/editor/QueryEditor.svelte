@@ -19,7 +19,13 @@
     type DecorationSet,
     type ViewUpdate,
   } from '@codemirror/view';
-  import { EditorState, StateEffect, StateField, RangeSetBuilder, type Extension } from '@codemirror/state';
+  import {
+    EditorState,
+    StateEffect,
+    StateField,
+    RangeSetBuilder,
+    type Extension,
+  } from '@codemirror/state';
   import { highlightSelectionMatches } from '@codemirror/search';
   import { defaultKeymap, indentWithTab, history, historyKeymap } from '@codemirror/commands';
   import { sql as sqlLang } from '@codemirror/lang-sql';
@@ -54,7 +60,12 @@
   import FkSearchPopup from '$lib/components/editor/FkSearchPopup.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { listVirtualRelations } from '$lib/tauri/virtual_relations';
-  import { splitStatements, statementAtCursor, isMutatingStatement, stripLineComments } from '$lib/utils/sql';
+  import {
+    splitStatements,
+    statementAtCursor,
+    isMutatingStatement,
+    stripLineComments,
+  } from '$lib/utils/sql';
   import { errorMessage } from '$lib/utils/errors';
   import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
@@ -141,8 +152,7 @@
   // ── SQL variable tracking (MySQL/MariaDB @varname) ────────────────────────
 
   let sqlVariableNames = $derived.by((): string[] => {
-    const dbType = connections.getById(connectionId)?.dbType;
-    if (dbType !== 'mysql' && dbType !== 'mariadb') return [];
+    if (!connections.getById(connectionId)?.dialectInfo.detectsSqlVariables) return [];
     const vars = new Set<string>();
     const re = /@([a-zA-Z_]\w*)/g;
     // Strip string literals and comments to avoid false positives
@@ -217,25 +227,24 @@
           annotationsJson !== savedAnnotations,
       );
     } else {
-      panelStore.setItemDirty(
-        dirtyKey,
-        sqlText.trim() !== '' || descriptionText.trim() !== '',
-      );
+      panelStore.setItemDirty(dirtyKey, sqlText.trim() !== '' || descriptionText.trim() !== '');
     }
   });
 
   let currentSavedQueryId = $state<string | undefined>(untrack(() => initialSavedQueryId));
   let currentSavedQueryName = $state<string | undefined>(untrack(() => initialSavedQueryName));
-  let savedSql = $state<string | null>(
-    untrack(() => (initialSavedQueryId ? initialSql : null)),
+  let savedSql = $state<string | null>(untrack(() => (initialSavedQueryId ? initialSql : null)));
+  let descriptionText = $state<string>(
+    untrack(() => cached?.description ?? initialDescription ?? ''),
   );
-  let descriptionText = $state<string>(untrack(() => cached?.description ?? initialDescription ?? ''));
-  let savedDescription = $state<string | null>(untrack(() => (initialSavedQueryId ? (initialDescription ?? '') : null)));
-  let descriptionOpen = $state<boolean>(untrack(() => !!(cached?.description ?? initialDescription)));
+  let savedDescription = $state<string | null>(
+    untrack(() => (initialSavedQueryId ? (initialDescription ?? '') : null)),
+  );
+  let descriptionOpen = $state<boolean>(
+    untrack(() => !!(cached?.description ?? initialDescription)),
+  );
   let aiModal = $state<
-    | { mode: 'generate'; insertLine: number }
-    | { mode: 'explain'; sql: string }
-    | null
+    { mode: 'generate'; insertLine: number } | { mode: 'explain'; sql: string } | null
   >(null);
   let editorContextMenu = $state<{
     x: number;
@@ -256,14 +265,18 @@
 
   function parseAnnotations(json: string | null | undefined): InlineNote[] {
     if (!json) return [];
-    try { return JSON.parse(json); } catch { return []; }
+    try {
+      return JSON.parse(json);
+    } catch {
+      return [];
+    }
   }
 
   let inlineNotes = $state<InlineNote[]>(
-    untrack(() => parseAnnotations(cached?.annotations ?? initialAnnotations))
+    untrack(() => parseAnnotations(cached?.annotations ?? initialAnnotations)),
   );
   let savedAnnotations = $state<string | null>(
-    untrack(() => (initialSavedQueryId ? (initialAnnotations ?? null) : null))
+    untrack(() => (initialSavedQueryId ? (initialAnnotations ?? null) : null)),
   );
   let noteMenu = $state<{ lineNumber: number; x: number; y: number } | null>(null);
   let queryBuilderLine = $state<number | null>(null);
@@ -282,8 +295,8 @@
   });
 
   const noteCallbacksRef: {
-    onUpdate: (id: string, text: string) => void;
-    onRemove: (id: string) => void;
+    onUpdate: (_id: string, _text: string) => void;
+    onRemove: (_id: string) => void;
   } = {
     onUpdate: () => {},
     onRemove: () => {},
@@ -291,7 +304,10 @@
 
   class NoteWidget extends WidgetType {
     private note: InlineNote;
-    constructor(note: InlineNote) { super(); this.note = note; }
+    constructor(note: InlineNote) {
+      super();
+      this.note = note;
+    }
 
     eq(other: NoteWidget) {
       return (
@@ -308,8 +324,8 @@
       const syncSize = () => {
         const gutterEl = view.dom.querySelector<HTMLElement>('.cm-gutters');
         const gutterWidth = gutterEl ? gutterEl.offsetWidth : 0;
-        wrap.style.left = (gutterWidth + 5) + 'px';
-        wrap.style.width = (view.scrollDOM.clientWidth - gutterWidth - 5) + 'px';
+        wrap.style.left = gutterWidth + 5 + 'px';
+        wrap.style.width = view.scrollDOM.clientWidth - gutterWidth - 5 + 'px';
       };
       syncSize();
       wrap._ro = new ResizeObserver(syncSize);
@@ -347,17 +363,24 @@
       (dom as HTMLDivElement & { _ro?: ResizeObserver })._ro?.disconnect();
     }
 
-    ignoreEvent() { return true; }
+    ignoreEvent() {
+      return true;
+    }
   }
 
-  const gutterClickRef: { onClick: (lineNumber: number, x: number, y: number) => void } = {
+  const gutterClickRef: { onClick: (_lineNumber: number, _x: number, _y: number) => void } = {
     onClick: () => {},
   };
 
   class PlusMarker extends GutterMarker {
     private lineNumber: number;
-    constructor(lineNumber: number) { super(); this.lineNumber = lineNumber; }
-    eq(other: PlusMarker) { return other.lineNumber === this.lineNumber; }
+    constructor(lineNumber: number) {
+      super();
+      this.lineNumber = lineNumber;
+    }
+    eq(other: PlusMarker) {
+      return other.lineNumber === this.lineNumber;
+    }
     toDOM() {
       const btn = document.createElement('button');
       btn.className = 'cm-note-plus-btn';
@@ -388,7 +411,7 @@
         entries.push({ pos: line.to, side: 1, note });
       }
     }
-    entries.sort((a, b) => a.pos !== b.pos ? a.pos - b.pos : a.side - b.side);
+    entries.sort((a, b) => (a.pos !== b.pos ? a.pos - b.pos : a.side - b.side));
     const builder = new RangeSetBuilder<Decoration>();
     for (const { pos, side, note } of entries) {
       builder.add(pos, pos, Decoration.widget({ widget: new NoteWidget(note), block: true, side }));
@@ -397,14 +420,16 @@
   }
 
   const notesDecoField = StateField.define<DecorationSet>({
-    create(state) { return buildNoteDecorations(state); },
+    create(state) {
+      return buildNoteDecorations(state);
+    },
     update(deco, tr) {
-      if (tr.docChanged || tr.effects.some(e => e.is(setNotesEffect))) {
+      if (tr.docChanged || tr.effects.some((e) => e.is(setNotesEffect))) {
         return buildNoteDecorations(tr.state);
       }
       return deco.map(tr.changes);
     },
-    provide: f => EditorView.decorations.from(f),
+    provide: (f) => EditorView.decorations.from(f),
   });
 
   function makeNotesGutter() {
@@ -415,7 +440,9 @@
         const lineNum = view.state.doc.lineAt(line.from).number;
         return new PlusMarker(lineNum);
       },
-      lineMarkerChange() { return false; },
+      lineMarkerChange() {
+        return false;
+      },
     });
   }
 
@@ -629,21 +656,15 @@
   const txDatabaseMismatch = $derived.by(() => {
     if (!connections.isTransactionActive(connectionId)) return null;
     const profile = connections.getById(connectionId);
-    if (!profile || (profile.dbType !== 'mysql' && profile.dbType !== 'mariadb')) return null;
+    if (!profile || !profile.dialectInfo.warnsTxDatabaseMismatch) return null;
     const txDb = connections.getTxDatabase(connectionId);
     if (!txDb || !selectedDatabase || txDb === selectedDatabase) return null;
     return txDb;
   });
 
-  const DB_TYPE_DIALECT: Record<string, string> = {
-    mysql: 'mysql',
-    mariadb: 'mysql',
-    postgres: 'postgresql',
-  };
-
   let sqlDialect = $derived(() => {
     const profile = connections.getById(connectionId);
-    return profile ? (DB_TYPE_DIALECT[profile.dbType] ?? 'sql') : 'sql';
+    return profile?.dialectInfo?.editorDialect ?? 'sql';
   });
 
   // ── Schema-aware autocomplete ─────────────────────────────────────────────
@@ -670,9 +691,30 @@
   const TABLE_INTRODUCERS = new Set(['FROM', 'JOIN', 'UPDATE', 'INTO', 'TABLE', 'TRUNCATE']);
   // Keywords that change the clause context (used to track what governs each position)
   const CLAUSE_KEYWORDS = new Set([
-    'SELECT', 'FROM', 'JOIN', 'WHERE', 'SET', 'UPDATE', 'INTO', 'TABLE',
-    'INSERT', 'DELETE', 'HAVING', 'GROUP', 'ORDER', 'LIMIT', 'ON', 'WITH',
-    'TRUNCATE', 'CREATE', 'DROP', 'ALTER', 'BY', 'UNION', 'INTERSECT', 'EXCEPT',
+    'SELECT',
+    'FROM',
+    'JOIN',
+    'WHERE',
+    'SET',
+    'UPDATE',
+    'INTO',
+    'TABLE',
+    'INSERT',
+    'DELETE',
+    'HAVING',
+    'GROUP',
+    'ORDER',
+    'LIMIT',
+    'ON',
+    'WITH',
+    'TRUNCATE',
+    'CREATE',
+    'DROP',
+    'ALTER',
+    'BY',
+    'UNION',
+    'INTERSECT',
+    'EXCEPT',
   ]);
 
   function isTableNamePosition(view: EditorView, node: SyntaxNode): boolean {
@@ -743,8 +785,8 @@
       class {
         decorations: DecorationSet = Decoration.none;
         private cmView: EditorView;
-        private boundKeyDown: (e: KeyboardEvent) => void;
-        private boundKeyUp: (e: KeyboardEvent) => void;
+        private boundKeyDown: (_e: KeyboardEvent) => void;
+        private boundKeyUp: (_e: KeyboardEvent) => void;
 
         constructor(view: EditorView) {
           this.cmView = view;
@@ -876,21 +918,54 @@
     | { kind: 'none' };
 
   const TABLE_CTX_KEYWORDS = new Set([
-    'FROM', 'JOIN', 'UPDATE', 'TABLE', 'INTO',
-    'TRUNCATE', 'RENAME',
+    'FROM',
+    'JOIN',
+    'UPDATE',
+    'TABLE',
+    'INTO',
+    'TRUNCATE',
+    'RENAME',
   ]);
   const COLUMN_CTX_KEYWORDS = new Set([
-    'SELECT', 'WHERE', 'HAVING', 'SET', 'ON', 'AND', 'OR', 'NOT',
-    'BY', 'WHEN', 'THEN', 'ELSE', 'RETURNING', 'DISTINCT',
-    'IF', 'CASE',
+    'SELECT',
+    'WHERE',
+    'HAVING',
+    'SET',
+    'ON',
+    'AND',
+    'OR',
+    'NOT',
+    'BY',
+    'WHEN',
+    'THEN',
+    'ELSE',
+    'RETURNING',
+    'DISTINCT',
+    'IF',
+    'CASE',
   ]);
   const SUPPRESS_CTX_KEYWORDS = new Set(['LIMIT', 'OFFSET', 'AS', 'FETCH', 'ROWS', 'ONLY', 'TIES']);
   const DATABASE_CTX_KEYWORDS = new Set(['USE', 'DATABASE', 'SCHEMA']);
 
   const SQL_STATEMENT_KEYWORDS = [
-    'SELECT', 'INSERT INTO', 'UPDATE', 'DELETE FROM', 'WITH',
-    'CREATE TABLE', 'CREATE VIEW', 'DROP TABLE', 'DROP VIEW', 'ALTER TABLE',
-    'EXPLAIN', 'BEGIN', 'COMMIT', 'ROLLBACK', 'TRUNCATE', 'SHOW', 'DESCRIBE', 'USE',
+    'SELECT',
+    'INSERT INTO',
+    'UPDATE',
+    'DELETE FROM',
+    'WITH',
+    'CREATE TABLE',
+    'CREATE VIEW',
+    'DROP TABLE',
+    'DROP VIEW',
+    'ALTER TABLE',
+    'EXPLAIN',
+    'BEGIN',
+    'COMMIT',
+    'ROLLBACK',
+    'TRUNCATE',
+    'SHOW',
+    'DESCRIBE',
+    'USE',
   ];
 
   function detectCompletionCtx(sqlBeforeCursor: string): CompletionCtx {
@@ -914,8 +989,14 @@
     let depth = 0;
     for (let i = tokens.length - 1; i >= 0; i--) {
       const tok = tokens[i].toUpperCase();
-      if (tok === ')') { depth++; continue; }
-      if (tok === '(') { depth = Math.max(0, depth - 1); continue; }
+      if (tok === ')') {
+        depth++;
+        continue;
+      }
+      if (tok === '(') {
+        depth = Math.max(0, depth - 1);
+        continue;
+      }
       if (depth > 0) continue; // inside parenthesised expression — skip
 
       if (tok === ',') continue; // comma: keep scanning to find which clause we're in
@@ -987,7 +1068,8 @@
       for (const col of cols) {
         if (!seen.has(col.name)) {
           seen.add(col.name);
-          const detail = tableNames.length > 1 ? `${schemaTable.name} · ${col.dataType}` : col.dataType;
+          const detail =
+            tableNames.length > 1 ? `${schemaTable.name} · ${col.dataType}` : col.dataType;
           options.push({ label: col.name, detail, type: 'property' });
         }
       }
@@ -1114,11 +1196,8 @@
     // Find which database has this table (use selectedDatabase first, then first match)
     const schemaTable =
       schemaRef.tables.find(
-        (t) =>
-          t.name.toLowerCase() === tableName.toLowerCase() &&
-          t.database === selectedDatabase,
-      ) ??
-      schemaRef.tables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
+        (t) => t.name.toLowerCase() === tableName.toLowerCase() && t.database === selectedDatabase,
+      ) ?? schemaRef.tables.find((t) => t.name.toLowerCase() === tableName.toLowerCase());
 
     const database = schemaTable?.database ?? selectedDatabase;
     if (!database) return null;
@@ -1175,7 +1254,6 @@
     // Determine the range of text the completion should replace (current partial value word)
     const word = context.matchBefore(/[\w.'"-]*/);
     const from = word ? word.from : context.pos;
-    const to = context.pos;
 
     // Capture in local vars for the closure
     const refConnId = referencedConnectionId;
@@ -1430,11 +1508,31 @@
     executedStatements = splitStatements(query);
     executedSql = query;
     try {
-      results = await executeMultiQuery(connectionId, stripLineComments(query), selectedDatabase || null, editorId);
-      if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
+      results = await executeMultiQuery(
+        connectionId,
+        stripLineComments(query),
+        selectedDatabase || null,
+        editorId,
+      );
+      if (connections.isTransactionActive(connectionId))
+        connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
-      if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
-        revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
+      if (
+        revertStore.isRevertingConnection(connectionId) &&
+        splitStatements(query).some(isMutatingStatement)
+      ) {
+        revertStore.add({
+          id: crypto.randomUUID(),
+          source: 'query',
+          connectionId,
+          database: selectedDatabase || '',
+          table: '',
+          sql: query,
+          revertSql: '',
+          rows: [],
+          executedAt: new Date(),
+          reverted: false,
+        });
       }
       onExecute?.(query);
       await fetchVariableValues();
@@ -1470,11 +1568,31 @@
     executedStatements = splitStatements(query);
     executedSql = query;
     try {
-      results = await executeMultiQuery(connectionId, stripLineComments(query), selectedDatabase || null, editorId);
-      if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, query);
+      results = await executeMultiQuery(
+        connectionId,
+        stripLineComments(query),
+        selectedDatabase || null,
+        editorId,
+      );
+      if (connections.isTransactionActive(connectionId))
+        connections.addTxQuery(connectionId, query);
       recording.add(query, connectionId, selectedDatabase || null);
-      if (revertStore.isRevertingConnection(connectionId) && splitStatements(query).some(isMutatingStatement)) {
-        revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: query, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
+      if (
+        revertStore.isRevertingConnection(connectionId) &&
+        splitStatements(query).some(isMutatingStatement)
+      ) {
+        revertStore.add({
+          id: crypto.randomUUID(),
+          source: 'query',
+          connectionId,
+          database: selectedDatabase || '',
+          table: '',
+          sql: query,
+          revertSql: '',
+          rows: [],
+          executedAt: new Date(),
+          reverted: false,
+        });
       }
       onExecute?.(query);
       await fetchVariableValues();
@@ -1508,11 +1626,27 @@
     executedStatements = [stmt];
     executedSql = stmt;
     try {
-      results = await executeMultiQuery(connectionId, stripLineComments(stmt), selectedDatabase || null, editorId);
+      results = await executeMultiQuery(
+        connectionId,
+        stripLineComments(stmt),
+        selectedDatabase || null,
+        editorId,
+      );
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
       recording.add(stmt, connectionId, selectedDatabase || null);
       if (revertStore.isRevertingConnection(connectionId) && isMutatingStatement(stmt)) {
-        revertStore.add({ id: crypto.randomUUID(), source: 'query', connectionId, database: selectedDatabase || '', table: '', sql: stmt, revertSql: '', rows: [], executedAt: new Date(), reverted: false });
+        revertStore.add({
+          id: crypto.randomUUID(),
+          source: 'query',
+          connectionId,
+          database: selectedDatabase || '',
+          table: '',
+          sql: stmt,
+          revertSql: '',
+          rows: [],
+          executedAt: new Date(),
+          reverted: false,
+        });
       }
       onExecute?.(stmt);
       await fetchVariableValues();
@@ -1573,7 +1707,10 @@
         };
         for (const rawLine of [...formatted.split(/\n/), null]) {
           const line = rawLine !== null ? rawLine.trim() : null;
-          if (line === null) { flushBuffer(); break; }
+          if (line === null) {
+            flushBuffer();
+            break;
+          }
           if (!line) continue;
           if (lineHasLineComment(line)) {
             // Append comment line to buffer, then flush — nothing can follow on same line
@@ -1630,9 +1767,7 @@
       // sql-formatter can fail on certain comment styles. Strip block/line
       // comments and retry — this preserves structure even if comments are lost.
       try {
-        const stripped = sqlText
-          .replace(/\/\*[\s\S]*?\*\//g, '')
-          .replace(/--[^\n]*/g, '');
+        const stripped = sqlText.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '');
         const formatted = sqlFormat(stripped, options);
         editorView.dispatch({
           changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
@@ -1793,7 +1928,13 @@
         sqlLang(),
         runKeymap,
         history(),
-        keymap.of([...historyKeymap, ...defaultKeymap, ...completionKeymap, ...closeBracketsKeymap, indentWithTab]),
+        keymap.of([
+          ...historyKeymap,
+          ...defaultKeymap,
+          ...completionKeymap,
+          ...closeBracketsKeymap,
+          indentWithTab,
+        ]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             sqlText = update.state.doc.toString();
@@ -1842,9 +1983,16 @@
             const { from, to } = state.selection.main;
             const hasSelection = from !== to;
             const selectionSql = hasSelection ? state.sliceDoc(from, to).trim() : '';
-            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? state.selection.main.head;
+            const pos =
+              view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? state.selection.main.head;
             const cursorSql = statementAtCursor(sqlText, pos);
-            editorContextMenu = { x: event.clientX, y: event.clientY, hasSelection, selectionSql, cursorSql };
+            editorContextMenu = {
+              x: event.clientX,
+              y: event.clientY,
+              hasSelection,
+              selectionSql,
+              cursorSql,
+            };
             return true;
           },
         }),
@@ -1920,6 +2068,7 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="query-editor-panel"
   bind:this={editorPanelEl}
@@ -1982,7 +2131,9 @@
     <button
       class="toolbar-btn toolbar-btn--icon toolbar-btn--description"
       class:toolbar-btn--description-active={descriptionOpen}
-      onclick={() => { descriptionOpen = !descriptionOpen; }}
+      onclick={() => {
+        descriptionOpen = !descriptionOpen;
+      }}
       title={descriptionOpen ? 'Hide description' : 'Show description'}
       aria-label="Toggle description"
       aria-pressed={descriptionOpen}
@@ -2147,7 +2298,8 @@
   {#if txDatabaseMismatch}
     <div class="tx-db-warning" role="alert">
       <WarningIcon width={13} height={13} />
-      Transaction started on <code>{txDatabaseMismatch}</code> — query will run on <code>{txDatabaseMismatch}</code>, not <code>{selectedDatabase}</code>
+      Transaction started on <code>{txDatabaseMismatch}</code> — query will run on
+      <code>{txDatabaseMismatch}</code>, not <code>{selectedDatabase}</code>
     </div>
   {/if}
 
@@ -2169,7 +2321,12 @@
     </div>
 
     {#if sqlVariableNames.length > 0}
-      <div class="vars-panel" class:vars-panel--open={varsOpen} role="region" aria-label="SQL variables">
+      <div
+        class="vars-panel"
+        class:vars-panel--open={varsOpen}
+        role="region"
+        aria-label="SQL variables"
+      >
         <button
           class="vars-panel-tab"
           onclick={() => (varsOpen = !varsOpen)}
@@ -2177,14 +2334,24 @@
           aria-expanded={varsOpen}
         >
           <span class="vars-panel-tab-label">Vars</span>
-          <ChevronIcon class="vars-panel-chevron{varsOpen ? ' vars-panel-chevron--open' : ''}" direction="left" width={10} height={10} strokeWidth={1.8} />
+          <ChevronIcon
+            class="vars-panel-chevron{varsOpen ? ' vars-panel-chevron--open' : ''}"
+            direction="left"
+            width={10}
+            height={10}
+            strokeWidth={1.8}
+          />
         </button>
 
         {#if varsOpen}
           <div class="vars-panel-body">
             {#each sqlVariableNames as varName}
               <div class="var-row">
-                <code class="var-name" title="Session variables are connection-scoped. Values shown are from the last execution on the same connection.">{varName}</code>
+                <code
+                  class="var-name"
+                  title="Session variables are connection-scoped. Values shown are from the last execution on the same connection."
+                  >{varName}</code
+                >
                 <span class="var-eq">=</span>
                 <code
                   class="var-value"
@@ -2210,14 +2377,23 @@
   <div
     class="editor-resizer"
     class:editor-resizer--active={isResizingEditor}
-    role="separator"
-    aria-label="Drag to resize editor"
-    aria-orientation="horizontal"
+    role="slider"
+    aria-label="Editor height"
+    aria-orientation="vertical"
+    aria-valuenow={Math.round(editorHeightPct)}
+    aria-valuemin={15}
+    aria-valuemax={80}
     tabindex="0"
     onpointerdown={onResizerPointerDown}
     onkeydown={(e) => {
-      if (e.key === 'ArrowUp') { e.preventDefault(); editorHeightPct = Math.max(15, editorHeightPct - 2); }
-      if (e.key === 'ArrowDown') { e.preventDefault(); editorHeightPct = Math.min(80, editorHeightPct + 2); }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        editorHeightPct = Math.max(15, editorHeightPct - 2);
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        editorHeightPct = Math.min(80, editorHeightPct + 2);
+      }
     }}
   ></div>
 
@@ -2255,24 +2431,28 @@
   <div
     class="note-menu-backdrop"
     role="presentation"
-    onmousedown={() => { noteMenu = null; }}
+    onmousedown={() => {
+      noteMenu = null;
+    }}
     use:portal
   ></div>
-  <div
-    class="note-menu"
-    style="top:{noteMenu.y}px;left:{noteMenu.x}px"
-    use:portal
-  >
+  <div class="note-menu" style="top:{noteMenu.y}px;left:{noteMenu.x}px" use:portal>
     {#if settingsStore.settings.aiProvider !== 'none'}
-      <button class="note-menu-item note-menu-item--ai" onmousedown={() => {
-        aiModal = { mode: 'generate', insertLine: noteMenu!.lineNumber };
-        noteMenu = null;
-      }}>
+      <button
+        class="note-menu-item note-menu-item--ai"
+        onmousedown={() => {
+          aiModal = { mode: 'generate', insertLine: noteMenu!.lineNumber };
+          noteMenu = null;
+        }}
+      >
         Generate with AI…
       </button>
       <div class="note-menu-separator"></div>
     {/if}
-    <button class="note-menu-item note-menu-item--builder" onmousedown={() => openQueryBuilder(noteMenu!.lineNumber)}>
+    <button
+      class="note-menu-item note-menu-item--builder"
+      onmousedown={() => openQueryBuilder(noteMenu!.lineNumber)}
+    >
       Build query…
     </button>
     <div class="note-menu-separator"></div>
@@ -2294,13 +2474,15 @@
       const cached = schemaRef.columns.get(key);
       if (cached) return cached;
       const colInfos = await schemaApi.listColumns(schemaRef.connectionId, db, table);
-      const cols = colInfos.map(c => ({ name: c.name, dataType: c.dataType }));
+      const cols = colInfos.map((c) => ({ name: c.name, dataType: c.dataType }));
       schemaRef.columns.set(key, cols);
       return cols;
     }}
     defaultDatabase={selectedDatabase}
     oninsert={(sql) => insertSqlAtLine(qbLine, sql)}
-    onclose={() => { queryBuilderLine = null; }}
+    onclose={() => {
+      queryBuilderLine = null;
+    }}
   />
 {/if}
 
@@ -2309,42 +2491,53 @@
   <div
     class="note-menu-backdrop"
     role="presentation"
-    onmousedown={() => { editorContextMenu = null; }}
+    onmousedown={() => {
+      editorContextMenu = null;
+    }}
     use:portal
   ></div>
-  <div
-    class="note-menu"
-    style="top:{ctx.y}px;left:{ctx.x}px"
-    use:portal
-    role="menu"
-  >
+  <div class="note-menu" style="top:{ctx.y}px;left:{ctx.x}px" use:portal role="menu">
     {#if ctx.hasSelection}
       <button
         class="note-menu-item"
         role="menuitem"
         disabled={isRunning}
-        onmousedown={() => { editorContextMenu = null; runSelection(); }}
-      >Run selection</button>
+        onmousedown={() => {
+          editorContextMenu = null;
+          runSelection();
+        }}>Run selection</button
+      >
       {#if settingsStore.settings.aiProvider !== 'none'}
         <button
           class="note-menu-item note-menu-item--ai"
           role="menuitem"
-          onmousedown={() => { const sql = ctx.selectionSql; editorContextMenu = null; aiModal = { mode: 'explain', sql }; }}
-        >Explain selection</button>
+          onmousedown={() => {
+            const sql = ctx.selectionSql;
+            editorContextMenu = null;
+            aiModal = { mode: 'explain', sql };
+          }}>Explain selection</button
+        >
       {/if}
     {:else}
       <button
         class="note-menu-item"
         role="menuitem"
         disabled={isRunning}
-        onmousedown={() => { editorContextMenu = null; runUnderCursor(); }}
-      >Run query under cursor</button>
+        onmousedown={() => {
+          editorContextMenu = null;
+          runUnderCursor();
+        }}>Run query under cursor</button
+      >
       {#if settingsStore.settings.aiProvider !== 'none'}
         <button
           class="note-menu-item note-menu-item--ai"
           role="menuitem"
-          onmousedown={() => { const sql = ctx.cursorSql; editorContextMenu = null; aiModal = { mode: 'explain', sql }; }}
-        >Explain query under cursor</button>
+          onmousedown={() => {
+            const sql = ctx.cursorSql;
+            editorContextMenu = null;
+            aiModal = { mode: 'explain', sql };
+          }}>Explain query under cursor</button
+        >
       {/if}
     {/if}
     <div class="note-menu-separator" role="separator"></div>
@@ -2352,14 +2545,21 @@
       class="note-menu-item"
       role="menuitem"
       disabled={isRunning}
-      onmousedown={() => { editorContextMenu = null; runQuery(); }}
-    >Run all</button>
+      onmousedown={() => {
+        editorContextMenu = null;
+        runQuery();
+      }}>Run all</button
+    >
     {#if settingsStore.settings.aiProvider !== 'none'}
       <button
         class="note-menu-item note-menu-item--ai"
         role="menuitem"
-        onmousedown={() => { const sql = sqlText; editorContextMenu = null; aiModal = { mode: 'explain', sql }; }}
-      >Explain all</button>
+        onmousedown={() => {
+          const sql = sqlText;
+          editorContextMenu = null;
+          aiModal = { mode: 'explain', sql };
+        }}>Explain all</button
+      >
     {/if}
   </div>
 {/if}
@@ -2371,8 +2571,13 @@
       mode="generate"
       {connectionId}
       database={selectedDatabase}
-      oninsert={(sql) => { insertSqlAtLine(insertLine, sql); aiModal = null; }}
-      onclose={() => { aiModal = null; }}
+      oninsert={(sql) => {
+        insertSqlAtLine(insertLine, sql);
+        aiModal = null;
+      }}
+      onclose={() => {
+        aiModal = null;
+      }}
     />
   {:else}
     {@const sql = aiModal.sql}
@@ -2381,7 +2586,9 @@
       {sql}
       {connectionId}
       database={selectedDatabase}
-      onclose={() => { aiModal = null; }}
+      onclose={() => {
+        aiModal = null;
+      }}
     />
   {/if}
 {/if}
@@ -2497,7 +2704,6 @@
     width: calc(var(--toolbar-height) - var(--spacing-3));
     padding: 0;
   }
-
 
   /* Save name dialog */
   .save-dialog {
@@ -2918,7 +3124,9 @@
     display: flex;
     align-items: center;
     opacity: 0;
-    transition: opacity var(--transition-fast), color var(--transition-fast);
+    transition:
+      opacity var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .editor-container :global(.cm-inline-note:hover .cm-inline-note-delete) {

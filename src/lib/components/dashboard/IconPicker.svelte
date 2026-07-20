@@ -3,9 +3,11 @@
   Emits the selected SVG string via onchange.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
+
   interface Props {
     value: string;
-    onchange: (svg: string) => void;
+    onchange: (_svg: string) => void;
   }
 
   const { value, onchange }: Props = $props();
@@ -95,7 +97,7 @@
 
   const isCustom = PRESET_ICONS.every((i) => i.svg !== value);
   let showCustom = $state(isCustom);
-  let customInput = $state(isCustom ? value : '');
+  let customInput = $state(untrack(() => (isCustom ? value : '')));
 </script>
 
 <div class="icon-picker">
@@ -113,11 +115,7 @@
     {/each}
   </div>
 
-  <button
-    class="custom-toggle"
-    type="button"
-    onclick={() => (showCustom = !showCustom)}
-  >
+  <button class="custom-toggle" type="button" onclick={() => (showCustom = !showCustom)}>
     {showCustom ? 'Hide custom SVG' : 'Use custom SVG…'}
   </button>
 

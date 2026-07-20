@@ -54,7 +54,9 @@
   <div class="modal-card">
     <div class="modal-header">
       <span class="modal-title">Recording</span>
-      <span class="stmt-count">{recording.statements.length} statement{recording.statements.length !== 1 ? 's' : ''}</span>
+      <span class="stmt-count"
+        >{recording.statements.length} statement{recording.statements.length !== 1 ? 's' : ''}</span
+      >
     </div>
 
     <div class="statements-list">
@@ -88,7 +90,11 @@
               if (e.key === 'Escape') showSaveForm = false;
             }}
           />
-          <button type="submit" class="btn btn--primary" disabled={!saveNameInput.trim() || isSaving}>
+          <button
+            type="submit"
+            class="btn btn--primary"
+            disabled={!saveNameInput.trim() || isSaving}
+          >
             Save
           </button>
           <button type="button" class="btn" onclick={() => (showSaveForm = false)}>Cancel</button>

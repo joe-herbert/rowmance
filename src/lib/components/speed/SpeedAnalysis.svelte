@@ -87,13 +87,20 @@
 
   function sortValue(entry: SpeedAnalysisEntry, field: SortField): number | string {
     switch (field) {
-      case 'date': return entry.executedAt;
-      case 'total': return entry.totalUs;
-      case 'pool': return entry.poolAcquireUs;
-      case 'switch': return entry.dbSwitchUs;
-      case 'exec': return entry.executionUs;
-      case 'proc': return entry.resultProcessingUs;
-      case 'rows': return entry.rowCount ?? -Infinity;
+      case 'date':
+        return entry.executedAt;
+      case 'total':
+        return entry.totalUs;
+      case 'pool':
+        return entry.poolAcquireUs;
+      case 'switch':
+        return entry.dbSwitchUs;
+      case 'exec':
+        return entry.executionUs;
+      case 'proc':
+        return entry.resultProcessingUs;
+      case 'rows':
+        return entry.rowCount ?? -Infinity;
     }
   }
 
@@ -120,7 +127,8 @@
       }
 
       if (filterSsh !== 'all') {
-        const sshEnabled = connections.profiles.find((p) => p.id === entry.connectionId)?.sshEnabled ?? false;
+        const sshEnabled =
+          connections.profiles.find((p) => p.id === entry.connectionId)?.sshEnabled ?? false;
         if (filterSsh === 'ssh' && !sshEnabled) return false;
         if (filterSsh === 'no-ssh' && sshEnabled) return false;
       }
@@ -226,7 +234,11 @@
                 placeholder={f.step === 'rows' ? 'rows' : 'ms'}
                 bind:value={f.max}
               />
-              <button class="filter-remove" onclick={() => removeFilter(f.id)} aria-label="Remove filter">×</button>
+              <button
+                class="filter-remove"
+                onclick={() => removeFilter(f.id)}
+                aria-label="Remove filter">×</button
+              >
             </div>
           {/each}
         </div>
@@ -274,7 +286,8 @@
           class="sort-dir-btn"
           onclick={() => (sortDir = sortDir === 'desc' ? 'asc' : 'desc')}
           title={sortDir === 'desc' ? 'Descending' : 'Ascending'}
-        >{sortDir === 'desc' ? '↓' : '↑'}</button>
+          >{sortDir === 'desc' ? '↓' : '↑'}</button
+        >
         {#if hasActiveFilter}
           <button class="btn-ghost filter-clear" onclick={clearFilters}>Clear filters</button>
         {/if}

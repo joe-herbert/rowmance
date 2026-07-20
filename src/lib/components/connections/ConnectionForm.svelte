@@ -10,9 +10,11 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as keychainApi from '$lib/tauri/keychain';
+  import { getDialect, getAllDialects, urlSchemeToDbType } from '$lib/stores/dialects.svelte';
   import type { ConnectionProfile, DbType } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import Modal from '$lib/components/Modal.svelte';
+  import ErrorMessage from '$lib/components/ErrorMessage.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
@@ -32,14 +34,6 @@
 
   const connectionStore = useConnections();
 
-  const DEFAULT_PORTS: Record<DbType, number> = {
-    mysql: 3306,
-    mariadb: 3306,
-    postgres: 5432,
-    sqlite: 0,
-    sqlserver: 1433,
-  };
-
   type Tab = 'basic' | 'ssh' | 'ssl' | 'advanced';
   let activeTab = $state<Tab>('basic');
 
@@ -48,14 +42,17 @@
   let name = $state(untrack(() => profile?.name ?? ''));
   let dbType = $state<DbType>(untrack(() => profile?.dbType ?? 'postgres'));
   let host = $state(untrack(() => profile?.host ?? 'localhost'));
-  let port = $state(untrack(() => profile?.port ?? DEFAULT_PORTS['postgres']));
+  // Default port when a fresh form opens — 5432 for postgres (the initial default dbType).
+  let port = $state(untrack(() => profile?.port ?? 5432));
   let database = $state(untrack(() => profile?.database ?? ''));
   let username = $state(untrack(() => profile?.username ?? ''));
   let password = $state('');
   let passwordDirty = $state(false);
   let showPassword = $state(false);
-  // SQLite file path — stored in `host` on the profile.
-  let filePath = $state(untrack(() => (profile?.dbType === 'sqlite' ? (profile?.host ?? '') : '')));
+  // File path for file-based engines (SQLite) — stored in `host` on the profile.
+  let filePath = $state(
+    untrack(() => (profile?.dialectInfo?.isFileBased ? (profile?.host ?? '') : '')),
+  );
   let color = $state(untrack(() => profile?.color ?? ''));
   let readOnly = $state(untrack(() => profile?.readOnly ?? false));
 
@@ -82,6 +79,11 @@
   let poolMax = $state(untrack(() => profile?.poolMax ?? 5));
   let pingInterval = $state(untrack(() => profile?.pingInterval ?? null));
 
+  // ── Dialect-driven helpers ────────────────────────────────────────────────────
+
+  const currentDialect = $derived(getDialect(dbType));
+  const isFileBased = $derived(currentDialect?.isFileBased ?? false);
+
   // ── URL import ────────────────────────────────────────────────────────────────
 
   let showUrlInput = $state(false);
@@ -94,38 +96,30 @@
     if (!url) return;
 
     try {
-      if (url.toLowerCase().startsWith('sqlite:')) {
-        const path = url
-          .replace(/^sqlite:\/\/\//, '/')
-          .replace(/^sqlite:\/\//, '')
-          .replace(/^sqlite:/i, '');
-        dbType = 'sqlite';
-        filePath = path;
+      const parsed = new URL(url);
+      const scheme = parsed.protocol.replace(':', '').toLowerCase();
+      const matchedDbType = urlSchemeToDbType(scheme);
+      if (!matchedDbType) {
+        const knownSchemes = getAllDialects()
+          .flatMap(({ dialect }) => dialect.urlSchemes)
+          .join(', ');
+        urlError = `Unsupported scheme "${scheme}". Supported schemes: ${knownSchemes}.`;
+        return;
+      }
+
+      dbType = matchedDbType;
+      const matchedDialect = getDialect(matchedDbType);
+
+      if (matchedDialect?.isFileBased) {
+        // File-based engines: extract the path from the URL (everything after the scheme://)
+        filePath = (parsed.hostname + parsed.pathname).replace(/^\/+/, '') || parsed.pathname;
         showUrlInput = false;
         connectionUrl = '';
         return;
       }
 
-      const parsed = new URL(url);
-      const scheme = parsed.protocol.replace(':', '').toLowerCase();
-      const schemeMap: Partial<Record<string, DbType>> = {
-        postgres: 'postgres',
-        postgresql: 'postgres',
-        mysql: 'mysql',
-        mariadb: 'mariadb',
-        sqlserver: 'sqlserver',
-        mssql: 'sqlserver',
-        'jdbc:sqlserver': 'sqlserver',
-      };
-      const type = schemeMap[scheme];
-      if (!type) {
-        urlError = `Unsupported scheme "${scheme}". Use postgres, mysql, mariadb, sqlite, or sqlserver.`;
-        return;
-      }
-
-      dbType = type;
       host = parsed.hostname || 'localhost';
-      port = parsed.port ? parseInt(parsed.port, 10) : DEFAULT_PORTS[type];
+      port = parsed.port ? parseInt(parsed.port, 10) : (matchedDialect?.defaultPort ?? 0);
       database = parsed.pathname.replace(/^\//, '');
       username = parsed.username ? decodeURIComponent(parsed.username) : '';
       if (parsed.password) {
@@ -167,10 +161,10 @@
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   function buildInput() {
-    if (dbType === 'sqlite') {
+    if (isFileBased) {
       return {
         name: name.trim(),
-        dbType: 'sqlite' as DbType,
+        dbType,
         host: filePath.trim(),
         port: 0,
         database: '',
@@ -278,9 +272,10 @@
   }
 
   function handleDbTypeChange() {
-    const prevDefault = DEFAULT_PORTS[profile?.dbType ?? dbType];
+    const prevDialect = getDialect(profile?.dbType ?? dbType);
+    const prevDefault = prevDialect?.defaultPort ?? 0;
     if (port === prevDefault) {
-      port = DEFAULT_PORTS[dbType];
+      port = currentDialect?.defaultPort ?? 0;
     }
   }
 
@@ -290,7 +285,7 @@
 
   const isValid = $derived(
     name.trim() !== '' &&
-      (dbType === 'sqlite'
+      (isFileBased
         ? filePath.trim() !== ''
         : host.trim() !== '' && database.trim() !== '' && username.trim() !== ''),
   );
@@ -303,11 +298,11 @@
   ];
 
   const tabs = $derived(
-    dbType === 'sqlite' ? allTabs.filter((t) => t.id !== 'ssh' && t.id !== 'ssl') : allTabs,
+    isFileBased ? allTabs.filter((t) => t.id !== 'ssh' && t.id !== 'ssl') : allTabs,
   );
 
   $effect(() => {
-    if (dbType === 'sqlite' && (activeTab === 'ssh' || activeTab === 'ssl')) {
+    if (isFileBased && (activeTab === 'ssh' || activeTab === 'ssl')) {
       activeTab = 'basic';
     }
   });
@@ -406,7 +401,7 @@
                   >Apply</button
                 >
               </div>
-              {#if urlError}<div class="url-error">{urlError}</div>{/if}
+              {#if urlError}<ErrorMessage message={urlError} />{/if}
             </div>
             <div class="url-import-divider"><span>or fill in manually</span></div>
           </div>
@@ -418,13 +413,10 @@
             <Select
               id="conn-type"
               bind:value={dbType}
-              options={[
-                { value: 'postgres', label: 'PostgreSQL' },
-                { value: 'mysql', label: 'MySQL' },
-                { value: 'mariadb', label: 'MariaDB' },
-                { value: 'sqlite', label: 'SQLite' },
-                { value: 'sqlserver', label: 'SQL Server' },
-              ]}
+              options={getAllDialects().map(({ dbType, dialect }) => ({
+                value: dbType,
+                label: dialect.displayName,
+              }))}
               size="md"
               onchange={handleDbTypeChange}
             />
@@ -445,7 +437,7 @@
           </div>
         </div>
 
-        {#if dbType === 'sqlite'}
+        {#if isFileBased}
           <div class="field">
             <label for="conn-file" class="label">File Path</label>
             <div class="file-row">
@@ -555,7 +547,10 @@
                   class="btn btn--ghost btn--sm btn--icon"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onclick={() => (showPassword = !showPassword)}
-                  >{#if showPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon width={14} height={14} />{/if}</button
+                  >{#if showPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon
+                      width={14}
+                      height={14}
+                    />{/if}</button
                 >
               </div>
             </div>
@@ -569,8 +564,8 @@
 
         <!-- SSH tab -->
       {:else if activeTab === 'ssh'}
-        {#if dbType === 'sqlite'}
-          <p class="tab-hint">SSH tunnelling is not available for SQLite connections.</p>
+        {#if isFileBased}
+          <p class="tab-hint">SSH tunnelling is not available for file-based connections.</p>
         {:else}
           <div class="field field--inline">
             <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
@@ -655,7 +650,10 @@
                     class="btn btn--ghost btn--sm btn--icon"
                     aria-label={showSshPassword ? 'Hide password' : 'Show password'}
                     onclick={() => (showSshPassword = !showSshPassword)}
-                    >{#if showSshPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon width={14} height={14} />{/if}</button
+                    >{#if showSshPassword}<EyeOffIcon width={14} height={14} />{:else}<EyeIcon
+                        width={14}
+                        height={14}
+                      />{/if}</button
                   >
                 </div>
               </div>
@@ -691,8 +689,8 @@
 
         <!-- SSL tab -->
       {:else if activeTab === 'ssl'}
-        {#if dbType === 'sqlite'}
-          <p class="tab-hint">SSL/TLS is not available for SQLite connections.</p>
+        {#if isFileBased}
+          <p class="tab-hint">SSL/TLS is not available for file-based connections.</p>
         {:else}
           <div class="field field--inline">
             <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
@@ -806,7 +804,9 @@
             placeholder="Disabled"
             autocomplete="off"
           />
-          <p class="tab-hint">Periodically checks the connection is still alive. Leave empty to disable.</p>
+          <p class="tab-hint">
+            Periodically checks the connection is still alive. Leave empty to disable.
+          </p>
         </div>
 
         <div class="field field--inline">
@@ -822,7 +822,11 @@
           class:test-result--success={testResult.success}
           class:test-result--fail={!testResult.success}
         >
-          {#if testResult.success}<CheckIcon width={13} height={13} strokeWidth={2.5} />{:else}<CloseIcon width={13} height={13} strokeWidth={2.5} />{/if}
+          {#if testResult.success}<CheckIcon
+              width={13}
+              height={13}
+              strokeWidth={2.5}
+            />{:else}<CloseIcon width={13} height={13} strokeWidth={2.5} />{/if}
           {testResult.message}
           {#if testResult.latencyMs !== null}
             <span class="latency">{testResult.latencyMs}ms</span>
@@ -831,7 +835,7 @@
       {/if}
 
       {#if saveError}
-        <div class="save-error">{saveError}</div>
+        <ErrorMessage message={saveError} />
       {/if}
 
       <div class="actions">
@@ -1086,13 +1090,6 @@
     opacity: 0.7;
   }
 
-  .save-error {
-    padding: var(--spacing-2) var(--spacing-3);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    background: var(--color-danger-subtle);
-    color: var(--color-danger);
-  }
 
   .actions {
     display: flex;
@@ -1219,15 +1216,6 @@
     flex: 1;
   }
 
-  .url-error {
-    padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-danger-subtle);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    color: var(--color-danger);
-    margin-top: var(--spacing-1);
-  }
 
   .url-import-divider {
     display: flex;

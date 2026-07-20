@@ -1,6 +1,5 @@
 // Prevents additional console window on Windows in release.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-#![allow(dead_code)]
 
 mod commands;
 mod connections;
@@ -170,13 +169,8 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let help_whats_new_item = MenuItem::with_id(
-                app,
-                "help-whats-new",
-                "What's New…",
-                true,
-                None::<&str>,
-            )?;
+            let help_whats_new_item =
+                MenuItem::with_id(app, "help-whats-new", "What's New…", true, None::<&str>)?;
             let help_submenu = Submenu::with_items(
                 app,
                 "Help",
@@ -347,6 +341,7 @@ pub fn run() {
             commands::connections::connections_get_db_url,
             commands::connections::connections_copy_db_url_to_clipboard,
             commands::connections::connections_duplicate,
+            commands::connections::connections_list_dialects,
             // Keychain
             commands::keychain::keychain_store,
             commands::keychain::keychain_retrieve,
@@ -365,6 +360,7 @@ pub fn run() {
             commands::query::query_save_table_changes,
             // Schema introspection & modification
             commands::schema::schema_list_databases,
+            commands::schema::schema_list_schemas,
             commands::schema::schema_list_tables,
             commands::schema::schema_list_columns,
             commands::schema::schema_list_all_columns,
@@ -455,6 +451,18 @@ pub fn run() {
             commands::virtual_relations::polymorphic_vr_create,
             commands::virtual_relations::polymorphic_vr_update,
             commands::virtual_relations::polymorphic_vr_delete,
+            // Server administration
+            commands::server_admin::server_admin_get_capabilities,
+            commands::server_admin::server_admin_list_processes,
+            commands::server_admin::server_admin_kill_session,
+            commands::server_admin::server_admin_cancel_session,
+            commands::server_admin::server_admin_get_status,
+            commands::server_admin::server_admin_list_variables,
+            commands::server_admin::server_admin_set_variable,
+            commands::server_admin::server_admin_list_locks,
+            commands::server_admin::server_admin_list_scheduled_jobs,
+            commands::server_admin::server_admin_get_innodb_status,
+            commands::server_admin::server_admin_get_vacuum_status,
             // User management
             commands::users::users_list,
             commands::users::users_get_grants,

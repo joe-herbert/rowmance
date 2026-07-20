@@ -7,8 +7,15 @@
   import Modal from '$lib/components/Modal.svelte';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
-  import { generateQuery, explainQuery, describeTable, summariseResult, type AiConfig } from '$lib/ai/service';
+  import {
+    generateQuery,
+    explainQuery,
+    describeTable,
+    summariseResult,
+    type AiConfig,
+  } from '$lib/ai/service';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { defaultDialectInfo } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
   import { marked } from 'marked';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
@@ -18,7 +25,7 @@
     mode: 'generate';
     connectionId: string;
     database: string;
-    oninsert: (sql: string) => void;
+    oninsert: (_sql: string) => void;
     onclose: () => void;
   }
   interface ExplainProps {
@@ -47,6 +54,7 @@
   }
   type Props = GenerateProps | ExplainProps | DescribeProps | SummariseProps;
 
+  // eslint-disable-next-line svelte/valid-compile
   let props: Props = $props();
 
   const settingsStore = useSettings();
@@ -61,7 +69,7 @@
     dataSampleRows: settingsStore.settings.aiDataSampleRows,
   });
 
-  const dbType = $derived(connections.getById(props.connectionId)?.dbType ?? 'mysql');
+  const dialectInfo = $derived(connections.getById(props.connectionId)?.dialectInfo);
 
   let prompt = $state('');
   let result = $state('');
@@ -97,7 +105,13 @@
     error = null;
     result = '';
     try {
-      result = await generateQuery(config, prompt, props.connectionId, props.database, dbType);
+      result = await generateQuery(
+        config,
+        prompt,
+        props.connectionId,
+        props.database,
+        dialectInfo ?? defaultDialectInfo,
+      );
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -111,7 +125,13 @@
     error = null;
     result = '';
     try {
-      result = await explainQuery(config, props.sql, props.connectionId, props.database, dbType);
+      result = await explainQuery(
+        config,
+        props.sql,
+        props.connectionId,
+        props.database,
+        dialectInfo ?? defaultDialectInfo,
+      );
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -139,7 +159,14 @@
     error = null;
     result = '';
     try {
-      result = await describeTable(config, props.tableName, props.ddl, props.connectionId, props.database, dbType);
+      result = await describeTable(
+        config,
+        props.tableName,
+        props.ddl,
+        props.connectionId,
+        props.database,
+        dialectInfo ?? defaultDialectInfo,
+      );
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -148,11 +175,27 @@
   }
 </script>
 
-<Modal zindex={200} label={props.mode === 'generate' ? 'Generate query' : props.mode === 'explain' ? 'Explain query' : props.mode === 'describe' ? 'Describe table' : 'Summarise results'} onbackdropclick={props.onclose}>
+<Modal
+  zindex={200}
+  label={props.mode === 'generate'
+    ? 'Generate query'
+    : props.mode === 'explain'
+      ? 'Explain query'
+      : props.mode === 'describe'
+        ? 'Describe table'
+        : 'Summarise results'}
+  onbackdropclick={props.onclose}
+>
   <div class="ai-modal">
     <header class="ai-modal-header">
       <h2 class="ai-modal-title">
-        {props.mode === 'generate' ? 'Generate Query' : props.mode === 'explain' ? 'Explain Query' : props.mode === 'describe' ? 'Describe Table' : 'Summarise Results'}
+        {props.mode === 'generate'
+          ? 'Generate Query'
+          : props.mode === 'explain'
+            ? 'Explain Query'
+            : props.mode === 'describe'
+              ? 'Describe Table'
+              : 'Summarise Results'}
       </h2>
       <button class="ai-modal-close" onclick={props.onclose} aria-label="Close">
         <CloseIcon width={12} height={12} strokeWidth={2.5} />
@@ -162,7 +205,8 @@
     <div class="ai-modal-body">
       {#if props.mode === 'generate' && config.contextLevel === 'none'}
         <div class="ai-context-warning">
-          AI has no schema context — results may be inaccurate. Enable schema access in Settings → AI.
+          AI has no schema context — results may be inaccurate. Enable schema access in Settings →
+          AI.
         </div>
       {/if}
       {#if props.mode === 'generate'}
@@ -199,7 +243,13 @@
       {:else if isLoading}
         <div class="ai-loading">
           <Spinner size={14} label="Loading" />
-          {props.mode === 'generate' ? 'Generating…' : props.mode === 'explain' ? 'Explaining…' : props.mode === 'describe' ? 'Describing…' : 'Summarising…'}
+          {props.mode === 'generate'
+            ? 'Generating…'
+            : props.mode === 'explain'
+              ? 'Explaining…'
+              : props.mode === 'describe'
+                ? 'Describing…'
+                : 'Summarising…'}
         </div>
       {:else if result}
         {#if props.mode === 'generate'}
@@ -208,7 +258,6 @@
           <div class="ai-explain-result markdown-body">{@html marked(result)}</div>
         {/if}
       {/if}
-
     </div>
 
     <footer class="ai-modal-footer">
@@ -222,12 +271,18 @@
           </button>
           <button
             class="ai-btn ai-btn--primary"
-            onclick={() => { if (props.mode === 'generate') props.oninsert(result); }}
+            onclick={() => {
+              if (props.mode === 'generate') props.oninsert(result);
+            }}
           >
             Insert into editor
           </button>
         {:else}
-          <button class="ai-btn ai-btn--primary" onclick={runGenerate} disabled={isLoading || !prompt.trim()}>
+          <button
+            class="ai-btn ai-btn--primary"
+            onclick={runGenerate}
+            disabled={isLoading || !prompt.trim()}
+          >
             {#if isLoading}
               <Spinner size={12} label="Generating" />
             {:else}
@@ -286,7 +341,9 @@
     border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
-    transition: color var(--transition-fast), background var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
   }
 
   .ai-context-warning {
@@ -410,9 +467,15 @@
     color: var(--color-text-primary);
   }
 
-  :global(.ai-explain-result.markdown-body h1) { font-size: 1.2rem; }
-  :global(.ai-explain-result.markdown-body h2) { font-size: 1.1rem; }
-  :global(.ai-explain-result.markdown-body h3) { font-size: 1rem; }
+  :global(.ai-explain-result.markdown-body h1) {
+    font-size: 1.2rem;
+  }
+  :global(.ai-explain-result.markdown-body h2) {
+    font-size: 1.1rem;
+  }
+  :global(.ai-explain-result.markdown-body h3) {
+    font-size: 1rem;
+  }
 
   :global(.ai-explain-result.markdown-body p) {
     margin: 0 0 0.75rem;
@@ -428,8 +491,12 @@
     margin: 0 0 0.75rem;
   }
 
-  :global(.ai-explain-result.markdown-body ul) { list-style: disc; }
-  :global(.ai-explain-result.markdown-body ol) { list-style: decimal; }
+  :global(.ai-explain-result.markdown-body ul) {
+    list-style: disc;
+  }
+  :global(.ai-explain-result.markdown-body ol) {
+    list-style: decimal;
+  }
 
   :global(.ai-explain-result.markdown-body li) {
     margin-bottom: 0.2rem;

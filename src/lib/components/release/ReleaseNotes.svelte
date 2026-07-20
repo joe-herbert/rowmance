@@ -30,7 +30,13 @@
     {#if html}
       {@html html}
     {:else}
-      <p class="release-empty">See the <a href="https://github.com/joe-herbert/rowmance/releases/tag/v{version}" target="_blank" rel="noreferrer">release page</a> for what's new.</p>
+      <p class="release-empty">
+        See the <a
+          href="https://github.com/joe-herbert/rowmance/releases/tag/v{version}"
+          target="_blank"
+          rel="noreferrer">release page</a
+        > for what's new.
+      </p>
     {/if}
   </div>
 </div>
@@ -107,10 +113,22 @@
     color: var(--color-text, inherit);
   }
 
-  :global(.release-body.markdown-body h1) { font-size: 1.5rem; border-bottom: 1px solid var(--color-border, #e1e4e8); padding-bottom: 0.3rem; }
-  :global(.release-body.markdown-body h2) { font-size: 1.25rem; border-bottom: 1px solid var(--color-border, #e1e4e8); padding-bottom: 0.3rem; }
-  :global(.release-body.markdown-body h3) { font-size: 1.1rem; }
-  :global(.release-body.markdown-body h4) { font-size: 1rem; }
+  :global(.release-body.markdown-body h1) {
+    font-size: 1.5rem;
+    border-bottom: 1px solid var(--color-border, #e1e4e8);
+    padding-bottom: 0.3rem;
+  }
+  :global(.release-body.markdown-body h2) {
+    font-size: 1.25rem;
+    border-bottom: 1px solid var(--color-border, #e1e4e8);
+    padding-bottom: 0.3rem;
+  }
+  :global(.release-body.markdown-body h3) {
+    font-size: 1.1rem;
+  }
+  :global(.release-body.markdown-body h4) {
+    font-size: 1rem;
+  }
 
   :global(.release-body.markdown-body p) {
     margin: 0 0 1rem;
@@ -139,7 +157,13 @@
   }
 
   :global(.release-body.markdown-body code) {
-    font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+    font-family:
+      ui-monospace,
+      SFMono-Regular,
+      SF Mono,
+      Menlo,
+      Consolas,
+      monospace;
     font-size: 0.85em;
     padding: 0.2em 0.4em;
     background: var(--color-surface-raised, rgba(128, 128, 128, 0.1));

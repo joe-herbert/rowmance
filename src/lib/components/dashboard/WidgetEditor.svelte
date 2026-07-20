@@ -3,6 +3,7 @@
   Supports SQL mode and a basic visual builder mode.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { DashboardWidget, WidgetDisplayType, SingleValueFormat } from '$lib/types';
   import { useConnections } from '$lib/stores/connections.svelte';
   import * as schemaApi from '$lib/tauri/schema';
@@ -14,7 +15,7 @@
 
   interface Props {
     widget?: DashboardWidget | null;
-    onsave: (w: Omit<DashboardWidget, 'id' | 'x' | 'y'>) => void;
+    onsave: (_w: Omit<DashboardWidget, 'id' | 'x' | 'y'>) => void;
     oncancel: () => void;
   }
 
@@ -24,20 +25,25 @@
 
   // ── Form state ────────────────────────────────────────────────────────────
 
-  let title = $state(widget?.title ?? '');
+  let title = $state(untrack(() => widget?.title ?? ''));
   let connectionId = $state(
-    widget?.connectionId ??
-      connectionsStore.profiles.find((p) => connectionsStore.isActive(p.id))?.id ??
-      connectionsStore.profiles[0]?.id ??
-      '',
+    untrack(
+      () =>
+        widget?.connectionId ??
+        connectionsStore.profiles.find((p) => connectionsStore.isActive(p.id))?.id ??
+        connectionsStore.profiles[0]?.id ??
+        '',
+    ),
   );
-  let database = $state(widget?.database ?? '');
-  let sql = $state(widget?.sql ?? '');
-  let displayType = $state<WidgetDisplayType>(widget?.displayType ?? 'table');
-  let singleValueFormat = $state<SingleValueFormat>(widget?.singleValueFormat ?? 'auto');
-  let singleValueCurrency = $state(widget?.singleValueCurrency ?? 'GBP');
-  let w = $state(widget?.w ?? 6);
-  let h = $state(widget?.h ?? 3);
+  let database = $state(untrack(() => widget?.database ?? ''));
+  let sql = $state(untrack(() => widget?.sql ?? ''));
+  let displayType = $state<WidgetDisplayType>(untrack(() => widget?.displayType ?? 'table'));
+  let singleValueFormat = $state<SingleValueFormat>(
+    untrack(() => widget?.singleValueFormat ?? 'auto'),
+  );
+  let singleValueCurrency = $state(untrack(() => widget?.singleValueCurrency ?? 'GBP'));
+  let w = $state(untrack(() => widget?.w ?? 6));
+  let h = $state(untrack(() => widget?.h ?? 3));
 
   // ── Query Builder state ───────────────────────────────────────────────────
 
@@ -85,7 +91,10 @@
       sql,
       displayType,
       singleValueFormat: displayType === 'count' ? singleValueFormat : undefined,
-      singleValueCurrency: displayType === 'count' && singleValueFormat === 'currency' ? singleValueCurrency : undefined,
+      singleValueCurrency:
+        displayType === 'count' && singleValueFormat === 'currency'
+          ? singleValueCurrency
+          : undefined,
       w,
       h,
     });
@@ -94,15 +103,15 @@
   const canSave = $derived(connectionId && sql.trim().length > 0);
 
   const SINGLE_VALUE_FORMATS: { value: SingleValueFormat; label: string }[] = [
-    { value: 'auto',           label: 'Auto' },
-    { value: 'number',         label: 'Number' },
+    { value: 'auto', label: 'Auto' },
+    { value: 'number', label: 'Number' },
     { value: 'number_compact', label: 'Number (compact)' },
-    { value: 'currency',       label: 'Currency' },
-    { value: 'percent',        label: 'Percentage' },
-    { value: 'date',           label: 'Date' },
-    { value: 'datetime',       label: 'Date & Time' },
-    { value: 'boolean',        label: 'Boolean' },
-    { value: 'text',           label: 'Text' },
+    { value: 'currency', label: 'Currency' },
+    { value: 'percent', label: 'Percentage' },
+    { value: 'date', label: 'Date' },
+    { value: 'datetime', label: 'Date & Time' },
+    { value: 'boolean', label: 'Boolean' },
+    { value: 'text', label: 'Text' },
   ];
 
   const CURRENCIES = [
@@ -192,7 +201,8 @@
             disabled={qbLoading || !connectionsStore.isActive(connectionId)}
             onclick={openBuilder}
             title={!connectionsStore.isActive(connectionId) ? 'Connect to a database first' : ''}
-          >{qbLoading ? 'Loading…' : 'Query Builder'}</button>
+            >{qbLoading ? 'Loading…' : 'Query Builder'}</button
+          >
         </div>
         {#if qbError}<p class="builder-error">{qbError}</p>{/if}
         <textarea
@@ -207,15 +217,15 @@
 
       <!-- Display type -->
       <div class="field">
-        <label class="field-label">Display as</label>
+        <span class="field-label">Display as</span>
         <div class="display-types">
           {#each DISPLAY_TYPES as dt}
             <button
               class="display-btn"
               class:active={displayType === dt.value}
               type="button"
-              onclick={() => (displayType = dt.value)}
-            >{dt.label}</button>
+              onclick={() => (displayType = dt.value)}>{dt.label}</button
+            >
           {/each}
         </div>
       </div>
@@ -269,7 +279,6 @@
           />
         </div>
       </div>
-
     </div>
 
     <div class="dialog-footer">
@@ -284,7 +293,7 @@
 {#if showQueryBuilder}
   <QueryBuilderModal
     tables={qbTables}
-    loadColumns={loadColumns}
+    {loadColumns}
     defaultDatabase={database}
     oninsert={(generatedSql) => {
       sql = generatedSql;
@@ -397,7 +406,6 @@
     width: 100px;
   }
 
-
   .sql-input {
     padding: var(--spacing-2);
     font-size: 12.5px;
@@ -493,7 +501,9 @@
     border-radius: var(--radius-sm);
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
   }
 
   .builder-open-btn:hover:not(:disabled) {

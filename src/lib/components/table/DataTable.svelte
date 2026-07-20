@@ -68,9 +68,21 @@
     onDeleteRow?: (_row: CellValue[], _rowKey: string) => void;
     onCloneRow?: (_row: CellValue[]) => void;
     onDeleteRowsPending?: (_deletedRows: Map<string, CellValue[]>) => void;
-    onForeignKeyClick?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => void;
-    onForeignKeyQuickView?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => Promise<QuickViewData | null>;
-    isForeignKeyNavigable?: (_colName: string, _value: CellValue, _row: Record<string, CellValue>) => boolean;
+    onForeignKeyClick?: (
+      _colName: string,
+      _value: CellValue,
+      _row: Record<string, CellValue>,
+    ) => void;
+    onForeignKeyQuickView?: (
+      _colName: string,
+      _value: CellValue,
+      _row: Record<string, CellValue>,
+    ) => Promise<QuickViewData | null>;
+    isForeignKeyNavigable?: (
+      _colName: string,
+      _value: CellValue,
+      _row: Record<string, CellValue>,
+    ) => boolean;
     onConnectColumn?: (_colName: string) => void;
     onConnectPolymorphic?: (_colName: string) => void;
     initialColWidths?: Record<string, number>;
@@ -1736,7 +1748,10 @@
             const rowContext = Object.fromEntries(
               columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, rowData[i])]),
             );
-            if (!isForeignKeyNavigable || isForeignKeyNavigable(colMeta.name, cellValue, rowContext)) {
+            if (
+              !isForeignKeyNavigable ||
+              isForeignKeyNavigable(colMeta.name, cellValue, rowContext)
+            ) {
               triggerQuickView(colMeta.name, cellValue, rowKey, rowContext);
             }
           }
@@ -1754,7 +1769,10 @@
             const rowContext = Object.fromEntries(
               columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, rowData[i])]),
             );
-            if (!isForeignKeyNavigable || isForeignKeyNavigable(colMeta.name, cellValue, rowContext)) {
+            if (
+              !isForeignKeyNavigable ||
+              isForeignKeyNavigable(colMeta.name, cellValue, rowContext)
+            ) {
               onForeignKeyClick?.(colMeta.name, cellValue, rowContext);
             }
           }
@@ -1929,7 +1947,14 @@
     if (value.startsWith("'")) return false;
     if (/\(/.test(value)) return true;
     const upper = value.trim().toUpperCase();
-    return ['CURRENT_TIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_USER', 'CURRENT_ROLE', 'CURRENT_SCHEMA'].includes(upper);
+    return [
+      'CURRENT_TIMESTAMP',
+      'CURRENT_DATE',
+      'CURRENT_TIME',
+      'CURRENT_USER',
+      'CURRENT_ROLE',
+      'CURRENT_SCHEMA',
+    ].includes(upper);
   }
 
   function parseDefaultValue(value: string, dataType: string): CellValue {
@@ -2248,13 +2273,34 @@
           if (val === null) return true;
           break;
         case 'true':
-          if (val === true || val === 1 || val === '1' || val === 't' || String(val).toLowerCase() === 'true' || String(val).toLowerCase() === 'yes') return true;
+          if (
+            val === true ||
+            val === 1 ||
+            val === '1' ||
+            val === 't' ||
+            String(val).toLowerCase() === 'true' ||
+            String(val).toLowerCase() === 'yes'
+          )
+            return true;
           break;
         case 'false':
-          if (val === false || val === 0 || val === '0' || val === 'f' || String(val).toLowerCase() === 'false' || String(val).toLowerCase() === 'no') return true;
+          if (
+            val === false ||
+            val === 0 ||
+            val === '0' ||
+            val === 'f' ||
+            String(val).toLowerCase() === 'false' ||
+            String(val).toLowerCase() === 'no'
+          )
+            return true;
           break;
         case 'equals':
-          if (cond.value != null && val !== null && String(val).toLowerCase() === cond.value.toLowerCase()) return true;
+          if (
+            cond.value != null &&
+            val !== null &&
+            String(val).toLowerCase() === cond.value.toLowerCase()
+          )
+            return true;
           break;
       }
     }
@@ -2308,7 +2354,9 @@
         if (!result.error && result.rows[0]?.[0] != null) {
           rawDbString = String(result.rows[0][0]);
         }
-      } catch {}
+      } catch {
+        /* ignore */
+      }
     }
     if (!rawDbString) rawDate = new Date();
 
@@ -2350,12 +2398,20 @@
           const { originalIndex } = visibleColumns[c];
           const colDef = columns[originalIndex];
           if (colDef && isDatetimeishType(colDef.dataType)) {
-            applyPendingChange(rowKey, colDef.name, rowData[originalIndex], getNowForType(colDef.dataType));
+            applyPendingChange(
+              rowKey,
+              colDef.name,
+              rowData[originalIndex],
+              getNowForType(colDef.dataType),
+            );
           }
         }
       } else {
         const range = getSelectionRange();
-        if (!range) { dismissContextMenu(); return; }
+        if (!range) {
+          dismissContextMenu();
+          return;
+        }
         const { minRow, maxRow, minCol, maxCol } = range;
         for (let r = minRow; r <= maxRow; r++) {
           const rowData = pageRows[r];
@@ -2370,7 +2426,12 @@
             const { originalIndex } = visibleColumns[c];
             const colDef = columns[originalIndex];
             if (colDef && isDatetimeishType(colDef.dataType)) {
-              applyPendingChange(rowKey, colDef.name, rowData[originalIndex], getNowForType(colDef.dataType));
+              applyPendingChange(
+                rowKey,
+                colDef.name,
+                rowData[originalIndex],
+                getNowForType(colDef.dataType),
+              );
             }
           }
         }
@@ -3527,7 +3588,8 @@
                 if (!isRenamingThis) onColHeaderPointerDown(e, col.name);
               }}
               oncontextmenu={(e) => {
-                if (onRenameColumn || onQuickFilter || onHideColumn) openHeaderContextMenu(e, col.name);
+                if (onRenameColumn || onQuickFilter || onHideColumn)
+                  openHeaderContextMenu(e, col.name);
               }}
             >
               {#if isRenamingThis}
@@ -3784,7 +3846,11 @@
                           class:bool-true={currentValue}
                           class:bool-false={!currentValue}
                         >
-                          {#if currentValue}<CheckIcon width={12} height={12} strokeWidth={2.5} />{:else}<CloseIcon width={12} height={12} strokeWidth={2.5} />{/if}
+                          {#if currentValue}<CheckIcon
+                              width={12}
+                              height={12}
+                              strokeWidth={2.5}
+                            />{:else}<CloseIcon width={12} height={12} strokeWidth={2.5} />{/if}
                         </span>
                       {:else}
                         {formatCell(currentValue)}
@@ -3803,7 +3869,10 @@
           {@const isSelected = selectedRowKeys.has(rowKey)}
           {@const rowDirty = isRowPending(rowKey)}
           {@const isDeleted = pendingDeletedRows.has(rowKey)}
-          {@const isSoftDeleted = !isDeleted && (settings.softDeleteHighlight || settings.softDeleteStrikethrough) && checkSoftDeleted(row, columns)}
+          {@const isSoftDeleted =
+            !isDeleted &&
+            (settings.softDeleteHighlight || settings.softDeleteStrikethrough) &&
+            checkSoftDeleted(row, columns)}
           <tr
             class="data-row"
             class:row-selected={isSelected}
@@ -3875,16 +3944,11 @@
               {@const isLivePreview =
                 editTarget !== null &&
                 isCellInSelection(rowIndex, colIndex) &&
-                !(
-                  editTarget.rowKey === rowKey &&
-                  editTarget.colIndex === originalIndex
-                )}
+                !(editTarget.rowKey === rowKey && editTarget.colIndex === originalIndex)}
               {@const cellValue = isLivePreview
                 ? liveEditValue
                 : getPendingValue(rowKey, col.name, row[originalIndex])}
-              {@const isPending = isLivePreview
-                ? true
-                : hasPendingChange(rowKey, col.name)}
+              {@const isPending = isLivePreview ? true : hasPendingChange(rowKey, col.name)}
               {@const typeCategory = getDataTypeCategory(col.dataType)}
               {@const isRequiredEmpty =
                 isPending &&
@@ -3899,15 +3963,15 @@
                 String(cellValue).toLowerCase().includes(searchTerm.toLowerCase())}
               {@const isFkNavigable =
                 col.isForeignKey && cellValue !== null && !!onForeignKeyClick
-                  ? (isForeignKeyNavigable
-                      ? isForeignKeyNavigable(
-                          col.name,
-                          cellValue,
-                          Object.fromEntries(
-                            columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
-                          ),
-                        )
-                      : true)
+                  ? isForeignKeyNavigable
+                    ? isForeignKeyNavigable(
+                        col.name,
+                        cellValue,
+                        Object.fromEntries(
+                          columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
+                        ),
+                      )
+                    : true
                   : false}
               <td
                 class="data-cell"
@@ -4380,7 +4444,11 @@
                           class:bool-true={currentValue}
                           class:bool-false={!currentValue}
                         >
-                          {#if currentValue}<CheckIcon width={12} height={12} strokeWidth={2.5} />{:else}<CloseIcon width={12} height={12} strokeWidth={2.5} />{/if}
+                          {#if currentValue}<CheckIcon
+                              width={12}
+                              height={12}
+                              strokeWidth={2.5}
+                            />{:else}<CloseIcon width={12} height={12} strokeWidth={2.5} />{/if}
                         </span>
                       {:else}
                         {formatCell(currentValue)}
@@ -4424,10 +4492,14 @@
             </CtxItem>
           {/if}
           <CtxItem onclick={() => copyAsJson()}>
-            {selectedNewRowKeys.size > 1 ? `Copy ${selectedNewRowKeys.size} rows as JSON` : 'Copy row as JSON'}
+            {selectedNewRowKeys.size > 1
+              ? `Copy ${selectedNewRowKeys.size} rows as JSON`
+              : 'Copy row as JSON'}
           </CtxItem>
           <CtxItem onclick={() => copyAsCsv()}>
-            {selectedNewRowKeys.size > 1 ? `Copy ${selectedNewRowKeys.size} rows as CSV` : 'Copy row as CSV'}
+            {selectedNewRowKeys.size > 1
+              ? `Copy ${selectedNewRowKeys.size} rows as CSV`
+              : 'Copy row as CSV'}
           </CtxItem>
           {#if editable && !readOnly}
             <CtxSep />
@@ -4437,7 +4509,9 @@
           {/if}
           <CtxSep />
           <CtxItem danger onclick={() => discardSelectedNewRows()}>
-            {selectedNewRowKeys.size > 1 ? `Discard ${selectedNewRowKeys.size} new rows` : 'Discard new row'}
+            {selectedNewRowKeys.size > 1
+              ? `Discard ${selectedNewRowKeys.size} new rows`
+              : 'Discard new row'}
           </CtxItem>
         {:else}
           {#if (contextMenu.colName && editable && !readOnly && !contextMenuSnapshotIsMultiCell) || (contextMenu.colName && !contextMenuSnapshotIsMultiCell)}
@@ -4489,9 +4563,15 @@
             {/if}
           {/if}
           <CtxSep />
-          <CtxItem onclick={() => copyAsJson()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as JSON</CtxItem>
-          <CtxItem onclick={() => copyAsSql()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as SQL</CtxItem>
-          <CtxItem onclick={() => copyAsCsv()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as CSV</CtxItem>
+          <CtxItem onclick={() => copyAsJson()}
+            >{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as JSON</CtxItem
+          >
+          <CtxItem onclick={() => copyAsSql()}
+            >{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as SQL</CtxItem
+          >
+          <CtxItem onclick={() => copyAsCsv()}
+            >{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as CSV</CtxItem
+          >
           {#if contextMenuSnapshotIsMultiCell}
             <CtxItem onclick={() => copySelectionForIn()}>Copy selection for IN</CtxItem>
           {/if}
@@ -4530,7 +4610,9 @@
             <CtxSep />
             <CtxItem onclick={() => cloneRow()}>Clone row</CtxItem>
             <CtxSep />
-            <CtxItem danger onclick={() => deleteNewRow(contextMenu!.rowKey)}>Discard new row</CtxItem>
+            <CtxItem danger onclick={() => deleteNewRow(contextMenu!.rowKey)}
+              >Discard new row</CtxItem
+            >
           {/if}
         {/if}
       {:else if contextMenuSnapshotIsRowSelection || contextMenu.colName === null}
@@ -4626,9 +4708,15 @@
           {/if}
         {/if}
         <CtxSep />
-        <CtxItem onclick={() => copyAsJson()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as JSON</CtxItem>
-        <CtxItem onclick={() => copyAsSql()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as SQL</CtxItem>
-        <CtxItem onclick={() => copyAsCsv()}>{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as CSV</CtxItem>
+        <CtxItem onclick={() => copyAsJson()}
+          >{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as JSON</CtxItem
+        >
+        <CtxItem onclick={() => copyAsSql()}
+          >{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as SQL</CtxItem
+        >
+        <CtxItem onclick={() => copyAsCsv()}
+          >{contextMenuSnapshotIsMultiCell ? 'Copy selection' : 'Copy cell'} as CSV</CtxItem
+        >
         {#if contextMenuSnapshotIsMultiCell}
           <CtxItem onclick={() => copySelectionForIn()}>Copy selection for IN</CtxItem>
         {/if}
@@ -4702,7 +4790,12 @@
       {/if}
     {/if}
     {#if onHideColumn}
-      <CtxItem onclick={() => { onHideColumn!(headerContextMenuColName); headerContextMenu = null; }}>Hide column</CtxItem>
+      <CtxItem
+        onclick={() => {
+          onHideColumn!(headerContextMenuColName);
+          headerContextMenu = null;
+        }}>Hide column</CtxItem
+      >
     {/if}
     {#if onQuickFilter}
       {#if onRenameColumn || onHideColumn}
@@ -4710,19 +4803,74 @@
       {/if}
       <CtxSubmenuItem label="Add filter…">
         {#snippet children()}
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '='); headerContextMenu = null; }}>= Equals</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '!='); headerContextMenu = null; }}>≠ Not equals</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '>'); headerContextMenu = null; }}>&gt; Greater than</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '<'); headerContextMenu = null; }}>&lt; Less than</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '>='); headerContextMenu = null; }}>≥ Greater than or equal</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, '<='); headerContextMenu = null; }}>≤ Less than or equal</CtxItem>
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, '=');
+              headerContextMenu = null;
+            }}>= Equals</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, '!=');
+              headerContextMenu = null;
+            }}>≠ Not equals</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, '>');
+              headerContextMenu = null;
+            }}>&gt; Greater than</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, '<');
+              headerContextMenu = null;
+            }}>&lt; Less than</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, '>=');
+              headerContextMenu = null;
+            }}>≥ Greater than or equal</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, '<=');
+              headerContextMenu = null;
+            }}>≤ Less than or equal</CtxItem
+          >
           <CtxSep />
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'LIKE'); headerContextMenu = null; }}>LIKE</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'NOT LIKE'); headerContextMenu = null; }}>NOT LIKE</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'IN'); headerContextMenu = null; }}>IN (list)</CtxItem>
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, 'LIKE');
+              headerContextMenu = null;
+            }}>LIKE</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, 'NOT LIKE');
+              headerContextMenu = null;
+            }}>NOT LIKE</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, 'IN');
+              headerContextMenu = null;
+            }}>IN (list)</CtxItem
+          >
           <CtxSep />
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'IS NULL'); headerContextMenu = null; }}>IS NULL</CtxItem>
-          <CtxItem onclick={() => { onQuickFilter!(headerContextMenuColName, 'IS NOT NULL'); headerContextMenu = null; }}>IS NOT NULL</CtxItem>
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, 'IS NULL');
+              headerContextMenu = null;
+            }}>IS NULL</CtxItem
+          >
+          <CtxItem
+            onclick={() => {
+              onQuickFilter!(headerContextMenuColName, 'IS NOT NULL');
+              headerContextMenu = null;
+            }}>IS NOT NULL</CtxItem
+          >
         {/snippet}
       </CtxSubmenuItem>
     {/if}
@@ -4747,7 +4895,9 @@
       onTab={handleTabFromEditor}
       onTabConfirm={handleTabConfirm}
       onOpenModal={openInlineAsModal}
-      onLiveValue={(v) => { liveEditValue = v; }}
+      onLiveValue={(v) => {
+        liveEditValue = v;
+      }}
       {connectionId}
       {database}
     />

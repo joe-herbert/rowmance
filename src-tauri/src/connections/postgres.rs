@@ -1,39 +1,18 @@
 /// PostgreSQL-specific schema introspection queries.
-use serde::Serialize;
 use sqlx::PgPool;
 
+use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
 use crate::error::RowmanceError;
 
-#[derive(Debug, Serialize)]
-pub struct TableInfo {
-    pub name: String,
-    #[serde(rename = "tableType")]
-    pub table_type: String,
-    #[serde(rename = "rowCount")]
-    pub row_count: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ColumnInfo {
-    pub name: String,
-    #[serde(rename = "dataType")]
-    pub data_type: String,
-    pub nullable: bool,
-    #[serde(rename = "defaultValue")]
-    pub default_value: Option<String>,
-    #[serde(rename = "isPrimaryKey")]
-    pub is_primary_key: bool,
-    #[serde(rename = "isAutoIncrement")]
-    pub is_auto_increment: bool,
-    #[serde(rename = "isForeignKey")]
-    pub is_foreign_key: bool,
-    pub comment: Option<String>,
-}
-
-/// List all non-system databases visible to this connection.
+/// List all user schemas in the connected database.
+/// PostgreSQL separates "database" (connection target) from "schema" (namespace).
+/// The pool is already scoped to one database, so we expose schemas as the
+/// navigatable unit — they map to the `schema` parameter used in list_tables.
 pub async fn list_databases(pool: &PgPool) -> Result<Vec<String>, RowmanceError> {
     let rows = sqlx::query_scalar::<_, String>(
-        "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname",
+        "SELECT nspname FROM pg_catalog.pg_namespace \
+         WHERE nspname NOT LIKE 'pg_%' AND nspname != 'information_schema' \
+         ORDER BY nspname",
     )
     .fetch_all(pool)
     .await?;
@@ -261,30 +240,6 @@ pub async fn list_all_columns(
             )
         })
         .collect())
-}
-
-#[derive(Debug, Serialize)]
-pub struct IndexInfo {
-    pub name: String,
-    pub columns: Vec<String>,
-    pub unique: bool,
-    #[serde(rename = "indexType")]
-    pub index_type: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ForeignKeyInfo {
-    #[serde(rename = "constraintName")]
-    pub constraint_name: String,
-    pub columns: Vec<String>,
-    #[serde(rename = "referencedTable")]
-    pub referenced_table: String,
-    #[serde(rename = "referencedColumns")]
-    pub referenced_columns: Vec<String>,
-    #[serde(rename = "onDelete")]
-    pub on_delete: String,
-    #[serde(rename = "onUpdate")]
-    pub on_update: String,
 }
 
 /// List all indexes for a given table in the given schema.

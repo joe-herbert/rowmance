@@ -81,7 +81,10 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (!open) { open = true; return; }
+      if (!open) {
+        open = true;
+        return;
+      }
       focusedIndex = Math.min(focusedIndex + 1, filtered.length - 1);
       scrollFocused();
     } else if (e.key === 'ArrowUp') {
@@ -116,8 +119,12 @@
       const t = e.target as Node;
       if (!inputEl?.contains(t) && !dropdownEl?.contains(t)) close();
     }
-    function onScroll() { positionDropdown(); }
-    function onResize() { positionDropdown(); }
+    function onScroll() {
+      positionDropdown();
+    }
+    function onResize() {
+      positionDropdown();
+    }
 
     document.addEventListener('mousedown', onMousedown, true);
     window.addEventListener('scroll', onScroll, true);
@@ -148,12 +155,17 @@
     onfocus={openDropdown}
     onkeydown={handleKeydown}
   />
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <span
     class="combo-chevron{open ? ' combo-chevron--open' : ''}"
     onmousedown={(e) => {
       e.preventDefault();
-      if (open) { close(); inputEl?.focus(); } else { inputEl?.focus(); openDropdown(); }
+      if (open) {
+        close();
+        inputEl?.focus();
+      } else {
+        inputEl?.focus();
+        openDropdown();
+      }
     }}
     aria-hidden="true"
   >
@@ -181,10 +193,18 @@
         class="combo-option"
         class:combo-option--selected={option === value}
         class:combo-option--focused={idx === focusedIndex}
-        onmouseenter={() => { focusedIndex = idx; }}
-        onmousedown={(e) => { e.preventDefault(); pick(option); }}
+        onmouseenter={() => {
+          focusedIndex = idx;
+        }}
+        onmousedown={(e) => {
+          e.preventDefault();
+          pick(option);
+        }}
       >
-        <span class="combo-option-indicator" class:combo-option-indicator--visible={option === value}></span>
+        <span
+          class="combo-option-indicator"
+          class:combo-option-indicator--visible={option === value}
+        ></span>
         <span class="combo-option-label">{option}</span>
       </button>
     {/each}
@@ -292,13 +312,25 @@
   }
 
   @keyframes combo-in {
-    from { opacity: 0; transform: scaleY(0.92) translateY(-4px); }
-    to   { opacity: 1; transform: scaleY(1)    translateY(0); }
+    from {
+      opacity: 0;
+      transform: scaleY(0.92) translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1) translateY(0);
+    }
   }
 
   @keyframes combo-in-up {
-    from { opacity: 0; transform: scaleY(0.92) translateY(4px); }
-    to   { opacity: 1; transform: scaleY(1)    translateY(0); }
+    from {
+      opacity: 0;
+      transform: scaleY(0.92) translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1) translateY(0);
+    }
   }
 
   /* ── Option ───────────────────────────────────────────────────────────────── */
