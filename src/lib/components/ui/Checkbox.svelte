@@ -121,7 +121,7 @@
     border-color: var(--color-accent-hover);
   }
 
-  .checkbox-check {
+  :global(.checkbox-check) {
     width: 10px;
     height: 8px;
     color: white;
