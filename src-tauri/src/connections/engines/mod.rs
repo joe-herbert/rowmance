@@ -134,6 +134,7 @@ fn default_dialect(db_type: &str) -> DialectInfo {
         uses_schema: true,
         db_label: "Database".into(),
         has_instance_databases: false,
+        requires_database: true,
         select_top: false,
         boolean_literals: false,
         uses_ilike: false,

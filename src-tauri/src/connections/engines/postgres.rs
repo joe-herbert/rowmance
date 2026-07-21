@@ -1480,6 +1480,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             uses_schema: true,
             db_label: "Schema".into(),
             has_instance_databases: false,
+            requires_database: false,
             select_top: false,
             boolean_literals: true,
             uses_ilike: true,
@@ -1588,10 +1589,16 @@ pub async fn create_pool(
     use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
     use std::path::Path;
 
+    // No database given: connect to Postgres's own maintenance database and
+    // leave the schema at its server default ("public") rather than pinning
+    // search_path to an empty string.
+    let connect_db = if database.is_empty() { "postgres" } else { database };
+    let schema = if database.is_empty() { "public" } else { database };
+
     let mut opts = PgConnectOptions::new()
         .host(host)
         .port(port)
-        .database(database)
+        .database(connect_db)
         .username(username);
     if !password.is_empty() {
         opts = opts.password(password);
@@ -1620,7 +1627,7 @@ pub async fn create_pool(
         opts = opts.options([("default_transaction_read_only", "on")]);
     }
 
-    let schema_esc = database.replace('\'', "''");
+    let schema_esc = schema.replace('\'', "''");
     let set_path_sql: &'static str =
         Box::leak(format!("SET search_path = '{}'", schema_esc).into_boxed_str());
     let p = PgPoolOptions::new()

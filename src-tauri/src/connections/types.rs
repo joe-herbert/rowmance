@@ -55,6 +55,12 @@ pub struct DialectInfo {
     /// call list_schemas() to enumerate schemas within each database.
     #[serde(rename = "hasInstanceDatabases")]
     pub has_instance_databases: bool,
+    /// False for PostgreSQL and SQL Server: the connection form allows leaving the
+    /// database/schema field blank, connecting at the server/instance level so the
+    /// user can browse and pick a database afterwards. True for engines that have no
+    /// server-level connection concept (MySQL/MariaDB, Oracle) or are file-based (SQLite).
+    #[serde(rename = "requiresDatabase")]
+    pub requires_database: bool,
 
     // ── Query syntax ──────────────────────────────────────────────────────────
     /// True for SQL Server (`SELECT TOP n`); false for engines that use `LIMIT n`.

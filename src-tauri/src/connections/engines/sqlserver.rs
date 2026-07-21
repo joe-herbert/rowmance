@@ -1483,6 +1483,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             uses_schema: true,
             db_label: "Schema".into(),
             has_instance_databases: true,
+            requires_database: false,
             select_top: true,
             boolean_literals: false,
             uses_ilike: false,
@@ -1592,7 +1593,11 @@ pub async fn create_pool(
     let mut config = Config::new();
     config.host(host);
     config.port(port);
-    config.database(database);
+    // No database given: connect using the login's default database (typically
+    // "master") instead of pinning to an empty name.
+    if !database.is_empty() {
+        config.database(database);
+    }
     config.authentication(AuthMethod::sql_server(username, password));
 
     config.encryption(EncryptionLevel::Required);

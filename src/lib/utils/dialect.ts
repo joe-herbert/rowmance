@@ -9,6 +9,7 @@ export const defaultDialectInfo: DialectInfo = {
   usesSchema: true,
   dbLabel: 'Database',
   hasInstanceDatabases: false,
+  requiresDatabase: true,
   selectTop: false,
   booleanLiterals: false,
   usesIlike: false,

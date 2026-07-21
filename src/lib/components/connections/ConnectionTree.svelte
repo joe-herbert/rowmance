@@ -1837,7 +1837,7 @@
                     <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
                   </span>
                   <DbIcon system={false} aria-hidden="true" />
-                  <span class="db-name">{profile.database}</span>
+                  <span class="db-name">{profile.database || '(server)'}</span>
                 </button>
 
                 {#if isDbNodeExpanded || filterQuery}

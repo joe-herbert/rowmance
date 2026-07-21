@@ -852,6 +852,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             uses_schema: false,
             db_label: "Database".into(),
             has_instance_databases: false,
+            requires_database: true,
             select_top: false,
             boolean_literals: false,
             uses_ilike: false,

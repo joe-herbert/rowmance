@@ -1438,6 +1438,7 @@ pub fn dialect_info(db_type: &str) -> Option<crate::connections::types::DialectI
             uses_schema: true,
             db_label: "Database".into(),
             has_instance_databases: false,
+            requires_database: false,
             select_top: false,
             boolean_literals: false,
             uses_ilike: false,
@@ -1560,11 +1561,13 @@ pub async fn create_pool(
     use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode};
     use std::path::Path;
 
-    let mut opts = MySqlConnectOptions::new()
-        .host(host)
-        .port(port)
-        .database(database)
-        .username(username);
+    let mut opts = MySqlConnectOptions::new().host(host).port(port).username(username);
+    // No database given: connect without selecting one rather than pinning to
+    // an empty name. The connection has no "current database" until a query
+    // qualifies tables as `db.table` or issues `USE db`.
+    if !database.is_empty() {
+        opts = opts.database(database);
+    }
     if !password.is_empty() {
         opts = opts.password(password);
     }
@@ -1608,11 +1611,13 @@ pub async fn create_pool(
         });
     }
 
-    let db_esc = database.replace('`', "``");
-    let use_sql: &'static str = Box::leak(format!("USE `{}`", db_esc).into_boxed_str());
-    pool_opts = pool_opts.after_release(move |conn, _meta| {
-        Box::pin(async move { Ok(mysql_reset_db(conn, use_sql).await) })
-    });
+    if !database.is_empty() {
+        let db_esc = database.replace('`', "``");
+        let use_sql: &'static str = Box::leak(format!("USE `{}`", db_esc).into_boxed_str());
+        pool_opts = pool_opts.after_release(move |conn, _meta| {
+            Box::pin(async move { Ok(mysql_reset_db(conn, use_sql).await) })
+        });
+    }
     let p = pool_opts.connect_with(opts).await?;
     // Verify credentials and warm up one idle connection.
     p.acquire().await?;

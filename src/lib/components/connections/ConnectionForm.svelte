@@ -290,11 +290,15 @@
     if (e.key === 'Escape') onclose();
   }
 
+  const requiresDatabase = $derived(currentDialect?.requiresDatabase ?? true);
+
   const isValid = $derived(
     name.trim() !== '' &&
       (isFileBased
         ? filePath.trim() !== ''
-        : host.trim() !== '' && database.trim() !== '' && username.trim() !== ''),
+        : host.trim() !== '' &&
+          username.trim() !== '' &&
+          (!requiresDatabase || database.trim() !== '')),
   );
 
   const allTabs: { id: Tab; label: string }[] = [
@@ -503,14 +507,16 @@
           </div>
 
           <div class="field">
-            <label for="conn-database" class="label">Database</label>
+            <label for="conn-database" class="label"
+              >Database{requiresDatabase ? '' : ' (optional)'}</label
+            >
             <input
               id="conn-database"
               class="input"
               type="text"
               bind:value={database}
-              placeholder="my_database"
-              required
+              placeholder={requiresDatabase ? 'my_database' : 'Leave blank to connect at server level'}
+              required={requiresDatabase}
               autocomplete="off"
               autocorrect="off"
               autocapitalize="off"

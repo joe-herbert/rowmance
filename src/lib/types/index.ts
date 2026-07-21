@@ -35,6 +35,10 @@ export interface DialectInfo {
   dbLabel: string;
   /** True for SQL Server: connection tree has Instance Database → Schema → Tables hierarchy. */
   hasInstanceDatabases: boolean;
+  /** False for PostgreSQL and SQL Server: the database/schema field may be left blank to
+   *  connect at the server/instance level. True for engines with no server-level connect
+   *  concept (MySQL/MariaDB, Oracle) or that are file-based (SQLite). */
+  requiresDatabase: boolean;
 
   // ── Query syntax ────────────────────────────────────────────────────────────
   /** SQL Server uses SELECT TOP n; others use LIMIT n. */
