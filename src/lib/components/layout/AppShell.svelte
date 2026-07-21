@@ -31,7 +31,7 @@
   import * as updaterApi from '$lib/tauri/updater';
   import * as txApi from '$lib/tauri/transactions';
   import { errorMessage } from '$lib/utils/errors';
-  import { openNewWindow, syncTrafficLightPosition } from '$lib/tauri/window';
+  import { openNewWindow, syncTrafficLightPosition, onFullscreenChange } from '$lib/tauri/window';
   import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
   import LockIcon from '$lib/components/icons/LockIcon.svelte';
   import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
@@ -729,12 +729,21 @@
   }
 
   // On macOS with titleBarStyle:"overlay" the webview fills behind the native traffic
-  // lights, so we reserve space to push content clear of them.
+  // lights, so we reserve space to push content clear of them. In fullscreen the
+  // traffic lights are hidden entirely, so the reserved space is dropped.
   const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
+  let isFullscreen = $state(false);
 
   $effect(() => {
     document.addEventListener('shortcut-action', handleShortcutAction);
     return () => document.removeEventListener('shortcut-action', handleShortcutAction);
+  });
+
+  $effect(() => {
+    if (!isMacOS) return;
+    return onFullscreenChange((fullscreen) => {
+      isFullscreen = fullscreen;
+    });
   });
 </script>
 
@@ -747,7 +756,7 @@
     : 0}px; --right-sidebar-width: {rightWidth}px;"
 >
   <div class="titlebar-card" data-tauri-drag-region>
-    {#if isMacOS}
+    {#if isMacOS && !isFullscreen}
       <div class="traffic-lights-spacer" aria-hidden="true"></div>
     {/if}
 
