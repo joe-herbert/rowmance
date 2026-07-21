@@ -28,6 +28,10 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
+      - name: Inject Apple Team ID into entitlements
+        run: |
+          sed -i '' "s/__APPLE_TEAM_ID__/${{ secrets.APPLE_TEAM_ID }}/" src-tauri/entitlements.plist
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -37,6 +37,7 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "macOS": {
+      "entitlements": "entitlements.plist",
       "dmg": {
         "background": "icons/dmg-background.png",
         "windowSize": { "width": 540, "height": 380 },
