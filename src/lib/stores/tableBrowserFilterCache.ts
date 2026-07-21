@@ -18,6 +18,7 @@ type FilterRule = {
   column: string;
   operator: FilterOperator;
   value: string;
+  valueKind?: 'text' | 'raw' | 'column';
 };
 
 type FilterGroup = {

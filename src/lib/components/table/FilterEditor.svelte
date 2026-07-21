@@ -12,6 +12,8 @@
     | 'IS NOT NULL'
     | 'IN';
 
+  export type FilterValueKind = 'text' | 'raw' | 'column';
+
   export interface FilterRule {
     id: string;
     /** When set, this rule is displayed/stored as raw SQL rather than column/operator/value. */
@@ -19,6 +21,8 @@
     column: string;
     operator: FilterOperator;
     value: string;
+    /** How `value` should be interpreted when building SQL. Defaults to 'text'. */
+    valueKind?: FilterValueKind;
   }
 
   export interface FilterGroup {
@@ -58,6 +62,13 @@
     return state.groups.reduce((sum, g) => sum + g.rules.filter(isActiveRule).length, 0);
   }
 
+  function buildRuleValueSql(r: FilterRule, quoteIdentifier: (_n: string) => string): string {
+    const kind = r.valueKind ?? 'text';
+    if (kind === 'raw') return r.value;
+    if (kind === 'column') return quoteIdentifier(r.value);
+    return `'${r.value.replaceAll("'", "''")}'`;
+  }
+
   function buildRuleSql(r: FilterRule, quoteIdentifier: (_n: string) => string): string {
     if (r.rawSql !== undefined) return r.rawSql.trim();
     const col = quoteIdentifier(r.column);
@@ -70,8 +81,7 @@
         .join(', ');
       return `${col} IN (${values})`;
     }
-    const escaped = r.value.replaceAll("'", "''");
-    return `${col} ${r.operator} '${escaped}'`;
+    return `${col} ${r.operator} ${buildRuleValueSql(r, quoteIdentifier)}`;
   }
 
   export function buildWhereClause(
@@ -388,6 +398,18 @@
     'IN',
   ];
   const VALUE_LESS_OPS: FilterOperator[] = ['IS NULL', 'IS NOT NULL'];
+  const VALUE_KIND_INFO: Record<
+    FilterValueKind,
+    { label: string; next: FilterValueKind; desc: string }
+  > = {
+    text: { label: 'Text', next: 'raw', desc: 'Text — value is treated as a literal string' },
+    raw: { label: 'Raw', next: 'column', desc: 'Raw — value is inserted into the SQL as-is' },
+    column: {
+      label: 'Col',
+      next: 'text',
+      desc: 'Column — value is treated as a reference to another column',
+    },
+  };
 
   function needsValue(op: FilterOperator): boolean {
     return !VALUE_LESS_OPS.includes(op);
@@ -529,6 +551,17 @@
     draft.groups = draft.groups.map((g) =>
       g.id === groupId
         ? { ...g, rules: g.rules.map((r) => (r.id === ruleId ? { ...r, value: val } : r)) }
+        : g,
+    );
+  }
+
+  function updateRuleValueKind(groupId: string, ruleId: string, valueKind: FilterValueKind): void {
+    draft.groups = draft.groups.map((g) =>
+      g.id === groupId
+        ? {
+            ...g,
+            rules: g.rules.map((r) => (r.id === ruleId ? { ...r, valueKind, value: '' } : r)),
+          }
         : g,
     );
   }
@@ -689,8 +722,40 @@
                     />
 
                     {#if needsValue(rule.operator)}
+                      {@const valueKind = rule.valueKind ?? 'text'}
                       {@const enumValues = getEnumValues(rule.column)}
-                      {#if isBooleanColumn(rule.column)}
+                      {#if valueKind === 'column' && rule.operator !== 'IN'}
+                        <Select
+                          value={rule.value || undefined}
+                          options={columns
+                            .filter((col) => col.name !== rule.column)
+                            .map((col) => ({ value: col.name, label: col.name }))}
+                          onchange={(v) => updateRuleValue(group.id, rule.id, v)}
+                          aria-label="Filter value column"
+                          size="xs"
+                          mono
+                          style="flex:1; min-width:0"
+                          searchable
+                        />
+                      {:else if valueKind === 'raw' && rule.operator !== 'IN'}
+                        <input
+                          class="fe-value-input fe-value-input--raw"
+                          type="text"
+                          value={rule.value}
+                          oninput={(e) =>
+                            updateRuleValue(
+                              group.id,
+                              rule.id,
+                              (e.target as HTMLInputElement).value,
+                            )}
+                          placeholder="expression"
+                          aria-label="Filter value expression"
+                          autocomplete="off"
+                          autocapitalize="off"
+                          autocorrect="off"
+                          spellcheck="false"
+                        />
+                      {:else if isBooleanColumn(rule.column)}
                         <div class="fe-bool-picker" aria-label="Filter value">
                           <button
                             class="fe-bool-btn fe-bool-btn--true"
@@ -792,6 +857,18 @@
                             spellcheck="false"
                           />
                         {/if}
+                      {/if}
+
+                      {#if rule.operator !== 'IN'}
+                        <button
+                          type="button"
+                          class="fe-value-kind-btn"
+                          onclick={() =>
+                            updateRuleValueKind(group.id, rule.id, VALUE_KIND_INFO[valueKind].next)}
+                          title={`Value type: ${VALUE_KIND_INFO[valueKind].desc}\nClick to cycle: Text → Raw → Column`}
+                          aria-label="Cycle filter value type"
+                          >{VALUE_KIND_INFO[valueKind].label}</button
+                        >
                       {/if}
                     {:else}
                       <span class="fe-value-spacer"></span>
@@ -1211,6 +1288,31 @@
   .fe-date-picker-btn:hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
+  }
+
+  .fe-value-kind-btn {
+    flex-shrink: 0;
+    width: 34px;
+    padding: 2px var(--spacing-1);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 9px;
+    font-weight: var(--font-weight-semibold);
+    font-family: var(--font-family-mono);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-align: center;
+    transition:
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .fe-value-kind-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: var(--color-accent-subtle);
   }
 
   .raw-sql-tag {
