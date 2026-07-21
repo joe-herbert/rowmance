@@ -15,7 +15,7 @@
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import { useDashboards } from '$lib/stores/dashboards.svelte';
-  import { panelLabel } from '$lib/utils/panel-label';
+  import { panelLabel, ambiguousTableKeys, isTableAmbiguous } from '$lib/utils/panel-label';
   import PanelIcon from '$lib/components/layout/PanelIcon.svelte';
   import TabContextMenu from '$lib/components/layout/TabContextMenu.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
@@ -27,6 +27,7 @@
   const settingsStore = useSettings();
   const dashboardsStore = useDashboards();
   const dashboardsById = $derived(new Map(dashboardsStore.dashboards.map((d) => [d.id, d])));
+  const ambiguousTables = $derived(ambiguousTableKeys(panelStore.openItems));
 
   function panelConnInfo(content: PanelKind): { color: string | null; shortName: string } | null {
     if (!('connectionId' in content)) return null;
@@ -292,8 +293,9 @@
                   onblur={() => commitRename(item)}
                 />
               {:else}
-                <span class="panel-label" title={panelLabel(item.content, dashboardsById)}
-                  >{panelLabel(item.content, dashboardsById)}</span
+                {@const qualify = isTableAmbiguous(item.content, ambiguousTables)}
+                <span class="panel-label" title={panelLabel(item.content, dashboardsById, qualify)}
+                  >{panelLabel(item.content, dashboardsById, qualify)}</span
                 >
               {/if}
               {#if itemIsDirty(item)}
@@ -420,8 +422,11 @@
                         onblur={() => commitRename(item)}
                       />
                     {:else}
-                      <span class="panel-label" title={panelLabel(item.content, dashboardsById)}
-                        >{panelLabel(item.content, dashboardsById)}</span
+                      {@const qualify = isTableAmbiguous(item.content, ambiguousTables)}
+                      <span
+                        class="panel-label"
+                        title={panelLabel(item.content, dashboardsById, qualify)}
+                        >{panelLabel(item.content, dashboardsById, qualify)}</span
                       >
                     {/if}
                     {#if itemIsDirty(item)}

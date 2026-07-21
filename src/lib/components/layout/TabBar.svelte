@@ -13,7 +13,7 @@
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import { queryEditorCache } from '$lib/stores/queryEditorState';
   import { useDashboards } from '$lib/stores/dashboards.svelte';
-  import { panelLabel } from '$lib/utils/panel-label';
+  import { panelLabel, ambiguousTableKeys, isTableAmbiguous } from '$lib/utils/panel-label';
   import PanelIcon from '$lib/components/layout/PanelIcon.svelte';
   import TabContextMenu from '$lib/components/layout/TabContextMenu.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
@@ -37,6 +37,7 @@
     return { color: conn.color };
   }
   const dashboardsById = $derived(new Map(dashboardsStore.dashboards.map((d) => [d.id, d])));
+  const ambiguousTables = $derived(ambiguousTableKeys(panelStore.openItems));
 
   // Items for this split only
   const items = $derived(panelStore.getSplitItems(splitId));
@@ -314,8 +315,9 @@
             onblur={() => commitRename(item)}
           />
         {:else}
-          <span class="tab-label" title={panelLabel(item.content, dashboardsById)}
-            >{panelLabel(item.content, dashboardsById)}</span
+          {@const qualify = isTableAmbiguous(item.content, ambiguousTables)}
+          <span class="tab-label" title={panelLabel(item.content, dashboardsById, qualify)}
+            >{panelLabel(item.content, dashboardsById, qualify)}</span
           >
         {/if}
         {#if itemIsDirty(item)}
