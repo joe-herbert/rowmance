@@ -14,7 +14,10 @@ use connections::ssh_tunnel::SshTunnelManager;
 use sessions::SessionManager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
+use tauri_plugin_shell::ShellExt;
 use transactions::TransactionManager;
+
+const RELEASES_URL: &str = "https://github.com/joe-herbert/rowmance/releases";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -171,6 +174,8 @@ pub fn run() {
             )?;
             let help_whats_new_item =
                 MenuItem::with_id(app, "help-whats-new", "What's New…", true, None::<&str>)?;
+            let help_view_releases_item =
+                MenuItem::with_id(app, "help-view-releases", "View Releases", true, None::<&str>)?;
             let help_submenu = Submenu::with_items(
                 app,
                 "Help",
@@ -178,6 +183,7 @@ pub fn run() {
                 &[
                     &help_whats_new_item,
                     &help_updates_item,
+                    &help_view_releases_item,
                     &PredefinedMenuItem::separator(app)?,
                     &PredefinedMenuItem::about(app, None, None)?,
                 ],
@@ -233,6 +239,9 @@ pub fn run() {
                     }
                     "help-whats-new" => {
                         let _ = app.emit("menu:whats-new", ());
+                    }
+                    "help-view-releases" => {
+                        let _ = app.shell().open(RELEASES_URL, None);
                     }
                     "new-query" => {
                         let _ = app.emit("menu:new-query", ());
