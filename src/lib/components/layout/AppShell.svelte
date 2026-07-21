@@ -233,6 +233,36 @@
   let updateDismissed = $state(false);
   let installing = $state(false);
 
+  async function fetchCombinedReleaseNotes(
+    fromVersion: string | undefined,
+    toVersion: string,
+  ): Promise<string> {
+    if (!fromVersion) {
+      const r = await fetch(
+        `https://api.github.com/repos/joe-herbert/rowmance/releases/tags/v${toVersion}`,
+        { headers: { Accept: 'application/vnd.github+json' } },
+      );
+      const data = r.ok ? ((await r.json()) as { body?: string }) : null;
+      return data?.body?.trim() || '';
+    }
+
+    const r = await fetch(`https://api.github.com/repos/joe-herbert/rowmance/releases`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (!r.ok) return '';
+    const releases = (await r.json()) as { tag_name: string; body?: string }[];
+
+    // Releases come back newest-first; collect everything after the version we
+    // updated from, up to and including the version we updated to.
+    const skipped: string[] = [];
+    for (const release of releases) {
+      if (release.tag_name === `v${fromVersion}`) break;
+      const body = release.body?.trim();
+      if (body) skipped.push(body);
+    }
+    return skipped.join('\n\n---\n\n');
+  }
+
   onMount(() => {
     shortcutsStore.load(settings.shortcutPreset);
 
@@ -240,18 +270,17 @@
     if (stored) {
       localStorage.removeItem('rowmance:pending-release-notes');
       try {
-        const { version } = JSON.parse(stored) as { version: string };
-        if (version) {
-          fetch(`https://api.github.com/repos/joe-herbert/rowmance/releases/tags/v${version}`, {
-            headers: { Accept: 'application/vnd.github+json' },
-          })
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data: { body?: string } | null) => {
-              const notes = data?.body?.trim() || '';
-              panelStore.openInFocused({ kind: 'release_notes', version, notes });
+        const { fromVersion, toVersion } = JSON.parse(stored) as {
+          fromVersion?: string;
+          toVersion: string;
+        };
+        if (toVersion) {
+          fetchCombinedReleaseNotes(fromVersion, toVersion)
+            .then((notes) => {
+              panelStore.openInFocused({ kind: 'release_notes', version: toVersion, notes });
             })
             .catch(() => {
-              panelStore.openInFocused({ kind: 'release_notes', version, notes: '' });
+              panelStore.openInFocused({ kind: 'release_notes', version: toVersion, notes: '' });
             });
         }
       } catch {
@@ -391,9 +420,10 @@
     installing = true;
     try {
       if (pendingUpdate) {
+        const fromVersion = await getVersion();
         localStorage.setItem(
           'rowmance:pending-release-notes',
-          JSON.stringify({ version: pendingUpdate.version }),
+          JSON.stringify({ fromVersion, toVersion: pendingUpdate.version }),
         );
       }
       await updaterApi.updaterInstall();
