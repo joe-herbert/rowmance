@@ -527,6 +527,19 @@
         </div>
         <div class="setting-row">
           <div class="setting-label">
+            <span class="label-text">Type to Confirm Major Destructive Actions</span>
+            <span class="label-hint"
+              >Require typing the connection name before dropping tables, schemas, or databases, or
+              running a DELETE without a WHERE clause</span
+            >
+          </div>
+          <Checkbox
+            checked={settings.confirmDestructiveActionsWithTypedName}
+            onchange={(c) => update('confirmDestructiveActionsWithTypedName', c)}
+          />
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
             <span class="label-text">Highlight Local Search Matches</span>
             <span class="label-hint">Highlight matching text in cells when using table search</span>
           </div>

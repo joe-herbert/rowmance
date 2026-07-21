@@ -178,6 +178,7 @@
     message: string;
     confirmText?: string;
     onconfirm: () => void;
+    requireTypedText?: string;
   }
   let confirmState = $state<ConfirmState | null>(null);
   let errorModal = $state<{ title: string; message: string } | null>(null);
@@ -661,6 +662,9 @@
       title: 'Drop Database',
       message: `Drop database "${instanceDb}"? This will permanently delete all schemas, tables, and data within it. This cannot be undone.`,
       confirmText: 'Drop Database',
+      requireTypedText: settingsStore.settings.confirmDestructiveActionsWithTypedName
+        ? profile.name
+        : undefined,
       onconfirm: async () => {
         confirmState = null;
         try {
@@ -782,6 +786,9 @@
       title: 'Drop Schema',
       message: `Drop schema "${schema}" in "${instanceDb}"? This will permanently delete all tables and data within it. This cannot be undone.`,
       confirmText: 'Drop Schema',
+      requireTypedText: settingsStore.settings.confirmDestructiveActionsWithTypedName
+        ? profile.name
+        : undefined,
       onconfirm: async () => {
         confirmState = null;
         try {
@@ -1078,6 +1085,9 @@
       title: 'Drop Table',
       message: `Drop table "${table.name}"? This will permanently delete the table and all its data. This cannot be undone.`,
       confirmText: 'Drop Table',
+      requireTypedText: settingsStore.settings.confirmDestructiveActionsWithTypedName
+        ? profile.name
+        : undefined,
       onconfirm: async () => {
         confirmState = null;
         try {
@@ -1114,6 +1124,9 @@
       title: isSchema ? 'Drop Schema' : 'Drop Database',
       message: `Drop ${isSchema ? 'schema' : 'database'} "${database}"? This will permanently delete all tables and data within it. This cannot be undone.`,
       confirmText: isSchema ? 'Drop Schema' : 'Drop Database',
+      requireTypedText: settingsStore.settings.confirmDestructiveActionsWithTypedName
+        ? profile.name
+        : undefined,
       onconfirm: async () => {
         confirmState = null;
         try {
@@ -2338,7 +2351,9 @@
 
 {#if createDbModal}
   {@const createDbDialect = connectionStore.getById(createDbModal.connectionId)?.dialectInfo}
-  {@const dbLabel = createDbDialect?.hasInstanceDatabases ? 'Database' : (createDbDialect?.dbLabel ?? 'Database')}
+  {@const dbLabel = createDbDialect?.hasInstanceDatabases
+    ? 'Database'
+    : (createDbDialect?.dbLabel ?? 'Database')}
   <Modal
     label="New {dbLabel}"
     onbackdropclick={() => {
@@ -2737,6 +2752,7 @@
     message={confirmState.message}
     confirmText={confirmState.confirmText ?? 'Delete'}
     danger={true}
+    requireTypedText={confirmState.requireTypedText}
     onconfirm={confirmState.onconfirm}
     oncancel={() => (confirmState = null)}
   />

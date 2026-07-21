@@ -7,6 +7,8 @@
     confirmText?: string;
     cancelText?: string;
     danger?: boolean;
+    /** When set, the confirm action is disabled until the user types this text exactly. */
+    requireTypedText?: string;
     onconfirm: () => void;
     oncancel: () => void;
   }
@@ -17,16 +19,49 @@
     confirmText = 'Confirm',
     cancelText = 'Cancel',
     danger = false,
+    requireTypedText,
     onconfirm,
     oncancel,
   }: Props = $props();
+
+  let typedValue = $state('');
+  const canConfirm = $derived(!requireTypedText || typedValue === requireTypedText);
+
+  function handleKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      oncancel();
+    } else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
+      // Enter on a focused button already triggers its native click; only
+      // treat Enter as "confirm" when focus isn't on one of the buttons.
+      e.preventDefault();
+      if (canConfirm) onconfirm();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <Modal label={title} onbackdropclick={oncancel}>
   <div class="modal-card">
     <div class="modal-title">{title}</div>
     <div class="modal-body">
       <p class="modal-message">{message}</p>
+      {#if requireTypedText}
+        <p class="type-confirm-hint">
+          Type <strong>{requireTypedText}</strong> to confirm:
+        </p>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          class="type-confirm-input"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          autofocus
+          bind:value={typedValue}
+          placeholder={requireTypedText}
+        />
+      {/if}
     </div>
     <div class="modal-footer">
       <button class="btn" onclick={oncancel}>{cancelText}</button>
@@ -35,6 +70,7 @@
         class:btn--danger={danger}
         class:btn--primary={!danger}
         onclick={onconfirm}
+        disabled={!canConfirm}
       >
         {confirmText}
       </button>
@@ -84,6 +120,30 @@
     line-height: var(--line-height-normal);
   }
 
+  .type-confirm-hint {
+    margin: var(--spacing-3) 0 var(--spacing-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .type-confirm-input {
+    width: 100%;
+    height: 28px;
+    padding: 0 var(--spacing-2);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    box-sizing: border-box;
+  }
+
+  .type-confirm-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+
   .modal-footer {
     padding: var(--spacing-3) var(--spacing-4);
     border-top: 1px solid var(--color-border);
@@ -112,6 +172,17 @@
     border-color: var(--color-border-strong);
     color: var(--color-text-primary);
     background: var(--color-bg-hover);
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn:disabled:hover {
+    background: var(--color-bg-secondary);
+    border-color: var(--color-border);
+    color: var(--color-text-secondary);
   }
 
   .btn--primary {

@@ -65,7 +65,9 @@
     statementAtCursor,
     isMutatingStatement,
     stripLineComments,
+    isDeleteWithoutWhere,
   } from '$lib/utils/sql';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { errorMessage } from '$lib/utils/errors';
   import { getFkValueContext } from '$lib/utils/sqlFkContext';
   import Select from '$lib/components/ui/Select.svelte';
@@ -1500,12 +1502,28 @@
 
   // ── Query execution ───────────────────────────────────────────────────────
 
+  let pendingDestructiveConfirm = $state<{ resolve: (_result: boolean) => void } | null>(null);
+
+  async function confirmDestructiveIfNeeded(statements: string[]): Promise<boolean> {
+    if (!statements.some(isDeleteWithoutWhere)) return true;
+    return new Promise<boolean>((resolve) => {
+      pendingDestructiveConfirm = { resolve };
+    });
+  }
+
+  function resolveDestructiveConfirm(ok: boolean): void {
+    pendingDestructiveConfirm?.resolve(ok);
+    pendingDestructiveConfirm = null;
+  }
+
   async function runQuery(): Promise<void> {
     const query = sqlText.trim();
     if (!query || isRunning) return;
+    const statements = splitStatements(query);
+    if (!(await confirmDestructiveIfNeeded(statements))) return;
 
     isRunning = true;
-    executedStatements = splitStatements(query);
+    executedStatements = statements;
     executedSql = query;
     try {
       results = await executeMultiQuery(
@@ -1563,9 +1581,11 @@
     const selected = from === to ? sqlText : state.sliceDoc(from, to);
     const query = selected.trim();
     if (!query) return;
+    const statements = splitStatements(query);
+    if (!(await confirmDestructiveIfNeeded(statements))) return;
 
     isRunning = true;
-    executedStatements = splitStatements(query);
+    executedStatements = statements;
     executedSql = query;
     try {
       results = await executeMultiQuery(
@@ -1621,6 +1641,7 @@
     const pos = editorView.state.selection.main.head;
     const stmt = statementAtCursor(sqlText, pos);
     if (!stmt.trim()) return;
+    if (!(await confirmDestructiveIfNeeded([stmt]))) return;
 
     isRunning = true;
     executedStatements = [stmt];
@@ -2591,6 +2612,20 @@
       }}
     />
   {/if}
+{/if}
+
+{#if pendingDestructiveConfirm}
+  <ConfirmDialog
+    title="Delete Without WHERE"
+    message="This DELETE statement has no WHERE clause and will remove every row in the table. This cannot be undone."
+    confirmText="Run DELETE"
+    danger={true}
+    requireTypedText={settingsStore.settings.confirmDestructiveActionsWithTypedName
+      ? connectionName
+      : undefined}
+    onconfirm={() => resolveDestructiveConfirm(true)}
+    oncancel={() => resolveDestructiveConfirm(false)}
+  />
 {/if}
 
 <style>

@@ -551,6 +551,8 @@ export interface AppSettings {
   newlineReplacement: string;
   newRowPosition: 'top' | 'bottom';
   confirmBeforeDelete: boolean;
+  /** Require typing the connection name to confirm major destructive actions (dropping tables/schemas/databases, DELETE without WHERE). */
+  confirmDestructiveActionsWithTypedName: boolean;
   /** Absolute path to the saved queries directory. Empty string = use default. */
   savedQueriesDirectory: string;
   localSearchHighlight: boolean;
@@ -604,6 +606,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   newlineReplacement: '↵',
   newRowPosition: 'bottom',
   confirmBeforeDelete: true,
+  confirmDestructiveActionsWithTypedName: true,
   savedQueriesDirectory: '',
   localSearchHighlight: true,
   saveOnRun: false,

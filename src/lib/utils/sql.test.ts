@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { splitStatements, statementAtCursor, isMutatingStatement } from './sql';
+import {
+  splitStatements,
+  statementAtCursor,
+  isMutatingStatement,
+  isDeleteWithoutWhere,
+} from './sql';
 
 describe('splitStatements', () => {
   it('splits two simple statements', () => {
@@ -108,5 +113,33 @@ describe('isMutatingStatement', () => {
     // WITH starts the statement, not INSERT — the read-only UI check misses this case.
     // The backend uses sqlparser AST detection which handles it correctly.
     expect(isMutatingStatement('WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x')).toBe(false);
+  });
+});
+
+describe('isDeleteWithoutWhere', () => {
+  it.each([
+    ['DELETE FROM t', true],
+    ['DELETE FROM t;', true],
+    ['delete from t', true],
+    ['DELETE FROM t WHERE id = 1', false],
+    ['DELETE FROM t\nWHERE id = 1', false],
+    ["DELETE FROM t WHERE name = 'where'", false],
+    ['UPDATE t SET a = 1', false],
+    ['SELECT * FROM t', false],
+  ])('"%s" → %s', (sql, expected) => {
+    expect(isDeleteWithoutWhere(sql)).toBe(expected);
+  });
+
+  it('ignores the word "where" inside a string literal', () => {
+    expect(isDeleteWithoutWhere("DELETE FROM t WHERE note = 'nowhere to run'")).toBe(false);
+    expect(isDeleteWithoutWhere('DELETE FROM t WHERE 1=1')).toBe(false);
+  });
+
+  it('flags a DELETE whose only "where"-like text is inside a comment', () => {
+    expect(isDeleteWithoutWhere('DELETE FROM t -- WHERE id = 1')).toBe(true);
+  });
+
+  it('does not false-positive on identifiers containing "where"', () => {
+    expect(isDeleteWithoutWhere('DELETE FROM anywhere_table')).toBe(true);
   });
 });

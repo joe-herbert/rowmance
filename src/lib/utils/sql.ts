@@ -281,6 +281,60 @@ export function stripLineComments(sql: string): string {
  * The backend enforces read-only at the database connection level, which
  * covers cases this heuristic misses (CTEs, CALL, EXEC, etc.).
  */
+/**
+ * Strip quoted strings/identifiers and comments from SQL, replacing them with
+ * nothing, so the remaining text can be safely scanned for bare keywords.
+ */
+function stripQuotedAndComments(sql: string): string {
+  let out = '';
+  let i = 0;
+
+  while (i < sql.length) {
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    if (char === '/' && next === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      i = end === -1 ? sql.length : end + 2;
+      continue;
+    }
+    if (char === '-' && next === '-') {
+      const end = sql.indexOf('\n', i);
+      i = end === -1 ? sql.length : end + 1;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      const close = char;
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === close && sql[j + 1] === close) j += 2;
+        else if (sql[j] === close) {
+          j++;
+          break;
+        } else j++;
+      }
+      i = j;
+      continue;
+    }
+
+    out += char;
+    i++;
+  }
+
+  return out;
+}
+
+/**
+ * Return whether a single SQL statement is a DELETE with no WHERE clause,
+ * i.e. one that would delete every row in the table.
+ */
+export function isDeleteWithoutWhere(sql: string): boolean {
+  const trimmed = sql.trim();
+  const keyword = trimmed.split(/\s+/)[0]?.toUpperCase();
+  if (keyword !== 'DELETE') return false;
+  return !/\bwhere\b/i.test(stripQuotedAndComments(trimmed));
+}
+
 export function isMutatingStatement(sql: string): boolean {
   const keyword = sql.trim().split(/\s+/)[0]?.toUpperCase();
   return [
