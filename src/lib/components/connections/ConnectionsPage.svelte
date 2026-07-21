@@ -202,6 +202,18 @@
   }
 
   function handleDelete(profile: ConnectionProfile) {
+    if (profile.unsaved) {
+      confirmState = {
+        title: 'Disconnect Connection',
+        message: `Disconnect "${profile.name}"? It was never saved, so it will not appear again.`,
+        confirmText: 'Disconnect',
+        onconfirm: async () => {
+          confirmState = null;
+          if (connectionStore.isActive(profile.id)) await connectionStore.disconnect(profile.id);
+        },
+      };
+      return;
+    }
     confirmState = {
       title: 'Delete Connection',
       message: `Delete "${profile.name}"? This cannot be undone.`,
@@ -512,15 +524,17 @@
       Manage Users
     </CtxItem>
     <CtxSep />
-    <CtxItem
-      onclick={() => {
-        const prof = p;
-        cardCtx = null;
-        handleDuplicate(prof);
-      }}
-    >
-      Duplicate
-    </CtxItem>
+    {#if !p.unsaved}
+      <CtxItem
+        onclick={() => {
+          const prof = p;
+          cardCtx = null;
+          handleDuplicate(prof);
+        }}
+      >
+        Duplicate
+      </CtxItem>
+    {/if}
     <CtxItem
       onclick={() => {
         const prof = p;
@@ -560,7 +574,7 @@
     >
       Close All Tabs
     </CtxItem>
-    {#if hasGroups}
+    {#if hasGroups && !p.unsaved}
       <CtxSep />
       {@const otherGroups = connectionStore.groups.filter((g) => g.id !== p.groupId)}
       {#if otherGroups.length > 0}
@@ -598,10 +612,9 @@
   <ConnectionForm
     profile={editingProfile}
     groupId={newConnectionGroupId}
-    onclose={async () => {
+    onclose={() => {
       showAddForm = false;
       editingProfile = undefined;
-      await connectionStore.load();
     }}
     ondelete={editingProfile
       ? () => {
@@ -763,6 +776,11 @@
         <span class="card-type">{profile.dbType}</span>
       </div>
       <div class="card-badges">
+        {#if profile.unsaved}
+          <span class="badge badge--unsaved" title="Not saved — will disappear once disconnected"
+            >TEMP</span
+          >
+        {/if}
         {#if profile.readOnly}
           <span class="badge badge--readonly" title="Read-only">RO</span>
         {/if}
@@ -819,50 +837,52 @@
         >
           <TerminalIcon width={13} height={13} />
         </button>
-        <button
-          class="card-icon-btn"
-          onclick={() => handleEdit(profile)}
-          title="Edit"
-          aria-label="Edit connection"
-        >
-          <EditIcon width={13} height={13} />
-        </button>
-        <button
-          class="card-icon-btn"
-          onclick={() => handleToggleReadOnly(profile)}
-          title={profile.readOnly ? 'Disable read only' : 'Enable read only'}
-          aria-label={profile.readOnly ? 'Disable read only' : 'Enable read only'}
-        >
-          {#if profile.readOnly}
-            <LockIcon open={false} width={13} height={13} />
-          {:else}
-            <LockIcon open={true} width={13} height={13} />
-          {/if}
-        </button>
-        <button
-          class="card-icon-btn"
-          onclick={() => handleCopyDbUrl(profile)}
-          title="Copy as database URL"
-          aria-label="Copy as database URL"
-        >
-          <CopyIcon width={13} height={13} />
-        </button>
-        <button
-          class="card-icon-btn"
-          onclick={() => {
-            exportPreselectIds = [profile.id];
-            showExportDialog = true;
-          }}
-          title="Export"
-          aria-label="Export connection"
-        >
-          <DownloadIcon width={13} height={13} />
-        </button>
+        {#if !profile.unsaved}
+          <button
+            class="card-icon-btn"
+            onclick={() => handleEdit(profile)}
+            title="Edit"
+            aria-label="Edit connection"
+          >
+            <EditIcon width={13} height={13} />
+          </button>
+          <button
+            class="card-icon-btn"
+            onclick={() => handleToggleReadOnly(profile)}
+            title={profile.readOnly ? 'Disable read only' : 'Enable read only'}
+            aria-label={profile.readOnly ? 'Disable read only' : 'Enable read only'}
+          >
+            {#if profile.readOnly}
+              <LockIcon open={false} width={13} height={13} />
+            {:else}
+              <LockIcon open={true} width={13} height={13} />
+            {/if}
+          </button>
+          <button
+            class="card-icon-btn"
+            onclick={() => handleCopyDbUrl(profile)}
+            title="Copy as database URL"
+            aria-label="Copy as database URL"
+          >
+            <CopyIcon width={13} height={13} />
+          </button>
+          <button
+            class="card-icon-btn"
+            onclick={() => {
+              exportPreselectIds = [profile.id];
+              showExportDialog = true;
+            }}
+            title="Export"
+            aria-label="Export connection"
+          >
+            <DownloadIcon width={13} height={13} />
+          </button>
+        {/if}
         <button
           class="card-icon-btn card-icon-btn--danger"
           onclick={() => handleDelete(profile)}
-          title="Delete"
-          aria-label="Delete connection"
+          title={profile.unsaved ? 'Disconnect' : 'Delete'}
+          aria-label={profile.unsaved ? 'Disconnect connection' : 'Delete connection'}
         >
           <TrashIcon width={13} height={13} />
         </button>
@@ -1212,6 +1232,12 @@
     padding: 1px 5px;
     border-radius: var(--radius-sm);
     letter-spacing: 0.03em;
+  }
+
+  .badge--unsaved {
+    background: color-mix(in srgb, var(--color-text-muted) 12%, transparent);
+    color: var(--color-text-muted);
+    border: 1px solid color-mix(in srgb, var(--color-text-muted) 30%, transparent);
   }
 
   .badge--readonly {

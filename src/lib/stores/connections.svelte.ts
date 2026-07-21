@@ -3,6 +3,7 @@
  * Manages the list of saved connection profiles and tracks which connections
  * are currently active (i.e. have an open pool in the Rust backend).
  */
+import { untrack } from 'svelte';
 import type { ConnectionProfile, ConnectionGroup, ConnectionProfileInput } from '$lib/types';
 import * as api from '$lib/tauri/connections';
 import { errorMessage } from '$lib/utils/errors';
@@ -41,11 +42,23 @@ export function useConnections() {
 
     /** Load all profiles and groups from the backend. Call once at startup. */
     async load() {
-      [profiles, groups] = await Promise.all([api.listConnections(), api.listConnectionGroups()]);
+      // Read via untrack — this runs synchronously (before the first await) inside
+      // whatever effect called load(), and a tracked read here would make that
+      // effect depend on `profiles`. Since this function also writes `profiles`,
+      // that would re-trigger the calling effect every time load() runs, which
+      // calls load() again — an infinite loop.
+      const previousProfiles = untrack(() => profiles);
+      let loaded: ConnectionProfile[];
+      [loaded, groups] = await Promise.all([api.listConnections(), api.listConnectionGroups()]);
       const ids = await api.listActiveConnections();
       activeIds = new Set(ids);
       const now = new Date();
       connectedAt = new Map(ids.map((id) => [id, now]));
+      // Unsaved connections live only in the backend's in-memory pool registry,
+      // never in SQLite, so `listConnections()` won't return them — preserve any
+      // still active, and drop any that have since been disconnected.
+      const unsavedProfiles = previousProfiles.filter((p) => p.unsaved && activeIds.has(p.id));
+      profiles = [...loaded, ...unsavedProfiles];
     },
 
     /** Create a new connection profile. */
@@ -123,12 +136,33 @@ export function useConnections() {
       }
     },
 
+    /**
+     * Connect using raw input without persisting a profile to SQLite.
+     * The returned profile is added to the local list only, tagged `unsaved`,
+     * and is removed again as soon as it disconnects.
+     */
+    async connectUnsaved(
+      input: ConnectionProfileInput,
+      password?: string,
+      sshPassword?: string,
+    ): Promise<ConnectionProfile> {
+      const created = await api.connectUnsaved(input, password, sshPassword);
+      const profile: ConnectionProfile = { ...created, unsaved: true };
+      profiles = [...profiles, profile];
+      activeIds = new Set([...activeIds, profile.id]);
+      connectedAt = new Map([...connectedAt, [profile.id, new Date()]]);
+      return profile;
+    },
+
     /** Close the connection pool for a profile. */
     async disconnect(id: string): Promise<void> {
       await api.disconnectFromDatabase(id);
       activeIds = new Set([...activeIds].filter((i) => i !== id));
       connectedAt = new Map([...connectedAt].filter(([k]) => k !== id));
       transactionIds = new Set([...transactionIds].filter((i) => i !== id));
+      if (profiles.find((p) => p.id === id)?.unsaved) {
+        profiles = profiles.filter((p) => p.id !== id);
+      }
     },
 
     /** Update local state when the backend has already disconnected (e.g. SSH dropped). */
@@ -136,6 +170,9 @@ export function useConnections() {
       activeIds = new Set([...activeIds].filter((i) => i !== id));
       connectedAt = new Map([...connectedAt].filter(([k]) => k !== id));
       transactionIds = new Set([...transactionIds].filter((i) => i !== id));
+      if (profiles.find((p) => p.id === id)?.unsaved) {
+        profiles = profiles.filter((p) => p.id !== id);
+      }
     },
 
     /** Check whether a given profile ID is currently connected. */

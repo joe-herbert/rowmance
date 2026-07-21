@@ -21,6 +21,7 @@ pub struct RemotePool(Arc<dyn crate::connections::engine::PoolAdapter>);
 pub struct ConnectionManager {
     pools: DashMap<String, RemotePool>,
     names: DashMap<String, String>,
+    read_only: DashMap<String, bool>,
 }
 
 impl ConnectionManager {
@@ -28,6 +29,7 @@ impl ConnectionManager {
         Arc::new(Self {
             pools: DashMap::new(),
             names: DashMap::new(),
+            read_only: DashMap::new(),
         })
     }
 
@@ -74,6 +76,7 @@ impl ConnectionManager {
         self.pools
             .insert(id.to_owned(), RemotePool(Arc::from(adapter)));
         self.names.insert(id.to_owned(), name.to_owned());
+        self.read_only.insert(id.to_owned(), read_only);
         Ok(())
     }
 
@@ -118,10 +121,17 @@ impl ConnectionManager {
 
     /// Close and remove the pool for the given connection id.
     pub async fn disconnect(&self, id: &str) {
+        self.read_only.remove(id);
         if let Some((_, pool)) = self.pools.remove(id) {
             let _ =
                 tokio::time::timeout(std::time::Duration::from_secs(3), pool.0.disconnect()).await;
         }
+    }
+
+    /// Returns whether the active connection for this id is in read-only mode.
+    /// Defaults to false if no pool is registered.
+    pub fn is_read_only(&self, id: &str) -> bool {
+        self.read_only.get(id).map(|r| *r).unwrap_or(false)
     }
 
     /// Send a lightweight ping to check the connection is still alive.

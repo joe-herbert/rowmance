@@ -49,6 +49,20 @@ export async function connectToDatabase(id: string): Promise<void> {
   return invoke<void>('connections_connect', { id });
 }
 
+/** Connect using raw input without persisting a profile — used by the
+ * "Don't save this connection" option in the connection form. */
+export async function connectUnsaved(
+  input: ConnectionProfileInput,
+  password?: string,
+  sshPassword?: string,
+): Promise<ConnectionProfile> {
+  return invoke<ConnectionProfile>('connections_connect_unsaved', {
+    input,
+    password,
+    sshPassword,
+  });
+}
+
 export async function disconnectFromDatabase(id: string): Promise<void> {
   return invoke<void>('connections_disconnect', { id });
 }

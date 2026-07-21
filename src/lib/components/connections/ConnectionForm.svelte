@@ -55,6 +55,7 @@
   );
   let color = $state(untrack(() => profile?.color ?? ''));
   let readOnly = $state(untrack(() => profile?.readOnly ?? false));
+  let dontSave = $state(false);
 
   // ── SSH fields ────────────────────────────────────────────────────────────────
 
@@ -228,8 +229,14 @@
     saving = true;
     try {
       const input = buildInput();
-      let savedId: string;
 
+      if (!isEditing && dontSave) {
+        await connectionStore.connectUnsaved(input, password || undefined, sshPassword || undefined);
+        onclose();
+        return;
+      }
+
+      let savedId: string;
       if (isEditing) {
         const updated = await connectionStore.update(profile!.id, input);
         savedId = updated.id;
@@ -838,6 +845,13 @@
         <ErrorMessage message={saveError} />
       {/if}
 
+      {#if !isEditing}
+        <div class="field field--inline">
+          <label for="conn-dont-save" class="label">Don't save this connection</label>
+          <Checkbox id="conn-dont-save" bind:checked={dontSave} />
+        </div>
+      {/if}
+
       <div class="actions">
         <div class="actions-left">
           {#if isEditing && ondelete}
@@ -862,7 +876,15 @@
         <div class="actions-right">
           <button type="button" class="btn btn--ghost" onclick={onclose}>Cancel</button>
           <button type="submit" class="btn btn--primary" disabled={saving || testing || !isValid}>
-            {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Connection'}
+            {saving
+              ? dontSave
+                ? 'Connecting…'
+                : 'Saving…'
+              : isEditing
+                ? 'Save Changes'
+                : dontSave
+                  ? 'Connect'
+                  : 'Add Connection'}
           </button>
         </div>
       </div>

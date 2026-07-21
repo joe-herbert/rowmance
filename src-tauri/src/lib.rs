@@ -329,6 +329,7 @@ pub fn run() {
             commands::connections::connections_test,
             commands::connections::connections_test_unsaved,
             commands::connections::connections_connect,
+            commands::connections::connections_connect_unsaved,
             commands::connections::connections_disconnect,
             commands::connections::connections_list_active,
             commands::connections::connection_groups_list,

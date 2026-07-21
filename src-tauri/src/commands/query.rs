@@ -89,7 +89,6 @@ pub struct UpdateResult {
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn query_delete_rows(
-    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
@@ -98,25 +97,14 @@ pub async fn query_delete_rows(
     instance_db: Option<String>,
     rows: Vec<RowDelete>,
 ) -> Result<UpdateResult, AppError> {
-    let profile_row = sqlx::query!(
-        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    if !connections.is_active(&connection_id) {
+        return Err(AppError::new(
+            "CONNECTION_NOT_FOUND",
+            format!("No connection with id {connection_id}"),
+        ));
+    }
 
-    let is_read_only = match &profile_row {
-        Some(row) => row.read_only != 0,
-        None => {
-            return Err(AppError::new(
-                "CONNECTION_NOT_FOUND",
-                format!("No connection with id {connection_id}"),
-            ))
-        }
-    };
-
-    if is_read_only {
+    if connections.is_read_only(&connection_id) {
         return Err(AppError::new(
             "READ_ONLY_VIOLATION",
             "This connection is in read-only mode — mutating statements are not allowed",
@@ -156,7 +144,6 @@ pub async fn query_delete_rows(
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn query_update_rows(
-    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
@@ -166,25 +153,14 @@ pub async fn query_update_rows(
     changes: Vec<RowChange>,
 ) -> Result<UpdateResult, AppError> {
     // Check read-only mode before touching the remote pool.
-    let profile_row = sqlx::query!(
-        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    if !connections.is_active(&connection_id) {
+        return Err(AppError::new(
+            "CONNECTION_NOT_FOUND",
+            format!("No connection with id {connection_id}"),
+        ));
+    }
 
-    let is_read_only = match &profile_row {
-        Some(row) => row.read_only != 0,
-        None => {
-            return Err(AppError::new(
-                "CONNECTION_NOT_FOUND",
-                format!("No connection with id {connection_id}"),
-            ))
-        }
-    };
-
-    if is_read_only {
+    if connections.is_read_only(&connection_id) {
         return Err(AppError::new(
             "READ_ONLY_VIOLATION",
             "This connection is in read-only mode — mutating statements are not allowed",
@@ -238,7 +214,6 @@ pub async fn query_update_rows(
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn query_insert_row(
-    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
@@ -247,28 +222,18 @@ pub async fn query_insert_row(
     instance_db: Option<String>,
     values: std::collections::HashMap<String, serde_json::Value>,
 ) -> Result<(), AppError> {
-    let profile_row = sqlx::query!(
-        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    if !connections.is_active(&connection_id) {
+        return Err(AppError::new(
+            "CONNECTION_NOT_FOUND",
+            format!("No connection with id {connection_id}"),
+        ));
+    }
 
-    match &profile_row {
-        Some(row) if row.read_only != 0 => {
-            return Err(AppError::new(
-                "READ_ONLY_VIOLATION",
-                "This connection is in read-only mode — mutating statements are not allowed",
-            ));
-        }
-        None => {
-            return Err(AppError::new(
-                "CONNECTION_NOT_FOUND",
-                format!("No connection with id {connection_id}"),
-            ));
-        }
-        _ => {}
+    if connections.is_read_only(&connection_id) {
+        return Err(AppError::new(
+            "READ_ONLY_VIOLATION",
+            "This connection is in read-only mode — mutating statements are not allowed",
+        ));
     }
 
     if values.is_empty() {
@@ -329,7 +294,6 @@ pub struct SaveChangesResult {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn query_save_table_changes(
-    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     transactions: State<'_, Arc<TransactionManager>>,
     connection_id: String,
@@ -340,28 +304,18 @@ pub async fn query_save_table_changes(
     inserts: Vec<std::collections::HashMap<String, serde_json::Value>>,
     deletes: Vec<RowDelete>,
 ) -> Result<SaveChangesResult, AppError> {
-    let profile_row = sqlx::query!(
-        "SELECT read_only, db_type FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    if !connections.is_active(&connection_id) {
+        return Err(AppError::new(
+            "CONNECTION_NOT_FOUND",
+            format!("No connection with id {connection_id}"),
+        ));
+    }
 
-    match &profile_row {
-        Some(row) if row.read_only != 0 => {
-            return Err(AppError::new(
-                "READ_ONLY_VIOLATION",
-                "This connection is in read-only mode — mutating statements are not allowed",
-            ));
-        }
-        None => {
-            return Err(AppError::new(
-                "CONNECTION_NOT_FOUND",
-                format!("No connection with id {connection_id}"),
-            ));
-        }
-        _ => {}
+    if connections.is_read_only(&connection_id) {
+        return Err(AppError::new(
+            "READ_ONLY_VIOLATION",
+            "This connection is in read-only mode — mutating statements are not allowed",
+        ));
     }
 
     let mut updated_count = 0u64;

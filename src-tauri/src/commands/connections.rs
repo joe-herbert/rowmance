@@ -648,6 +648,156 @@ pub async fn connections_connect(
     Ok(())
 }
 
+/// Connect using raw input without persisting a profile to SQLite.
+/// Used for the "don't save this connection" option in the connection form:
+/// the pool is keyed by a freshly generated id that is never written to
+/// `connection_profiles`, so it vanishes once disconnected instead of
+/// lingering in the saved connection list.
+#[tauri::command]
+pub async fn connections_connect_unsaved(
+    app: tauri::AppHandle,
+    connections: State<'_, Arc<ConnectionManager>>,
+    transactions: State<'_, Arc<crate::transactions::TransactionManager>>,
+    tunnels: State<'_, Arc<SshTunnelManager>>,
+    input: ConnectionProfileInput,
+    password: Option<String>,
+    ssh_password: Option<String>,
+) -> Result<ConnectionProfile, AppError> {
+    let id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let pool_max = input.pool_max.unwrap_or(5);
+    let password = password.unwrap_or_default();
+
+    let (connect_host, connect_port) = if input.ssh_enabled {
+        let ssh_host = input
+            .ssh_host
+            .clone()
+            .ok_or_else(|| AppError::new("SSH_ERROR", "SSH host not set"))?;
+        let ssh_port = input.ssh_port.unwrap_or(22) as u16;
+        let ssh_user = input
+            .ssh_user
+            .clone()
+            .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
+        let auth_type = input.ssh_auth_type.as_deref().unwrap_or("key");
+        let ssh_pass = (auth_type == "password").then_some(ssh_password).flatten();
+
+        let local_port = tunnels
+            .create_tunnel(
+                &id,
+                &ssh_host,
+                ssh_port,
+                &ssh_user,
+                ssh_pass,
+                input.ssh_key_path.clone(),
+                None,
+                &input.host,
+                input.port as u16,
+            )
+            .await
+            .map_err(AppError::from)?;
+        ("127.0.0.1".to_owned(), local_port)
+    } else {
+        (input.host.clone(), input.port as u16)
+    };
+
+    connections
+        .connect(
+            &id,
+            &input.name,
+            &input.db_type,
+            &connect_host,
+            connect_port,
+            &input.database,
+            &input.username,
+            &password,
+            pool_max as u32,
+            input.ssl_enabled,
+            input.ssl_ca_path.as_deref(),
+            input.ssl_cert_path.as_deref(),
+            input.ssl_key_path.as_deref(),
+            input.read_only,
+        )
+        .await
+        .map_err(AppError::from)?;
+
+    // Watch for unexpected SSH tunnel exits, same as a saved connection.
+    if input.ssh_enabled {
+        if let Some(mut exit_rx) = tunnels.exit_receiver(&id) {
+            let id_clone = id.clone();
+            let connections_clone = connections.inner().clone();
+            let transactions_clone = transactions.inner().clone();
+            let tunnels_clone = tunnels.inner().clone();
+            let app_clone = app.clone();
+            tokio::spawn(async move {
+                if exit_rx.changed().await.is_err() {
+                    return;
+                }
+                if tunnels_clone.destroy_tunnel(&id_clone) {
+                    transactions_clone.remove(&id_clone);
+                    connections_clone.disconnect(&id_clone).await;
+                    let _ = app_clone.emit("connection:ssh-dropped", &id_clone);
+                }
+            });
+        }
+    }
+
+    // Periodic ping, same as a saved connection.
+    if let Some(interval_secs) = input.ping_interval.filter(|&s| s > 0) {
+        let id_clone = id.clone();
+        let connections_clone = connections.inner().clone();
+        let transactions_clone = transactions.inner().clone();
+        let tunnels_clone = tunnels.inner().clone();
+        let app_clone = app.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(interval_secs as u64)).await;
+                if !connections_clone.is_active(&id_clone) {
+                    break;
+                }
+                if !connections_clone.ping(&id_clone).await {
+                    if connections_clone.is_active(&id_clone) {
+                        transactions_clone.remove(&id_clone);
+                        tunnels_clone.destroy_tunnel(&id_clone);
+                        connections_clone.disconnect(&id_clone).await;
+                        let _ = app_clone.emit("connection:ping-failed", &id_clone);
+                    }
+                    break;
+                }
+            }
+        });
+    }
+
+    let dialect_info = DialectInfo::for_db_type(&input.db_type);
+
+    Ok(ConnectionProfile {
+        id,
+        group_id: input.group_id,
+        name: input.name,
+        db_type: input.db_type,
+        host: input.host,
+        port: input.port,
+        database: input.database,
+        username: input.username,
+        color: input.color,
+        read_only: input.read_only,
+        ssh_enabled: input.ssh_enabled,
+        ssh_host: input.ssh_host,
+        ssh_port: input.ssh_port,
+        ssh_user: input.ssh_user,
+        ssh_auth_type: input.ssh_auth_type,
+        ssh_key_path: input.ssh_key_path,
+        ssl_enabled: input.ssl_enabled,
+        ssl_ca_path: input.ssl_ca_path,
+        ssl_cert_path: input.ssl_cert_path,
+        ssl_key_path: input.ssl_key_path,
+        pool_max,
+        ping_interval: input.ping_interval,
+        created_at: now.clone(),
+        updated_at: now,
+        dialect_info,
+    })
+}
+
 /// Close the connection pool for the given profile.
 /// Also removes any active transaction for this connection — the underlying
 /// DB connection is dropped, which causes the server to roll back automatically.

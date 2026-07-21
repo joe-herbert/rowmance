@@ -143,6 +143,9 @@ export interface ConnectionProfile {
   createdAt: string;
   updatedAt: string;
   dialectInfo: DialectInfo;
+  /** True for a connection opened via "Don't save this connection" — never
+   * persisted to SQLite; disappears from the list once disconnected. */
+  unsaved?: boolean;
 }
 
 /** Input type for creating or updating a connection profile.

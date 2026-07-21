@@ -18,6 +18,7 @@
   import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
   import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
   import LockIcon from '$lib/components/icons/LockIcon.svelte';
+  import ClockIcon from '$lib/components/icons/ClockIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
@@ -274,6 +275,20 @@
   }
 
   function deleteConnection(profile: ConnectionProfile, onDone?: () => void) {
+    if (profile.unsaved) {
+      confirmState = {
+        title: 'Disconnect Connection',
+        message: `Disconnect "${profile.name}"? It was never saved, so it will not appear again.`,
+        confirmText: 'Disconnect',
+        onconfirm: async () => {
+          confirmState = null;
+          if (connectionStore.isActive(profile.id)) await connectionStore.disconnect(profile.id);
+          panelStore.closeItemsForConnection(profile.id);
+          onDone?.();
+        },
+      };
+      return;
+    }
     confirmState = {
       title: 'Delete Connection',
       message: `Delete "${profile.name}"? This cannot be undone.`,
@@ -1644,37 +1659,56 @@
           title={profile.host}>{profile.name}</button
         >
 
-        <!-- Lock icon if read-only — click to toggle -->
-        {#if profile.readOnly}
-          <button
-            class="lock-icon-btn"
-            onclick={(e) => {
-              e.stopPropagation();
-              connectionStore.toggleReadOnly(profile.id);
-            }}
-            title="Read-only — click to disable"
-            aria-label="Disable read-only for {profile.name}"
-            aria-pressed={true}
+        <!-- Clock icon if this connection wasn't saved — disappears on disconnect -->
+        {#if profile.unsaved}
+          <span
+            class="temp-icon"
+            title="Not saved — will disappear once disconnected"
+            aria-label="Temporary connection, not saved"
           >
-            <LockIcon width={11} height={11} />
-          </button>
+            <ClockIcon width={11} height={11} />
+          </span>
+        {/if}
+
+        <!-- Lock icon if read-only — click to toggle (saved connections only) -->
+        {#if profile.readOnly}
+          {#if profile.unsaved}
+            <span class="temp-icon" title="Read-only" aria-label="Read-only">
+              <LockIcon width={11} height={11} />
+            </span>
+          {:else}
+            <button
+              class="lock-icon-btn"
+              onclick={(e) => {
+                e.stopPropagation();
+                connectionStore.toggleReadOnly(profile.id);
+              }}
+              title="Read-only — click to disable"
+              aria-label="Disable read-only for {profile.name}"
+              aria-pressed={true}
+            >
+              <LockIcon width={11} height={11} />
+            </button>
+          {/if}
         {/if}
       </div>
 
       <!-- Hover actions -->
-      <div class="conn-actions">
-        <button
-          class="action-btn"
-          onclick={(e) => {
-            e.stopPropagation();
-            editingProfile = profile;
-          }}
-          title="Edit connection"
-          aria-label="Edit {profile.name}"
-        >
-          <EditIcon width={13} height={13} strokeWidth={1.8} />
-        </button>
-      </div>
+      {#if !profile.unsaved}
+        <div class="conn-actions">
+          <button
+            class="action-btn"
+            onclick={(e) => {
+              e.stopPropagation();
+              editingProfile = profile;
+            }}
+            title="Edit connection"
+            aria-label="Edit {profile.name}"
+          >
+            <EditIcon width={13} height={13} strokeWidth={1.8} />
+          </button>
+        </div>
+      {/if}
     </div>
 
     <!-- Schema tree when expanded -->
@@ -2187,31 +2221,33 @@
     {/if}
     <CtxItem onclick={ctxOpenServerAdmin}>Server Admin</CtxItem>
     <CtxSep />
-    <CtxItem
-      onclick={() => {
-        if (connCtx) {
-          editingProfile = connCtx.profile;
-          connCtx = null;
-        }
-      }}>Edit</CtxItem
-    >
-    <CtxItem
-      onclick={async () => {
-        if (connCtx) {
-          const id = connCtx.profile.id;
-          connCtx = null;
-          try {
-            await connectionsApi.duplicateConnection(id);
-            await connectionStore.load();
-          } catch (err) {
-            errorModal = { title: 'Duplicate Failed', message: errorMessage(err) };
+    {#if !connCtx.profile.unsaved}
+      <CtxItem
+        onclick={() => {
+          if (connCtx) {
+            editingProfile = connCtx.profile;
+            connCtx = null;
           }
-        }
-      }}>Duplicate</CtxItem
-    >
-    <CtxItem onclick={ctxConnToggleReadOnly}
-      >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</CtxItem
-    >
+        }}>Edit</CtxItem
+      >
+      <CtxItem
+        onclick={async () => {
+          if (connCtx) {
+            const id = connCtx.profile.id;
+            connCtx = null;
+            try {
+              await connectionsApi.duplicateConnection(id);
+              await connectionStore.load();
+            } catch (err) {
+              errorModal = { title: 'Duplicate Failed', message: errorMessage(err) };
+            }
+          }
+        }}>Duplicate</CtxItem
+      >
+      <CtxItem onclick={ctxConnToggleReadOnly}
+        >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</CtxItem
+      >
+    {/if}
     <CtxItem
       onclick={async () => {
         if (connCtx) {
@@ -2226,29 +2262,31 @@
         }
       }}>Copy Name</CtxItem
     >
-    <CtxItem
-      onclick={async () => {
-        if (connCtx) {
-          const id = connCtx.profile.id;
-          connCtx = null;
-          try {
-            await connectionsApi.copyConnectionDbUrlToClipboard(id);
-            toast.addToast('Database URL copied', 'success');
-          } catch (err) {
-            toast.addToast(`Copy failed: ${errorMessage(err)}`, 'error', 0);
+    {#if !connCtx.profile.unsaved}
+      <CtxItem
+        onclick={async () => {
+          if (connCtx) {
+            const id = connCtx.profile.id;
+            connCtx = null;
+            try {
+              await connectionsApi.copyConnectionDbUrlToClipboard(id);
+              toast.addToast('Database URL copied', 'success');
+            } catch (err) {
+              toast.addToast(`Copy failed: ${errorMessage(err)}`, 'error', 0);
+            }
           }
-        }
-      }}>Copy as Database URL</CtxItem
-    >
-    <CtxItem
-      onclick={() => {
-        if (connCtx) {
-          exportSingleId = connCtx.profile.id;
-          connCtx = null;
-          showExportDialog = true;
-        }
-      }}>Export Connection…</CtxItem
-    >
+        }}>Copy as Database URL</CtxItem
+      >
+      <CtxItem
+        onclick={() => {
+          if (connCtx) {
+            exportSingleId = connCtx.profile.id;
+            connCtx = null;
+            showExportDialog = true;
+          }
+        }}>Export Connection…</CtxItem
+      >
+    {/if}
     <CtxSep />
     <CtxItem
       onclick={() => {
@@ -2281,7 +2319,7 @@
       }}>Close All Tabs</CtxItem
     >
     <CtxSep />
-    {#if connectionStore.groups.length > 0}
+    {#if connectionStore.groups.length > 0 && !connCtx.profile.unsaved}
       <div
         class="ctx-item--submenu"
         role="menuitem"
@@ -2991,7 +3029,8 @@
     color: var(--color-accent);
   }
 
-  .lock-icon-btn {
+  .lock-icon-btn,
+  .temp-icon {
     display: flex;
     align-items: center;
     justify-content: center;

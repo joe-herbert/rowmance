@@ -174,33 +174,22 @@ pub async fn schema_list_foreign_keys(
 /// The caller is responsible for generating correct, database-specific SQL.
 #[tauri::command]
 pub async fn schema_execute_ddl(
-    sqlite: State<'_, sqlx::SqlitePool>,
     connections: State<'_, Arc<ConnectionManager>>,
     connection_id: String,
     sql: String,
 ) -> Result<(), AppError> {
-    let profile_row = sqlx::query!(
-        "SELECT read_only FROM connection_profiles WHERE id = ?",
-        connection_id
-    )
-    .fetch_optional(sqlite.inner())
-    .await
-    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    if !connections.is_active(&connection_id) {
+        return Err(AppError::new(
+            "CONNECTION_NOT_FOUND",
+            format!("No connection with id {connection_id}"),
+        ));
+    }
 
-    match profile_row {
-        None => {
-            return Err(AppError::new(
-                "CONNECTION_NOT_FOUND",
-                format!("No connection with id {connection_id}"),
-            ))
-        }
-        Some(row) if row.read_only != 0 => {
-            return Err(AppError::new(
-                "READ_ONLY_VIOLATION",
-                "This connection is in read-only mode — DDL statements are not allowed",
-            ));
-        }
-        _ => {}
+    if connections.is_read_only(&connection_id) {
+        return Err(AppError::new(
+            "READ_ONLY_VIOLATION",
+            "This connection is in read-only mode — DDL statements are not allowed",
+        ));
     }
 
     let engine = connections
