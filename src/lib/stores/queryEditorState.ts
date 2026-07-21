@@ -2,6 +2,7 @@ import type { QueryResult } from '$lib/types';
 
 type SavedQueryEditorState = {
   sql: string;
+  executedSql?: string;
   results: QueryResult[];
   executedStatements: string[];
   selectedDatabase: string;

@@ -449,6 +449,28 @@
 
         <div class="setting-row">
           <div class="setting-label">
+            <span class="label-text">Live View Poll Interval</span>
+            <span class="label-hint"
+              >How often (ms) the table browser re-checks for new data when Live mode is on</span
+            >
+          </div>
+          <input
+            class="setting-input setting-input--sm"
+            type="number"
+            min="1000"
+            max="300000"
+            step="500"
+            value={settings.tableLivePollIntervalMs}
+            onchange={(e) =>
+              update(
+                'tableLivePollIntervalMs',
+                parseInt((e.currentTarget as HTMLInputElement).value, 10),
+              )}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
             <span class="label-text">Boolean Display</span>
             <span class="label-hint">How boolean and tinyint(1) values are shown in the table</span>
           </div>
@@ -709,6 +731,28 @@
             value={settings.fontSize}
             onchange={(e) =>
               update('fontSize', parseInt((e.currentTarget as HTMLInputElement).value, 10))}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Live View Poll Interval</span>
+            <span class="label-hint"
+              >How often (ms) query results re-check for new data when Live mode is on</span
+            >
+          </div>
+          <input
+            class="setting-input setting-input--sm"
+            type="number"
+            min="1000"
+            max="300000"
+            step="500"
+            value={settings.queryLivePollIntervalMs}
+            onchange={(e) =>
+              update(
+                'queryLivePollIntervalMs',
+                parseInt((e.currentTarget as HTMLInputElement).value, 10),
+              )}
           />
         </div>
       </div>

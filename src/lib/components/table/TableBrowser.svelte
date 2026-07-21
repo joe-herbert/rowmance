@@ -1,6 +1,7 @@
 <script module>
   // Shared across all TableBrowser instances — persists across remounts.
   import { tableBrowserFilterCache } from '$lib/stores/tableBrowserFilterCache';
+  import { tableSchemaCache, tableDataCache } from '$lib/stores/tableDataCache';
 
   type CellValue = string | number | boolean | null;
   const tableScrollPositions = new Map<string, number>();
@@ -12,20 +13,6 @@
       deletedRows: Map<string, CellValue[]>;
     }
   >();
-
-  type CachedSchema = {
-    columns: import('$lib/types').ColumnInfo[];
-    indexes: import('$lib/types').IndexInfo[];
-    foreignKeys: import('$lib/types').ForeignKeyInfo[];
-  };
-  const tableSchemaCache = new Map<string, CachedSchema>();
-
-  type CachedData = {
-    result: import('$lib/types').QueryResult;
-    unfilteredTotal: number | null;
-    foreignKeys: import('$lib/types').ForeignKeyInfo[];
-  };
-  const tableDataCache = new Map<string, CachedData>();
 
   export function clearTablePendingState(key: string): void {
     tablePendingState.delete(key);
@@ -47,7 +34,6 @@
   import Loader from '$lib/components/ui/Loader.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
-  import { listColumns, listIndexes, listForeignKeys } from '$lib/tauri/schema';
   import { listen } from '@tauri-apps/api/event';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useRecording } from '$lib/stores/recording.svelte';
@@ -63,6 +49,8 @@
   import PolymorphicVirtualRelationModal from '$lib/components/relations/PolymorphicVirtualRelationModal.svelte';
   import type { QueryResult, ColumnMeta, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { fetchTableSnapshot } from '$lib/utils/tableSnapshot';
+  import { useLiveView } from '$lib/stores/liveView.svelte';
   import DataTable, {
     type PageInfo,
     type QuickViewData,
@@ -199,8 +187,24 @@
   const statusBar = useStatusBar();
   const toast = useToast();
   const settings = useSettings();
+  const liveView = useLiveView();
 
   const PAGE_SIZE = $derived(settings.settings.pageSize);
+  const liveKey = $derived(`${connectionId}:${database}:${table}`);
+
+  function toggleLive(): void {
+    liveView.toggleTableLive(liveKey, {
+      connectionId,
+      database,
+      table,
+      instanceDb,
+      getDialect: () => dialect,
+      getFilterState: () => filterEditorState,
+      getSearchTerm: () => localSearchTerm,
+      getPage: () => page,
+      getPageSize: () => PAGE_SIZE,
+    });
+  }
 
   let page = $state(1);
   let filterEditorState = $state<FilterEditorState>(
@@ -223,6 +227,17 @@
   let isLoading = $state(false);
   let isRefreshing = $state(false);
   let error = $state<string | null>(null);
+
+  // Live mode polls in a module-level store that outlives this component's
+  // mount/unmount cycle. Subscribe so a poll landing while this tab is the
+  // one on screen shows up immediately instead of waiting for a remount.
+  $effect(() => {
+    return liveView.subscribeTable(liveKey, (snapshot) => {
+      result = snapshot.result;
+      unfilteredTotal = snapshot.unfilteredTotal;
+      foreignKeys = snapshot.foreignKeys;
+    });
+  });
 
   $effect(() => {
     let unlisten: (() => void) | null = null;
@@ -915,95 +930,27 @@
     error = null;
     const t0 = performance.now();
     try {
-      const filterActive = filterStateIsActive(filterEditorState);
-      const countTarget = dialect?.usesSchema
-        ? `${quoteIdentifier(database)}.${quoteIdentifier(table)}`
-        : quoteIdentifier(table);
-      const countSql = `SELECT COUNT(*) FROM ${countTarget}`;
-
-      const schemaKey = `${connectionId}:${database}:${table}`;
-      const cachedSchema = tableSchemaCache.get(schemaKey);
-      const schemaPromise: Promise<{
-        columns: ColumnInfo[];
-        indexes: IndexInfo[];
-        foreignKeys: ForeignKeyInfo[];
-      }> = cachedSchema
-        ? Promise.resolve(cachedSchema)
-        : Promise.all([
-            listColumns(connectionId, database, table, instanceDb).catch((): ColumnInfo[] => []),
-            listIndexes(connectionId, database, table, instanceDb).catch((): IndexInfo[] => []),
-            listForeignKeys(connectionId, database, table, instanceDb).catch(
-              (): ForeignKeyInfo[] => [],
-            ),
-          ]).then(([columns, indexes, fks]) => {
-            const schema = { columns, indexes, foreignKeys: fks };
-            tableSchemaCache.set(schemaKey, schema);
-            return schema;
-          });
-
-      const [queryResult, schema, countResult] = await Promise.all([
-        executeQuery(
-          connectionId,
-          buildSql(),
-          untrack(() => page),
-          PAGE_SIZE,
-          database,
-          instanceDb,
-        ),
-        schemaPromise,
-        filterActive
-          ? executeSelection(connectionId, countSql, database, instanceDb)
-          : Promise.resolve(null),
-      ]);
-      const { columns: schemaColumns, indexes, foreignKeys: fks } = schema;
-      foreignKeys = fks;
-
-      if (countResult && !countResult.error) {
-        const raw = countResult.rows[0]?.[0];
-        unfilteredTotal = raw !== null && raw !== undefined ? Number(raw) : null;
-      } else if (!filterActive) {
-        unfilteredTotal = null;
-      }
-
-      if (queryResult.error) {
-        error = queryResult.error;
+      const snapshot = await fetchTableSnapshot({
+        connectionId,
+        database,
+        table,
+        instanceDb,
+        dialect,
+        filterEditorState,
+        searchTerm: localSearchTerm,
+        page: untrack(() => page),
+        pageSize: PAGE_SIZE,
+        previousTotalRows: result?.totalRows ?? null,
+        previousUnfilteredTotal: unfilteredTotal,
+      });
+      foreignKeys = snapshot.foreignKeys;
+      unfilteredTotal = snapshot.unfilteredTotal;
+      if (snapshot.error) {
+        error = snapshot.error;
         result = null;
       } else {
-        if (schemaColumns.length > 0) {
-          const schemaMap = new Map(schemaColumns.map((c) => [c.name, c]));
-          const uniqueColNames = new Set(
-            indexes.filter((idx) => idx.unique).flatMap((idx) => idx.columns),
-          );
-          queryResult.columns = queryResult.columns.map((col) => {
-            const s = schemaMap.get(col.name);
-            return {
-              ...col,
-              dataType: s?.dataType ?? col.dataType,
-              nullable: s ? s.nullable : col.nullable,
-              isPrimaryKey: s?.isPrimaryKey ?? false,
-              isForeignKey:
-                (s?.isForeignKey ?? false) ||
-                vrStore.hasForwardFrom(connectionId, database, table, col.name) ||
-                vrStore.hasPolymorphicValueColumn(connectionId, database, table, col.name),
-              defaultValue: s?.defaultValue ?? null,
-              isAutoIncrement: s?.isAutoIncrement ?? false,
-              isUnique: uniqueColNames.has(col.name),
-            };
-          });
-        }
-        // While the real count is still pending, carry forward the cached value so
-        // the pagination display isn't blank during a background refresh.
-        const displayResult =
-          queryResult.totalRows === null && result !== null
-            ? { ...queryResult, totalRows: result.totalRows }
-            : queryResult;
-        result = displayResult;
+        result = snapshot.result;
         lastQueryMs = Math.round(performance.now() - t0);
-        tableDataCache.set(`${connectionId}:${database}:${table}`, {
-          result: displayResult,
-          unfilteredTotal,
-          foreignKeys,
-        });
       }
     } catch (err) {
       if (!background) {
@@ -1910,6 +1857,28 @@
                 <RefreshIcon />
                 <span>Refresh</span>
                 <kbd>{isMac ? '⌘R' : 'Ctrl+R'}</kbd>
+              </button>
+
+              <!-- Live -->
+              <button
+                class="export-menu-row"
+                role="menuitemcheckbox"
+                aria-checked={liveView.isTableLive(liveKey)}
+                onclick={() => {
+                  showActionsMenu = false;
+                  toggleLive();
+                }}
+              >
+                <span class="live-dot-slot" aria-hidden="true">
+                  <span
+                    class="live-dot"
+                    class:live-dot--active={liveView.isTableLive(liveKey)}
+                  ></span>
+                </span>
+                <span>Live</span>
+                <span class="badge actions-menu-badge"
+                  >{liveView.isTableLive(liveKey) ? 'On' : 'Off'}</span
+                >
               </button>
 
               <!-- Fetch row count -->
@@ -3271,6 +3240,28 @@
     background: var(--color-bg-tertiary, var(--color-bg-hover));
     color: var(--color-text-muted);
     font-weight: var(--font-weight-medium);
+  }
+
+  .live-dot-slot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .live-dot--active {
+    background: var(--color-success, #2ecc71);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success, #2ecc71) 25%, transparent);
   }
 
   .actions-menu-divider {

@@ -577,6 +577,10 @@ export interface AppSettings {
   softDeleteStrikethrough: boolean;
   /** Column conditions used to detect soft-deleted rows. */
   softDeleteConditions: SoftDeleteCondition[];
+  /** Poll interval (ms) used by Live mode in the table browser. */
+  tableLivePollIntervalMs: number;
+  /** Poll interval (ms) used by Live mode in the query editor. */
+  queryLivePollIntervalMs: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -646,6 +650,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     { column: 'is_active', type: 'false' },
     { column: 'status', type: 'equals', value: 'deleted' },
   ],
+  tableLivePollIntervalMs: 5000,
+  queryLivePollIntervalMs: 5000,
 };
 
 // ── Dashboards ───────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@
   import AiModal from '$lib/components/ai/AiModal.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useCellSelection } from '$lib/stores/cellSelection.svelte';
+  import { useLiveView } from '$lib/stores/liveView.svelte';
   import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
   import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
 
@@ -28,12 +29,17 @@
   const connections = useConnections();
   const settingsStore = useSettings();
   const cellSelectionStore = useCellSelection();
+  const liveView = useLiveView();
 
   interface Props {
     results: QueryResult[];
     statements?: string[];
     connectionId?: string;
     database?: string;
+    instanceDb?: string | null;
+    editorId?: string;
+    executedSql?: string;
+    queryName?: string;
     isRunning?: boolean;
     initialActiveTab?: number;
     onActiveTabChange?: (_tab: number) => void;
@@ -45,11 +51,29 @@
     statements = [],
     connectionId,
     database,
+    instanceDb,
+    editorId,
+    executedSql,
+    queryName,
     isRunning = false,
     initialActiveTab = 0,
     onActiveTabChange,
     variableValues = {},
   }: Props = $props();
+
+  const canLive = $derived(!!editorId && !!executedSql?.trim());
+  const isLive = $derived(editorId ? liveView.isQueryLive(editorId) : false);
+
+  function toggleLive(): void {
+    if (!editorId || !executedSql?.trim()) return;
+    liveView.toggleQueryLive(editorId, {
+      connectionId: connectionId ?? '',
+      database: database ?? null,
+      instanceDb,
+      sql: executedSql,
+      queryName,
+    });
+  }
 
   type CellValue = string | number | boolean | null;
 
@@ -755,6 +779,17 @@
           <span class="status-item">{affectedLabel}</span>
         {/if}
         <div class="status-spacer"></div>
+        <button
+          class="export-btn live-toggle-btn"
+          class:live-toggle-btn--active={isLive}
+          disabled={!canLive}
+          aria-pressed={isLive}
+          title={canLive ? 'Poll this query for changes' : 'Run a query to enable Live mode'}
+          onclick={toggleLive}
+        >
+          <span class="live-dot" class:live-dot--active={isLive} aria-hidden="true"></span>
+          Live
+        </button>
         <div class="export-dropdown">
           <button
             bind:this={exportBtnEl}
@@ -1340,6 +1375,35 @@
   .export-btn:hover {
     background: var(--color-bg-hover);
     color: var(--color-text-primary);
+  }
+
+  .live-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+  }
+
+  .live-toggle-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .live-toggle-btn--active {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .live-dot--active {
+    background: var(--color-success, #2ecc71);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success, #2ecc71) 25%, transparent);
   }
 
   .export-menu {

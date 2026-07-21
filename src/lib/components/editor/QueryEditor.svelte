@@ -81,6 +81,7 @@
   import type { FileQuery } from '$lib/types';
   import { useRecording } from '$lib/stores/recording.svelte';
   import { useRevert } from '$lib/stores/revert.svelte';
+  import { useLiveView } from '$lib/stores/liveView.svelte';
   import SaveIcon from '$lib/components/icons/SaveIcon.svelte';
   import FileDocIcon from '$lib/components/icons/FileDocIcon.svelte';
   import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
@@ -119,6 +120,7 @@
   const panelStore = usePanels();
   const recording = useRecording();
   const revertStore = useRevert();
+  const liveView = useLiveView();
 
   const cached = untrack(() => (editorId ? queryEditorCache.get(editorId) : undefined));
 
@@ -131,9 +133,19 @@
   let editorView = $state<EditorView | undefined>(undefined);
   let resultsWrapperEl = $state<HTMLDivElement | undefined>(undefined);
   let sqlText = $state(untrack(() => cached?.sql ?? initialSql));
-  let executedSql = $state('');
+  let executedSql = $state(untrack(() => cached?.executedSql ?? ''));
   let results = $state<QueryResult[]>(untrack(() => cached?.results ?? []));
   let executedStatements = $state<string[]>(untrack(() => cached?.executedStatements ?? []));
+
+  // Live mode polls in a module-level store that outlives this component's
+  // mount/unmount cycle. Subscribe so a poll landing while this tab is the
+  // one on screen shows up immediately instead of waiting for a remount.
+  $effect(() => {
+    if (!editorId) return;
+    return liveView.subscribeQuery(editorId, (newResults) => {
+      results = newResults;
+    });
+  });
   let isRunning = $state(false);
   let databases = $state<string[]>([]);
   let selectedDatabase = $state<string>(
@@ -204,6 +216,7 @@
     if (!editorId) return;
     queryEditorCache.save(editorId, {
       sql: sqlText,
+      executedSql,
       results,
       executedStatements,
       selectedDatabase,
@@ -1584,6 +1597,7 @@
         });
       }
       onExecute?.(query);
+      if (editorId) liveView.updateQuerySource(editorId, query);
       await fetchVariableValues();
       if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
         await saveQuery();
@@ -1646,6 +1660,7 @@
         });
       }
       onExecute?.(query);
+      if (editorId) liveView.updateQuerySource(editorId, query);
       await fetchVariableValues();
       if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
         await saveQuery();
@@ -1701,6 +1716,7 @@
         });
       }
       onExecute?.(stmt);
+      if (editorId) liveView.updateQuerySource(editorId, stmt);
       await fetchVariableValues();
       if (settingsStore.settings.saveOnRun && currentSavedQueryId && savedSql !== sqlText) {
         await saveQuery();
@@ -2506,6 +2522,9 @@
       statements={executedStatements}
       {connectionId}
       database={selectedDatabase || undefined}
+      {editorId}
+      executedSql={executedSql || undefined}
+      queryName={currentSavedQueryName}
       {isRunning}
       {variableValues}
       initialActiveTab={activeResultTab}
