@@ -86,6 +86,9 @@
   import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
   import WarningIcon from '$lib/components/icons/WarningIcon.svelte';
   import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
+  import PlayIcon from '$lib/components/icons/PlayIcon.svelte';
+  import CodeBracketsIcon from '$lib/components/icons/CodeBracketsIcon.svelte';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
 
   interface Props {
     connectionId: string;
@@ -522,13 +525,23 @@
 
   let toolbarEl = $state<HTMLDivElement | undefined>(undefined);
   let toolbarWidth = $state(9999);
+  let toolbarLeadingEl = $state<HTMLDivElement | undefined>(undefined);
+  let toolbarLeadingWidth = $state(0);
+  let toolbarMeasureEl = $state<HTMLDivElement | undefined>(undefined);
+  let toolbarTrailingFullWidth = $state(0);
   let actionsMenuOpen = $state(false);
   let actionsMenuTriggerEl = $state<HTMLButtonElement | undefined>(undefined);
   let actionsMenuEl = $state<HTMLDivElement | undefined>(undefined);
   let actionsMenuTop = $state(0);
   let actionsMenuLeft = $state(0);
 
-  const compact = $derived(toolbarWidth < 700);
+  // Extra slack for the two flex gaps around the spacer, which the
+  // leading/trailing measurements below don't account for on their own.
+  const TOOLBAR_GAP_BUFFER = 24;
+
+  const compact = $derived(
+    toolbarWidth - toolbarLeadingWidth < toolbarTrailingFullWidth + TOOLBAR_GAP_BUFFER,
+  );
 
   $effect(() => {
     if (!toolbarEl) return;
@@ -536,6 +549,24 @@
       toolbarWidth = entries[0].contentRect.width;
     });
     ro.observe(toolbarEl);
+    return () => ro.disconnect();
+  });
+
+  $effect(() => {
+    if (!toolbarLeadingEl) return;
+    const ro = new ResizeObserver(() => {
+      toolbarLeadingWidth = toolbarLeadingEl!.offsetWidth;
+    });
+    ro.observe(toolbarLeadingEl);
+    return () => ro.disconnect();
+  });
+
+  $effect(() => {
+    if (!toolbarMeasureEl) return;
+    const ro = new ResizeObserver(() => {
+      toolbarTrailingFullWidth = toolbarMeasureEl!.offsetWidth;
+    });
+    ro.observe(toolbarMeasureEl);
     return () => ro.disconnect();
   });
 
@@ -2098,34 +2129,69 @@
   onpointercancel={onResizerPointerUp}
 >
   <div class="toolbar" bind:this={toolbarEl}>
-    <button
-      class="run-button"
-      onclick={runQuery}
-      disabled={isRunning}
-      title="Run query (Cmd+Enter)"
-      aria-label="Run query"
-    >
-      ▶
-    </button>
+    <div class="toolbar-leading" bind:this={toolbarLeadingEl}>
+      <button
+        class="run-button"
+        onclick={runQuery}
+        disabled={isRunning}
+        title="Run query (Cmd+Enter)"
+        aria-label="Run query"
+      >
+        ▶
+      </button>
 
-    <span class="connection-badge" title={connectionName}>
-      {connectionName}
-    </span>
+      <span class="connection-badge" title={connectionName}>
+        {connectionName}
+      </span>
 
-    {#if databases.length > 0}
-      <Select
-        bind:value={selectedDatabase}
-        options={databases.map((db) => ({ value: db, label: db }))}
-        size="xs"
-        aria-label="Select database"
-        mono
-        searchable
-      />
-    {:else if selectedDatabase}
-      <span class="connection-badge" title="Database">{selectedDatabase}</span>
-    {/if}
+      {#if databases.length > 0}
+        <Select
+          bind:value={selectedDatabase}
+          options={databases.map((db) => ({ value: db, label: db }))}
+          size="xs"
+          aria-label="Select database"
+          mono
+          searchable
+        />
+      {:else if selectedDatabase}
+        <span class="connection-badge" title="Database">{selectedDatabase}</span>
+      {/if}
+    </div>
 
     <div class="toolbar-spacer"></div>
+
+    <div class="toolbar-measure" bind:this={toolbarMeasureEl} aria-hidden="true" inert>
+      {#if currentSavedQueryId}
+        <button class="toolbar-btn" tabindex="-1">
+          <SaveIcon width={13} height={13} />
+          <span>Save As…</span>
+        </button>
+      {/if}
+      <button class="toolbar-btn" tabindex="-1">
+        <SaveIcon width={13} height={13} />
+        <span>Save</span>
+      </button>
+      <button class="toolbar-btn" tabindex="-1">
+        <FileDocIcon size={13} />
+        <span>Description</span>
+      </button>
+      <button class="toolbar-btn" tabindex="-1">
+        <PlayIcon width={12} height={12} />
+        <span>Run Selection</span>
+      </button>
+      <button class="toolbar-btn" tabindex="-1">
+        <PlayIcon width={12} height={12} />
+        <span>Run Cursor</span>
+      </button>
+      <button class="toolbar-btn" tabindex="-1">
+        <CodeBracketsIcon size={13} />
+        <span>Format</span>
+      </button>
+      <button class="toolbar-btn" tabindex="-1">
+        <SearchIcon width={13} height={13} />
+        <span>Explain</span>
+      </button>
+    </div>
 
     {#if currentSavedQueryId && !compact}
       <button
@@ -2134,32 +2200,37 @@
         disabled={isSaving}
         title="Save a copy with a new name"
       >
-        Save As…
+        <SaveIcon width={13} height={13} />
+        <span>Save As…</span>
       </button>
     {/if}
 
     <button
       bind:this={saveDialogTriggerEl}
-      class="toolbar-btn toolbar-btn--save"
+      class="toolbar-btn"
+      class:toolbar-btn--icon={compact}
       onclick={saveQuery}
       disabled={isSaving}
       title={currentSavedQueryId ? 'Save query' : 'Save query as…'}
-      aria-label="Save query"
+      aria-label={compact ? 'Save query' : undefined}
     >
       <SaveIcon width={13} height={13} />
+      {#if !compact}<span>Save</span>{/if}
     </button>
 
     <button
-      class="toolbar-btn toolbar-btn--icon toolbar-btn--description"
+      class="toolbar-btn"
+      class:toolbar-btn--icon={compact}
       class:toolbar-btn--description-active={descriptionOpen}
       onclick={() => {
         descriptionOpen = !descriptionOpen;
       }}
       title={descriptionOpen ? 'Hide description' : 'Show description'}
-      aria-label="Toggle description"
       aria-pressed={descriptionOpen}
+      aria-label={compact ? 'Toggle description' : undefined}
     >
       <FileDocIcon size={13} />
+      {#if !compact}<span>Description</span>{/if}
     </button>
 
     {#if saveDialogOpen}
@@ -2233,7 +2304,9 @@
             }}
             disabled={isRunning}
           >
-            <span>Run Selection</span>
+            <span class="actions-menu-item-label"
+              ><PlayIcon width={12} height={12} />Run Selection</span
+            >
             <kbd>⇧↵</kbd>
           </button>
           <button
@@ -2245,7 +2318,9 @@
             }}
             disabled={isRunning}
           >
-            <span>Run Cursor</span>
+            <span class="actions-menu-item-label"
+              ><PlayIcon width={12} height={12} />Run Cursor</span
+            >
             <kbd>⇧R</kbd>
           </button>
           <div class="actions-menu-sep" role="separator"></div>
@@ -2257,7 +2332,7 @@
               actionsMenuOpen = false;
             }}
           >
-            <span>Format SQL</span>
+            <span class="actions-menu-item-label"><CodeBracketsIcon size={12} />Format SQL</span>
             <kbd>⇧F</kbd>
           </button>
           <button
@@ -2269,7 +2344,8 @@
             }}
             disabled={isRunning}
           >
-            <span>Explain</span>
+            <span class="actions-menu-item-label"><SearchIcon width={12} height={12} />Explain</span
+            >
           </button>
           {#if currentSavedQueryId}
             <div class="actions-menu-sep" role="separator"></div>
@@ -2282,7 +2358,9 @@
               }}
               disabled={isSaving}
             >
-              <span>Save As…</span>
+              <span class="actions-menu-item-label"
+                ><SaveIcon width={12} height={12} />Save As…</span
+              >
             </button>
           {/if}
         </div>
@@ -2294,7 +2372,8 @@
         disabled={isRunning}
         title="Run selection (Cmd+Shift+Enter)"
       >
-        Run Selection
+        <PlayIcon width={12} height={12} />
+        <span>Run Selection</span>
       </button>
 
       <button
@@ -2303,15 +2382,18 @@
         disabled={isRunning}
         title="Run statement under cursor (Cmd+Shift+R)"
       >
-        Run Cursor
+        <PlayIcon width={12} height={12} />
+        <span>Run Cursor</span>
       </button>
 
       <button class="toolbar-btn" onclick={formatQuery} title="Format SQL (Cmd+Shift+F)">
-        Format
+        <CodeBracketsIcon size={13} />
+        <span>Format</span>
       </button>
 
       <button class="toolbar-btn" onclick={runExplain} disabled={isRunning} title="Explain query">
-        Explain
+        <SearchIcon width={13} height={13} />
+        <span>Explain</span>
       </button>
     {/if}
   </div>
@@ -2647,11 +2729,32 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow: hidden;
     gap: var(--spacing-2);
     padding: 0 var(--spacing-3);
     border-bottom: 1px solid var(--color-border);
     min-height: var(--toolbar-height);
+  }
+
+  .toolbar-leading {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .toolbar-measure {
+    position: fixed;
+    top: -9999px;
+    left: -9999px;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    white-space: nowrap;
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .run-button {
@@ -2698,6 +2801,9 @@
   }
 
   .toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
     padding: 0 var(--spacing-2);
     height: calc(var(--toolbar-height) - var(--spacing-3));
     background: transparent;
@@ -2726,18 +2832,7 @@
   .toolbar-btn--icon {
     width: calc(var(--toolbar-height) - var(--spacing-3));
     padding: 0;
-    display: inline-flex;
-    align-items: center;
     justify-content: center;
-  }
-
-  .toolbar-btn--save {
-    color: var(--color-text-muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(var(--toolbar-height) - var(--spacing-3));
-    padding: 0;
   }
 
   /* Save name dialog */
@@ -2853,6 +2948,17 @@
   .actions-menu-item:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .actions-menu-item-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+
+  .actions-menu-item-label :global(svg) {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
   }
 
   .actions-menu-item kbd {
