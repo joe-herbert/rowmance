@@ -3865,6 +3865,7 @@
                   </div>
                 </td>
               {/each}
+              <td class="filler-cell"></td>
             </tr>
           {/each}
         {/if}
@@ -4463,6 +4464,7 @@
                   </div>
                 </td>
               {/each}
+              <td class="filler-cell"></td>
             </tr>
           {/each}
         {/if}
