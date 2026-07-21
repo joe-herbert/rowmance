@@ -9,3 +9,8 @@ export function errorMessage(err: unknown): string {
   }
   return String(err);
 }
+
+/** True when an error looks like the backend's "Connection X is not connected" error. */
+export function isNotConnectedError(err: unknown): boolean {
+  return /is not connected/i.test(errorMessage(err));
+}

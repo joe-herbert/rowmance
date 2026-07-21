@@ -6,11 +6,17 @@
 
 export type ToastType = 'info' | 'success' | 'error' | 'warning';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Toast {
   id: string;
   message: string;
   type: ToastType;
   duration: number;
+  action?: ToastAction;
 }
 
 const MAX_TOASTS = 5;
@@ -28,9 +34,14 @@ export function useToast() {
       return toasts;
     },
 
-    addToast(message: string, type: ToastType = 'info', duration = 4000): string {
+    addToast(
+      message: string,
+      type: ToastType = 'info',
+      duration = 4000,
+      action?: ToastAction,
+    ): string {
       const id = nextId();
-      const toast: Toast = { id, message, type, duration };
+      const toast: Toast = { id, message, type, duration, action };
 
       // Cap at MAX_TOASTS — drop the oldest if we're over.
       if (toasts.length >= MAX_TOASTS) {

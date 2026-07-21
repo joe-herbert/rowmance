@@ -28,6 +28,17 @@
         {/if}
       </span>
       <span class="toast-message">{toast.message}</span>
+      {#if toast.action}
+        <button
+          class="toast-action"
+          onclick={() => {
+            toast.action?.onClick();
+            toastStore.dismiss(toast.id);
+          }}
+        >
+          {toast.action.label}
+        </button>
+      {/if}
       {#if toast.type === 'error'}
         <button
           class="toast-copy"
@@ -128,6 +139,27 @@
     color: var(--color-text-primary);
     line-height: var(--line-height-normal);
     word-break: break-word;
+  }
+
+  .toast-action {
+    flex-shrink: 0;
+    padding: 2px var(--spacing-2);
+    background: var(--color-accent-subtle);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-ui);
+    color: var(--color-accent);
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .toast-action:hover {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
   }
 
   .toast-copy {

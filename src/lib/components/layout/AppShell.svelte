@@ -30,7 +30,7 @@
   import { getAllFileExtensions } from '$lib/stores/dialects.svelte';
   import * as updaterApi from '$lib/tauri/updater';
   import * as txApi from '$lib/tauri/transactions';
-  import { errorMessage } from '$lib/utils/errors';
+  import { errorMessage, isNotConnectedError } from '$lib/utils/errors';
   import { openNewWindow, syncTrafficLightPosition, onFullscreenChange } from '$lib/tauri/window';
   import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
   import LockIcon from '$lib/components/icons/LockIcon.svelte';
@@ -75,6 +75,18 @@
   const toast = useToast();
   const recordingStore = useRecording();
   const revertStore = useRevert();
+
+  function toastConnectionError(connectionId: string, err: unknown): void {
+    const message = errorMessage(err);
+    if (isNotConnectedError(err)) {
+      toast.addToast(message, 'error', 0, {
+        label: 'Connect',
+        onClick: () => connectionsStore.connect(connectionId).catch(() => {}),
+      });
+    } else {
+      toast.addToast(message, 'error');
+    }
+  }
 
   // ── Active connection + view mode (derived from focused panel) ────────────
 
@@ -635,7 +647,7 @@
       await txApi.beginTransaction(id, database);
       connectionsStore.setTransactionActive(id, true, database);
     } catch (err) {
-      toast.addToast(errorMessage(err), 'error');
+      toastConnectionError(id, err);
     } finally {
       txBusy = false;
     }
@@ -649,7 +661,7 @@
       await txApi.commitTransaction(id);
       connectionsStore.setTransactionActive(id, false);
     } catch (err) {
-      toast.addToast(errorMessage(err), 'error');
+      toastConnectionError(id, err);
     } finally {
       txBusy = false;
     }
@@ -665,7 +677,7 @@
       txQueriesExpanded = false;
       document.dispatchEvent(new CustomEvent('tx-rollback', { detail: { connectionId: id } }));
     } catch (err) {
-      toast.addToast(errorMessage(err), 'error');
+      toastConnectionError(id, err);
     } finally {
       txBusy = false;
     }

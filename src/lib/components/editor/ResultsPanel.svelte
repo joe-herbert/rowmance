@@ -11,7 +11,7 @@
     type ExportFormat,
   } from '$lib/tauri/export';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
-  import { errorMessage } from '$lib/utils/errors';
+  import { errorMessage, isNotConnectedError } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
@@ -163,6 +163,20 @@
   let pickerLeft = $state(0);
 
   // ── Derived editing values ────────────────────────────────────────────────
+
+  let reconnecting = $state(false);
+
+  async function handleReconnect() {
+    if (!connectionId) return;
+    reconnecting = true;
+    try {
+      await connections.connect(connectionId);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error');
+    } finally {
+      reconnecting = false;
+    }
+  }
 
   let connectionReadOnly = $derived(
     connectionId ? (connections.getById(connectionId)?.readOnly ?? false) : true,
@@ -569,6 +583,11 @@
           </button>
         </div>
         <span class="error-message">{result.error}</span>
+        {#if connectionId && isNotConnectedError(result.error)}
+          <button class="error-reconnect" onclick={handleReconnect} disabled={reconnecting}>
+            {reconnecting ? 'Connecting…' : 'Connect'}
+          </button>
+        {/if}
       </div>
       <div class="flex-fill"></div>
       <div class="status-bar">
@@ -1019,6 +1038,33 @@
     word-break: break-word;
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  .error-reconnect {
+    align-self: flex-start;
+    margin-top: var(--spacing-2);
+    padding: 3px var(--spacing-3);
+    background: var(--color-accent-subtle);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-ui);
+    color: var(--color-accent);
+    cursor: pointer;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .error-reconnect:hover {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+  }
+
+  .error-reconnect:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .table-wrapper {
