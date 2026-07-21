@@ -633,7 +633,13 @@
         : [],
     ),
   );
-  let nextNewRowId = 0;
+  let nextNewRowId = untrack(() => {
+    const restoredIds = (initialPendingChanges ? [...initialPendingChanges.keys()] : [])
+      .filter((k) => k.startsWith('__new__'))
+      .map((k) => Number.parseInt(k.slice('__new__'.length), 10))
+      .filter((n) => Number.isFinite(n));
+    return restoredIds.length > 0 ? Math.max(...restoredIds) + 1 : 0;
+  });
 
   // rowKey → original row values snapshot for building DELETE WHERE clauses
   let pendingDeletedRows = $state<Map<string, CellValue[]>>(
@@ -3644,7 +3650,7 @@
 
       <tbody>
         {#if settings.newRowPosition === 'top'}
-          {#each pendingNewRows as newRow}
+          {#each pendingNewRows as newRow (newRow.key)}
             <tr
               class="data-row new-row"
               class:row-selected={newRowRowSelectionMode && selectedNewRowKeys.has(newRow.key)}
@@ -4242,7 +4248,7 @@
         {/each}
 
         {#if settings.newRowPosition !== 'top'}
-          {#each pendingNewRows as newRow}
+          {#each pendingNewRows as newRow (newRow.key)}
             <tr
               class="data-row new-row"
               class:row-selected={newRowRowSelectionMode && selectedNewRowKeys.has(newRow.key)}
