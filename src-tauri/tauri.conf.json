@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Rowmance",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "identifier": "com.jherbert.rowmance",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -38,6 +38,9 @@
     "createUpdaterArtifacts": true,
     "macOS": {
       "entitlements": "entitlements.plist",
+      "files": {
+        "embedded.provisionprofile": "embedded.provisionprofile"
+      },
       "dmg": {
         "background": "icons/dmg-background.png",
         "windowSize": { "width": 540, "height": 380 },

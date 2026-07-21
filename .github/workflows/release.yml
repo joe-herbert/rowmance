@@ -32,6 +32,14 @@ jobs:
         run: |
           sed -i '' "s/__APPLE_TEAM_ID__/${{ secrets.APPLE_TEAM_ID }}/" src-tauri/entitlements.plist
 
+      - name: Write embedded provisioning profile
+        run: |
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode -o src-tauri/embedded.provisionprofile
+          if [ ! -s src-tauri/embedded.provisionprofile ]; then
+            echo "::error::embedded.provisionprofile is empty. Check that the APPLE_PROVISIONING_PROFILE_BASE64 secret is set correctly."
+            exit 1
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,3 +69,12 @@ jobs:
             exit 1
           fi
           echo "Found $COUNT signature file(s) — signing succeeded."
+
+      - name: Verify provisioning profile embedded
+        run: |
+          PROFILE=$(find src-tauri/target -path "*/Rowmance.app/Contents/embedded.provisionprofile" | head -n1)
+          if [ -z "$PROFILE" ]; then
+            echo "::error::embedded.provisionprofile not found in Rowmance.app bundle. keychain-access-groups entitlement will fail at launch without it."
+            exit 1
+          fi
+          echo "Found embedded provisioning profile at $PROFILE"
