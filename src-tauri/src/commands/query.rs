@@ -800,6 +800,7 @@ pub async fn query_execute(
     let execution_us = t.elapsed().as_micros() as u64;
 
     let duration_us = start.elapsed().as_micros() as u64;
+    #[cfg(debug_assertions)]
     let result_processing_us = duration_us.saturating_sub(execution_us);
 
     let affected_rows = exec_result.affected_rows;

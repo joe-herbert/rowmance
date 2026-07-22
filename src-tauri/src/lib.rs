@@ -14,7 +14,7 @@ use connections::ssh_tunnel::SshTunnelManager;
 use sessions::SessionManager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_opener::OpenerExt;
 use transactions::TransactionManager;
 
 const RELEASES_URL: &str = "https://github.com/joe-herbert/rowmance/releases";
@@ -25,6 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // ── Rowmance app menu ──────────────────────────────────────────
@@ -241,7 +242,7 @@ pub fn run() {
                         let _ = app.emit("menu:whats-new", ());
                     }
                     "help-view-releases" => {
-                        let _ = app.shell().open(RELEASES_URL, None);
+                        let _ = app.opener().open_url(RELEASES_URL, None::<&str>);
                     }
                     "new-query" => {
                         let _ = app.emit("menu:new-query", ());
