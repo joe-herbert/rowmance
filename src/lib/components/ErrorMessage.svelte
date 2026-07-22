@@ -9,11 +9,19 @@
   let { message }: Props = $props();
 
   let copied = $state(false);
+  let resetTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  $effect(() => {
+    message;
+    copied = false;
+    clearTimeout(resetTimeout);
+  });
 
   function copy() {
     navigator.clipboard.writeText(message).then(() => {
       copied = true;
-      setTimeout(() => (copied = false), 1500);
+      clearTimeout(resetTimeout);
+      resetTimeout = setTimeout(() => (copied = false), 1500);
     });
   }
 </script>
@@ -67,6 +75,9 @@
     cursor: pointer;
     opacity: 0.8;
     transition: opacity var(--transition-fast), background var(--transition-fast);
+    /* Forces WKWebView to composite this element on its own layer so the icon
+       swap repaints immediately instead of waiting for a hover-triggered repaint. */
+    transform: translateZ(0);
   }
 
   .error-message__copy:hover {
