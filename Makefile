@@ -20,8 +20,24 @@ dev:
 	bunx tauri dev
 
 ## Build a production release for the current platform
+## Mirrors the release CI: injects the real Apple Team ID into entitlements.plist
+## before building (restoring the __APPLE_TEAM_ID__ placeholder afterwards so the
+## tracked file never stays dirty) and requires a real embedded.provisionprofile.
 build:
-	TAURI_SIGNING_PRIVATE_KEY=$$(cat ~/.tauri/rowmance.key) TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$$(cat ~/.tauri/rowmance.password) bunx tauri build
+	@test -f ~/.tauri/rowmance.key || { echo "Missing ~/.tauri/rowmance.key (Tauri updater signing private key). See 'Local Release Builds' in README.md."; exit 1; }
+	@test -f ~/.tauri/rowmance.password || { echo "Missing ~/.tauri/rowmance.password (password for rowmance.key). See 'Local Release Builds' in README.md."; exit 1; }
+	@test -f ~/.tauri/rowmance.team_id || { echo "Missing ~/.tauri/rowmance.team_id (your Apple Team ID, e.g. WEEZR2L997). See 'Local Release Builds' in README.md."; exit 1; }
+	@test -f ~/.tauri/rowmance.signing_identity || { echo "Missing ~/.tauri/rowmance.signing_identity (your codesign identity, e.g. 'Developer ID Application: Name (TEAMID)'). See 'Local Release Builds' in README.md."; exit 1; }
+	@test -s src-tauri/embedded.provisionprofile || { echo "Missing/empty src-tauri/embedded.provisionprofile. See 'Local Release Builds' in README.md."; exit 1; }
+	@cp src-tauri/entitlements.plist src-tauri/entitlements.plist.bak
+	@trap 'mv src-tauri/entitlements.plist.bak src-tauri/entitlements.plist' EXIT; \
+	sed -i '' "s/__APPLE_TEAM_ID__/$$(cat ~/.tauri/rowmance.team_id)/" src-tauri/entitlements.plist; \
+	TAURI_SIGNING_PRIVATE_KEY=$$(cat ~/.tauri/rowmance.key) \
+	TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$$(cat ~/.tauri/rowmance.password) \
+	APPLE_TEAM_ID=$$(cat ~/.tauri/rowmance.team_id) \
+	APPLE_SIGNING_IDENTITY=$$(cat ~/.tauri/rowmance.signing_identity) \
+	KEYCHAIN_ACCESS_GROUP=$$(cat ~/.tauri/rowmance.team_id).com.jherbert.rowmance \
+	bunx tauri build
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 

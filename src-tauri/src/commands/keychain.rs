@@ -2,12 +2,19 @@
 /// Entry names follow the pattern "{connection_id}:{secret_type}" where
 /// secret_type is one of: db_password, ssh_password, ssh_key_passphrase.
 ///
-/// On macOS all new items are written to the Data Protection Keychain
-/// (kSecUseDataProtectionKeychain = true).  Items there never show ACL
-/// confirmation dialogs — access is granted automatically while the device
-/// is unlocked.  Items that were previously stored in the legacy keychain
-/// by the old `keyring` crate are migrated on first read (delete old item,
-/// insert into DPK) so that future reads are silent too.
+/// On macOS, secrets are written to the legacy (non-DPK) generic-password
+/// keychain. The Data Protection Keychain (`kSecUseDataProtectionKeychain`)
+/// was tried first, since it's documented to skip ACL confirmation dialogs
+/// entirely, but proved unreliable in testing on this app's Team ID/entitlement
+/// combination: writes could report success and read back successfully
+/// immediately after, yet the item would be gone shortly after — even within
+/// the same process. It's still checked on read as a harmless courtesy in case
+/// an item ever does land there durably, but nothing is ever written to it.
+///
+/// With the app's Developer ID signature stable across builds, the legacy
+/// keychain's own default ACL (which trusts the app that created an item,
+/// identified by code signature) means reads from this same app are silent —
+/// no custom access-control-list code needed.
 #[cfg(not(target_os = "macos"))]
 use keyring::Entry;
 use sqlx::SqlitePool;
@@ -25,21 +32,29 @@ mod macos {
     use core_foundation::string::CFString;
     use core_foundation_sys::base::{CFGetTypeID, CFRelease, CFTypeRef};
     use core_foundation_sys::data::CFDataRef;
-    use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound};
+    use security_framework_sys::base::errSecItemNotFound;
     use security_framework_sys::item::{
-        kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnData,
-        kSecUseDataProtectionKeychain, kSecValueData,
+        kSecAttrAccessGroup, kSecAttrAccount, kSecAttrService, kSecClass,
+        kSecClassGenericPassword, kSecReturnData, kSecUseDataProtectionKeychain,
     };
-    use security_framework_sys::keychain_item::{
-        SecItemAdd, SecItemCopyMatching, SecItemDelete, SecItemUpdate,
-    };
+    use security_framework_sys::keychain_item::{SecItemCopyMatching, SecItemDelete};
+
+    /// The app's `keychain-access-groups` entitlement value, baked in at build time
+    /// from the `KEYCHAIN_ACCESS_GROUP` env var (see Makefile / release.yml). `None`
+    /// in unsigned dev builds, where there's no custom access group to pin to.
+    ///
+    /// Without pinning this explicitly, `SecItemAdd` and `SecItemCopyMatching` can
+    /// each fall back to a different implicit default access group when the app has
+    /// exactly one custom (non-default) group entitled, causing a write to report
+    /// success while an immediately-following read of the same item misses.
+    const ACCESS_GROUP: Option<&str> = option_env!("KEYCHAIN_ACCESS_GROUP");
 
     /// Build the base query attributes for a generic password in the Data
     /// Protection Keychain.  The DPK flag causes macOS to bypass ACL-based
     /// confirmation dialogs entirely.
     fn dpk_query(service: &str, account: &str) -> Vec<(CFString, CFType)> {
         unsafe {
-            vec![
+            let mut query = vec![
                 (
                     CFString::wrap_under_get_rule(kSecClass),
                     CFString::wrap_under_get_rule(kSecClassGenericPassword).into_CFType(),
@@ -56,7 +71,14 @@ mod macos {
                     CFString::wrap_under_get_rule(kSecUseDataProtectionKeychain),
                     CFBoolean::from(true).into_CFType(),
                 ),
-            ]
+            ];
+            if let Some(group) = ACCESS_GROUP {
+                query.push((
+                    CFString::wrap_under_get_rule(kSecAttrAccessGroup),
+                    CFString::from(group).into_CFType(),
+                ));
+            }
+            query
         }
     }
 
@@ -97,29 +119,6 @@ mod macos {
         Ok(extract_bytes(ret))
     }
 
-    /// Write to the Data Protection Keychain — never prompts.
-    /// Returns the OSStatus so callers can detect failure and fall back.
-    pub fn write_dpk(service: &str, account: &str, value: &[u8]) -> i32 {
-        let mut query = dpk_query(service, account);
-        let find_len = query.len();
-        query.push((
-            unsafe { CFString::wrap_under_get_rule(kSecValueData) },
-            CFData::from_buffer(value).into_CFType(),
-        ));
-
-        let params = CFDictionary::from_CFType_pairs(&query);
-        let mut ret = std::ptr::null();
-        let status = unsafe { SecItemAdd(params.as_concrete_TypeRef(), &mut ret) };
-        if status == errSecDuplicateItem {
-            let find = CFDictionary::from_CFType_pairs(&query[..find_len]);
-            let attrs = CFDictionary::from_CFType_pairs(&query[find_len..]);
-            return unsafe {
-                SecItemUpdate(find.as_concrete_TypeRef(), attrs.as_concrete_TypeRef())
-            };
-        }
-        status
-    }
-
     /// Delete from the Data Protection Keychain.
     pub fn remove_dpk(service: &str, account: &str) {
         let query = dpk_query(service, account);
@@ -147,63 +146,32 @@ mod macos {
 
 // ── Public helpers ────────────────────────────────────────────────────────────
 
-/// Read a secret from the keychain.
-///
-/// On macOS: checks the Data Protection Keychain first (no prompt).  If not
-/// found there, falls back to the legacy keychain (may prompt once for old
-/// items created by a previous version) and immediately migrates the item into
-/// the DPK so all future reads are silent.
 /// Reads a secret from the keychain.
 ///
+/// The Data Protection Keychain (`kSecUseDataProtectionKeychain`) has proven
+/// unreliable on this app's Team ID/entitlement combination in testing: a
+/// write can report success and be immediately read back successfully, yet
+/// the item is gone moments later — even within the same process, with no
+/// error at any step. It is checked here only as a courtesy in case an item
+/// really did land there durably, but it is never written to (see
+/// `keychain_write`), and a hit here is not treated as authoritative over a
+/// miss — everything durable lives in the legacy keychain.
+///
 /// `Ok(None)` means no secret was ever stored under this account. `Err(_)`
-/// means the keychain itself refused access (e.g. a missing/invalid
-/// `keychain-access-groups` entitlement) — callers must not treat this the
-/// same as "no secret configured", since silently falling back to an empty
-/// value here is what causes confusing downstream errors (like a database
-/// login rejecting an empty password instead of the real one).
+/// means the keychain itself refused access outright.
 #[cfg(target_os = "macos")]
 pub fn read_keychain_secret(service: &str, account: &str) -> Result<Option<String>, String> {
-    // Fast path: item already in the Data Protection Keychain — no prompt.
-    match macos::read_dpk(service, account) {
-        Ok(Some(bytes)) => return Ok(String::from_utf8(bytes).ok()),
-        Ok(None) => {}
-        Err(status) => {
-            // DPK access failed outright. Still check the legacy keychain in
-            // case the secret lives there, but surface the DPK error if not.
-            return match macos::read_legacy(service, account) {
-                Ok(Some(bytes)) => Ok(String::from_utf8(bytes).ok()),
-                Ok(None) => Err(format!(
-                    "keychain access denied (status {status}); the app's keychain entitlement may be missing or invalid"
-                )),
-                Err(legacy_status) => Err(format!(
-                    "keychain access denied (status {status}, legacy status {legacy_status}); the app's keychain entitlement may be missing or invalid"
-                )),
-            };
-        }
+    if let Ok(Some(bytes)) = macos::read_dpk(service, account) {
+        return Ok(String::from_utf8(bytes).ok());
     }
 
-    // Slow path: item is in the legacy keychain (stored by old keyring crate).
-    // This may show an ACL prompt, but only this one time.
-    let bytes = match macos::read_legacy(service, account) {
-        Ok(Some(bytes)) => bytes,
-        Ok(None) => return Ok(None),
-        Err(status) => {
-            return Err(format!(
-                "keychain access denied (status {status}); the app's keychain entitlement may be missing or invalid"
-            ))
-        }
-    };
-    let Some(value) = String::from_utf8(bytes.clone()).ok() else {
-        return Ok(None);
-    };
-
-    // Attempt to migrate into the DPK so future reads are silent.
-    // Succeeds in production (signed) builds; silently skips in unsigned dev builds.
-    if macos::write_dpk(service, account, &bytes) == 0 {
-        macos::remove_legacy(service, account);
+    match macos::read_legacy(service, account) {
+        Ok(Some(bytes)) => Ok(String::from_utf8(bytes).ok()),
+        Ok(None) => Ok(None),
+        Err(status) => Err(format!(
+            "keychain access denied (status {status})"
+        )),
     }
-
-    Ok(Some(value))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -251,23 +219,14 @@ pub fn keychain_write_secret(service: &str, account: &str, value: &str) -> Resul
     keychain_write(service, account, value.as_bytes())
 }
 
+/// Writes a secret to the legacy (non-DPK) generic-password keychain — the
+/// only storage observed to be reliable in testing (see `read_keychain_secret`).
+/// Delete-then-add ensures a clean `SecItemAdd`-created item rather than an
+/// update on top of a pre-existing item from the old `keyring` crate, which
+/// avoids a second/duplicate ACL prompt.
 #[cfg(target_os = "macos")]
 fn keychain_write(service: &str, account: &str, value: &[u8]) -> Result<(), AppError> {
-    let dpk_status = macos::write_dpk(service, account, value);
-    if dpk_status == 0 {
-        // Successfully written to the Data Protection Keychain.
-        // Remove any legacy item so it can't generate a second ACL prompt.
-        macos::remove_legacy(service, account);
-        return Ok(());
-    }
-
-    // DPK write failed (errSecMissingEntitlement=-34018 in unsigned dev builds).
-    // Fall back to the legacy keychain via security_framework.
-    // To avoid the double-prompt caused by items originally created with the old
-    // SecKeychain API, delete any existing item first so set_generic_password
-    // always calls SecItemAdd (clean new-API item) rather than SecItemUpdate.
-    eprintln!("[keychain] DPK write failed (status {dpk_status}), falling back to legacy keychain");
-    security_framework::passwords::delete_generic_password(service, account).ok();
+    macos::remove_legacy(service, account);
     security_framework::passwords::set_generic_password(service, account, value)
         .map_err(|e| AppError::new("KEYCHAIN_ERROR", e.to_string()))
 }

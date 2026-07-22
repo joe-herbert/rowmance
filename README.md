@@ -65,6 +65,31 @@ Run `make help` to list all targets. The most useful ones:
 
 ---
 
+## Local Release Builds
+
+`make build` produces a signed, notarizable macOS release the same way release CI does (`.github/workflows/release.yml`), instead of the ad-hoc/unsigned build you get from `tauri build` directly.
+
+Signing with a stable Developer ID identity matters for more than distribution: connection passwords are stored in the macOS keychain (see [Configuration](#configuration)), and the keychain's own access-control list trusts whichever app *created* an item, identified by its code signature. An ad-hoc or inconsistently-signed build looks like a "new" app on every rebuild, so macOS re-prompts for the keychain password constantly. With a stable signing identity, that prompt happens once per stored credential and never again.
+
+(The app also carries a `keychain-access-groups` entitlement and embedded provisioning profile for the macOS Data Protection Keychain, which would avoid that one-time prompt entirely — but DPK access proved unreliable in practice on this Team ID/entitlement combination, silently losing writes even when they read back successfully moments later. Secrets are stored via the plain legacy keychain API instead; the DPK entitlement/profile are left in place as a harmless no-op in case that changes in a future macOS release.)
+
+This requires four files under `~/.tauri/` (outside the repo, never committed):
+
+| File | Contents |
+|---|---|
+| `~/.tauri/rowmance.key` | Tauri updater signing private key |
+| `~/.tauri/rowmance.password` | Password for `rowmance.key` |
+| `~/.tauri/rowmance.team_id` | Your Apple Team ID (e.g. `WEEZR2L997`) |
+| `~/.tauri/rowmance.signing_identity` | Your codesign identity, e.g. `Developer ID Application: Name (TEAMID)` — find it with `security find-identity -v -p codesigning` |
+
+You'll also need a `src-tauri/embedded.provisionprofile` (gitignored) — see the note above on why this no longer needs to be a perfectly valid, matching profile for keychain access to work, though a real one is still required for notarized distribution.
+
+`make build` substitutes your team ID into `src-tauri/entitlements.plist` before building and restores the `__APPLE_TEAM_ID__` placeholder afterward, so the tracked file never ends up dirty. If any of the files above are missing, the target fails fast with a message telling you which one.
+
+Note: local builds skip notarization (no `APPLE_ID`/`APPLE_PASSWORD`) — that only affects Gatekeeper's online check, not the keychain behavior above.
+
+---
+
 ## Configuration
 
 User configuration is stored in `~/.config/rowmance/` (Linux/macOS) or the platform-appropriate AppData folder on Windows:

@@ -51,6 +51,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_ACCESS_GROUP: ${{ secrets.APPLE_TEAM_ID }}.com.jherbert.rowmance
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Rowmance ${{ github.ref_name }}
@@ -74,7 +75,7 @@ jobs:
         run: |
           PROFILE=$(find src-tauri/target -path "*/Rowmance.app/Contents/embedded.provisionprofile" | head -n1)
           if [ -z "$PROFILE" ]; then
-            echo "::error::embedded.provisionprofile not found in Rowmance.app bundle. keychain-access-groups entitlement will fail at launch without it."
+            echo "::error::embedded.provisionprofile not found in Rowmance.app bundle. Required for notarized distribution."
             exit 1
           fi
           echo "Found embedded provisioning profile at $PROFILE"
