@@ -8,11 +8,13 @@
   import { untrack } from 'svelte';
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { usePanels } from '$lib/stores/panels.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as keychainApi from '$lib/tauri/keychain';
   import { getDialect, getAllDialects, urlSchemeToDbType } from '$lib/stores/dialects.svelte';
   import type { ConnectionProfile, DbType } from '$lib/types';
-  import { errorMessage } from '$lib/utils/errors';
+  import { errorMessage, isOracleClientMissingError } from '$lib/utils/errors';
+  import { useToast } from '$lib/stores/toast.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ErrorMessage from '$lib/components/ErrorMessage.svelte';
   import Select from '$lib/components/ui/Select.svelte';
@@ -270,6 +272,12 @@
           password || undefined,
           sshPassword || undefined,
         );
+      }
+      if (testResult && !testResult.success && isOracleClientMissingError(testResult.message)) {
+        toast.addToast('Oracle Client library not found.', 'error', 0, {
+          label: 'Install instructions',
+          onClick: () => panelStore.openInFocused({ kind: 'oracle_client_help' }),
+        });
       }
     } catch (err) {
       saveError = errorMessage(err);

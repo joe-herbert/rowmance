@@ -28,6 +28,8 @@ export function panelLabel(
       return 'Speed Analysis';
     case 'release_notes':
       return `What's New in ${content.version}`;
+    case 'oracle_client_help':
+      return 'Install Oracle Client';
     case 'connections':
       return 'Connections';
     case 'dashboard':

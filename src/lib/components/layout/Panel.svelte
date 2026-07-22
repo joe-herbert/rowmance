@@ -19,6 +19,7 @@
   import ServerAdmin from '$lib/components/server-admin/ServerAdmin.svelte';
   import SpeedAnalysis from '$lib/components/speed/SpeedAnalysis.svelte';
   import ReleaseNotes from '$lib/components/release/ReleaseNotes.svelte';
+  import OracleClientHelp from '$lib/components/connections/OracleClientHelp.svelte';
   import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
   import DashboardPanel from '$lib/components/dashboard/DashboardPanel.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
@@ -114,6 +115,8 @@
     <SpeedAnalysis />
   {:else if panel.content.kind === 'release_notes'}
     <ReleaseNotes version={panel.content.version} notes={panel.content.notes} />
+  {:else if panel.content.kind === 'oracle_client_help'}
+    <OracleClientHelp />
   {:else if panel.content.kind === 'connections'}
     <ConnectionsPage />
   {:else if panel.content.kind === 'dashboard'}

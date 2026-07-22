@@ -485,6 +485,7 @@ export type PanelKind =
   | { kind: 'server_admin'; connectionId: string }
   | { kind: 'speed_analysis' }
   | { kind: 'release_notes'; version: string; notes: string }
+  | { kind: 'oracle_client_help' }
   | { kind: 'connections' }
   | { kind: 'dashboard'; dashboardId: string }
   | { kind: 'empty' };

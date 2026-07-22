@@ -14,3 +14,9 @@ export function errorMessage(err: unknown): string {
 export function isNotConnectedError(err: unknown): boolean {
   return /is not connected/i.test(errorMessage(err));
 }
+
+/** True when a message indicates the Oracle Instant Client isn't installed locally
+ *  (DPI-1047, raised by ODPI-C when it can't dlopen libclntsh). */
+export function isOracleClientMissingError(message: string): boolean {
+  return /DPI-1047/.test(message);
+}

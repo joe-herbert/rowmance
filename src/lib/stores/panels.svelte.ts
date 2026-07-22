@@ -69,6 +69,8 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
       return true;
     case 'release_notes':
       return b.kind === 'release_notes' && a.version === b.version;
+    case 'oracle_client_help':
+      return b.kind === 'oracle_client_help';
     case 'connections':
       return true;
     case 'dashboard':

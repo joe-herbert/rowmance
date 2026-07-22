@@ -7,6 +7,7 @@
   import PersonIcon from '$lib/components/icons/PersonIcon.svelte';
   import BarChartIcon from '$lib/components/icons/BarChartIcon.svelte';
   import ActivityIcon from '$lib/components/icons/ActivityIcon.svelte';
+  import InfoCircleIcon from '$lib/components/icons/InfoCircleIcon.svelte';
   import ConnectionsIcon from '$lib/components/icons/ConnectionsIcon.svelte';
   import BoxIcon from '$lib/components/icons/BoxIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
@@ -51,6 +52,8 @@
   <BarChartIcon {size} />
 {:else if content.kind === 'release_notes'}
   <ActivityIcon {size} />
+{:else if content.kind === 'oracle_client_help'}
+  <InfoCircleIcon width={size} height={size} />
 {:else if content.kind === 'connections'}
   <ConnectionsIcon {size} />
 {:else if content.kind === 'dashboard'}

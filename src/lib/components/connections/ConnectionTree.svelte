@@ -24,7 +24,7 @@
   import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
-  import { errorMessage } from '$lib/utils/errors';
+  import { errorMessage, isOracleClientMissingError } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -270,7 +270,15 @@
       await connectionStore.connect(profile.id);
       if (isConnected(profile.id)) toggleExpand(profile.id);
     } catch (err) {
-      toast.addToast(`${profile.name}: ${errorMessage(err)}`, 'error', 0);
+      const message = errorMessage(err);
+      if (isOracleClientMissingError(message)) {
+        toast.addToast(`${profile.name}: Oracle Client library not found.`, 'error', 0, {
+          label: 'Install instructions',
+          onClick: () => panelStore.openInFocused({ kind: 'oracle_client_help' }),
+        });
+      } else {
+        toast.addToast(`${profile.name}: ${message}`, 'error', 0);
+      }
     }
   }
 
