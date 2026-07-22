@@ -25,7 +25,7 @@ mod macos {
     use core_foundation::string::CFString;
     use core_foundation_sys::base::{CFGetTypeID, CFRelease, CFTypeRef};
     use core_foundation_sys::data::CFDataRef;
-    use security_framework_sys::base::errSecDuplicateItem;
+    use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound};
     use security_framework_sys::item::{
         kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnData,
         kSecUseDataProtectionKeychain, kSecValueData,
@@ -74,7 +74,12 @@ mod macos {
     }
 
     /// Read from the Data Protection Keychain — never prompts.
-    pub fn read_dpk(service: &str, account: &str) -> Option<Vec<u8>> {
+    ///
+    /// Returns `Ok(None)` when the item genuinely doesn't exist, and `Err(status)`
+    /// for any other failure (e.g. `errSecMissingEntitlement` when the app's
+    /// `keychain-access-groups` entitlement isn't valid) so callers can tell
+    /// "no secret was ever stored" apart from "the keychain refused access".
+    pub fn read_dpk(service: &str, account: &str) -> Result<Option<Vec<u8>>, i32> {
         let mut query = dpk_query(service, account);
         query.push((
             unsafe { CFString::wrap_under_get_rule(kSecReturnData) },
@@ -83,10 +88,13 @@ mod macos {
         let params = CFDictionary::from_CFType_pairs(&query);
         let mut ret: CFTypeRef = std::ptr::null();
         let status = unsafe { SecItemCopyMatching(params.as_concrete_TypeRef(), &mut ret) };
-        if status != 0 {
-            return None;
+        if status == errSecItemNotFound {
+            return Ok(None);
         }
-        extract_bytes(ret)
+        if status != 0 {
+            return Err(status);
+        }
+        Ok(extract_bytes(ret))
     }
 
     /// Write to the Data Protection Keychain — never prompts.
@@ -121,8 +129,14 @@ mod macos {
 
     /// Read from the legacy keychain (may show ACL prompt for old items).
     /// Used only as a one-time fallback during migration.
-    pub fn read_legacy(service: &str, account: &str) -> Option<Vec<u8>> {
-        security_framework::passwords::get_generic_password(service, account).ok()
+    ///
+    /// Same `Ok(None)` vs `Err(status)` distinction as [`read_dpk`].
+    pub fn read_legacy(service: &str, account: &str) -> Result<Option<Vec<u8>>, i32> {
+        match security_framework::passwords::get_generic_password(service, account) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.code() == errSecItemNotFound => Ok(None),
+            Err(e) => Err(e.code()),
+        }
     }
 
     /// Delete from the legacy keychain — typically silent for the owning app.
@@ -139,17 +153,49 @@ mod macos {
 /// found there, falls back to the legacy keychain (may prompt once for old
 /// items created by a previous version) and immediately migrates the item into
 /// the DPK so all future reads are silent.
+/// Reads a secret from the keychain.
+///
+/// `Ok(None)` means no secret was ever stored under this account. `Err(_)`
+/// means the keychain itself refused access (e.g. a missing/invalid
+/// `keychain-access-groups` entitlement) — callers must not treat this the
+/// same as "no secret configured", since silently falling back to an empty
+/// value here is what causes confusing downstream errors (like a database
+/// login rejecting an empty password instead of the real one).
 #[cfg(target_os = "macos")]
-pub fn read_keychain_secret(service: &str, account: &str) -> Option<String> {
+pub fn read_keychain_secret(service: &str, account: &str) -> Result<Option<String>, String> {
     // Fast path: item already in the Data Protection Keychain — no prompt.
-    if let Some(bytes) = macos::read_dpk(service, account) {
-        return String::from_utf8(bytes).ok();
+    match macos::read_dpk(service, account) {
+        Ok(Some(bytes)) => return Ok(String::from_utf8(bytes).ok()),
+        Ok(None) => {}
+        Err(status) => {
+            // DPK access failed outright. Still check the legacy keychain in
+            // case the secret lives there, but surface the DPK error if not.
+            return match macos::read_legacy(service, account) {
+                Ok(Some(bytes)) => Ok(String::from_utf8(bytes).ok()),
+                Ok(None) => Err(format!(
+                    "keychain access denied (status {status}); the app's keychain entitlement may be missing or invalid"
+                )),
+                Err(legacy_status) => Err(format!(
+                    "keychain access denied (status {status}, legacy status {legacy_status}); the app's keychain entitlement may be missing or invalid"
+                )),
+            };
+        }
     }
 
     // Slow path: item is in the legacy keychain (stored by old keyring crate).
     // This may show an ACL prompt, but only this one time.
-    let bytes = macos::read_legacy(service, account)?;
-    let value = String::from_utf8(bytes.clone()).ok()?;
+    let bytes = match macos::read_legacy(service, account) {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => return Ok(None),
+        Err(status) => {
+            return Err(format!(
+                "keychain access denied (status {status}); the app's keychain entitlement may be missing or invalid"
+            ))
+        }
+    };
+    let Some(value) = String::from_utf8(bytes.clone()).ok() else {
+        return Ok(None);
+    };
 
     // Attempt to migrate into the DPK so future reads are silent.
     // Succeeds in production (signed) builds; silently skips in unsigned dev builds.
@@ -157,14 +203,17 @@ pub fn read_keychain_secret(service: &str, account: &str) -> Option<String> {
         macos::remove_legacy(service, account);
     }
 
-    Some(value)
+    Ok(Some(value))
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn read_keychain_secret(service: &str, account: &str) -> Option<String> {
-    Entry::new(service, account)
-        .ok()
-        .and_then(|e| e.get_password().ok())
+pub fn read_keychain_secret(service: &str, account: &str) -> Result<Option<String>, String> {
+    let entry = Entry::new(service, account).map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(pw) => Ok(Some(pw)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
@@ -186,10 +235,8 @@ pub async fn keychain_retrieve(
     connection_id: String,
     secret_type: String,
 ) -> Result<Option<String>, AppError> {
-    Ok(read_keychain_secret(
-        "rowmance",
-        &format!("{connection_id}:{secret_type}"),
-    ))
+    read_keychain_secret("rowmance", &format!("{connection_id}:{secret_type}"))
+        .map_err(|e| AppError::new("KEYCHAIN_ERROR", e))
 }
 
 /// Delete a secret from the OS keychain. No-ops if not present.
@@ -276,8 +323,13 @@ pub async fn migrate_passwords_to_keychain(sqlite: &SqlitePool) {
                     continue;
                 }
                 let account = format!("{}:db_password", row.id);
-                // Only migrate if not already in the keychain.
-                if read_keychain_secret("rowmance", &account).is_none() {
+                // Only migrate if not already in the keychain. Treat a read
+                // error the same as "not present" here — this is a one-time,
+                // best-effort migration, not the security-sensitive read path.
+                if !matches!(
+                    read_keychain_secret("rowmance", &account),
+                    Ok(Some(_))
+                ) {
                     let _ = keychain_write("rowmance", &account, pw.as_bytes());
                 }
                 // Null out the stored password.

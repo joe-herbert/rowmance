@@ -166,14 +166,35 @@ pub struct ConnectionProfileInput {
     pub ping_interval: Option<i64>,
 }
 
-fn retrieve_keychain_password(connection_id: &str) -> String {
+/// Reads the DB password for a connection from the keychain.
+///
+/// Returns an error (rather than silently falling back to an empty password)
+/// when the keychain itself couldn't be read, since connecting with an empty
+/// password in that case produces a confusing "wrong password" error from the
+/// database instead of surfacing the real problem.
+fn retrieve_keychain_password(connection_id: &str) -> Result<String, AppError> {
     let account = format!("{connection_id}:db_password");
-    crate::commands::keychain::read_keychain_secret("rowmance", &account).unwrap_or_default()
+    crate::commands::keychain::read_keychain_secret("rowmance", &account)
+        .map(|opt| opt.unwrap_or_default())
+        .map_err(|e| {
+            AppError::new(
+                "KEYCHAIN_ERROR",
+                format!("Could not read the stored password from the system keychain: {e}"),
+            )
+        })
 }
 
-fn retrieve_keychain_secret(connection_id: &str, secret_type: &str) -> Option<String> {
+fn retrieve_keychain_secret(
+    connection_id: &str,
+    secret_type: &str,
+) -> Result<Option<String>, AppError> {
     let account = format!("{connection_id}:{secret_type}");
-    crate::commands::keychain::read_keychain_secret("rowmance", &account)
+    crate::commands::keychain::read_keychain_secret("rowmance", &account).map_err(|e| {
+        AppError::new(
+            "KEYCHAIN_ERROR",
+            format!("Could not read the stored {secret_type} from the system keychain: {e}"),
+        )
+    })
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -356,9 +377,10 @@ pub async fn connections_test(
             })?;
 
     // Use the provided password, fall back to keychain, then to empty string.
-    let password = password
-        .filter(|p| !p.is_empty())
-        .unwrap_or_else(|| retrieve_keychain_password(&id));
+    let password = match password.filter(|p| !p.is_empty()) {
+        Some(p) => p,
+        None => retrieve_keychain_password(&id)?,
+    };
 
     // Create a temporary SSH tunnel if needed, using a distinct key so we don't
     // interfere with an active connection tunnel for the same profile.
@@ -372,12 +394,16 @@ pub async fn connections_test(
             .ssh_user
             .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
         let auth_type = row.ssh_auth_type.as_deref().unwrap_or("key");
-        let ssh_password = (auth_type == "password")
-            .then(|| retrieve_keychain_secret(&id, "ssh_password"))
-            .flatten();
-        let ssh_key_passphrase = (auth_type == "key")
-            .then(|| retrieve_keychain_secret(&id, "ssh_key_passphrase"))
-            .flatten();
+        let ssh_password = if auth_type == "password" {
+            retrieve_keychain_secret(&id, "ssh_password")?
+        } else {
+            None
+        };
+        let ssh_key_passphrase = if auth_type == "key" {
+            retrieve_keychain_secret(&id, "ssh_key_passphrase")?
+        } else {
+            None
+        };
 
         let local_port = tunnels
             .create_tunnel(
@@ -533,7 +559,7 @@ pub async fn connections_connect(
                 )
             })?;
 
-    let password = retrieve_keychain_password(&id);
+    let password = retrieve_keychain_password(&id)?;
 
     let (connect_host, connect_port, new_tunnel) = if row.ssh_enabled {
         if let Some(port) = tunnels.local_port(&id) {
@@ -547,12 +573,16 @@ pub async fn connections_connect(
                 .ssh_user
                 .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
             let auth_type = row.ssh_auth_type.as_deref().unwrap_or("key");
-            let ssh_password = (auth_type == "password")
-                .then(|| retrieve_keychain_secret(&id, "ssh_password"))
-                .flatten();
-            let ssh_key_passphrase = (auth_type == "key")
-                .then(|| retrieve_keychain_secret(&id, "ssh_key_passphrase"))
-                .flatten();
+            let ssh_password = if auth_type == "password" {
+                retrieve_keychain_secret(&id, "ssh_password")?
+            } else {
+                None
+            };
+            let ssh_key_passphrase = if auth_type == "key" {
+                retrieve_keychain_secret(&id, "ssh_key_passphrase")?
+            } else {
+                None
+            };
 
             let port = tunnels
                 .create_tunnel(
@@ -1010,7 +1040,7 @@ pub async fn connections_duplicate(
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
     for secret_type in &["db_password", "ssh_password", "ssh_key_passphrase"] {
-        if let Some(secret) = retrieve_keychain_secret(&id, secret_type) {
+        if let Some(secret) = retrieve_keychain_secret(&id, secret_type).ok().flatten() {
             if !secret.is_empty() {
                 let account = format!("{new_id}:{secret_type}");
                 let _ =
@@ -1120,9 +1150,11 @@ pub async fn connections_export(
         if let Some(row) = row {
             let passwords = if include_sensitive {
                 Some(ConnectionExportPasswords {
-                    db_password: retrieve_keychain_secret(id, "db_password"),
-                    ssh_password: retrieve_keychain_secret(id, "ssh_password"),
-                    ssh_key_passphrase: retrieve_keychain_secret(id, "ssh_key_passphrase"),
+                    db_password: retrieve_keychain_secret(id, "db_password").ok().flatten(),
+                    ssh_password: retrieve_keychain_secret(id, "ssh_password").ok().flatten(),
+                    ssh_key_passphrase: retrieve_keychain_secret(id, "ssh_key_passphrase")
+                        .ok()
+                        .flatten(),
                 })
             } else {
                 None
@@ -1205,7 +1237,7 @@ pub async fn connections_get_db_url(
             .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?
             .ok_or_else(|| AppError::new("NOT_FOUND", format!("Connection {id} not found")))?;
 
-    let password = retrieve_keychain_password(&id);
+    let password = retrieve_keychain_password(&id)?;
 
     let dialect = DialectInfo::for_db_type(&row.db_type);
     if dialect.url_template.is_empty() {

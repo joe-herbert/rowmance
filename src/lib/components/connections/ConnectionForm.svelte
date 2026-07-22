@@ -35,6 +35,7 @@
   const { profile, groupId, onclose, ondelete }: Props = $props();
 
   const connectionStore = useConnections();
+  const panelStore = usePanels();
 
   type Tab = 'basic' | 'ssh' | 'ssl' | 'advanced';
   let activeTab = $state<Tab>('basic');
@@ -137,6 +138,8 @@
     }
   }
 
+  const toast = useToast();
+
   // ── Status ────────────────────────────────────────────────────────────────────
 
   let saving = $state(false);
@@ -151,13 +154,23 @@
 
   $effect(() => {
     if (!profile) return;
-    keychainApi.keychainRetrieve(profile.id, 'db_password').then((v) => {
-      if (v) password = v;
-    });
-    if (profile.sshEnabled) {
-      keychainApi.keychainRetrieve(profile.id, 'ssh_password').then((v) => {
-        if (v) sshPassword = v;
+    keychainApi
+      .keychainRetrieve(profile.id, 'db_password')
+      .then((v) => {
+        if (v) password = v;
+      })
+      .catch((e) => {
+        saveError = `Could not read the stored password from the keychain: ${e}`;
       });
+    if (profile.sshEnabled) {
+      keychainApi
+        .keychainRetrieve(profile.id, 'ssh_password')
+        .then((v) => {
+          if (v) sshPassword = v;
+        })
+        .catch((e) => {
+          saveError = `Could not read the stored SSH password from the keychain: ${e}`;
+        });
     }
   });
 

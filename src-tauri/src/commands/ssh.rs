@@ -15,9 +15,17 @@ pub struct SshTunnelStatus {
     pub local_port: Option<u16>,
 }
 
-fn retrieve_keychain_secret(connection_id: &str, secret_type: &str) -> Option<String> {
+fn retrieve_keychain_secret(
+    connection_id: &str,
+    secret_type: &str,
+) -> Result<Option<String>, AppError> {
     let account = format!("{connection_id}:{secret_type}");
-    crate::commands::keychain::read_keychain_secret("rowmance", &account)
+    crate::commands::keychain::read_keychain_secret("rowmance", &account).map_err(|e| {
+        AppError::new(
+            "KEYCHAIN_ERROR",
+            format!("Could not read the stored {secret_type} from the system keychain: {e}"),
+        )
+    })
 }
 
 /// Create an SSH tunnel for a connection profile.
@@ -57,12 +65,16 @@ pub async fn ssh_create_tunnel(
         .ok_or_else(|| AppError::new("SSH_ERROR", "SSH user not set"))?;
 
     let auth_type = row.ssh_auth_type.as_deref().unwrap_or("password");
-    let ssh_password = (auth_type == "password")
-        .then(|| retrieve_keychain_secret(&connection_id, "ssh_password"))
-        .flatten();
-    let ssh_key_passphrase = (auth_type == "key")
-        .then(|| retrieve_keychain_secret(&connection_id, "ssh_key_passphrase"))
-        .flatten();
+    let ssh_password = if auth_type == "password" {
+        retrieve_keychain_secret(&connection_id, "ssh_password")?
+    } else {
+        None
+    };
+    let ssh_key_passphrase = if auth_type == "key" {
+        retrieve_keychain_secret(&connection_id, "ssh_key_passphrase")?
+    } else {
+        None
+    };
 
     let local_port = tunnels
         .create_tunnel(
