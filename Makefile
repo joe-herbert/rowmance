@@ -2,7 +2,7 @@
 # Requires: bun, cargo (with rustfmt + clippy components).
 # Run `make help` to list all targets.
 
-.PHONY: help dev build check lint format test test-watch test-coverage \
+.PHONY: help dev build check lint format test test-frontend test-backend test-watch test-coverage \
         rust-check rust-lint rust-test rust-fmt rust-doc \
         clean install update ci test-db-up test-db-down
 
@@ -57,9 +57,16 @@ lint:
 format:
 	bunx prettier --write src/
 
+## Run all tests, frontend and backend
+test: test-frontend test-backend
+
 ## Run frontend tests once
-test:
+test-frontend:
 	bun run test
+
+## Run backend (Rust) tests once
+test-backend:
+	SQLX_OFFLINE=true cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Run frontend tests in watch mode
 test-watch:
@@ -75,15 +82,14 @@ test-coverage:
 rust-check:
 	SQLX_OFFLINE=true cargo fmt --check --manifest-path src-tauri/Cargo.toml
 	SQLX_OFFLINE=true cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-	SQLX_OFFLINE=true cargo test --manifest-path src-tauri/Cargo.toml
+	$(MAKE) test-backend
 
 ## Run Clippy linter (warnings as errors)
 rust-lint:
 	SQLX_OFFLINE=true cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
-## Run Rust test suite
-rust-test:
-	SQLX_OFFLINE=true cargo test --manifest-path src-tauri/Cargo.toml
+## Run Rust test suite (alias for test-backend)
+rust-test: test-backend
 
 ## Auto-fix Rust formatting
 rust-fmt:
