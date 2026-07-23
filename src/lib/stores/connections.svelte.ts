@@ -75,11 +75,15 @@ export function useConnections() {
       return updated;
     },
 
-    /** Toggle read-only mode for a connection. Reconnects the pool if active. */
+    /**
+     * Toggle read-only mode for a connection. Reconnects the pool if active.
+     * Read-only and Safe Mode are mutually exclusive — enabling one disables the other.
+     */
     async toggleReadOnly(id: string): Promise<void> {
       const profile = profiles.find((p) => p.id === id);
       if (!profile) return;
       const wasActive = activeIds.has(id);
+      const newReadOnly = !profile.readOnly;
       const updated = await api.updateConnection(id, {
         name: profile.name,
         dbType: profile.dbType,
@@ -88,7 +92,7 @@ export function useConnections() {
         database: profile.database,
         username: profile.username,
         color: profile.color,
-        readOnly: !profile.readOnly,
+        readOnly: newReadOnly,
         groupId: profile.groupId,
         sshEnabled: profile.sshEnabled,
         sshHost: profile.sshHost,
@@ -101,7 +105,7 @@ export function useConnections() {
         sslCertPath: profile.sslCertPath,
         sslKeyPath: profile.sslKeyPath,
         poolMax: profile.poolMax,
-        safeMode: profile.safeMode,
+        safeMode: newReadOnly ? false : profile.safeMode,
       });
       profiles = profiles.map((p) => (p.id === id ? updated : p));
       if (wasActive) {
@@ -110,10 +114,17 @@ export function useConnections() {
       }
     },
 
-    /** Toggle Safe Mode for a connection (warn before running mutating SQL). */
+    /**
+     * Toggle Safe Mode for a connection (warn before running mutating SQL).
+     * Read-only and Safe Mode are mutually exclusive — enabling one disables the other.
+     * Reconnects the pool if active and read-only actually changed as a result.
+     */
     async toggleSafeMode(id: string): Promise<void> {
       const profile = profiles.find((p) => p.id === id);
       if (!profile) return;
+      const wasActive = activeIds.has(id);
+      const newSafeMode = !profile.safeMode;
+      const newReadOnly = newSafeMode ? false : profile.readOnly;
       const updated = await api.updateConnection(id, {
         name: profile.name,
         dbType: profile.dbType,
@@ -122,7 +133,7 @@ export function useConnections() {
         database: profile.database,
         username: profile.username,
         color: profile.color,
-        readOnly: profile.readOnly,
+        readOnly: newReadOnly,
         groupId: profile.groupId,
         sshEnabled: profile.sshEnabled,
         sshHost: profile.sshHost,
@@ -135,9 +146,13 @@ export function useConnections() {
         sslCertPath: profile.sslCertPath,
         sslKeyPath: profile.sslKeyPath,
         poolMax: profile.poolMax,
-        safeMode: !profile.safeMode,
+        safeMode: newSafeMode,
       });
       profiles = profiles.map((p) => (p.id === id ? updated : p));
+      if (wasActive && newReadOnly !== profile.readOnly) {
+        await this.disconnect(id);
+        await this.connect(id);
+      }
     },
 
     /** Delete a connection profile and disconnect if active. */

@@ -32,6 +32,7 @@
   import TerminalIcon from '$lib/components/icons/TerminalIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import LockIcon from '$lib/components/icons/LockIcon.svelte';
+  import ShieldIcon from '$lib/components/icons/ShieldIcon.svelte';
   import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
   import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
   import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
@@ -268,6 +269,14 @@
   async function handleToggleReadOnly(profile: ConnectionProfile) {
     try {
       await connectionStore.toggleReadOnly(profile.id);
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error');
+    }
+  }
+
+  async function handleToggleSafeMode(profile: ConnectionProfile) {
+    try {
+      await connectionStore.toggleSafeMode(profile.id);
     } catch (err) {
       toast.addToast(errorMessage(err), 'error');
     }
@@ -784,6 +793,9 @@
         {#if profile.readOnly}
           <span class="badge badge--readonly" title="Read-only">RO</span>
         {/if}
+        {#if profile.safeMode}
+          <span class="badge badge--safemode" title="Safe Mode">SM</span>
+        {/if}
         {#if profile.sshEnabled}
           <span class="badge badge--ssh" title="SSH tunnel">SSH</span>
         {/if}
@@ -848,6 +860,7 @@
           </button>
           <button
             class="card-icon-btn"
+            class:card-icon-btn--active={profile.readOnly}
             onclick={() => handleToggleReadOnly(profile)}
             title={profile.readOnly ? 'Disable read only' : 'Enable read only'}
             aria-label={profile.readOnly ? 'Disable read only' : 'Enable read only'}
@@ -857,6 +870,15 @@
             {:else}
               <LockIcon open={true} width={13} height={13} />
             {/if}
+          </button>
+          <button
+            class="card-icon-btn"
+            class:card-icon-btn--active={profile.safeMode}
+            onclick={() => handleToggleSafeMode(profile)}
+            title={profile.safeMode ? 'Disable Safe Mode' : 'Enable Safe Mode'}
+            aria-label={profile.safeMode ? 'Disable Safe Mode' : 'Enable Safe Mode'}
+          >
+            <ShieldIcon checked={profile.safeMode} width={13} height={13} />
           </button>
           <button
             class="card-icon-btn"
@@ -1246,6 +1268,12 @@
     border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
   }
 
+  .badge--safemode {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+
   .badge--ssh {
     background: color-mix(in srgb, var(--color-success, #16a34a) 12%, transparent);
     color: var(--color-success, #16a34a);
@@ -1407,6 +1435,10 @@
   .card-icon-btn--danger:hover {
     background: color-mix(in srgb, var(--color-danger, #dc2626) 10%, transparent);
     color: var(--color-danger, #dc2626);
+  }
+
+  .card-icon-btn--active {
+    color: var(--color-accent);
   }
 
   .card-more-btn {

@@ -61,6 +61,14 @@
   let safeMode = $state(untrack(() => profile?.safeMode ?? false));
   let dontSave = $state(false);
 
+  // Read-only and Safe Mode are mutually exclusive — enabling one disables the other.
+  function handleReadOnlyChange(checked: boolean): void {
+    if (checked) safeMode = false;
+  }
+  function handleSafeModeChange(checked: boolean): void {
+    if (checked) readOnly = false;
+  }
+
   // ── SSH fields ────────────────────────────────────────────────────────────────
 
   let sshEnabled = $state(untrack(() => profile?.sshEnabled ?? false));
@@ -597,7 +605,11 @@
         <div class="field-group">
           <div class="field field--inline">
             <label for="conn-readonly" class="label">Read-only</label>
-            <Checkbox id="conn-readonly" bind:checked={readOnly} />
+            <Checkbox
+              id="conn-readonly"
+              bind:checked={readOnly}
+              onchange={handleReadOnlyChange}
+            />
           </div>
           <p class="tab-hint tab-hint--tight">
             Block all write operations to the database.
@@ -607,7 +619,11 @@
         <div class="field-group">
           <div class="field field--inline">
             <label for="conn-safemode" class="label">Safe Mode</label>
-            <Checkbox id="conn-safemode" bind:checked={safeMode} />
+            <Checkbox
+              id="conn-safemode"
+              bind:checked={safeMode}
+              onchange={handleSafeModeChange}
+            />
           </div>
           <p class="tab-hint tab-hint--tight">
             Warn with a confirmation dialog before running any SQL that would modify this
@@ -871,7 +887,11 @@
         <div class="field-group">
           <div class="field field--inline">
             <label for="adv-readonly" class="label">Read-only Mode</label>
-            <Checkbox id="adv-readonly" bind:checked={readOnly} />
+            <Checkbox
+              id="adv-readonly"
+              bind:checked={readOnly}
+              onchange={handleReadOnlyChange}
+            />
           </div>
           <p class="tab-hint tab-hint--tight">
             Block all write operations to the database.
@@ -881,7 +901,11 @@
         <div class="field-group">
           <div class="field field--inline">
             <label for="adv-safemode" class="label">Safe Mode</label>
-            <Checkbox id="adv-safemode" bind:checked={safeMode} />
+            <Checkbox
+              id="adv-safemode"
+              bind:checked={safeMode}
+              onchange={handleSafeModeChange}
+            />
           </div>
           <p class="tab-hint tab-hint--tight">
             Warn with a confirmation dialog before running any SQL that would modify this

@@ -18,6 +18,7 @@
   import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
   import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
   import LockIcon from '$lib/components/icons/LockIcon.svelte';
+  import ShieldIcon from '$lib/components/icons/ShieldIcon.svelte';
   import ClockIcon from '$lib/components/icons/ClockIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
@@ -906,6 +907,13 @@
     await connectionStore.toggleReadOnly(id);
   }
 
+  async function ctxConnToggleSafeMode() {
+    if (!connCtx) return;
+    const id = connCtx.profile.id;
+    connCtx = null;
+    await connectionStore.toggleSafeMode(id);
+  }
+
   async function ctxDisconnectAll() {
     panelCtx = null;
     const activeIds = [...connectionStore.activeIds];
@@ -1699,6 +1707,28 @@
             </button>
           {/if}
         {/if}
+
+        <!-- Shield icon if Safe Mode is on — click to toggle (saved connections only) -->
+        {#if profile.safeMode}
+          {#if profile.unsaved}
+            <span class="temp-icon" title="Safe Mode" aria-label="Safe Mode">
+              <ShieldIcon width={11} height={11} />
+            </span>
+          {:else}
+            <button
+              class="lock-icon-btn"
+              onclick={(e) => {
+                e.stopPropagation();
+                connectionStore.toggleSafeMode(profile.id);
+              }}
+              title="Safe Mode — click to disable"
+              aria-label="Disable Safe Mode for {profile.name}"
+              aria-pressed={true}
+            >
+              <ShieldIcon width={11} height={11} />
+            </button>
+          {/if}
+        {/if}
       </div>
 
       <!-- Hover actions -->
@@ -2254,6 +2284,9 @@
       >
       <CtxItem onclick={ctxConnToggleReadOnly}
         >{connCtx.profile.readOnly ? 'Disable Read Only' : 'Enable Read Only'}</CtxItem
+      >
+      <CtxItem onclick={ctxConnToggleSafeMode}
+        >{connCtx.profile.safeMode ? 'Disable Safe Mode' : 'Enable Safe Mode'}</CtxItem
       >
     {/if}
     <CtxItem
