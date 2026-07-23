@@ -31,6 +31,7 @@ describe('listTables', () => {
     expect(mockInvoke).toHaveBeenCalledWith('schema_list_tables', {
       connectionId: 'conn-1',
       database: 'my_db',
+      instanceDb: null,
     });
   });
 });
@@ -42,6 +43,7 @@ describe('listColumns', () => {
     expect(mockInvoke).toHaveBeenCalledWith('schema_list_columns', {
       connectionId: 'conn-1',
       database: 'my_db',
+      instanceDb: null,
       table: 'users',
     });
   });
@@ -54,6 +56,7 @@ describe('listIndexes', () => {
     expect(mockInvoke).toHaveBeenCalledWith('schema_list_indexes', {
       connectionId: 'conn-1',
       database: 'my_db',
+      instanceDb: null,
       table: 'users',
     });
   });
@@ -66,6 +69,7 @@ describe('listForeignKeys', () => {
     expect(mockInvoke).toHaveBeenCalledWith('schema_list_foreign_keys', {
       connectionId: 'conn-1',
       database: 'my_db',
+      instanceDb: null,
       table: 'orders',
     });
   });

@@ -20,6 +20,7 @@ describe('getErdGraph', () => {
     expect(mockInvoke).toHaveBeenCalledWith('erd_get_graph', {
       connectionId: 'conn-1',
       database: 'mydb',
+      instanceDb: null,
     });
   });
 

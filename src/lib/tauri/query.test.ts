@@ -77,6 +77,7 @@ describe('updateRows', () => {
     expect(mockInvoke).toHaveBeenCalledWith('query_update_rows', {
       connectionId: 'conn-1',
       database: 'mydb',
+      instanceDb: null,
       table: 'users',
       changes,
     });
@@ -101,6 +102,7 @@ describe('explainQuery', () => {
       connectionId: 'conn-1',
       sql: 'SELECT 1',
       database: null,
+      instanceDb: null,
     });
   });
 
