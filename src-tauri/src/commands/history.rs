@@ -20,6 +20,7 @@ pub struct QueryHistoryEntry {
     pub row_count: Option<i64>,
     pub error: Option<String>,
     pub status: String,
+    pub source: String,
 }
 
 impl From<QueryHistoryRow> for QueryHistoryEntry {
@@ -33,6 +34,7 @@ impl From<QueryHistoryRow> for QueryHistoryEntry {
             row_count: r.row_count,
             error: r.error,
             status: r.status,
+            source: r.source,
         }
     }
 }

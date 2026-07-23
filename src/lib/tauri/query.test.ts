@@ -28,6 +28,8 @@ describe('executeQuery', () => {
       page: 1,
       pageSize: 50,
       database: null,
+      instanceDb: null,
+      source: 'system',
     });
   });
 
@@ -46,6 +48,8 @@ describe('executeSelection', () => {
       connectionId: 'conn-2',
       sql: 'SELECT 2',
       database: null,
+      instanceDb: null,
+      source: 'system',
     });
   });
 });

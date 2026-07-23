@@ -198,6 +198,8 @@
         `SELECT ${vars.join(', ')}`,
         selectedDatabase || null,
         editorId,
+        undefined,
+        'system',
       );
       if (res[0]?.error === null && res[0].rows.length > 0) {
         const newValues: Record<string, string | null> = {};
@@ -1607,6 +1609,8 @@
         stripLineComments(query),
         selectedDatabase || null,
         editorId,
+        undefined,
+        'user',
       );
       if (connections.isTransactionActive(connectionId))
         connections.addTxQuery(connectionId, query);
@@ -1670,6 +1674,8 @@
         stripLineComments(query),
         selectedDatabase || null,
         editorId,
+        undefined,
+        'user',
       );
       if (connections.isTransactionActive(connectionId))
         connections.addTxQuery(connectionId, query);
@@ -1730,6 +1736,8 @@
         stripLineComments(stmt),
         selectedDatabase || null,
         editorId,
+        undefined,
+        'user',
       );
       if (connections.isTransactionActive(connectionId)) connections.addTxQuery(connectionId, stmt);
       recording.add(stmt, connectionId, selectedDatabase || null);

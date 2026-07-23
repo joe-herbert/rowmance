@@ -490,6 +490,7 @@ pub async fn query_execute_multi(
     database: Option<String>,
     instance_db: Option<String>,
     session_id: Option<String>,
+    source: String,
 ) -> Result<Vec<QueryResult>, AppError> {
     let statements = split_statements(&sql);
     if statements.is_empty() {
@@ -516,6 +517,7 @@ pub async fn query_execute_multi(
                 stmt,
                 duration_us,
                 sqlite.inner(),
+                &source,
             )
             .await;
         }
@@ -549,6 +551,7 @@ pub async fn query_execute_multi(
                     stmt,
                     duration_us,
                     sqlite.inner(),
+                    &source,
                 )
                 .await;
             }
@@ -584,6 +587,7 @@ pub async fn query_execute_multi(
                     Some(row_count),
                     None,
                     "success",
+                    &source,
                 )
                 .await;
                 let should_count = !er.columns.is_empty() && affected_rows.is_none();
@@ -650,6 +654,7 @@ pub async fn query_execute_multi(
                     None,
                     Some(&err_msg),
                     "error",
+                    &source,
                 )
                 .await;
                 results.push(QueryResult {
@@ -684,6 +689,7 @@ pub async fn query_execute_multi(
     Ok(results)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn push_result(
     results: &mut Vec<QueryResult>,
     exec_result: ExecuteResult,
@@ -692,6 +698,7 @@ async fn push_result(
     stmt: &str,
     duration_us: u64,
     sqlite: &sqlx::SqlitePool,
+    source: &str,
 ) {
     match exec_result {
         Ok((columns, rows, total_rows, affected_rows)) => {
@@ -705,6 +712,7 @@ async fn push_result(
                 Some(row_count),
                 None,
                 "success",
+                source,
             )
             .await;
             results.push(QueryResult {
@@ -727,6 +735,7 @@ async fn push_result(
                 None,
                 Some(&err_msg),
                 "error",
+                source,
             )
             .await;
             results.push(QueryResult {
@@ -758,6 +767,7 @@ pub async fn query_execute(
     page_size: u32,
     database: Option<String>,
     instance_db: Option<String>,
+    source: String,
 ) -> Result<QueryResult, AppError> {
     let query_id = uuid::Uuid::new_v4().to_string();
     let start = std::time::Instant::now();
@@ -778,6 +788,7 @@ pub async fn query_execute(
             &sql,
             duration_us,
             sqlite.inner(),
+            &source,
         )
         .await);
     }
@@ -815,6 +826,7 @@ pub async fn query_execute(
         Some(row_count),
         None,
         "success",
+        &source,
     )
     .await;
     let query_result = QueryResult {
@@ -874,6 +886,7 @@ async fn build_query_result(
     sql: &str,
     duration_us: u64,
     sqlite: &sqlx::SqlitePool,
+    source: &str,
 ) -> QueryResult {
     match result {
         Ok((columns, rows, total_rows, affected_rows)) => {
@@ -887,6 +900,7 @@ async fn build_query_result(
                 Some(row_count),
                 None,
                 "success",
+                source,
             )
             .await;
             QueryResult {
@@ -909,6 +923,7 @@ async fn build_query_result(
                 None,
                 Some(&err_msg),
                 "error",
+                source,
             )
             .await;
             QueryResult {
@@ -936,6 +951,7 @@ pub async fn query_execute_selection(
     sql: String,
     database: Option<String>,
     instance_db: Option<String>,
+    source: String,
 ) -> Result<QueryResult, AppError> {
     // Execute without LIMIT/OFFSET so the user's highlighted text reaches the driver unchanged.
     query_execute(
@@ -949,6 +965,7 @@ pub async fn query_execute_selection(
         UNBOUNDED,
         database,
         instance_db,
+        source,
     )
     .await
 }
@@ -1095,13 +1112,14 @@ async fn record_history(
     row_count: Option<i64>,
     error: Option<&str>,
     status: &str,
+    source: &str,
 ) {
     let now = chrono::Utc::now().to_rfc3339();
     let duration_us_i64 = duration_us as i64;
     if let Err(e) = sqlx::query(
         r#"
-        INSERT INTO query_history (id, connection_id, sql, executed_at, duration_us, row_count, error, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO query_history (id, connection_id, sql, executed_at, duration_us, row_count, error, status, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(query_id)
@@ -1112,6 +1130,7 @@ async fn record_history(
     .bind(row_count)
     .bind(error)
     .bind(status)
+    .bind(source)
     .execute(pool)
     .await
     {

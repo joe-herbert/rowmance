@@ -2,6 +2,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { QueryResult, ExplainResult } from '$lib/types';
 
+/** Origin of a query execution, recorded on its history entry. */
+export type QuerySource = 'user' | 'system';
+
 export async function executeQuery(
   connectionId: string,
   sql: string,
@@ -9,6 +12,7 @@ export async function executeQuery(
   pageSize: number,
   database?: string | null,
   instanceDb?: string | null,
+  source: QuerySource = 'system',
 ): Promise<QueryResult> {
   return invoke<QueryResult>('query_execute', {
     connectionId,
@@ -17,6 +21,7 @@ export async function executeQuery(
     pageSize,
     database: database ?? null,
     instanceDb: instanceDb ?? null,
+    source,
   });
 }
 
@@ -25,12 +30,14 @@ export async function executeSelection(
   sql: string,
   database?: string | null,
   instanceDb?: string | null,
+  source: QuerySource = 'system',
 ): Promise<QueryResult> {
   return invoke<QueryResult>('query_execute_selection', {
     connectionId,
     sql,
     database: database ?? null,
     instanceDb: instanceDb ?? null,
+    source,
   });
 }
 
@@ -40,6 +47,7 @@ export async function executeMultiQuery(
   database?: string | null,
   instanceDb?: string | null,
   sessionId?: string | null,
+  source: QuerySource = 'system',
 ): Promise<QueryResult[]> {
   return invoke<QueryResult[]>('query_execute_multi', {
     connectionId,
@@ -47,6 +55,7 @@ export async function executeMultiQuery(
     database: database ?? null,
     instanceDb: instanceDb ?? null,
     sessionId: sessionId ?? null,
+    source,
   });
 }
 

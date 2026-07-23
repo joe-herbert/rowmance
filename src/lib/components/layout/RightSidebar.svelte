@@ -37,6 +37,7 @@
   import DashboardsPanel from '$lib/components/dashboard/DashboardsPanel.svelte';
   import JsonViewerPanel from '$lib/components/json/JsonViewerPanel.svelte';
   import Select from '$lib/components/ui/Select.svelte';
+  import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { savedQueriesInvalidator } from '$lib/stores/savedQueriesInvalidator.svelte';
   import { portal } from '$lib/actions/portal';
@@ -127,6 +128,13 @@
   let historyEntries = $state<QueryHistoryEntry[]>([]);
   let historyLoading = $state(false);
   let selectedHistoryConnectionId = $state<string>('');
+  let historySourceFilter = $state<'all' | 'user' | 'system'>('all');
+
+  const filteredHistoryEntries = $derived(
+    historySourceFilter === 'all'
+      ? historyEntries
+      : historyEntries.filter((entry) => entry.source === historySourceFilter),
+  );
 
   const activeProfiles = $derived(
     connectionStore.profiles.filter((p) => connectionStore.isActive(p.id)),
@@ -999,6 +1007,16 @@
 
           <div class="toolbar-gap"></div>
 
+          <SegmentedControl
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'user', label: 'User' },
+              { value: 'system', label: 'System' },
+            ]}
+            value={historySourceFilter}
+            onchange={(v) => (historySourceFilter = v as 'all' | 'user' | 'system')}
+          />
+
           {#if historyEntries.length > 0}
             <button
               class="action-btn danger-btn"
@@ -1012,11 +1030,13 @@
 
         {#if historyLoading}
           <div class="loading-row">Loading…</div>
-        {:else if historyEntries.length === 0}
-          <div class="empty-row">No history yet.</div>
+        {:else if filteredHistoryEntries.length === 0}
+          <div class="empty-row">
+            {historyEntries.length === 0 ? 'No history yet.' : 'No matching history entries.'}
+          </div>
         {:else}
           <ul class="history-list" role="list">
-            {#each historyEntries as entry (entry.id)}
+            {#each filteredHistoryEntries as entry (entry.id)}
               <li class="history-item" role="listitem">
                 <button
                   class="history-btn"
@@ -1032,6 +1052,7 @@
                     >
                       {entry.status}
                     </span>
+                    <span class="meta-item source-badge">{entry.source}</span>
                     {#if entry.durationUs !== null}
                       <span class="meta-item">{formatDuration(entry.durationUs)}</span>
                     {/if}

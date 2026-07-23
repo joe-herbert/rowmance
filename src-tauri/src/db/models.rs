@@ -51,4 +51,5 @@ pub struct QueryHistoryRow {
     pub row_count: Option<i64>,
     pub error: Option<String>,
     pub status: String,
+    pub source: String,
 }

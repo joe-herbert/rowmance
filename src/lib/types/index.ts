@@ -285,6 +285,7 @@ export interface QueryHistoryEntry {
   rowCount: number | null;
   error: string | null;
   status: 'success' | 'error' | 'cancelled';
+  source: 'user' | 'system';
 }
 
 // ── Saved queries ─────────────────────────────────────────────────────────────
