@@ -3874,6 +3874,7 @@
           {@const processedRowIndex = rowIndex}
           {@const rowKey = buildRowKey(row, columns, pageOffset + processedRowIndex)}
           {@const isSelected = selectedRowKeys.has(rowKey)}
+          {@const isFullRowSelected = rowSelectionMode && isSelected}
           {@const rowDirty = isRowPending(rowKey)}
           {@const isDeleted = pendingDeletedRows.has(rowKey)}
           {@const isSoftDeleted =
@@ -3883,6 +3884,7 @@
           <tr
             class="data-row"
             class:row-selected={isSelected}
+            class:row-full-selected={isFullRowSelected}
             class:row-deleted={isDeleted}
             class:row-soft-deleted={isSoftDeleted && settings.softDeleteHighlight}
             class:row-soft-deleted-strike={isSoftDeleted && settings.softDeleteStrikethrough}
@@ -5257,8 +5259,26 @@
     opacity: 1;
   }
 
+  .data-row.row-soft-deleted.row-selected {
+    background: var(--color-table-row-selected);
+    opacity: 1;
+  }
+
+  .data-row.row-soft-deleted.row-selected .rownum-cell {
+    border-left: 2px solid var(--color-accent);
+  }
+
+  .data-row.row-soft-deleted.row-selected:hover {
+    background: var(--color-table-row-selected);
+  }
+
   .data-row.row-soft-deleted-strike .data-cell {
     text-decoration: line-through;
+  }
+
+  .data-row.row-soft-deleted-strike .data-cell.cell-selected,
+  .data-row.row-soft-deleted-strike.row-full-selected .data-cell {
+    text-decoration: none;
   }
 
   /* ── Data cells ─────────────────────────────────────────────────────────── */
