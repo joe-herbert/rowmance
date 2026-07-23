@@ -144,6 +144,9 @@ export interface ConnectionProfile {
   sslKeyPath: string | null;
   poolMax: number;
   pingInterval: number | null;
+  /** When true, warn with a confirmation dialog before running any SQL that
+   * would modify this connection's database (query editor, table view, etc.). */
+  safeMode: boolean;
   createdAt: string;
   updatedAt: string;
   dialectInfo: DialectInfo;
@@ -176,6 +179,7 @@ export interface ConnectionProfileInput {
   sslKeyPath?: string | null;
   poolMax?: number;
   pingInterval?: number | null;
+  safeMode?: boolean;
 }
 
 export interface ConnectionGroup {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '$lib/components/Modal.svelte';
+  import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
 
   interface Props {
     title: string;
@@ -9,6 +10,8 @@
     danger?: boolean;
     /** When set, the confirm action is disabled until the user types this text exactly. */
     requireTypedText?: string;
+    /** When set, shown below the message in a scrollable monospace code block. */
+    code?: string;
     onconfirm: () => void;
     oncancel: () => void;
   }
@@ -20,6 +23,7 @@
     cancelText = 'Cancel',
     danger = false,
     requireTypedText,
+    code,
     onconfirm,
     oncancel,
   }: Props = $props();
@@ -43,10 +47,13 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <Modal label={title} onbackdropclick={oncancel}>
-  <div class="modal-card">
+  <div class="modal-card" class:modal-card--wide={!!code}>
     <div class="modal-title">{title}</div>
     <div class="modal-body">
       <p class="modal-message">{message}</p>
+      {#if code}
+        <pre class="modal-code"><SqlHighlight sql={code} /></pre>
+      {/if}
       {#if requireTypedText}
         <p class="type-confirm-hint">
           Type <strong>{requireTypedText}</strong> to confirm:
@@ -88,6 +95,26 @@
     max-width: 92vw;
     overflow: hidden;
     animation: modal-in 140ms ease both;
+  }
+
+  .modal-card--wide {
+    width: 560px;
+  }
+
+  .modal-code {
+    margin: var(--spacing-3) 0 0;
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-normal);
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   @keyframes modal-in {

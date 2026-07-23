@@ -101,12 +101,43 @@ export function useConnections() {
         sslCertPath: profile.sslCertPath,
         sslKeyPath: profile.sslKeyPath,
         poolMax: profile.poolMax,
+        safeMode: profile.safeMode,
       });
       profiles = profiles.map((p) => (p.id === id ? updated : p));
       if (wasActive) {
         await this.disconnect(id);
         await this.connect(id);
       }
+    },
+
+    /** Toggle Safe Mode for a connection (warn before running mutating SQL). */
+    async toggleSafeMode(id: string): Promise<void> {
+      const profile = profiles.find((p) => p.id === id);
+      if (!profile) return;
+      const updated = await api.updateConnection(id, {
+        name: profile.name,
+        dbType: profile.dbType,
+        host: profile.host,
+        port: profile.port,
+        database: profile.database,
+        username: profile.username,
+        color: profile.color,
+        readOnly: profile.readOnly,
+        groupId: profile.groupId,
+        sshEnabled: profile.sshEnabled,
+        sshHost: profile.sshHost,
+        sshPort: profile.sshPort,
+        sshUser: profile.sshUser,
+        sshAuthType: profile.sshAuthType,
+        sshKeyPath: profile.sshKeyPath,
+        sslEnabled: profile.sslEnabled,
+        sslCaPath: profile.sslCaPath,
+        sslCertPath: profile.sslCertPath,
+        sslKeyPath: profile.sslKeyPath,
+        poolMax: profile.poolMax,
+        safeMode: !profile.safeMode,
+      });
+      profiles = profiles.map((p) => (p.id === id ? updated : p));
     },
 
     /** Delete a connection profile and disconnect if active. */

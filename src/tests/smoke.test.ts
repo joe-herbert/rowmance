@@ -34,6 +34,7 @@ function makeProfile(overrides: Partial<ConnectionProfile> = {}): ConnectionProf
     sslKeyPath: null,
     poolMax: 5,
     pingInterval: null,
+    safeMode: false,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     dialectInfo: {

@@ -71,6 +71,7 @@
   import SqlImportModal from '$lib/components/table/SqlImportModal.svelte';
   import SqlPreviewModal from '$lib/components/table/SqlPreviewModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import {
     qi as dialectQi,
     formatSqlValue as dialectFmtVal,
@@ -277,6 +278,9 @@
   let fkNavigationInfo = $state<FkNavigationInfo | null>(null);
   let showSqlPreview = $state(false);
   let showDeleteConfirm = $state(false);
+  let pendingSafeModeConfirm = $state<{ resolve: (_result: boolean) => void; sql: string } | null>(
+    null,
+  );
 
   function buildPreviewStatements(): string[] {
     if (!result) return [];
@@ -617,6 +621,15 @@
         });
       }
 
+      const changesSql = buildChangesSql(database, table, rowChanges, insertValues, deleteChanges);
+
+      if (changesSql && connections.getById(connectionId)?.safeMode) {
+        const confirmed = await new Promise<boolean>((resolve) => {
+          pendingSafeModeConfirm = { resolve, sql: changesSql };
+        });
+        if (!confirmed) return;
+      }
+
       await saveTableChanges(
         connectionId,
         database,
@@ -626,7 +639,6 @@
         deleteChanges,
         instanceDb,
       );
-      const changesSql = buildChangesSql(database, table, rowChanges, insertValues, deleteChanges);
       if (connections.isTransactionActive(connectionId) && changesSql) {
         connections.addTxQuery(connectionId, changesSql);
       }
@@ -2413,6 +2425,24 @@
       </div>
     </div>
   </Modal>
+{/if}
+
+{#if pendingSafeModeConfirm}
+  <ConfirmDialog
+    title="Confirm SQL Execution"
+    message="Safe Mode is enabled for this connection. This will run the following SQL, which will modify the database:"
+    confirmText="Execute"
+    danger={true}
+    code={pendingSafeModeConfirm.sql}
+    onconfirm={() => {
+      pendingSafeModeConfirm?.resolve(true);
+      pendingSafeModeConfirm = null;
+    }}
+    oncancel={() => {
+      pendingSafeModeConfirm?.resolve(false);
+      pendingSafeModeConfirm = null;
+    }}
+  />
 {/if}
 
 {#if showSqlPreview}

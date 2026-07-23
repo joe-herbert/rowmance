@@ -58,6 +58,7 @@
   );
   let color = $state(untrack(() => profile?.color ?? ''));
   let readOnly = $state(untrack(() => profile?.readOnly ?? false));
+  let safeMode = $state(untrack(() => profile?.safeMode ?? false));
   let dontSave = $state(false);
 
   // ── SSH fields ────────────────────────────────────────────────────────────────
@@ -200,6 +201,7 @@
         sslKeyPath: null,
         poolMax,
         pingInterval: pingInterval || null,
+        safeMode,
       };
     }
     return {
@@ -224,6 +226,7 @@
       sslKeyPath: sslEnabled ? sslKeyPath.trim() || null : null,
       poolMax,
       pingInterval: pingInterval || null,
+      safeMode,
     };
   }
 
@@ -591,9 +594,25 @@
           </div>
         {/if}
 
-        <div class="field field--inline">
-          <label for="conn-readonly" class="label">Read-only</label>
-          <Checkbox id="conn-readonly" bind:checked={readOnly} />
+        <div class="field-group">
+          <div class="field field--inline">
+            <label for="conn-readonly" class="label">Read-only</label>
+            <Checkbox id="conn-readonly" bind:checked={readOnly} />
+          </div>
+          <p class="tab-hint tab-hint--tight">
+            Block all write operations to the database.
+          </p>
+        </div>
+
+        <div class="field-group">
+          <div class="field field--inline">
+            <label for="conn-safemode" class="label">Safe Mode</label>
+            <Checkbox id="conn-safemode" bind:checked={safeMode} />
+          </div>
+          <p class="tab-hint tab-hint--tight">
+            Warn with a confirmation dialog before running any SQL that would modify this
+            database.
+          </p>
         </div>
 
         <!-- SSH tab -->
@@ -601,9 +620,14 @@
         {#if isFileBased}
           <p class="tab-hint">SSH tunnelling is not available for file-based connections.</p>
         {:else}
-          <div class="field field--inline">
-            <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
-            <Checkbox id="ssh-enabled" bind:checked={sshEnabled} />
+          <div class="field-group">
+            <div class="field field--inline">
+              <label for="ssh-enabled" class="label">Enable SSH Tunnel</label>
+              <Checkbox id="ssh-enabled" bind:checked={sshEnabled} />
+            </div>
+            {#if !sshEnabled}
+              <p class="tab-hint tab-hint--tight">Enable SSH tunnelling to connect through a bastion host.</p>
+            {/if}
           </div>
 
           {#if sshEnabled}
@@ -716,8 +740,6 @@
                 </div>
               </div>
             {/if}
-          {:else}
-            <p class="tab-hint">Enable SSH tunnelling to connect through a bastion host.</p>
           {/if}
         {/if}
 
@@ -726,9 +748,14 @@
         {#if isFileBased}
           <p class="tab-hint">SSL/TLS is not available for file-based connections.</p>
         {:else}
-          <div class="field field--inline">
-            <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
-            <Checkbox id="ssl-enabled" bind:checked={sslEnabled} />
+          <div class="field-group">
+            <div class="field field--inline">
+              <label for="ssl-enabled" class="label">Enable SSL/TLS</label>
+              <Checkbox id="ssl-enabled" bind:checked={sslEnabled} />
+            </div>
+            {#if !sslEnabled}
+              <p class="tab-hint tab-hint--tight">Enable SSL/TLS to encrypt the connection to the database server.</p>
+            {/if}
           </div>
 
           {#if sslEnabled}
@@ -806,8 +833,6 @@
                 >
               </div>
             </div>
-          {:else}
-            <p class="tab-hint">Enable SSL/TLS to encrypt the connection to the database server.</p>
           {/if}
         {/if}
 
@@ -838,14 +863,30 @@
             placeholder="Disabled"
             autocomplete="off"
           />
-          <p class="tab-hint">
+          <p class="tab-hint tab-hint--tight">
             Periodically checks the connection is still alive. Leave empty to disable.
           </p>
         </div>
 
-        <div class="field field--inline">
-          <label for="adv-readonly" class="label">Read-only Mode</label>
-          <Checkbox id="adv-readonly" bind:checked={readOnly} />
+        <div class="field-group">
+          <div class="field field--inline">
+            <label for="adv-readonly" class="label">Read-only Mode</label>
+            <Checkbox id="adv-readonly" bind:checked={readOnly} />
+          </div>
+          <p class="tab-hint tab-hint--tight">
+            Block all write operations to the database.
+          </p>
+        </div>
+
+        <div class="field-group">
+          <div class="field field--inline">
+            <label for="adv-safemode" class="label">Safe Mode</label>
+            <Checkbox id="adv-safemode" bind:checked={safeMode} />
+          </div>
+          <p class="tab-hint tab-hint--tight">
+            Warn with a confirmation dialog before running any SQL that would modify this
+            database.
+          </p>
         </div>
       {/if}
 
@@ -1007,6 +1048,12 @@
     gap: var(--spacing-1);
   }
 
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+  }
+
   .field--inline {
     flex-direction: row;
     align-items: center;
@@ -1113,6 +1160,10 @@
     font-style: italic;
     margin: 0;
     padding: var(--spacing-2) 0;
+  }
+
+  .tab-hint--tight {
+    padding-top: 0;
   }
 
   .test-result {

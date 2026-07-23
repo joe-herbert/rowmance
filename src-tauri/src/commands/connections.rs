@@ -54,6 +54,8 @@ pub struct ConnectionProfile {
     pub pool_max: i64,
     #[serde(rename = "pingInterval")]
     pub ping_interval: Option<i64>,
+    #[serde(rename = "safeMode")]
+    pub safe_mode: bool,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "updatedAt")]
@@ -88,6 +90,7 @@ impl From<ConnectionProfileRow> for ConnectionProfile {
             ssl_key_path: r.ssl_key_path,
             pool_max: r.pool_max,
             ping_interval: r.ping_interval,
+            safe_mode: r.safe_mode,
             created_at: r.created_at,
             updated_at: r.updated_at,
             dialect_info,
@@ -164,6 +167,8 @@ pub struct ConnectionProfileInput {
     pub pool_max: Option<i64>,
     #[serde(rename = "pingInterval")]
     pub ping_interval: Option<i64>,
+    #[serde(rename = "safeMode", default)]
+    pub safe_mode: bool,
 }
 
 /// Reads the DB password for a connection from the keychain.
@@ -231,12 +236,12 @@ pub async fn connections_create(
             id, group_id, name, db_type, host, port, database, username, color,
             read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
             ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-            pool_max, ping_interval, created_at, updated_at
+            pool_max, ping_interval, safe_mode, created_at, updated_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?, ?
+            ?, ?, ?, ?, ?
         )
         "#,
     )
@@ -262,6 +267,7 @@ pub async fn connections_create(
     .bind(&input.ssl_key_path)
     .bind(pool_max)
     .bind(input.ping_interval)
+    .bind(input.safe_mode)
     .bind(&now)
     .bind(&now)
     .execute(sqlite.inner())
@@ -299,7 +305,7 @@ pub async fn connections_update(
             ssh_enabled = ?, ssh_host = ?, ssh_port = ?, ssh_user = ?,
             ssh_auth_type = ?, ssh_key_path = ?,
             ssl_enabled = ?, ssl_ca_path = ?, ssl_cert_path = ?, ssl_key_path = ?,
-            pool_max = ?, ping_interval = ?, updated_at = ?
+            pool_max = ?, ping_interval = ?, safe_mode = ?, updated_at = ?
         WHERE id = ?
         "#,
     )
@@ -324,6 +330,7 @@ pub async fn connections_update(
     .bind(&input.ssl_key_path)
     .bind(pool_max)
     .bind(input.ping_interval)
+    .bind(input.safe_mode)
     .bind(&now)
     .bind(&id)
     .execute(sqlite.inner())
@@ -822,6 +829,7 @@ pub async fn connections_connect_unsaved(
         ssl_key_path: input.ssl_key_path,
         pool_max,
         ping_interval: input.ping_interval,
+        safe_mode: input.safe_mode,
         created_at: now.clone(),
         updated_at: now,
         dialect_info,
@@ -1002,12 +1010,12 @@ pub async fn connections_duplicate(
             id, group_id, name, db_type, host, port, database, username, color,
             read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
             ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-            pool_max, ping_interval, created_at, updated_at
+            pool_max, ping_interval, safe_mode, created_at, updated_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?, ?
+            ?, ?, ?, ?, ?
         )
         "#,
     )
@@ -1033,6 +1041,7 @@ pub async fn connections_duplicate(
     .bind(&row.ssl_key_path)
     .bind(row.pool_max)
     .bind(row.ping_interval)
+    .bind(row.safe_mode)
     .bind(&now)
     .bind(&now)
     .execute(sqlite.inner())
@@ -1109,6 +1118,8 @@ pub struct ConnectionExportEntry {
     pub pool_max: i64,
     #[serde(rename = "pingInterval")]
     pub ping_interval: Option<i64>,
+    #[serde(rename = "safeMode", default)]
+    pub safe_mode: bool,
     /// Present only when exported with include_sensitive = true.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passwords: Option<ConnectionExportPasswords>,
@@ -1181,6 +1192,7 @@ pub async fn connections_export(
                 ssl_key_path: row.ssl_key_path,
                 pool_max: row.pool_max,
                 ping_interval: row.ping_interval,
+                safe_mode: row.safe_mode,
                 passwords,
             });
         }
@@ -1303,12 +1315,12 @@ pub async fn connections_import(
                 id, group_id, name, db_type, host, port, database, username, color,
                 read_only, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth_type, ssh_key_path,
                 ssl_enabled, ssl_ca_path, ssl_cert_path, ssl_key_path,
-                pool_max, ping_interval, created_at, updated_at
+                pool_max, ping_interval, safe_mode, created_at, updated_at
             ) VALUES (
                 ?, NULL, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
-                ?, ?, ?, ?
+                ?, ?, ?, ?, ?
             )
             "#,
         )
@@ -1333,6 +1345,7 @@ pub async fn connections_import(
         .bind(&entry.ssl_key_path)
         .bind(entry.pool_max)
         .bind(entry.ping_interval)
+        .bind(entry.safe_mode)
         .bind(&now)
         .bind(&now)
         .execute(sqlite.inner())

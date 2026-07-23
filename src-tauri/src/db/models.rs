@@ -28,6 +28,7 @@ pub struct ConnectionProfileRow {
     pub ssl_key_path: Option<String>,
     pub pool_max: i64,
     pub ping_interval: Option<i64>,
+    pub safe_mode: bool,
     pub created_at: String,
     pub updated_at: String,
 }

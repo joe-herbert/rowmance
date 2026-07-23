@@ -16,6 +16,8 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import type { RowChange, RowDelete } from '$lib/tauri/query';
   import { saveTableChanges } from '$lib/tauri/query';
+  import { qi as dialectQi, formatSqlValue as dialectFmtVal } from '$lib/utils/dialect';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { portal } from '$lib/actions/portal';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import AiModal from '$lib/components/ai/AiModal.svelte';
@@ -165,6 +167,9 @@
   let tableKey = $state(0);
   let isSaving = $state(false);
   let saveError = $state<string | null>(null);
+  let pendingSafeModeConfirm = $state<{ resolve: (_result: boolean) => void; sql: string } | null>(
+    null,
+  );
 
   // Column management (session-only, no persistence for query results)
   let hiddenColumns = $state<Set<string>>(new Set());
@@ -322,6 +327,41 @@
     tableKey++;
   }
 
+  function buildChangesSql(
+    db: string,
+    tbl: string,
+    updates: RowChange[],
+    inserts: Record<string, unknown>[],
+    deletes: RowDelete[],
+  ): string {
+    const d = connections.getById(connectionId ?? '')?.dialectInfo;
+    const q = (name: string) => (d ? dialectQi(name, d) : `\`${name}\``);
+    const v = (val: unknown) => (d ? dialectFmtVal(val, d) : String(val ?? 'NULL'));
+    const target = d?.usesSchema ? `${q(db)}.${q(tbl)}` : q(tbl);
+    const lines: string[] = [];
+    for (const { primaryKeys, changes } of updates) {
+      const set = Object.entries(changes)
+        .map(([c, val]) => `${q(c)} = ${v(val)}`)
+        .join(', ');
+      const where = Object.entries(primaryKeys)
+        .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
+        .join(' AND ');
+      lines.push(`UPDATE ${target} SET ${set} WHERE ${where};`);
+    }
+    for (const vals of inserts) {
+      const cols = Object.keys(vals).map(q).join(', ');
+      const values = Object.values(vals).map(v).join(', ');
+      lines.push(`INSERT INTO ${target} (${cols}) VALUES (${values});`);
+    }
+    for (const { primaryKeys } of deletes) {
+      const where = Object.entries(primaryKeys)
+        .map(([c, val]) => (val === null ? `${q(c)} IS NULL` : `${q(c)} = ${v(val)}`))
+        .join(' AND ');
+      lines.push(`DELETE FROM ${target} WHERE ${where};`);
+    }
+    return lines.join('\n');
+  }
+
   async function saveChanges(): Promise<void> {
     if (!result || !detectedTable || !detectedDatabase || !connectionId) return;
     isSaving = true;
@@ -379,6 +419,22 @@
           });
         }
         deleteChanges.push({ primaryKeys });
+      }
+
+      if (connections.getById(connectionId)?.safeMode) {
+        const changesSql = buildChangesSql(
+          detectedDatabase,
+          detectedTable,
+          rowChanges,
+          insertValues,
+          deleteChanges,
+        );
+        if (changesSql) {
+          const confirmed = await new Promise<boolean>((resolve) => {
+            pendingSafeModeConfirm = { resolve, sql: changesSql };
+          });
+          if (!confirmed) return;
+        }
       }
 
       await saveTableChanges(
@@ -884,6 +940,24 @@
     database={database ?? ''}
     onclose={() => {
       showAiSummarise = false;
+    }}
+  />
+{/if}
+
+{#if pendingSafeModeConfirm}
+  <ConfirmDialog
+    title="Confirm SQL Execution"
+    message="Safe Mode is enabled for this connection. This will run the following SQL, which will modify the database:"
+    confirmText="Execute"
+    danger={true}
+    code={pendingSafeModeConfirm.sql}
+    onconfirm={() => {
+      pendingSafeModeConfirm?.resolve(true);
+      pendingSafeModeConfirm = null;
+    }}
+    oncancel={() => {
+      pendingSafeModeConfirm?.resolve(false);
+      pendingSafeModeConfirm = null;
     }}
   />
 {/if}

@@ -1,0 +1,1 @@
+ALTER TABLE connection_profiles ADD COLUMN safe_mode INTEGER NOT NULL DEFAULT 0;

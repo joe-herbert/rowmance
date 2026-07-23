@@ -1546,13 +1546,45 @@
 
   // ── Query execution ───────────────────────────────────────────────────────
 
-  let pendingDestructiveConfirm = $state<{ resolve: (_result: boolean) => void } | null>(null);
+  let pendingDestructiveConfirm = $state<{
+    resolve: (_result: boolean) => void;
+    title: string;
+    message: string;
+    confirmText: string;
+    code?: string;
+    requireTyped: boolean;
+  } | null>(null);
 
   async function confirmDestructiveIfNeeded(statements: string[]): Promise<boolean> {
-    if (!statements.some(isDeleteWithoutWhere)) return true;
-    return new Promise<boolean>((resolve) => {
-      pendingDestructiveConfirm = { resolve };
-    });
+    if (statements.some(isDeleteWithoutWhere)) {
+      return new Promise<boolean>((resolve) => {
+        pendingDestructiveConfirm = {
+          resolve,
+          title: 'Delete Without WHERE',
+          message:
+            'This DELETE statement has no WHERE clause and will remove every row in the table. This cannot be undone.',
+          confirmText: 'Run DELETE',
+          requireTyped: true,
+        };
+      });
+    }
+
+    const mutating = statements.filter(isMutatingStatement);
+    if (connections.getById(connectionId)?.safeMode && mutating.length > 0) {
+      return new Promise<boolean>((resolve) => {
+        pendingDestructiveConfirm = {
+          resolve,
+          title: 'Confirm SQL Execution',
+          message:
+            'Safe Mode is enabled for this connection. This will run the following SQL, which will modify the database:',
+          confirmText: 'Execute',
+          code: mutating.join(';\n\n'),
+          requireTyped: false,
+        };
+      });
+    }
+
+    return true;
   }
 
   function resolveDestructiveConfirm(ok: boolean): void {
@@ -2717,11 +2749,13 @@
 
 {#if pendingDestructiveConfirm}
   <ConfirmDialog
-    title="Delete Without WHERE"
-    message="This DELETE statement has no WHERE clause and will remove every row in the table. This cannot be undone."
-    confirmText="Run DELETE"
+    title={pendingDestructiveConfirm.title}
+    message={pendingDestructiveConfirm.message}
+    confirmText={pendingDestructiveConfirm.confirmText}
+    code={pendingDestructiveConfirm.code}
     danger={true}
-    requireTypedText={settingsStore.settings.confirmDestructiveActionsWithTypedName
+    requireTypedText={pendingDestructiveConfirm.requireTyped &&
+    settingsStore.settings.confirmDestructiveActionsWithTypedName
       ? connectionName
       : undefined}
     onconfirm={() => resolveDestructiveConfirm(true)}
