@@ -30,6 +30,21 @@ Always branch from `main`. Keep branches short-lived — aim to merge within a w
 
 ---
 
+## Releasing
+
+`scripts/bump-version.sh` updates the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` together (plus the matching entry in `src-tauri/Cargo.lock`, which `cargo build`/`check` would otherwise rewrite on the next run), so they never drift out of sync.
+
+```bash
+./scripts/bump-version.sh                  # bump patch: 2.3.4 -> 2.3.5
+./scripts/bump-version.sh 2.4.0            # set an explicit version
+./scripts/bump-version.sh 2.4.0 --commit   # also commit as "Bump to v2.4.0"
+./scripts/bump-version.sh 2.4.0 --tag      # commit and tag as "v2.4.0" (implies --commit)
+```
+
+With no version argument, it increments the last dot-separated field of the current version (read from `package.json`). `--commit` and `--tag` are both opt-in — with neither, the script only edits the three files and leaves staging/committing to you.
+
+---
+
 ## Testing Guide
 
 ### Frontend tests
