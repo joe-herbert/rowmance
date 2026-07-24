@@ -1,6 +1,6 @@
 <!--
   GlobalSearch — opens from the titlebar search button.
-  Searches connections, databases, tables, and columns.
+  Searches connections, databases, schemas, tables, and columns.
   Schema data loads progressively on mount.
 -->
 <script lang="ts">
@@ -19,6 +19,7 @@
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
   import ListIcon from '$lib/components/icons/ListIcon.svelte';
+  import SchemaIcon from '$lib/components/icons/SchemaIcon.svelte';
 
   interface Props {
     onclose: () => void;
@@ -33,7 +34,7 @@
   let query = $state('');
   let selectedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | undefined>(undefined);
-  type Kind = 'connection' | 'database' | 'table' | 'column';
+  type Kind = 'connection' | 'database' | 'schema' | 'table' | 'column';
   type MatchMode = 'strict' | 'normal' | 'fuzzy';
   type AccessFilter = 'readonly' | 'writable' | null;
 
@@ -138,12 +139,17 @@
     inputEl?.focus();
   }
 
-  const kindOptions: Array<{ label: string; value: Kind }> = [
+  const hasSchemaCapableConnections = $derived(
+    connections.profiles.some((p) => p.dialectInfo.hasInstanceDatabases),
+  );
+
+  const kindOptions = $derived.by<Array<{ label: string; value: Kind }>>(() => [
     { label: 'Connections', value: 'connection' },
     { label: 'Databases', value: 'database' },
+    ...(hasSchemaCapableConnections ? [{ label: 'Schemas', value: 'schema' as const }] : []),
     { label: 'Tables', value: 'table' },
     { label: 'Columns', value: 'column' },
-  ];
+  ]);
 
   const matchOptions: Array<{ label: string; value: MatchMode; title: string }> = [
     { label: 'Strict', value: 'strict', title: 'Near-exact matches only' },
@@ -199,10 +205,12 @@
   // ── Schema data ────────────────────────────────────────────────────────────
 
   type DbEntry = import('$lib/stores/globalSearchCache.svelte').DbEntry;
+  type SchemaEntry = import('$lib/stores/globalSearchCache.svelte').SchemaEntry;
   type TableEntry = import('$lib/stores/globalSearchCache.svelte').TableEntry;
   type ColumnEntry = import('$lib/stores/globalSearchCache.svelte').ColumnEntry;
 
   const databaseEntries = $derived(searchCache.databaseEntries);
+  const schemaEntries = $derived(searchCache.schemaEntries);
   const tableEntries = $derived(searchCache.tableEntries);
   const columnEntries = $derived(searchCache.columnEntries);
 
@@ -218,6 +226,7 @@
   type ResultItem =
     | { kind: 'connection'; id: string; name: string; dbType: string; color: string | null }
     | (DbEntry & { kind: 'database' })
+    | (SchemaEntry & { kind: 'schema' })
     | (TableEntry & { kind: 'table' })
     | (ColumnEntry & { kind: 'column' });
 
@@ -263,12 +272,24 @@
     ),
   );
 
+  const fuseSchemas = $derived(
+    new Fuse(
+      schemaEntries.filter(
+        (e) =>
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          !matchesExcludePattern(e.instanceDb, excludedDbs),
+      ),
+      { keys: ['schema', 'instanceDb', 'connectionName'], includeScore: true, ...fuseOptions },
+    ),
+  );
+
   const fuseTables = $derived(
     new Fuse(
       tableEntries.filter(
         (e) =>
           matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
           !matchesExcludePattern(e.database, excludedDbs) &&
+          !(e.instanceDb && matchesExcludePattern(e.instanceDb, excludedDbs)) &&
           !matchesExcludePattern(e.name, excludedTables),
       ),
       { keys: ['name', 'database', 'connectionName'], includeScore: true, ...fuseOptions },
@@ -281,6 +302,7 @@
         (e) =>
           matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
           !matchesExcludePattern(e.database, excludedDbs) &&
+          !(e.instanceDb && matchesExcludePattern(e.instanceDb, excludedDbs)) &&
           !matchesExcludePattern(e.table, excludedTables),
       ),
       { keys: ['name', 'dataType', 'table'], includeScore: true, ...fuseOptions },
@@ -314,6 +336,9 @@
     if (wantsKind('database'))
       for (const r of fuseDatabases.search(q).slice(0, 5))
         results.push({ kind: 'database', ...r.item });
+    if (wantsKind('schema'))
+      for (const r of fuseSchemas.search(q).slice(0, 5))
+        results.push({ kind: 'schema', ...r.item });
     if (wantsKind('table'))
       for (const r of fuseTables.search(q).slice(0, 8)) results.push({ kind: 'table', ...r.item });
     if (wantsKind('column'))
@@ -343,12 +368,21 @@
           database: item.database,
         });
         break;
+      case 'schema':
+        panels.openInFocused({
+          kind: 'erd',
+          connectionId: item.connectionId,
+          database: item.schema,
+          instanceDb: item.instanceDb,
+        });
+        break;
       case 'table':
         panels.openInFocused({
           kind: 'table_browser',
           connectionId: item.connectionId,
           database: item.database,
           table: item.name,
+          instanceDb: item.instanceDb,
         });
         break;
       case 'column':
@@ -357,6 +391,7 @@
           connectionId: item.connectionId,
           database: item.database,
           table: item.table,
+          instanceDb: item.instanceDb,
         });
         break;
     }
@@ -401,6 +436,8 @@
         return 'Connections';
       case 'database':
         return 'Databases';
+      case 'schema':
+        return 'Schemas';
       case 'table':
         return 'Tables';
       case 'column':
@@ -414,6 +451,8 @@
         return item.name;
       case 'database':
         return item.database;
+      case 'schema':
+        return item.schema;
       case 'table':
         return item.name;
       case 'column':
@@ -427,8 +466,12 @@
         return item.dbType;
       case 'database':
         return item.connectionName;
+      case 'schema':
+        return `${item.connectionName} › ${item.instanceDb}`;
       case 'table':
-        return `${item.connectionName} › ${item.database}`;
+        return item.instanceDb
+          ? `${item.connectionName} › ${item.instanceDb} › ${item.database}`
+          : `${item.connectionName} › ${item.database}`;
       case 'column':
         return `${item.dataType}${item.isPrimaryKey ? ' · PK' : ''} · ${item.table}`;
     }
@@ -663,6 +706,8 @@
                 <LinkIcon width={10} height={10} strokeWidth={2} />
               {:else if item.kind === 'database'}
                 <DbIcon size={10} />
+              {:else if item.kind === 'schema'}
+                <SchemaIcon size={10} />
               {:else if item.kind === 'table'}
                 <TableIcon size={10} />
               {:else}
