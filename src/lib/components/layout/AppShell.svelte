@@ -368,6 +368,7 @@
         document.dispatchEvent(new CustomEvent('menu-import-sql'));
       }),
       listen('menu:speed-analysis', () => panelStore.openInFocused({ kind: 'speed_analysis' })),
+      listen('menu:view-releases', () => panelStore.openInFocused({ kind: 'releases' })),
       listen('menu:whats-new', async () => {
         const version = await getVersion();
         fetch(`https://api.github.com/repos/joe-herbert/rowmance/releases/tags/v${version}`, {

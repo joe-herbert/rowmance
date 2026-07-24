@@ -52,6 +52,8 @@
   <BarChartIcon {size} />
 {:else if content.kind === 'release_notes'}
   <ActivityIcon {size} />
+{:else if content.kind === 'releases'}
+  <ActivityIcon {size} />
 {:else if content.kind === 'oracle_client_help'}
   <InfoCircleIcon width={size} height={size} />
 {:else if content.kind === 'connections'}
