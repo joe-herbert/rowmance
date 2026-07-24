@@ -14,6 +14,7 @@
   import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
   import SpinnerIcon from '$lib/components/icons/SpinnerIcon.svelte';
   import FilterIcon from '$lib/components/icons/FilterIcon.svelte';
+  import MultiSelect from '$lib/components/ui/MultiSelect.svelte';
   import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
@@ -32,10 +33,9 @@
   let query = $state('');
   let selectedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | undefined>(undefined);
-  type KindFilter = 'connection' | 'database' | 'table' | 'column' | null;
+  type Kind = 'connection' | 'database' | 'table' | 'column';
   type MatchMode = 'strict' | 'normal' | 'fuzzy';
   type AccessFilter = 'readonly' | 'writable' | null;
-  type GroupFilter = string | 'ungrouped' | null;
 
   const STORAGE_KEY = 'globalSearch.filters';
 
@@ -49,11 +49,11 @@
 
   const saved = loadSaved();
 
-  let filterKind = $state<KindFilter>((saved.filterKind as KindFilter) ?? null);
+  let filterKinds = $state<Kind[]>((saved.filterKinds as Kind[]) ?? []);
   let matchMode = $state<MatchMode>((saved.matchMode as MatchMode) ?? 'normal');
-  let filterDbType = $state<DbType | null>((saved.filterDbType as DbType) ?? null);
+  let filterDbTypes = $state<DbType[]>((saved.filterDbTypes as DbType[]) ?? []);
   let filterAccess = $state<AccessFilter>((saved.filterAccess as AccessFilter) ?? null);
-  let filterGroup = $state<GroupFilter>((saved.filterGroup as GroupFilter) ?? null);
+  let filterGroups = $state<string[]>((saved.filterGroups as string[]) ?? []);
   let filtersExpanded = $state<boolean>((saved.filtersExpanded as boolean) ?? true);
   let excludedDbs = $state<string[]>((saved.excludedDbs as string[]) ?? []);
   let excludedTables = $state<string[]>((saved.excludedTables as string[]) ?? []);
@@ -64,11 +64,11 @@
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        filterKind,
+        filterKinds,
         matchMode,
-        filterDbType,
+        filterDbTypes,
         filterAccess,
-        filterGroup,
+        filterGroups,
         filtersExpanded,
         excludedDbs,
         excludedTables,
@@ -77,21 +77,21 @@
   });
 
   const isFiltersActive = $derived(
-    filterKind !== null ||
+    filterKinds.length > 0 ||
       matchMode !== 'normal' ||
-      filterDbType !== null ||
+      filterDbTypes.length > 0 ||
       filterAccess !== null ||
-      filterGroup !== null ||
+      filterGroups.length > 0 ||
       excludedDbs.length > 0 ||
       excludedTables.length > 0,
   );
 
   function clearFilters() {
-    filterKind = null;
+    filterKinds = [];
     matchMode = 'normal';
-    filterDbType = null;
+    filterDbTypes = [];
     filterAccess = null;
-    filterGroup = null;
+    filterGroups = [];
     excludedDbs = [];
     excludedTables = [];
     inputEl?.focus();
@@ -138,8 +138,7 @@
     inputEl?.focus();
   }
 
-  const filterOptions: Array<{ label: string; value: KindFilter }> = [
-    { label: 'All', value: null },
+  const kindOptions: Array<{ label: string; value: Kind }> = [
     { label: 'Connections', value: 'connection' },
     { label: 'Databases', value: 'database' },
     { label: 'Tables', value: 'table' },
@@ -154,6 +153,13 @@
 
   const availableDbTypes = $derived([...new Set(connections.profiles.map((p) => p.dbType))].sort());
 
+  const dbTypeOptions = $derived(
+    availableDbTypes.map((dt) => ({
+      value: dt,
+      label: connections.profiles.find((p) => p.dbType === dt)?.dialectInfo?.displayName ?? dt,
+    })),
+  );
+
   const hasAnyGroup = $derived(connections.profiles.some((p) => p.groupId !== null));
 
   const usedGroupIds = $derived(
@@ -167,6 +173,11 @@
   );
 
   const hasUngrouped = $derived(connections.profiles.some((p) => p.groupId === null));
+
+  const groupOptions = $derived([
+    ...availableGroups.map((g) => ({ value: g.id, label: g.name })),
+    ...(hasUngrouped ? [{ value: 'ungrouped', label: 'Ungrouped' }] : []),
+  ]);
 
   const accessOptions: Array<{ label: string; value: AccessFilter }> = [
     { label: 'All', value: null },
@@ -217,12 +228,10 @@
     readOnly: boolean,
     groupId: string | null,
   ): boolean {
-    if (filterDbType && dbType !== filterDbType) return false;
+    if (filterDbTypes.length > 0 && !filterDbTypes.includes(dbType)) return false;
     if (filterAccess === 'readonly' && !readOnly) return false;
     if (filterAccess === 'writable' && readOnly) return false;
-    if (filterGroup === 'ungrouped' && groupId !== null) return false;
-    if (filterGroup !== null && filterGroup !== 'ungrouped' && groupId !== filterGroup)
-      return false;
+    if (filterGroups.length > 0 && !filterGroups.includes(groupId ?? 'ungrouped')) return false;
     return true;
   }
 
@@ -282,7 +291,8 @@
 
   const filtered = $derived.by<ResultItem[]>(() => {
     const q = query.trim();
-    const fk = filterKind;
+    const fk = filterKinds;
+    const wantsKind = (k: Kind) => fk.length === 0 || fk.includes(k);
 
     if (!q) {
       const all: ResultItem[] = connections.profiles
@@ -295,18 +305,18 @@
           dbType: p.dbType,
           color: p.color,
         }));
-      return fk ? all.filter((r) => r.kind === fk) : all;
+      return fk.length > 0 ? all.filter((r) => fk.includes(r.kind)) : all;
     }
 
     const results: ResultItem[] = [];
-    if (!fk || fk === 'connection')
+    if (wantsKind('connection'))
       for (const r of fuseConnections.search(q).slice(0, 3)) results.push(r.item);
-    if (!fk || fk === 'database')
+    if (wantsKind('database'))
       for (const r of fuseDatabases.search(q).slice(0, 5))
         results.push({ kind: 'database', ...r.item });
-    if (!fk || fk === 'table')
+    if (wantsKind('table'))
       for (const r of fuseTables.search(q).slice(0, 8)) results.push({ kind: 'table', ...r.item });
-    if (!fk || fk === 'column')
+    if (wantsKind('column'))
       for (const r of fuseColumns.search(q).slice(0, 8))
         results.push({ kind: 'column', ...r.item });
     return results.slice(0, 30);
@@ -372,10 +382,10 @@
 
   $effect(() => {
     query;
-    filterKind;
-    filterDbType;
+    filterKinds;
+    filterDbTypes;
     filterAccess;
-    filterGroup;
+    filterGroups;
     selectedIndex = 0;
   });
 
@@ -514,17 +524,53 @@
     </div>
 
     {#if filtersExpanded}
+      <div class="filter-row filter-row--selects">
+        <div class="filter-group">
+          <span class="filter-label">Type</span>
+          <MultiSelect
+            bind:values={filterKinds}
+            options={kindOptions}
+            aria-label="Filter by type"
+            size="xs"
+            placeholder="All"
+          />
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">DB</span>
+          <MultiSelect
+            bind:values={filterDbTypes}
+            options={dbTypeOptions}
+            aria-label="Filter by database type"
+            size="xs"
+            placeholder="All"
+            searchable={dbTypeOptions.length > 8}
+          />
+        </div>
+        {#if hasAnyGroup}
+          <div class="filter-group">
+            <span class="filter-label">Folder</span>
+            <MultiSelect
+              bind:values={filterGroups}
+              options={groupOptions}
+              aria-label="Filter by folder"
+              size="xs"
+              placeholder="All"
+              searchable={groupOptions.length > 8}
+            />
+          </div>
+        {/if}
+      </div>
+
       <div class="filter-row">
-        <div role="group" aria-label="Filter by type" class="filter-group">
-          {#each filterOptions as opt}
+        <div role="group" aria-label="Filter by access" class="filter-group">
+          {#each accessOptions as opt}
             <button
               class="filter-chip"
-              class:active={filterKind === opt.value}
+              class:active={filterAccess === opt.value}
               onclick={() => {
-                filterKind = opt.value;
+                filterAccess = opt.value;
                 inputEl?.focus();
               }}
-              tabindex="0"
               type="button">{opt.label}</button
             >
           {/each}
@@ -545,86 +591,6 @@
           {/each}
         </div>
       </div>
-
-      <div class="filter-row">
-        <div role="group" aria-label="Filter by database type" class="filter-group">
-          <span class="filter-label">DB</span>
-          <button
-            class="filter-chip"
-            class:active={filterDbType === null}
-            onclick={() => {
-              filterDbType = null;
-              inputEl?.focus();
-            }}
-            type="button">All</button
-          >
-          {#each availableDbTypes as dt}
-            <button
-              class="filter-chip"
-              class:active={filterDbType === dt}
-              onclick={() => {
-                filterDbType = dt;
-                inputEl?.focus();
-              }}
-              type="button"
-              >{connections.profiles.find((p) => p.dbType === dt)?.dialectInfo?.displayName ??
-                dt}</button
-            >
-          {/each}
-        </div>
-        <div role="group" aria-label="Filter by access" class="filter-group filter-group--right">
-          {#each accessOptions as opt}
-            <button
-              class="filter-chip"
-              class:active={filterAccess === opt.value}
-              onclick={() => {
-                filterAccess = opt.value;
-                inputEl?.focus();
-              }}
-              type="button">{opt.label}</button
-            >
-          {/each}
-        </div>
-      </div>
-
-      {#if hasAnyGroup}
-        <div class="filter-row">
-          <div role="group" aria-label="Filter by folder" class="filter-group filter-group--wrap">
-            <span class="filter-label">Folder</span>
-            <button
-              class="filter-chip"
-              class:active={filterGroup === null}
-              onclick={() => {
-                filterGroup = null;
-                inputEl?.focus();
-              }}
-              type="button">All</button
-            >
-            {#each availableGroups as group}
-              <button
-                class="filter-chip"
-                class:active={filterGroup === group.id}
-                onclick={() => {
-                  filterGroup = group.id;
-                  inputEl?.focus();
-                }}
-                type="button">{group.name}</button
-              >
-            {/each}
-            {#if hasUngrouped}
-              <button
-                class="filter-chip"
-                class:active={filterGroup === 'ungrouped'}
-                onclick={() => {
-                  filterGroup = 'ungrouped';
-                  inputEl?.focus();
-                }}
-                type="button">Ungrouped</button
-              >
-            {/if}
-          </div>
-        </div>
-      {/if}
 
       <div class="filter-row filter-row--exclude">
         <div class="exclude-group">
@@ -892,8 +858,10 @@
     padding-left: var(--spacing-2);
   }
 
-  .filter-group--wrap {
+  .filter-row--selects {
+    justify-content: flex-start;
     flex-wrap: wrap;
+    gap: var(--spacing-3);
   }
 
   .filter-label {
