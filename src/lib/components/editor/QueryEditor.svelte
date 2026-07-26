@@ -651,11 +651,16 @@
         // ID may change if the file was renamed/moved.
         if (updated.id !== currentSavedQueryId) {
           currentSavedQueryId = updated.id;
-          panelStore.updateQueryEditorMeta(editorId, { savedQueryId: updated.id });
         }
         savedSql = sqlText;
         savedDescription = descriptionText;
         savedAnnotations = annotationsJson;
+        panelStore.updateQueryEditorMeta(editorId, {
+          savedQueryId: currentSavedQueryId,
+          initialSql: sqlText,
+          initialDescription: descriptionText,
+          initialAnnotations: annotationsJson ?? undefined,
+        });
         savedQueriesInvalidator.invalidate();
       } finally {
         isSaving = false;
@@ -692,6 +697,9 @@
       panelStore.updateQueryEditorMeta(editorId, {
         savedQueryId: saved.id,
         savedQueryName: saved.name,
+        initialSql: sqlText,
+        initialDescription: descriptionText,
+        initialAnnotations: annotationsJson ?? undefined,
       });
       savedQueriesInvalidator.invalidate();
     } finally {

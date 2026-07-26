@@ -1143,7 +1143,13 @@ export function usePanels() {
     /** Update saved query metadata on a query_editor open item across all splits. */
     updateQueryEditorMeta(
       editorId: string,
-      updates: { savedQueryId?: string; savedQueryName?: string },
+      updates: {
+        savedQueryId?: string;
+        savedQueryName?: string;
+        initialSql?: string;
+        initialDescription?: string;
+        initialAnnotations?: string;
+      },
     ) {
       const applyUpdate = (content: PanelKind): PanelKind => {
         if (content.kind === 'query_editor' && content.editorId === editorId) {
