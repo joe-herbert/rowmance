@@ -1935,6 +1935,9 @@
       case 'QUERY_EXPLAIN':
         runExplain();
         break;
+      case 'SAVE_QUERY':
+        saveQuery();
+        break;
       case 'FOCUS_EDITOR':
         if (isFocusedPanel) editorView?.focus();
         break;

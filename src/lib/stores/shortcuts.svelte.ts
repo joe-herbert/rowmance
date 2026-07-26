@@ -19,6 +19,7 @@ export type ShortcutAction =
   | 'QUERY_RUN_UNDER_CURSOR'
   | 'QUERY_FORMAT'
   | 'QUERY_EXPLAIN'
+  | 'SAVE_QUERY'
   | 'FOCUS_EDITOR'
   | 'FOCUS_SCHEMA_TREE'
   | 'FOCUS_RESULTS'
@@ -130,6 +131,16 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+Shift+X',
     jetbrains: 'Mod+Shift+E',
     vim: 'Mod+Shift+E',
+  },
+  {
+    action: 'SAVE_QUERY',
+    label: 'Save Query',
+    group: 'Query Editor',
+    global: false,
+    location: 'query-editor',
+    vscode: 'Mod+S',
+    jetbrains: 'Mod+S',
+    vim: ':w',
   },
   // ── Navigation ───────────────────────────────────────────────────────────────
   // All navigation shortcuts are global: handled by AppShell with no focus guard,
