@@ -3,6 +3,7 @@
   Supports grouped options, three size variants, keyboard navigation, and portal positioning.
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import { portal } from '$lib/actions/portal';
   import SmallChevronIcon from '$lib/components/icons/SmallChevronIcon.svelte';
 
@@ -84,8 +85,6 @@
     return fuzzy ? fuzzyMatch(label, q) : label.toLowerCase().includes(q.toLowerCase());
   });
 
-  const filteredFlat = $derived(searchQuery.trim() ? flat.filter((o) => matches(o.label)) : flat);
-
   const filteredOptions = $derived(
     searchQuery.trim()
       ? (options
@@ -99,6 +98,8 @@
           .filter(Boolean) as SelectOption[])
       : options,
   );
+
+  const filteredFlat = $derived(flatOptions(filteredOptions));
 
   function positionDropdown() {
     if (!triggerEl || !dropdownEl) return;
@@ -198,6 +199,14 @@
     }
   }
 
+  async function focusExactMatchOrFirst() {
+    const q = searchQuery.trim().toLowerCase();
+    const exactIdx = q ? filteredFlat.findIndex((o) => o.label.toLowerCase() === q) : -1;
+    focusedIndex = exactIdx >= 0 ? exactIdx : 0;
+    await tick();
+    scrollFocusedIntoView();
+  }
+
   function scrollFocusedIntoView() {
     if (!dropdownEl) return;
     const focused = dropdownEl.querySelector<HTMLElement>('[data-focused="true"]');
@@ -285,7 +294,7 @@
           autocomplete="off"
           spellcheck="false"
           oninput={() => {
-            focusedIndex = 0;
+            focusExactMatchOrFirst();
           }}
           onkeydown={handleSearchKeydown}
         />
