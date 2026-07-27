@@ -37,6 +37,7 @@
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
   import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CtxSep from '$lib/components/ui/CtxSep.svelte';
+  import CtxSubmenuItem from '$lib/components/ui/CtxSubmenuItem.svelte';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
   import { qi, tableRef as dialectTableRef } from '$lib/utils/dialect';
   import { listen } from '@tauri-apps/api/event';
@@ -174,10 +175,6 @@
   let schemaCtx = $state<SchemaCtxMenu | null>(null);
   let staticDbCtx = $state<StaticDbCtxMenu | null>(null);
 
-  let moveToGroupSubmenuOpen = $state(false);
-  let moveToGroupSubmenuTimer = $state<ReturnType<typeof setTimeout> | null>(null);
-  let tagSubmenuOpen = $state(false);
-  let tagSubmenuTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
   interface ConfirmState {
     title: string;
@@ -577,16 +574,6 @@
     instDbCtx = null;
     schemaCtx = null;
     staticDbCtx = null;
-    moveToGroupSubmenuOpen = false;
-    if (moveToGroupSubmenuTimer) {
-      clearTimeout(moveToGroupSubmenuTimer);
-      moveToGroupSubmenuTimer = null;
-    }
-    tagSubmenuOpen = false;
-    if (tagSubmenuTimer) {
-      clearTimeout(tagSubmenuTimer);
-      tagSubmenuTimer = null;
-    }
   }
 
   function showTableCtx(e: MouseEvent, connectionId: string, database: string, table: TableInfo) {
@@ -2399,101 +2386,25 @@
     >
     <CtxSep />
     {#if connectionStore.groups.length > 0 && !connCtx.profile.unsaved}
-      <div
-        class="ctx-item--submenu"
-        role="menuitem"
-        tabindex="0"
-        aria-haspopup="true"
-        onmouseenter={() => {
-          if (moveToGroupSubmenuTimer) {
-            clearTimeout(moveToGroupSubmenuTimer);
-            moveToGroupSubmenuTimer = null;
-          }
-          moveToGroupSubmenuOpen = true;
-        }}
-        onmouseleave={() => {
-          moveToGroupSubmenuTimer = setTimeout(() => {
-            moveToGroupSubmenuOpen = false;
-          }, 150);
-        }}
-      >
-        Move to Group
-        <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.5} class="ctx-caret" />
-        {#if moveToGroupSubmenuOpen}
-          <div
-            class="ctx-submenu"
-            role="menu"
-            tabindex="0"
-            onmouseenter={() => {
-              if (moveToGroupSubmenuTimer) {
-                clearTimeout(moveToGroupSubmenuTimer);
-                moveToGroupSubmenuTimer = null;
-              }
-            }}
-            onmouseleave={() => {
-              moveToGroupSubmenuTimer = setTimeout(() => {
-                moveToGroupSubmenuOpen = false;
-              }, 150);
-            }}
-          >
-            {#each connectionStore.groups.filter((g) => g.id !== connCtx?.profile.groupId) as g (g.id)}
-              <CtxItem onclick={() => ctxMoveToGroup(g.id)}>{g.name}</CtxItem>
-            {/each}
-          </div>
-        {/if}
-      </div>
+      <CtxSubmenuItem label="Move to Group">
+        {#each connectionStore.groups.filter((g) => g.id !== connCtx?.profile.groupId) as g (g.id)}
+          <CtxItem onclick={() => ctxMoveToGroup(g.id)}>{g.name}</CtxItem>
+        {/each}
+      </CtxSubmenuItem>
       {#if connCtx.profile.groupId !== null}
         <CtxItem onclick={() => ctxMoveToGroup(null)}>Remove from Group</CtxItem>
       {/if}
       <CtxSep />
     {/if}
     {#if tagsStore.tags.length > 0 && !connCtx.profile.unsaved}
-      <div
-        class="ctx-item--submenu"
-        role="menuitem"
-        tabindex="0"
-        aria-haspopup="true"
-        onmouseenter={() => {
-          if (tagSubmenuTimer) {
-            clearTimeout(tagSubmenuTimer);
-            tagSubmenuTimer = null;
-          }
-          tagSubmenuOpen = true;
-        }}
-        onmouseleave={() => {
-          tagSubmenuTimer = setTimeout(() => {
-            tagSubmenuOpen = false;
-          }, 150);
-        }}
-      >
-        Tags
-        <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.5} class="ctx-caret" />
-        {#if tagSubmenuOpen}
-          <div
-            class="ctx-submenu"
-            role="menu"
-            tabindex="0"
-            onmouseenter={() => {
-              if (tagSubmenuTimer) {
-                clearTimeout(tagSubmenuTimer);
-                tagSubmenuTimer = null;
-              }
-            }}
-            onmouseleave={() => {
-              tagSubmenuTimer = setTimeout(() => {
-                tagSubmenuOpen = false;
-              }, 150);
-            }}
-          >
-            {#each tagsStore.tags as tag (tag.id)}
-              {@const applied = connCtx.profile.tags.some((t) => t.id === tag.id)}
-              <CtxItem onclick={() => ctxToggleTag(tag.id)}>
-                {applied ? '✓ ' : ''}{tag.name}
-              </CtxItem>
-            {/each}
-          </div>
-        {/if}
-      </div>
+      <CtxSubmenuItem label="Tags">
+        {#each tagsStore.tags as tag (tag.id)}
+          {@const applied = connCtx.profile.tags.some((t) => t.id === tag.id)}
+          <CtxItem onclick={() => ctxToggleTag(tag.id)}>
+            {applied ? '✓ ' : ''}{tag.name}
+          </CtxItem>
+        {/each}
+      </CtxSubmenuItem>
       <CtxSep />
     {/if}
     <CtxItem
@@ -3431,47 +3342,6 @@
     50% {
       opacity: 0.4;
     }
-  }
-
-  /* ── Context menu ── */
-
-  .ctx-item--submenu {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: var(--spacing-1) var(--spacing-3);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family-ui);
-    color: var(--color-text-primary);
-    cursor: default;
-    -webkit-user-select: none;
-    user-select: none;
-    transition: background var(--transition-fast);
-  }
-  .ctx-item--submenu:hover {
-    background: var(--color-bg-active);
-  }
-
-  :global(.ctx-caret) {
-    flex-shrink: 0;
-    opacity: 0.6;
-  }
-
-  .ctx-submenu {
-    position: absolute;
-    top: -4px;
-    left: 100%;
-    min-width: 140px;
-    padding: var(--spacing-1) 0;
-    background: var(--color-bg-overlay);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-md);
-    z-index: 1;
   }
 
   /* ── Create modals ── */

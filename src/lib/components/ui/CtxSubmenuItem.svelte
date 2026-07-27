@@ -18,14 +18,14 @@
   function openSubmenu(): void {
     if (!triggerEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    left = rect.right + 2;
+    left = rect.right;
     top = rect.top;
     open = true;
     requestAnimationFrame(() => {
       if (!submenuEl) return;
       const { width, height } = submenuEl.getBoundingClientRect();
       if (left + width > window.innerWidth - 8) {
-        left = rect.left - width - 2;
+        left = rect.left - width;
       }
       if (top + height > window.innerHeight - 8) {
         top = Math.max(8, window.innerHeight - height - 8);
