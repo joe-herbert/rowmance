@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM connection_tags WHERE connection_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b123d332f575f6d06a83cb757b0731ccbaa1928028183740b2e0e99141232d0c"
+}

@@ -11,6 +11,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { useTags } from '$lib/stores/tags.svelte';
   import KeyboardShortcuts from '$lib/components/settings/KeyboardShortcuts.svelte';
   import ThemeEditor from '$lib/components/settings/ThemeEditor.svelte';
   import * as themesApi from '$lib/tauri/themes';
@@ -26,6 +27,7 @@
   import { ALL_THEME_VARS } from './theme-variables';
   import type { ThemeData } from '$lib/types';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
 
   type Section =
     | 'general'
@@ -33,8 +35,21 @@
     | 'editor'
     | 'keyboard'
     | 'connections'
+    | 'tags'
     | 'appearance'
     | 'ai';
+
+  const tagsStore = useTags();
+  let newTagName = $state('');
+  let newTagColor = $state('#4f46e5');
+
+  function moveTag(index: number, direction: -1 | 1): void {
+    const target = index + direction;
+    if (target < 0 || target >= tagsStore.tags.length) return;
+    const ids = tagsStore.tags.map((t) => t.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    tagsStore.reorder(ids);
+  }
 
   let activeSection = $state<Section>(lastActiveSection as Section);
   let settingsContentEl = $state<HTMLElement | null>(null);
@@ -289,7 +304,7 @@
 <div class="settings-page">
   <!-- Sidebar nav -->
   <nav class="settings-nav" aria-label="Settings sections">
-    {#each ['general', 'table-view', 'editor', 'keyboard', 'connections', 'appearance', 'ai'] as const as section}
+    {#each ['general', 'table-view', 'editor', 'keyboard', 'connections', 'tags', 'appearance', 'ai'] as const as section}
       <button
         class="nav-item"
         class:active={activeSection === section}
@@ -942,6 +957,94 @@
                   }
                   (e.currentTarget as HTMLInputElement).value = '';
                   e.preventDefault();
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    {:else if activeSection === 'tags'}
+      <h2 class="section-title">Tags</h2>
+
+      <div class="setting-group">
+        <div class="setting-row setting-row--block">
+          <div class="setting-label">
+            <span class="label-text">Manage Tags</span>
+            <span class="label-hint"
+              >Tags can be assigned to connections from the connection edit form.</span
+            >
+          </div>
+
+          {#if tagsStore.tags.length > 0}
+            <div class="tag-manage-list">
+              {#each tagsStore.tags as tag, index (tag.id)}
+                <div class="tag-manage-row">
+                  <div class="tag-reorder-btns">
+                    <button
+                      class="tag-reorder-btn"
+                      aria-label="Move {tag.name} up"
+                      disabled={index === 0}
+                      onclick={() => moveTag(index, -1)}
+                    >
+                      <ChevronIcon direction="up" width={11} height={11} strokeWidth={2.2} />
+                    </button>
+                    <button
+                      class="tag-reorder-btn"
+                      aria-label="Move {tag.name} down"
+                      disabled={index === tagsStore.tags.length - 1}
+                      onclick={() => moveTag(index, 1)}
+                    >
+                      <ChevronIcon direction="down" width={11} height={11} strokeWidth={2.2} />
+                    </button>
+                  </div>
+                  <input
+                    class="tag-color-input"
+                    type="color"
+                    value={tag.color ?? '#888888'}
+                    aria-label="Colour for {tag.name}"
+                    onchange={(e) =>
+                      tagsStore.update(tag.id, {
+                        name: tag.name,
+                        color: (e.currentTarget as HTMLInputElement).value,
+                      })}
+                  />
+                  <input
+                    class="tag-name-input"
+                    type="text"
+                    value={tag.name}
+                    aria-label="Name for tag"
+                    onchange={(e) =>
+                      tagsStore.update(tag.id, {
+                        name: (e.currentTarget as HTMLInputElement).value.trim() || tag.name,
+                        color: tag.color,
+                      })}
+                  />
+                  <button
+                    class="tag-remove"
+                    aria-label="Delete {tag.name}"
+                    onclick={() => tagsStore.remove(tag.id)}>×</button
+                  >
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="tag-create-row">
+            <input
+              class="tag-color-input"
+              type="color"
+              bind:value={newTagColor}
+              aria-label="Colour for new tag"
+            />
+            <input
+              class="tag-input"
+              type="text"
+              placeholder="New tag name…"
+              bind:value={newTagName}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' && newTagName.trim()) {
+                  tagsStore.create({ name: newTagName.trim(), color: newTagColor });
+                  newTagName = '';
                 }
               }}
             />
@@ -1650,6 +1753,81 @@
   .tag-input::placeholder {
     font-family: var(--font-family-ui);
     color: var(--color-text-muted);
+  }
+
+  .tag-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+    width: 100%;
+  }
+
+  .tag-manage-row,
+  .tag-create-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+
+  .tag-create-row {
+    margin-top: var(--spacing-2);
+  }
+
+  .tag-reorder-btns {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .tag-reorder-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 12px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-xs);
+  }
+
+  .tag-reorder-btn:hover:not(:disabled) {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
+  }
+
+  .tag-reorder-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .tag-color-input {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .tag-name-input {
+    flex: 1;
+    height: 24px;
+    padding: 0 var(--spacing-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .tag-name-input:focus {
+    border-color: var(--color-accent);
   }
 
   .soft-delete-row {

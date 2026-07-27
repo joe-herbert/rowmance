@@ -76,6 +76,7 @@ function makeProfile(overrides: Partial<ConnectionProfile> = {}): ConnectionProf
       systemDatabases: ['postgres', 'template0', 'template1'],
       fileExtensions: [],
     },
+    tags: [],
     ...overrides,
   };
 }

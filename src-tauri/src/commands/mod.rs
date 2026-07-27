@@ -15,6 +15,7 @@ pub mod settings;
 #[cfg(debug_assertions)]
 pub mod speed_analysis;
 pub mod ssh;
+pub mod tags;
 pub mod themes;
 pub mod updater;
 pub mod users;

@@ -8,7 +8,9 @@
   import { untrack } from 'svelte';
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useTags } from '$lib/stores/tags.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import MultiSelect from '$lib/components/ui/MultiSelect.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as keychainApi from '$lib/tauri/keychain';
   import { getDialect, getAllDialects, urlSchemeToDbType } from '$lib/stores/dialects.svelte';
@@ -35,6 +37,7 @@
   const { profile, groupId, onclose, ondelete }: Props = $props();
 
   const connectionStore = useConnections();
+  const tagsStore = useTags();
   const panelStore = usePanels();
 
   type Tab = 'basic' | 'ssh' | 'ssl' | 'advanced';
@@ -60,6 +63,11 @@
   let readOnly = $state(untrack(() => profile?.readOnly ?? false));
   let safeMode = $state(untrack(() => profile?.safeMode ?? false));
   let dontSave = $state(false);
+  let tagIds = $state<string[]>(untrack(() => profile?.tags.map((t) => t.id) ?? []));
+
+  const tagOptions = $derived(
+    tagsStore.tags.map((t) => ({ value: t.id, label: t.name, color: t.color })),
+  );
 
   // Read-only and Safe Mode are mutually exclusive — enabling one disables the other.
   function handleReadOnlyChange(checked: boolean): void {
@@ -272,6 +280,7 @@
       }
 
       await saveSecrets(savedId);
+      await connectionStore.setTags(savedId, tagIds);
       onclose();
     } catch (err) {
       saveError = errorMessage(err);
@@ -478,6 +487,19 @@
               {/if}
             </div>
           </div>
+        </div>
+
+        <div class="field">
+          <label for="conn-tags" class="label">Tags</label>
+          <MultiSelect
+            id="conn-tags"
+            bind:values={tagIds}
+            options={tagOptions}
+            size="md"
+            searchable={tagOptions.length > 8}
+            placeholder="No tags"
+            aria-label="Tags"
+          />
         </div>
 
         {#if isFileBased}

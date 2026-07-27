@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 use uuid::Uuid;
 
+use crate::commands::tags::{fetch_tags_for_connection, Tag};
 use crate::connections::pool_manager::ConnectionManager;
 use crate::connections::ssh_tunnel::SshTunnelManager;
 use crate::connections::types::DialectInfo;
@@ -62,40 +63,57 @@ pub struct ConnectionProfile {
     pub updated_at: String,
     #[serde(rename = "dialectInfo")]
     pub dialect_info: DialectInfo,
+    pub tags: Vec<Tag>,
 }
 
-impl From<ConnectionProfileRow> for ConnectionProfile {
-    fn from(r: ConnectionProfileRow) -> Self {
-        let dialect_info = DialectInfo::for_db_type(&r.db_type);
-        Self {
-            id: r.id,
-            group_id: r.group_id,
-            name: r.name,
-            db_type: r.db_type,
-            host: r.host,
-            port: r.port,
-            database: r.database,
-            username: r.username,
-            color: r.color,
-            read_only: r.read_only,
-            ssh_enabled: r.ssh_enabled,
-            ssh_host: r.ssh_host,
-            ssh_port: r.ssh_port,
-            ssh_user: r.ssh_user,
-            ssh_auth_type: r.ssh_auth_type,
-            ssh_key_path: r.ssh_key_path,
-            ssl_enabled: r.ssl_enabled,
-            ssl_ca_path: r.ssl_ca_path,
-            ssl_cert_path: r.ssl_cert_path,
-            ssl_key_path: r.ssl_key_path,
-            pool_max: r.pool_max,
-            ping_interval: r.ping_interval,
-            safe_mode: r.safe_mode,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-            dialect_info,
-        }
-    }
+/// Builds a `ConnectionProfile` from a DB row, fetching its attached tags.
+async fn to_profile(pool: &SqlitePool, r: ConnectionProfileRow) -> Result<ConnectionProfile, AppError> {
+    let tags = fetch_tags_for_connection(pool, &r.id).await?;
+    let dialect_info = DialectInfo::for_db_type(&r.db_type);
+    Ok(ConnectionProfile {
+        id: r.id,
+        group_id: r.group_id,
+        name: r.name,
+        db_type: r.db_type,
+        host: r.host,
+        port: r.port,
+        database: r.database,
+        username: r.username,
+        color: r.color,
+        read_only: r.read_only,
+        ssh_enabled: r.ssh_enabled,
+        ssh_host: r.ssh_host,
+        ssh_port: r.ssh_port,
+        ssh_user: r.ssh_user,
+        ssh_auth_type: r.ssh_auth_type,
+        ssh_key_path: r.ssh_key_path,
+        ssl_enabled: r.ssl_enabled,
+        ssl_ca_path: r.ssl_ca_path,
+        ssl_cert_path: r.ssl_cert_path,
+        ssl_key_path: r.ssl_key_path,
+        pool_max: r.pool_max,
+        ping_interval: r.ping_interval,
+        safe_mode: r.safe_mode,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        dialect_info,
+        tags,
+    })
+}
+
+/// Fetch a single connection profile by id, including its attached tags.
+/// Used by the `connections_set_tags` command after updating tag associations.
+pub(crate) async fn fetch_connection_profile(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<ConnectionProfile, AppError> {
+    let row =
+        sqlx::query_as::<_, ConnectionProfileRow>("SELECT * FROM connection_profiles WHERE id = ?")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    to_profile(pool, row).await
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -216,7 +234,11 @@ pub async fn connections_list(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    Ok(rows.into_iter().map(ConnectionProfile::from).collect())
+    let mut profiles = Vec::with_capacity(rows.len());
+    for row in rows {
+        profiles.push(to_profile(sqlite.inner(), row).await?);
+    }
+    Ok(profiles)
 }
 
 /// Create a new connection profile.
@@ -283,7 +305,7 @@ pub async fn connections_create(
 
     connections.register_name(&id, &row.name);
 
-    Ok(ConnectionProfile::from(row))
+    to_profile(sqlite.inner(), row).await
 }
 
 /// Update an existing connection profile.
@@ -346,7 +368,7 @@ pub async fn connections_update(
 
     connections.register_name(&id, &row.name);
 
-    Ok(ConnectionProfile::from(row))
+    to_profile(sqlite.inner(), row).await
 }
 
 /// Delete a connection profile.
@@ -833,6 +855,7 @@ pub async fn connections_connect_unsaved(
         created_at: now.clone(),
         updated_at: now,
         dialect_info,
+        tags: Vec::new(),
     })
 }
 
@@ -1067,7 +1090,7 @@ pub async fn connections_duplicate(
 
     connections.register_name(&new_id, &new_row.name);
 
-    Ok(ConnectionProfile::from(new_row))
+    to_profile(sqlite.inner(), new_row).await
 }
 
 // ── Import / Export types ─────────────────────────────────────────────────────
@@ -1649,7 +1672,7 @@ mod tests {
     async fn connection_profile_from_row_preserves_all_fields() {
         let pool = setup_db().await;
         let row = insert_profile(&pool, "conv-1", "ConvTest").await;
-        let profile = ConnectionProfile::from(row.clone());
+        let profile = to_profile(&pool, row.clone()).await.unwrap();
 
         assert_eq!(profile.id, row.id);
         assert_eq!(profile.name, row.name);

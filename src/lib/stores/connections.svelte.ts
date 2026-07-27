@@ -155,6 +155,13 @@ export function useConnections() {
       }
     },
 
+    /** Replace the full set of tags attached to a connection. */
+    async setTags(id: string, tagIds: string[]): Promise<ConnectionProfile> {
+      const updated = await api.setConnectionTags(id, tagIds);
+      profiles = profiles.map((p) => (p.id === id ? updated : p));
+      return updated;
+    },
+
     /** Delete a connection profile and disconnect if active. */
     async delete(id: string): Promise<void> {
       if (activeIds.has(id)) {

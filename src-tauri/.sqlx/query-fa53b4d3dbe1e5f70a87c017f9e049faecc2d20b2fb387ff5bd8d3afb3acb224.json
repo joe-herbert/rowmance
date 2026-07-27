@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO connection_tags (connection_id, tag_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "fa53b4d3dbe1e5f70a87c017f9e049faecc2d20b2fb387ff5bd8d3afb3acb224"
+}

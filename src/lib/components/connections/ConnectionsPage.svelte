@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useTags } from '$lib/stores/tags.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useToast } from '$lib/stores/toast.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
@@ -38,6 +39,7 @@
   import DotsIcon from '$lib/components/icons/DotsIcon.svelte';
 
   const connectionStore = useConnections();
+  const tagsStore = useTags();
   const panelStore = usePanels();
   const toast = useToast();
 
@@ -302,6 +304,14 @@
 
   function handleCloseAllTabs(profile: ConnectionProfile) {
     panelStore.closeItemsForConnection(profile.id);
+  }
+
+  async function handleToggleTag(profile: ConnectionProfile, tagId: string) {
+    const currentIds = profile.tags.map((t) => t.id);
+    const newIds = currentIds.includes(tagId)
+      ? currentIds.filter((id) => id !== tagId)
+      : [...currentIds, tagId];
+    await connectionStore.setTags(profile.id, newIds);
   }
 
   async function handleMoveToGroup(profile: ConnectionProfile, groupId: string | null) {
@@ -583,6 +593,23 @@
     >
       Close All Tabs
     </CtxItem>
+    {#if tagsStore.tags.length > 0 && !p.unsaved}
+      <CtxSep />
+      <CtxSubmenuItem label="Tags">
+        {#each tagsStore.tags as tag (tag.id)}
+          {@const applied = p.tags.some((t) => t.id === tag.id)}
+          <CtxItem
+            onclick={() => {
+              const prof = p;
+              cardCtx = null;
+              handleToggleTag(prof, tag.id);
+            }}
+          >
+            {applied ? '✓ ' : ''}{tag.name}
+          </CtxItem>
+        {/each}
+      </CtxSubmenuItem>
+    {/if}
     {#if hasGroups && !p.unsaved}
       <CtxSep />
       {@const otherGroups = connectionStore.groups.filter((g) => g.id !== p.groupId)}
@@ -813,6 +840,21 @@
       {/if}
     </div>
 
+    {#if profile.tags.length > 0}
+      <div class="card-tags">
+        {#each profile.tags as tag (tag.id)}
+          <span
+            class="card-tag-chip"
+            style="border-color:{tag.color ?? 'var(--color-border)'};color:{tag.color ??
+              'var(--color-text-secondary)'}"
+            title={tag.name}
+          >
+            {tag.name}
+          </span>
+        {/each}
+      </div>
+    {/if}
+
     <!-- Status -->
     <div class="card-status">
       <span
@@ -932,6 +974,7 @@
   /* ── Header ──────────────────────────────────────────────────────────────── */
 
   .page-header {
+    container-type: inline-size;
     display: flex;
     align-items: center;
     gap: var(--spacing-3);
@@ -965,8 +1008,18 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-2);
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     flex-wrap: wrap;
+  }
+
+  /* Below this width the actions can't sit inline with the title without
+     crowding it, so drop them onto their own full-width row instead —
+     they still wrap internally above (min-width: 0) so nothing overflows. */
+  @container (max-width: 720px) {
+    .header-actions {
+      flex-basis: 100%;
+    }
   }
 
   /* ── Search ──────────────────────────────────────────────────────────────── */
@@ -1308,6 +1361,25 @@
     font-size: var(--font-size-xs);
     color: var(--color-text-disabled);
     font-family: var(--font-family-mono);
+  }
+
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .card-tag-chip {
+    padding: 1px 5px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
   }
 
   /* ── Card status ─────────────────────────────────────────────────────────── */

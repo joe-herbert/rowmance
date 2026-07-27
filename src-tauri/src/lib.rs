@@ -350,6 +350,12 @@ pub fn run() {
             commands::connections::connections_copy_db_url_to_clipboard,
             commands::connections::connections_duplicate,
             commands::connections::connections_list_dialects,
+            commands::tags::tags_list,
+            commands::tags::tags_create,
+            commands::tags::tags_update,
+            commands::tags::tags_delete,
+            commands::tags::tags_reorder,
+            commands::tags::connections_set_tags,
             // Keychain
             commands::keychain::keychain_store,
             commands::keychain::keychain_retrieve,

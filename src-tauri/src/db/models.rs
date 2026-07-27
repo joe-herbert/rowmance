@@ -42,6 +42,14 @@ pub struct ConnectionGroupRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TagRow {
+    pub id: String,
+    pub name: String,
+    pub color: Option<String>,
+    pub position: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct QueryHistoryRow {
     pub id: String,
     pub connection_id: String,

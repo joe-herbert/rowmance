@@ -8,7 +8,7 @@
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import SmallChevronIcon from '$lib/components/icons/SmallChevronIcon.svelte';
 
-  type Option = { value: string; label: string };
+  type Option = { value: string; label: string; color?: string | null };
 
   interface Props {
     values?: string[];
@@ -288,6 +288,9 @@
         }}
       >
         <Checkbox size="sm" {checked} class="option-checkbox" onchange={() => {}} />
+        {#if opt.color}
+          <span class="option-dot" style="background:{opt.color}" aria-hidden="true"></span>
+        {/if}
         <span class="option-label">{opt.label}</span>
       </button>
     {/each}
@@ -578,5 +581,12 @@
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .option-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 </style>

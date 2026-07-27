@@ -119,6 +119,19 @@ export interface DialectInfo {
   fileExtensions: string[];
 }
 
+/** A tag that can be attached to any number of connections. */
+export interface Tag {
+  id: string;
+  name: string;
+  /** Hex colour string, e.g. '#4f46e5'. */
+  color: string | null;
+}
+
+export interface TagInput {
+  name: string;
+  color?: string | null;
+}
+
 /** A connection profile as stored in the local SQLite database. */
 export interface ConnectionProfile {
   id: string;
@@ -150,6 +163,7 @@ export interface ConnectionProfile {
   createdAt: string;
   updatedAt: string;
   dialectInfo: DialectInfo;
+  tags: Tag[];
   /** True for a connection opened via "Don't save this connection" — never
    * persisted to SQLite; disappears from the list once disconnected. */
   unsaved?: boolean;

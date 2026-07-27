@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useTags } from '$lib/stores/tags.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
@@ -44,6 +45,7 @@
   import SchemaIcon from '$lib/components/icons/SchemaIcon.svelte';
 
   const connectionStore = useConnections();
+  const tagsStore = useTags();
   const panelStore = usePanels();
   const settingsStore = useSettings();
   const toast = useToast();
@@ -174,6 +176,8 @@
 
   let moveToGroupSubmenuOpen = $state(false);
   let moveToGroupSubmenuTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+  let tagSubmenuOpen = $state(false);
+  let tagSubmenuTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
   interface ConfirmState {
     title: string;
@@ -578,6 +582,11 @@
       clearTimeout(moveToGroupSubmenuTimer);
       moveToGroupSubmenuTimer = null;
     }
+    tagSubmenuOpen = false;
+    if (tagSubmenuTimer) {
+      clearTimeout(tagSubmenuTimer);
+      tagSubmenuTimer = null;
+    }
   }
 
   function showTableCtx(e: MouseEvent, connectionId: string, database: string, table: TableInfo) {
@@ -898,6 +907,17 @@
       sslKeyPath: profile.sslKeyPath,
       poolMax: profile.poolMax,
     });
+  }
+
+  async function ctxToggleTag(tagId: string) {
+    if (!connCtx) return;
+    const { profile } = connCtx;
+    connCtx = null;
+    const currentIds = profile.tags.map((t) => t.id);
+    const newIds = currentIds.includes(tagId)
+      ? currentIds.filter((id) => id !== tagId)
+      : [...currentIds, tagId];
+    await connectionStore.setTags(profile.id, newIds);
   }
 
   async function ctxConnToggleReadOnly() {
@@ -1635,6 +1655,7 @@
       }}
     >
       <div class="conn-row-left">
+      <div class="conn-row-main">
         <!-- Chevron: rotates when expanded -->
         <button
           class="conn-chevron"
@@ -1729,6 +1750,23 @@
             </button>
           {/if}
         {/if}
+      </div>
+
+      <!-- Tag chips: wrap onto their own line(s), indented under the name -->
+      {#if profile.tags.length > 0}
+        <div class="conn-row-tags">
+          {#each profile.tags as tag (tag.id)}
+            <span
+              class="conn-tag-chip"
+              style="border-color:{tag.color ?? 'var(--color-border)'};color:{tag.color ??
+                'var(--color-text-secondary)'}"
+              title={tag.name}
+            >
+              {tag.name}
+            </span>
+          {/each}
+        </div>
+      {/if}
       </div>
 
       <!-- Hover actions -->
@@ -2409,6 +2447,55 @@
       {/if}
       <CtxSep />
     {/if}
+    {#if tagsStore.tags.length > 0 && !connCtx.profile.unsaved}
+      <div
+        class="ctx-item--submenu"
+        role="menuitem"
+        tabindex="0"
+        aria-haspopup="true"
+        onmouseenter={() => {
+          if (tagSubmenuTimer) {
+            clearTimeout(tagSubmenuTimer);
+            tagSubmenuTimer = null;
+          }
+          tagSubmenuOpen = true;
+        }}
+        onmouseleave={() => {
+          tagSubmenuTimer = setTimeout(() => {
+            tagSubmenuOpen = false;
+          }, 150);
+        }}
+      >
+        Tags
+        <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.5} class="ctx-caret" />
+        {#if tagSubmenuOpen}
+          <div
+            class="ctx-submenu"
+            role="menu"
+            tabindex="0"
+            onmouseenter={() => {
+              if (tagSubmenuTimer) {
+                clearTimeout(tagSubmenuTimer);
+                tagSubmenuTimer = null;
+              }
+            }}
+            onmouseleave={() => {
+              tagSubmenuTimer = setTimeout(() => {
+                tagSubmenuOpen = false;
+              }, 150);
+            }}
+          >
+            {#each tagsStore.tags as tag (tag.id)}
+              {@const applied = connCtx.profile.tags.some((t) => t.id === tag.id)}
+              <CtxItem onclick={() => ctxToggleTag(tag.id)}>
+                {applied ? '✓ ' : ''}{tag.name}
+              </CtxItem>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      <CtxSep />
+    {/if}
     <CtxItem
       onclick={() => {
         connCtx = null;
@@ -3007,9 +3094,25 @@
 
   .conn-row-left {
     display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .conn-row-main {
+    display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
+    min-width: 0;
+  }
+
+  .conn-row-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    /* Indent to align under the name: chevron (16) + gap (8) + dot (9) + gap (8). */
+    padding-left: 41px;
   }
 
   .conn-chevron {
@@ -3068,6 +3171,20 @@
 
   .conn-name:hover {
     color: var(--color-accent);
+  }
+
+  .conn-tag-chip {
+    flex-shrink: 0;
+    padding: 1px 3px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: .75rem;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 90px;
   }
 
   .lock-icon-btn,

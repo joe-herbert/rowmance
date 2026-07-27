@@ -124,3 +124,7 @@ export async function duplicateConnection(id: string): Promise<ConnectionProfile
 export async function listDialects(): Promise<DialectEntry[]> {
   return invoke<DialectEntry[]>('connections_list_dialects');
 }
+
+export async function setConnectionTags(id: string, tagIds: string[]): Promise<ConnectionProfile> {
+  return invoke<ConnectionProfile>('connections_set_tags', { id, tagIds });
+}
