@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE connection_profiles SET group_id = ?, position = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "91e4fd9f1a6155637866ae4ef3a611e80f7cc16dcb0be4af5faa3b9cb463f53c"
+}

@@ -33,6 +33,16 @@ export async function deleteConnection(id: string): Promise<void> {
   return invoke<void>('connections_delete', { id });
 }
 
+export interface ConnectionReorderItem {
+  id: string;
+  groupId: string | null;
+  position: number;
+}
+
+export async function reorderConnections(updates: ConnectionReorderItem[]): Promise<void> {
+  return invoke<void>('connections_reorder', { updates });
+}
+
 export async function testConnection(id: string, password?: string): Promise<ConnectionTestResult> {
   return invoke<ConnectionTestResult>('connections_test', { id, password });
 }

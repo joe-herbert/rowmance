@@ -160,6 +160,7 @@ export interface ConnectionProfile {
   /** When true, warn with a confirmation dialog before running any SQL that
    * would modify this connection's database (query editor, table view, etc.). */
   safeMode: boolean;
+  position: number;
   createdAt: string;
   updatedAt: string;
   dialectInfo: DialectInfo;

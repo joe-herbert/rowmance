@@ -14,6 +14,7 @@ let mockApi: {
   deleteConnection: ReturnType<typeof vi.fn>;
   connectToDatabase: ReturnType<typeof vi.fn>;
   disconnectFromDatabase: ReturnType<typeof vi.fn>;
+  reorderConnections: ReturnType<typeof vi.fn>;
 };
 
 function makeProfile(overrides: Partial<ConnectionProfile> = {}): ConnectionProfile {
@@ -41,6 +42,7 @@ function makeProfile(overrides: Partial<ConnectionProfile> = {}): ConnectionProf
     poolMax: 5,
     pingInterval: null,
     safeMode: false,
+    position: 0,
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
     dialectInfo: {
@@ -112,6 +114,7 @@ beforeEach(async () => {
     deleteConnection: vi.fn().mockResolvedValue(undefined),
     connectToDatabase: vi.fn().mockResolvedValue(undefined),
     disconnectFromDatabase: vi.fn().mockResolvedValue(undefined),
+    reorderConnections: vi.fn().mockResolvedValue(undefined),
   };
 
   vi.doMock('$lib/tauri/connections', () => mockApi);
@@ -178,6 +181,28 @@ describe('update()', () => {
 
     expect(store.profiles).toEqual([updated]);
     expect(store.profiles[0].name).toBe('Updated');
+  });
+});
+
+describe('reorder()', () => {
+  it('updates groupId and position in local state and calls the API', async () => {
+    const a = makeProfile({ id: 'a', groupId: null, position: 0 });
+    const b = makeProfile({ id: 'b', groupId: null, position: 1 });
+    mockApi.listConnections.mockResolvedValue([a, b]);
+    mockApi.listActiveConnections.mockResolvedValue([]);
+
+    const store = useConnections();
+    await store.load();
+    const updates = [
+      { id: 'b', groupId: null, position: 0 },
+      { id: 'a', groupId: 'g-1', position: 0 },
+    ];
+    await store.reorder(updates);
+
+    expect(store.getById('a')?.groupId).toBe('g-1');
+    expect(store.getById('a')?.position).toBe(0);
+    expect(store.getById('b')?.position).toBe(0);
+    expect(mockApi.reorderConnections).toHaveBeenCalledWith(updates);
   });
 });
 

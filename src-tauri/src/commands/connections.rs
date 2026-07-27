@@ -57,6 +57,7 @@ pub struct ConnectionProfile {
     pub ping_interval: Option<i64>,
     #[serde(rename = "safeMode")]
     pub safe_mode: bool,
+    pub position: i64,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "updatedAt")]
@@ -94,6 +95,7 @@ async fn to_profile(pool: &SqlitePool, r: ConnectionProfileRow) -> Result<Connec
         pool_max: r.pool_max,
         ping_interval: r.ping_interval,
         safe_mode: r.safe_mode,
+        position: r.position,
         created_at: r.created_at,
         updated_at: r.updated_at,
         dialect_info,
@@ -228,7 +230,7 @@ pub async fn connections_list(
     sqlite: State<'_, SqlitePool>,
 ) -> Result<Vec<ConnectionProfile>, AppError> {
     let rows = sqlx::query_as::<_, ConnectionProfileRow>(
-        "SELECT * FROM connection_profiles ORDER BY name",
+        "SELECT * FROM connection_profiles ORDER BY position, name",
     )
     .fetch_all(sqlite.inner())
     .await
@@ -369,6 +371,34 @@ pub async fn connections_update(
     connections.register_name(&id, &row.name);
 
     to_profile(sqlite.inner(), row).await
+}
+
+/// Reorder connection profiles, optionally moving them between groups.
+#[derive(Debug, Deserialize)]
+pub struct ConnectionReorderItem {
+    pub id: String,
+    #[serde(rename = "groupId")]
+    pub group_id: Option<String>,
+    pub position: i64,
+}
+
+#[tauri::command]
+pub async fn connections_reorder(
+    sqlite: State<'_, SqlitePool>,
+    updates: Vec<ConnectionReorderItem>,
+) -> Result<(), AppError> {
+    for item in &updates {
+        sqlx::query!(
+            "UPDATE connection_profiles SET group_id = ?, position = ? WHERE id = ?",
+            item.group_id,
+            item.position,
+            item.id
+        )
+        .execute(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    }
+    Ok(())
 }
 
 /// Delete a connection profile.
@@ -852,6 +882,7 @@ pub async fn connections_connect_unsaved(
         pool_max,
         ping_interval: input.ping_interval,
         safe_mode: input.safe_mode,
+        position: 0,
         created_at: now.clone(),
         updated_at: now,
         dialect_info,
@@ -1683,6 +1714,59 @@ mod tests {
         assert_eq!(profile.ssh_enabled, row.ssh_enabled);
         assert_eq!(profile.ssl_enabled, row.ssl_enabled);
         assert_eq!(profile.pool_max, row.pool_max);
+    }
+
+    // ── connections_reorder ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn reorder_connections_updates_positions_and_group() {
+        let pool = setup_db().await;
+        insert_profile(&pool, "cp-a", "A").await;
+        insert_profile(&pool, "cp-b", "B").await;
+        insert_group(&pool, "grp-1", "Group 1").await;
+
+        for item in [
+            ConnectionReorderItem {
+                id: "cp-a".to_string(),
+                group_id: Some("grp-1".to_string()),
+                position: 1,
+            },
+            ConnectionReorderItem {
+                id: "cp-b".to_string(),
+                group_id: None,
+                position: 0,
+            },
+        ] {
+            sqlx::query!(
+                "UPDATE connection_profiles SET group_id = ?, position = ? WHERE id = ?",
+                item.group_id,
+                item.position,
+                item.id
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let a = sqlx::query_as::<_, ConnectionProfileRow>(
+            "SELECT * FROM connection_profiles WHERE id = ?",
+        )
+        .bind("cp-a")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let b = sqlx::query_as::<_, ConnectionProfileRow>(
+            "SELECT * FROM connection_profiles WHERE id = ?",
+        )
+        .bind("cp-b")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(a.group_id.as_deref(), Some("grp-1"));
+        assert_eq!(a.position, 1);
+        assert_eq!(b.group_id, None);
+        assert_eq!(b.position, 0);
     }
 
     // ── connection_groups_update ──────────────────────────────────────────────

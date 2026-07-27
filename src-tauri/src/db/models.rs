@@ -29,6 +29,7 @@ pub struct ConnectionProfileRow {
     pub pool_max: i64,
     pub ping_interval: Option<i64>,
     pub safe_mode: bool,
+    pub position: i64,
     pub created_at: String,
     pub updated_at: String,
 }

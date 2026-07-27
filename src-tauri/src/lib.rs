@@ -333,6 +333,7 @@ pub fn run() {
             commands::connections::connections_create,
             commands::connections::connections_update,
             commands::connections::connections_delete,
+            commands::connections::connections_reorder,
             commands::connections::connections_test,
             commands::connections::connections_test_unsaved,
             commands::connections::connections_connect,

@@ -1458,16 +1458,100 @@
 
   // ── Derived groupings ─────────────────────────────────────────────────────
 
+  function sortByPosition(list: ConnectionProfile[]): ConnectionProfile[] {
+    return [...list].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+  }
+
   const grouped = $derived(() => {
     const groups = connectionStore.groups;
     const profiles = connectionStore.profiles;
-    const ungrouped = profiles.filter((p) => p.groupId === null);
+    const ungrouped = sortByPosition(profiles.filter((p) => p.groupId === null));
     const byGroup = new Map<string, ConnectionProfile[]>();
     for (const g of groups) byGroup.set(g.id, []);
     for (const p of profiles) {
       if (p.groupId !== null && byGroup.has(p.groupId)) byGroup.get(p.groupId)!.push(p);
     }
+    for (const [id, list] of byGroup) byGroup.set(id, sortByPosition(list));
     return { groups, ungrouped, byGroup };
+  });
+
+  // ── Connection reorder (drag) ─────────────────────────────────────────────
+
+  let connDragId = $state<string | null>(null);
+  let connIsDragging = $state(false);
+  let connDropTarget = $state<{ id: string; position: 'before' | 'after' } | null>(null);
+  let connPointerStart = { x: 0, y: 0 };
+  let suppressRowClick = false;
+
+  function onConnRowPointerDown(e: PointerEvent, profile: ConnectionProfile) {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    connPointerStart = { x: e.clientX, y: e.clientY };
+    connDragId = profile.id;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  }
+
+  function commitConnReorder(draggedId: string, target: { id: string; position: 'before' | 'after' }) {
+    const dragged = connectionStore.getById(draggedId);
+    const targetProfile = connectionStore.getById(target.id);
+    if (!dragged || !targetProfile) return;
+    const destGroupId = targetProfile.groupId;
+
+    const destList = (
+      destGroupId === null ? grouped().ungrouped : (grouped().byGroup.get(destGroupId) ?? [])
+    ).filter((p) => p.id !== draggedId);
+
+    const targetIdx = destList.findIndex((p) => p.id === target.id);
+    if (targetIdx === -1) return;
+    const insertIdx = target.position === 'before' ? targetIdx : targetIdx + 1;
+    const next = [...destList];
+    next.splice(insertIdx, 0, dragged);
+
+    connectionStore.reorder(next.map((p, i) => ({ id: p.id, groupId: destGroupId, position: i })));
+  }
+
+  $effect(() => {
+    if (!connDragId) return;
+
+    function onMove(e: PointerEvent) {
+      if (
+        !connIsDragging &&
+        (Math.abs(e.clientX - connPointerStart.x) > 4 || Math.abs(e.clientY - connPointerStart.y) > 4)
+      ) {
+        connIsDragging = true;
+      }
+      if (!connIsDragging) return;
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const rowEl = el?.closest<HTMLElement>('[data-conn-drag-id]');
+      const targetId = rowEl?.dataset.connDragId;
+      if (!targetId || targetId === connDragId) {
+        connDropTarget = null;
+        return;
+      }
+      const rect = rowEl!.getBoundingClientRect();
+      const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+      connDropTarget = { id: targetId, position };
+    }
+
+    function onUp() {
+      if (connIsDragging && connDropTarget) {
+        commitConnReorder(connDragId!, connDropTarget);
+        suppressRowClick = true;
+        setTimeout(() => (suppressRowClick = false), 0);
+      }
+      connDragId = null;
+      connIsDragging = false;
+      connDropTarget = null;
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
   });
 </script>
 
@@ -1627,14 +1711,23 @@
   {@const color = dotColor(profile)}
 
   <div class="conn-item">
+    {#if connDropTarget?.id === profile.id && connDropTarget.position === 'before'}
+      <div class="conn-drop-indicator" aria-hidden="true"></div>
+    {/if}
     <!-- Main row -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="conn-row"
       class:connected
       class:errored
+      class:dragging={connIsDragging && connDragId === profile.id}
+      data-conn-drag-id={profile.id}
       oncontextmenu={(e) => showConnCtx(e, profile)}
-      onclick={() => (connected ? toggleExpand(profile.id) : handleConnect(profile))}
+      onpointerdown={(e) => onConnRowPointerDown(e, profile)}
+      onclick={() => {
+        if (suppressRowClick) return;
+        connected ? toggleExpand(profile.id) : handleConnect(profile);
+      }}
       onkeydown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           connected ? toggleExpand(profile.id) : handleConnect(profile);
@@ -1773,6 +1866,9 @@
         </div>
       {/if}
     </div>
+    {#if connDropTarget?.id === profile.id && connDropTarget.position === 'after'}
+      <div class="conn-drop-indicator" aria-hidden="true"></div>
+    {/if}
 
     <!-- Schema tree when expanded -->
     {#if (expanded || filterQuery) && connected}
@@ -3001,6 +3097,18 @@
 
   .conn-row:hover {
     background: var(--color-bg-hover);
+  }
+
+  .conn-row.dragging {
+    opacity: 0.5;
+  }
+
+  .conn-drop-indicator {
+    height: 2px;
+    margin: 0 8px;
+    background: var(--color-accent);
+    border-radius: var(--radius-xs);
+    pointer-events: none;
   }
 
   .conn-row-left {

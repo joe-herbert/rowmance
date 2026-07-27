@@ -149,14 +149,19 @@
       : connectionStore.profiles,
   );
 
+  function sortByPosition(list: ConnectionProfile[]): ConnectionProfile[] {
+    return [...list].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+  }
+
   const grouped = $derived.by(() => {
     const groups = connectionStore.groups;
-    const ungrouped = filteredProfiles.filter((p) => p.groupId === null);
+    const ungrouped = sortByPosition(filteredProfiles.filter((p) => p.groupId === null));
     const byGroup = new Map<string, ConnectionProfile[]>();
     for (const g of groups) byGroup.set(g.id, []);
     for (const p of filteredProfiles) {
       if (p.groupId !== null && byGroup.has(p.groupId)) byGroup.get(p.groupId)!.push(p);
     }
+    for (const [id, list] of byGroup) byGroup.set(id, sortByPosition(list));
     return { groups, ungrouped, byGroup };
   });
 
@@ -165,6 +170,82 @@
   );
 
   const totalVisible = $derived(filteredProfiles.length);
+
+  // ── Card reorder (drag) ─────────────────────────────────────────────────────
+
+  let cardDragId = $state<string | null>(null);
+  let cardIsDragging = $state(false);
+  let cardDropTarget = $state<{ id: string; position: 'before' | 'after' } | null>(null);
+  let cardPointerStart = { x: 0, y: 0 };
+
+  function onCardPointerDown(e: PointerEvent, profile: ConnectionProfile) {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    cardPointerStart = { x: e.clientX, y: e.clientY };
+    cardDragId = profile.id;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+  }
+
+  function commitCardReorder(draggedId: string, target: { id: string; position: 'before' | 'after' }) {
+    const dragged = connectionStore.getById(draggedId);
+    const targetProfile = connectionStore.getById(target.id);
+    if (!dragged || !targetProfile) return;
+    const destGroupId = targetProfile.groupId;
+
+    const destList = (
+      destGroupId === null ? grouped.ungrouped : (grouped.byGroup.get(destGroupId) ?? [])
+    ).filter((p) => p.id !== draggedId);
+
+    const targetIdx = destList.findIndex((p) => p.id === target.id);
+    if (targetIdx === -1) return;
+    const insertIdx = target.position === 'before' ? targetIdx : targetIdx + 1;
+    const next = [...destList];
+    next.splice(insertIdx, 0, dragged);
+
+    connectionStore.reorder(next.map((p, i) => ({ id: p.id, groupId: destGroupId, position: i })));
+  }
+
+  $effect(() => {
+    if (!cardDragId) return;
+
+    function onMove(e: PointerEvent) {
+      if (
+        !cardIsDragging &&
+        (Math.abs(e.clientX - cardPointerStart.x) > 4 || Math.abs(e.clientY - cardPointerStart.y) > 4)
+      ) {
+        cardIsDragging = true;
+      }
+      if (!cardIsDragging) return;
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const cardEl = el?.closest<HTMLElement>('[data-card-drag-id]');
+      const targetId = cardEl?.dataset.cardDragId;
+      if (!targetId || targetId === cardDragId) {
+        cardDropTarget = null;
+        return;
+      }
+      const rect = cardEl!.getBoundingClientRect();
+      const position = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+      cardDropTarget = { id: targetId, position };
+    }
+
+    function onUp() {
+      if (cardIsDragging && cardDropTarget) {
+        commitCardReorder(cardDragId!, cardDropTarget);
+      }
+      cardDragId = null;
+      cardIsDragging = false;
+      cardDropTarget = null;
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  });
 
   // ── Connection state helpers ──────────────────────────────────────────────
 
@@ -794,7 +875,13 @@
     class="card"
     class:card--connected={connected}
     class:card--error={error}
+    class:card--dragging={cardIsDragging && cardDragId === profile.id}
+    class:card--drop-before={cardDropTarget?.id === profile.id &&
+      cardDropTarget.position === 'before'}
+    class:card--drop-after={cardDropTarget?.id === profile.id && cardDropTarget.position === 'after'}
     style="--conn-color: {profile.color ?? 'var(--color-accent)'}"
+    data-card-drag-id={profile.id}
+    onpointerdown={(e) => onCardPointerDown(e, profile)}
     oncontextmenu={(e) => openCardCtx(e, profile)}
   >
     <!-- Identity -->
@@ -1203,6 +1290,18 @@
     transition:
       border-color var(--transition-fast),
       box-shadow var(--transition-fast);
+  }
+
+  .card--dragging {
+    opacity: 0.5;
+  }
+
+  .card--drop-before {
+    box-shadow: inset 3px 0 0 var(--color-accent);
+  }
+
+  .card--drop-after {
+    box-shadow: inset -3px 0 0 var(--color-accent);
   }
 
   .card:hover {
