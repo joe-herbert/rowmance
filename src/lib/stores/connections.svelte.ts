@@ -177,6 +177,21 @@ export function useConnections() {
       await api.reorderConnections(updates);
     },
 
+    /**
+     * Reorder connection groups, optionally moving them to a new parent group.
+     * `updates` need only include the groups whose parent or position changed.
+     */
+    async reorderGroups(
+      updates: { id: string; parentId: string | null; position: number }[],
+    ): Promise<void> {
+      const byId = new Map(updates.map((u) => [u.id, u]));
+      groups = groups.map((g) => {
+        const u = byId.get(g.id);
+        return u ? { ...g, parentId: u.parentId, position: u.position } : g;
+      });
+      await api.reorderConnectionGroups(updates);
+    },
+
     /** Delete a connection profile and disconnect if active. */
     async delete(id: string): Promise<void> {
       if (activeIds.has(id)) {

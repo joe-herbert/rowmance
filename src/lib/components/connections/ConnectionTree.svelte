@@ -40,6 +40,11 @@
   import CtxSubmenuItem from '$lib/components/ui/CtxSubmenuItem.svelte';
   import type { ConnectionProfile, ConnectionGroup, TableInfo } from '$lib/types';
   import { qi, tableRef as dialectTableRef } from '$lib/utils/dialect';
+  import {
+    groupsByParent,
+    isDescendantGroup,
+    collectDescendantGroupIds,
+  } from '$lib/utils/connectionGroupTree';
   import { listen } from '@tauri-apps/api/event';
   import { useGlobalSearchCache } from '$lib/stores/globalSearchCache.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
@@ -472,9 +477,14 @@
 
   function deleteGroup(group: ConnectionGroup) {
     grpCtx = null;
+    const descendantIds = collectDescendantGroupIds(connectionStore.groups, group.id);
+    const subgroupNote =
+      descendantIds.size > 0
+        ? ` and its ${descendantIds.size} subgroup${descendantIds.size === 1 ? '' : 's'}`
+        : '';
     confirmState = {
       title: 'Delete Group',
-      message: `Delete group "${group.name}" and all its connections? This cannot be undone.`,
+      message: `Delete group "${group.name}"${subgroupNote}? Connections inside will be moved to Ungrouped. This cannot be undone.`,
       onconfirm: async () => {
         confirmState = null;
         try {
@@ -493,6 +503,7 @@
   let newGroupName = $state('');
   let newGroupError = $state('');
   let newGroupLoading = $state(false);
+  let newGroupParentId = $state<string | null>(null);
 
   // ── Import / Export ───────────────────────────────────────────────────────
 
@@ -540,10 +551,11 @@
     showExportDialog = true;
   }
 
-  function startCreateGroup() {
+  function startCreateGroup(parentId: string | null = null) {
     closeAllCtx();
     newGroupName = '';
     newGroupError = '';
+    newGroupParentId = parentId;
     createGroupModal = true;
   }
 
@@ -553,13 +565,25 @@
     newGroupLoading = true;
     newGroupError = '';
     try {
-      await connectionsApi.createConnectionGroup(name);
+      await connectionsApi.createConnectionGroup(name, newGroupParentId ?? undefined);
       await connectionStore.load();
       createGroupModal = false;
     } catch (e) {
       newGroupError = errorMessage(e);
     } finally {
       newGroupLoading = false;
+    }
+  }
+
+  async function ctxMoveGroupTo(parentId: string | null) {
+    if (!grpCtx) return;
+    const { group } = grpCtx;
+    grpCtx = null;
+    try {
+      await connectionsApi.updateConnectionGroup(group.id, { name: group.name, parentId });
+      await connectionStore.load();
+    } catch (e) {
+      errorModal = { title: 'Move Failed', message: errorMessage(e) };
     }
   }
 
@@ -592,6 +616,7 @@
 
   function showGrpCtx(e: MouseEvent, group: ConnectionGroup) {
     e.preventDefault();
+    e.stopPropagation();
     closeAllCtx();
     grpCtx = { x: e.clientX, y: e.clientY, group };
   }
@@ -1475,17 +1500,38 @@
     return { groups, ungrouped, byGroup };
   });
 
+  const groupTree = $derived(groupsByParent(connectionStore.groups));
+
+  /** Connection count for a group, including connections nested in its subgroups at any depth. */
+  function subtreeConnectionCount(groupId: string): number {
+    const direct = (grouped().byGroup.get(groupId) ?? []).filter(profileMatchesFilter).length;
+    const children = groupTree.get(groupId) ?? [];
+    return children.reduce((sum, child) => sum + subtreeConnectionCount(child.id), direct);
+  }
+
   // ── Connection reorder (drag) ─────────────────────────────────────────────
+
+  // Sentinel for `data-group-drop-id` on the Ungrouped section (dataset values
+  // can't hold `null` directly).
+  const UNGROUPED_DROP_ID = '__ungrouped__';
+
+  // `groupId: null` targets Ungrouped.
+  type ConnDropTarget =
+    | { kind: 'row'; id: string; position: 'before' | 'after' }
+    | { kind: 'group'; groupId: string | null };
 
   let connDragId = $state<string | null>(null);
   let connIsDragging = $state(false);
-  let connDropTarget = $state<{ id: string; position: 'before' | 'after' } | null>(null);
+  let connDropTarget = $state<ConnDropTarget | null>(null);
   let connPointerStart = { x: 0, y: 0 };
   let suppressRowClick = false;
 
   function onConnRowPointerDown(e: PointerEvent, profile: ConnectionProfile) {
     if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest('button')) return;
+    // Dragging can start from anywhere in the row, including its buttons
+    // (chevron, name, lock/safe-mode toggles, hover actions) — each button's
+    // own onclick checks `suppressRowClick` so a completed drag doesn't also
+    // fire that button's action.
     connPointerStart = { x: e.clientX, y: e.clientY };
     connDragId = profile.id;
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -1510,6 +1556,13 @@
     connectionStore.reorder(next.map((p, i) => ({ id: p.id, groupId: destGroupId, position: i })));
   }
 
+  function commitConnMoveToGroup(draggedId: string, groupId: string | null) {
+    const dragged = connectionStore.getById(draggedId);
+    if (!dragged || dragged.groupId === groupId) return;
+    const destList = groupId === null ? grouped().ungrouped : (grouped().byGroup.get(groupId) ?? []);
+    connectionStore.reorder([{ id: draggedId, groupId, position: destList.length }]);
+  }
+
   $effect(() => {
     if (!connDragId) return;
 
@@ -1525,18 +1578,30 @@
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const rowEl = el?.closest<HTMLElement>('[data-conn-drag-id]');
       const targetId = rowEl?.dataset.connDragId;
-      if (!targetId || targetId === connDragId) {
-        connDropTarget = null;
+      if (targetId && targetId !== connDragId) {
+        const rect = rowEl!.getBoundingClientRect();
+        const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+        connDropTarget = { kind: 'row', id: targetId, position };
         return;
       }
-      const rect = rowEl!.getBoundingClientRect();
-      const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-      connDropTarget = { id: targetId, position };
+
+      const groupEl = el?.closest<HTMLElement>('[data-group-drop-id]');
+      if (groupEl) {
+        const raw = groupEl.dataset.groupDropId!;
+        connDropTarget = { kind: 'group', groupId: raw === UNGROUPED_DROP_ID ? null : raw };
+        return;
+      }
+
+      connDropTarget = null;
     }
 
     function onUp() {
       if (connIsDragging && connDropTarget) {
-        commitConnReorder(connDragId!, connDropTarget);
+        if (connDropTarget.kind === 'row') {
+          commitConnReorder(connDragId!, connDropTarget);
+        } else {
+          commitConnMoveToGroup(connDragId!, connDropTarget.groupId);
+        }
         suppressRowClick = true;
         setTimeout(() => (suppressRowClick = false), 0);
       }
@@ -1631,8 +1696,13 @@
       {#if connectionStore.groups.length > 0 && grouped().ungrouped.length > 0}
         {@const filteredUngrouped = grouped().ungrouped.filter(profileMatchesFilter)}
         {#if filteredUngrouped.length > 0}
-          <div class="group-section">
-            <button class="group-row" onclick={() => (ungroupedExpanded = !ungroupedExpanded)}>
+          <div class="group-section" data-group-drop-id={UNGROUPED_DROP_ID}>
+            <button
+              class="group-row"
+              class:group-row--drop-target={connDropTarget?.kind === 'group' &&
+                connDropTarget.groupId === null}
+              onclick={() => (ungroupedExpanded = !ungroupedExpanded)}
+            >
               <span
                 class="chevron"
                 class:open={ungroupedExpanded || !!filterQuery}
@@ -1656,32 +1726,12 @@
         {/each}
       {/if}
 
-      <!-- Named groups -->
-      {#each grouped().groups as group (group.id)}
-        {@const isExpanded = expandedGroups.has(group.id)}
-        {@const groupProfiles = (grouped().byGroup.get(group.id) ?? []).filter(
-          profileMatchesFilter,
-        )}
-        {#if !filterQuery || groupProfiles.length > 0}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="group-section" oncontextmenu={(e) => showGrpCtx(e, group)}>
-            <button class="group-row" onclick={() => toggleGroup(group.id)}>
-              <span class="chevron" class:open={isExpanded || !!filterQuery} aria-hidden="true">
-                <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
-              </span>
-              <span class="group-name">{group.name}</span>
-              <span class="group-count">{groupProfiles.length}</span>
-            </button>
-            {#if isExpanded || filterQuery}
-              {#each groupProfiles as profile (profile.id)}
-                {@render connectionRow(profile)}
-              {/each}
-            {/if}
-          </div>
-        {/if}
+      <!-- Named groups (nested to any depth) -->
+      {#each groupTree.get(null) ?? [] as group (group.id)}
+        {@render groupNode(group)}
       {/each}
 
-      {#if filterQuery && grouped().ungrouped.filter(profileMatchesFilter).length === 0 && grouped().groups.every((g) => (grouped().byGroup.get(g.id) ?? []).filter(profileMatchesFilter).length === 0)}
+      {#if filterQuery && connectionStore.profiles.filter(profileMatchesFilter).length === 0}
         <div class="empty-state">
           <p>No matches for "{filterQuery}".</p>
         </div>
@@ -1702,6 +1752,82 @@
   </div>
 </div>
 
+<!-- ── Group node snippet (recursive — a folder can contain folders to any depth).
+     Nesting depth is never computed as a number: each level just wraps its
+     children in one more `.group-children` box, so the indent + guide line
+     compound naturally through plain DOM nesting, with no cap. ── -->
+{#snippet groupNode(group: ConnectionGroup)}
+  {@const isExpanded = expandedGroups.has(group.id)}
+  {@const groupProfiles = (grouped().byGroup.get(group.id) ?? []).filter(profileMatchesFilter)}
+  {@const childGroups = groupTree.get(group.id) ?? []}
+  {#if !filterQuery || groupProfiles.length > 0 || childGroups.length > 0}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="group-section" data-group-drop-id={group.id} oncontextmenu={(e) => showGrpCtx(e, group)}>
+      <button
+        class="group-row"
+        class:group-row--drop-target={connDropTarget?.kind === 'group' &&
+          connDropTarget.groupId === group.id}
+        onclick={() => toggleGroup(group.id)}
+      >
+        <span class="chevron" class:open={isExpanded || !!filterQuery} aria-hidden="true">
+          <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
+        </span>
+        <span class="group-name">{group.name}</span>
+        <span class="group-count">{subtreeConnectionCount(group.id)}</span>
+      </button>
+      {#if isExpanded || filterQuery}
+        <div class="group-children">
+          {#each childGroups as child (child.id)}
+            {@render groupNode(child)}
+          {/each}
+          {#each groupProfiles as profile (profile.id)}
+            {@render connectionRow(profile)}
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
+<!-- ── Move-to-group submenu snippet (recursive, mirrors folder nesting) ── -->
+{#snippet moveGroupSubmenu(parentId: string | null)}
+  {#each (groupTree.get(parentId) ?? []).filter(
+    (g) => grpCtx && g.id !== grpCtx.group.id && !isDescendantGroup(connectionStore.groups, g.id, grpCtx.group.id),
+  ) as g (g.id)}
+    {@const children = (groupTree.get(g.id) ?? []).filter(
+      (c) => grpCtx && c.id !== grpCtx.group.id && !isDescendantGroup(connectionStore.groups, c.id, grpCtx.group.id),
+    )}
+    {#if children.length > 0}
+      <CtxSubmenuItem label={g.name}>
+        <CtxItem onclick={() => ctxMoveGroupTo(g.id)}>Move here</CtxItem>
+        <CtxSep />
+        {@render moveGroupSubmenu(g.id)}
+      </CtxSubmenuItem>
+    {:else}
+      <CtxItem onclick={() => ctxMoveGroupTo(g.id)}>{g.name}</CtxItem>
+    {/if}
+  {/each}
+{/snippet}
+
+<!-- ── Move-to-group submenu for a connection (recursive, mirrors folder nesting) ── -->
+{#snippet connMoveToSubmenu(parentId: string | null, profile: ConnectionProfile)}
+  {#each groupTree.get(parentId) ?? [] as g (g.id)}
+    {@const children = groupTree.get(g.id) ?? []}
+    {@const isCurrent = g.id === profile.groupId}
+    {#if children.length > 0}
+      <CtxSubmenuItem label={g.name}>
+        {#if !isCurrent}
+          <CtxItem onclick={() => ctxMoveToGroup(g.id)}>Move here</CtxItem>
+          <CtxSep />
+        {/if}
+        {@render connMoveToSubmenu(g.id, profile)}
+      </CtxSubmenuItem>
+    {:else if !isCurrent}
+      <CtxItem onclick={() => ctxMoveToGroup(g.id)}>{g.name}</CtxItem>
+    {/if}
+  {/each}
+{/snippet}
+
 <!-- ── Connection row snippet ─────────────────────────────────────────────── -->
 {#snippet connectionRow(profile: ConnectionProfile)}
   {@const connected = isConnected(profile.id)}
@@ -1711,7 +1837,7 @@
   {@const color = dotColor(profile)}
 
   <div class="conn-item">
-    {#if connDropTarget?.id === profile.id && connDropTarget.position === 'before'}
+    {#if connDropTarget?.kind === 'row' && connDropTarget.id === profile.id && connDropTarget.position === 'before'}
       <div class="conn-drop-indicator" aria-hidden="true"></div>
     {/if}
     <!-- Main row -->
@@ -1742,6 +1868,7 @@
           class:open={expanded}
           onclick={(e) => {
             e.stopPropagation();
+            if (suppressRowClick) return;
             connected ? toggleExpand(profile.id) : handleConnect(profile);
           }}
           aria-label="{expanded ? 'Collapse' : 'Expand'} {profile.name}"
@@ -1769,6 +1896,7 @@
           class="conn-name"
           onclick={(e) => {
             e.stopPropagation();
+            if (suppressRowClick) return;
             connected
               ? panelStore.openInFocused({ kind: 'query_editor', connectionId: profile.id })
               : handleConnect(profile);
@@ -1798,6 +1926,7 @@
               class="lock-icon-btn"
               onclick={(e) => {
                 e.stopPropagation();
+                if (suppressRowClick) return;
                 connectionStore.toggleReadOnly(profile.id);
               }}
               title="Read-only — click to disable"
@@ -1820,6 +1949,7 @@
               class="lock-icon-btn"
               onclick={(e) => {
                 e.stopPropagation();
+                if (suppressRowClick) return;
                 connectionStore.toggleSafeMode(profile.id);
               }}
               title="Safe Mode — click to disable"
@@ -1856,6 +1986,7 @@
             class="action-btn"
             onclick={(e) => {
               e.stopPropagation();
+              if (suppressRowClick) return;
               editingProfile = profile;
             }}
             title="Edit connection"
@@ -1866,7 +1997,7 @@
         </div>
       {/if}
     </div>
-    {#if connDropTarget?.id === profile.id && connDropTarget.position === 'after'}
+    {#if connDropTarget?.kind === 'row' && connDropTarget.id === profile.id && connDropTarget.position === 'after'}
       <div class="conn-drop-indicator" aria-hidden="true"></div>
     {/if}
 
@@ -2171,7 +2302,7 @@
       showAddForm = true;
     }}>New Connection</CtxItem
   >
-  <CtxItem onclick={startCreateGroup}>New Group</CtxItem>
+  <CtxItem onclick={() => startCreateGroup()}>New Group</CtxItem>
   <CtxSep />
   <CtxItem onclick={handleImportConnections}>Import Connections…</CtxItem>
   {#if connectionStore.profiles.length > 0}
@@ -2339,6 +2470,13 @@
     <CtxItem
       onclick={() => {
         if (grpCtx) {
+          startCreateGroup(grpCtx.group.id);
+        }
+      }}>New Subgroup</CtxItem
+    >
+    <CtxItem
+      onclick={() => {
+        if (grpCtx) {
           renamingGroupId = grpCtx.group.id;
           renameValue = grpCtx.group.name;
           renameError = '';
@@ -2346,6 +2484,15 @@
         }
       }}>Rename Group</CtxItem
     >
+    {#if connectionStore.groups.length > 1}
+      <CtxSubmenuItem label="Move to Group">
+        {#if grpCtx.group.parentId !== null}
+          <CtxItem onclick={() => ctxMoveGroupTo(null)}>Root (Top Level)</CtxItem>
+          <CtxSep />
+        {/if}
+        {@render moveGroupSubmenu(null)}
+      </CtxSubmenuItem>
+    {/if}
     {#if (grouped().byGroup.get(grpCtx.group.id) ?? []).length > 0}
       <CtxSep />
       <CtxItem
@@ -2483,9 +2630,7 @@
     <CtxSep />
     {#if connectionStore.groups.length > 0 && !connCtx.profile.unsaved}
       <CtxSubmenuItem label="Move to Group">
-        {#each connectionStore.groups.filter((g) => g.id !== connCtx?.profile.groupId) as g (g.id)}
-          <CtxItem onclick={() => ctxMoveToGroup(g.id)}>{g.name}</CtxItem>
-        {/each}
+        {@render connMoveToSubmenu(null, connCtx.profile)}
       </CtxSubmenuItem>
       {#if connCtx.profile.groupId !== null}
         <CtxItem onclick={() => ctxMoveToGroup(null)}>Remove from Group</CtxItem>
@@ -3040,6 +3185,14 @@
     margin-bottom: 2px;
   }
 
+  /* Indent guide for nested content — one line per ancestor folder, compounding
+     naturally through DOM nesting so it works at any depth. */
+  .group-children {
+    margin-left: 11px;
+    padding-left: 9px;
+    border-left: 1px solid var(--color-border);
+  }
+
   .group-row {
     display: flex;
     align-items: center;
@@ -3061,6 +3214,12 @@
 
   .group-row:hover {
     background: var(--color-bg-hover);
+  }
+
+  .group-row--drop-target {
+    background: var(--color-bg-active);
+    outline: 1px dashed var(--color-accent);
+    outline-offset: -1px;
   }
 
   .group-name {

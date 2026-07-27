@@ -22,8 +22,14 @@
   import CtxSubmenuItem from '$lib/components/ui/CtxSubmenuItem.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
-  import type { ConnectionProfile } from '$lib/types';
+  import type { ConnectionProfile, ConnectionGroup } from '$lib/types';
+  import {
+    groupsByParent,
+    isDescendantGroup,
+    collectDescendantGroupIds,
+  } from '$lib/utils/connectionGroupTree';
   import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
+  import ChevronIcon from '$lib/components/icons/ChevronIcon.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import FolderPlusIcon from '$lib/components/icons/FolderPlusIcon.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
@@ -58,6 +64,14 @@
   let newGroupName = $state('');
   let newGroupError = $state('');
   let newGroupLoading = $state(false);
+  let newGroupParentId = $state<string | null>(null);
+
+  function startCreateGroup(parentId: string | null = null) {
+    newGroupName = '';
+    newGroupError = '';
+    newGroupParentId = parentId;
+    showCreateGroupModal = true;
+  }
 
   async function commitCreateGroup() {
     const name = newGroupName.trim();
@@ -65,7 +79,7 @@
     newGroupLoading = true;
     newGroupError = '';
     try {
-      await connectionsApi.createConnectionGroup(name);
+      await connectionsApi.createConnectionGroup(name, newGroupParentId ?? undefined);
       await connectionStore.load();
       showCreateGroupModal = false;
     } catch (e) {
@@ -73,6 +87,87 @@
     } finally {
       newGroupLoading = false;
     }
+  }
+
+  // ── Folder (group) UI state ───────────────────────────────────────────────
+  // Folders start expanded — `collapsedGroups` tracks the exceptions so that
+  // pre-existing groups (created before this feature) don't appear collapsed.
+
+  let collapsedGroups = $state<Set<string>>(new Set());
+
+  function toggleGroup(groupId: string) {
+    if (collapsedGroups.has(groupId)) {
+      collapsedGroups = new Set([...collapsedGroups].filter((id) => id !== groupId));
+    } else {
+      collapsedGroups = new Set([...collapsedGroups, groupId]);
+    }
+  }
+
+  interface FolderCtxMenu {
+    x: number;
+    y: number;
+    group: ConnectionGroup;
+  }
+  let folderCtx = $state<FolderCtxMenu | null>(null);
+
+  function openFolderCtx(e: MouseEvent, group: ConnectionGroup) {
+    e.preventDefault();
+    e.stopPropagation();
+    folderCtx = { x: e.clientX, y: e.clientY, group };
+  }
+
+  let renamingGroupId = $state<string | null>(null);
+  let renameValue = $state('');
+  let renameError = $state('');
+  let renameLoading = $state(false);
+
+  async function commitRenameGroup() {
+    if (!renamingGroupId || !renameValue.trim()) {
+      renamingGroupId = null;
+      return;
+    }
+    renameLoading = true;
+    renameError = '';
+    try {
+      await connectionsApi.updateConnectionGroup(renamingGroupId, { name: renameValue.trim() });
+      await connectionStore.load();
+      renamingGroupId = null;
+    } catch (e) {
+      renameError = errorMessage(e);
+    } finally {
+      renameLoading = false;
+    }
+  }
+
+  async function moveGroupTo(group: ConnectionGroup, parentId: string | null) {
+    try {
+      await connectionsApi.updateConnectionGroup(group.id, { name: group.name, parentId });
+      await connectionStore.load();
+    } catch (err) {
+      toast.addToast(errorMessage(err), 'error');
+    }
+  }
+
+  function deleteGroup(group: ConnectionGroup) {
+    folderCtx = null;
+    const descendantIds = collectDescendantGroupIds(connectionStore.groups, group.id);
+    const subgroupNote =
+      descendantIds.size > 0
+        ? ` and its ${descendantIds.size} subfolder${descendantIds.size === 1 ? '' : 's'}`
+        : '';
+    confirmState = {
+      title: 'Delete Folder',
+      message: `Delete folder "${group.name}"${subgroupNote}? Connections inside will be moved to Ungrouped. This cannot be undone.`,
+      onconfirm: async () => {
+        confirmState = null;
+        try {
+          await connectionsApi.deleteConnectionGroup(group.id);
+          await connectionStore.load();
+        } catch {
+          /* ignore */
+        }
+      },
+    };
   }
 
   interface ConfirmState {
@@ -165,17 +260,24 @@
     return { groups, ungrouped, byGroup };
   });
 
-  const visibleGroups = $derived(
-    grouped.groups.filter((g) => (grouped.byGroup.get(g.id) ?? []).length > 0),
-  );
+  const groupTree = $derived(groupsByParent(connectionStore.groups));
 
   const totalVisible = $derived(filteredProfiles.length);
 
   // ── Card reorder (drag) ─────────────────────────────────────────────────────
 
+  // Sentinel for `data-group-drop-id` on the Ungrouped section (dataset values
+  // can't hold `null` directly).
+  const UNGROUPED_DROP_ID = '__ungrouped__';
+
+  // `groupId: null` targets Ungrouped.
+  type CardDropTarget =
+    | { kind: 'row'; id: string; position: 'before' | 'after' }
+    | { kind: 'group'; groupId: string | null };
+
   let cardDragId = $state<string | null>(null);
   let cardIsDragging = $state(false);
-  let cardDropTarget = $state<{ id: string; position: 'before' | 'after' } | null>(null);
+  let cardDropTarget = $state<CardDropTarget | null>(null);
   let cardPointerStart = { x: 0, y: 0 };
 
   function onCardPointerDown(e: PointerEvent, profile: ConnectionProfile) {
@@ -205,6 +307,13 @@
     connectionStore.reorder(next.map((p, i) => ({ id: p.id, groupId: destGroupId, position: i })));
   }
 
+  function commitCardMoveToGroup(draggedId: string, groupId: string | null) {
+    const dragged = connectionStore.getById(draggedId);
+    if (!dragged || dragged.groupId === groupId) return;
+    const destList = groupId === null ? grouped.ungrouped : (grouped.byGroup.get(groupId) ?? []);
+    connectionStore.reorder([{ id: draggedId, groupId, position: destList.length }]);
+  }
+
   $effect(() => {
     if (!cardDragId) return;
 
@@ -220,18 +329,30 @@
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const cardEl = el?.closest<HTMLElement>('[data-card-drag-id]');
       const targetId = cardEl?.dataset.cardDragId;
-      if (!targetId || targetId === cardDragId) {
-        cardDropTarget = null;
+      if (targetId && targetId !== cardDragId) {
+        const rect = cardEl!.getBoundingClientRect();
+        const position = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+        cardDropTarget = { kind: 'row', id: targetId, position };
         return;
       }
-      const rect = cardEl!.getBoundingClientRect();
-      const position = e.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
-      cardDropTarget = { id: targetId, position };
+
+      const groupEl = el?.closest<HTMLElement>('[data-group-drop-id]');
+      if (groupEl) {
+        const raw = groupEl.dataset.groupDropId!;
+        cardDropTarget = { kind: 'group', groupId: raw === UNGROUPED_DROP_ID ? null : raw };
+        return;
+      }
+
+      cardDropTarget = null;
     }
 
     function onUp() {
       if (cardIsDragging && cardDropTarget) {
-        commitCardReorder(cardDragId!, cardDropTarget);
+        if (cardDropTarget.kind === 'row') {
+          commitCardReorder(cardDragId!, cardDropTarget);
+        } else {
+          commitCardMoveToGroup(cardDragId!, cardDropTarget.groupId);
+        }
       }
       cardDragId = null;
       cardIsDragging = false;
@@ -502,15 +623,7 @@
         {/if}
       </div>
 
-      <button
-        class="action-btn"
-        onclick={() => {
-          newGroupName = '';
-          newGroupError = '';
-          showCreateGroupModal = true;
-        }}
-        title="New folder"
-      >
+      <button class="action-btn" onclick={() => startCreateGroup()} title="New folder">
         <FolderPlusIcon width={13} height={13} />
         New Folder
       </button>
@@ -570,8 +683,15 @@
     {:else}
       <!-- Ungrouped connections -->
       {#if grouped.ungrouped.length > 0}
-        {#if grouped.groups.length > 0}
-          <div class="group-label">Ungrouped</div>
+        {#if connectionStore.groups.length > 0}
+          <div
+            class="group-label"
+            class:group-label--drop-target={cardDropTarget?.kind === 'group' &&
+              cardDropTarget.groupId === null}
+            data-group-drop-id={UNGROUPED_DROP_ID}
+          >
+            Ungrouped
+          </div>
         {/if}
         <div class="cards-grid">
           {#each grouped.ungrouped as profile (profile.id)}
@@ -580,21 +700,115 @@
         </div>
       {/if}
 
-      <!-- Groups -->
-      {#each visibleGroups as group (group.id)}
-        {@const groupProfiles = grouped.byGroup.get(group.id) ?? []}
-        {#if groupProfiles.length > 0}
-          <div class="group-label">{group.name}</div>
-          <div class="cards-grid">
-            {#each groupProfiles as profile (profile.id)}
-              {@render Card(profile)}
-            {/each}
-          </div>
-        {/if}
+      <!-- Folders (nested to any depth) -->
+      {#each groupTree.get(null) ?? [] as group (group.id)}
+        {@render groupSection(group)}
       {/each}
     {/if}
   </div>
 </div>
+
+<!-- ── Folder section snippet (recursive — a folder can contain folders to any depth).
+     Nesting depth is never computed as a number: each level just wraps its
+     children in one more `.group-children` box, so the indent + guide line
+     compound naturally through plain DOM nesting, with no cap. ── -->
+{#snippet groupSection(group: ConnectionGroup)}
+  {@const isCollapsed = collapsedGroups.has(group.id)}
+  {@const groupProfiles = grouped.byGroup.get(group.id) ?? []}
+  {@const childGroups = groupTree.get(group.id) ?? []}
+  {#if !filterQuery || groupProfiles.length > 0 || childGroups.length > 0}
+    <div class="group-block" data-group-drop-id={group.id}>
+      <button
+        class="group-label group-label--clickable"
+        class:group-label--drop-target={cardDropTarget?.kind === 'group' &&
+          cardDropTarget.groupId === group.id}
+        onclick={() => toggleGroup(group.id)}
+        oncontextmenu={(e) => openFolderCtx(e, group)}
+      >
+        <span class="chevron" class:open={!isCollapsed} aria-hidden="true">
+          <ChevronIcon direction="right" width={9} height={9} strokeWidth={2.2} />
+        </span>
+        {group.name}
+      </button>
+      {#if !isCollapsed}
+        <div class="group-children">
+          {#if groupProfiles.length > 0}
+            <div class="cards-grid">
+              {#each groupProfiles as profile (profile.id)}
+                {@render Card(profile)}
+              {/each}
+            </div>
+          {/if}
+          {#each childGroups as child (child.id)}
+            {@render groupSection(child)}
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
+<!-- ── Move-to submenus (recursive, mirror folder nesting) ── -->
+{#snippet connMoveToSubmenu(parentId: string | null, profile: ConnectionProfile)}
+  {#each groupTree.get(parentId) ?? [] as g (g.id)}
+    {@const children = groupTree.get(g.id) ?? []}
+    {@const isCurrent = g.id === profile.groupId}
+    {#if children.length > 0}
+      <CtxSubmenuItem label={g.name}>
+        {#if !isCurrent}
+          <CtxItem
+            onclick={() => {
+              cardCtx = null;
+              handleMoveToGroup(profile, g.id);
+            }}>Move here</CtxItem
+          >
+          <CtxSep />
+        {/if}
+        {@render connMoveToSubmenu(g.id, profile)}
+      </CtxSubmenuItem>
+    {:else if !isCurrent}
+      <CtxItem
+        onclick={() => {
+          cardCtx = null;
+          handleMoveToGroup(profile, g.id);
+        }}>{g.name}</CtxItem
+      >
+    {/if}
+  {/each}
+{/snippet}
+
+{#snippet folderMoveToSubmenu(parentId: string | null)}
+  {#each (groupTree.get(parentId) ?? []).filter(
+    (g) => folderCtx && g.id !== folderCtx.group.id && !isDescendantGroup(connectionStore.groups, g.id, folderCtx.group.id),
+  ) as g (g.id)}
+    {@const children = (groupTree.get(g.id) ?? []).filter(
+      (c) => folderCtx && c.id !== folderCtx.group.id && !isDescendantGroup(connectionStore.groups, c.id, folderCtx.group.id),
+    )}
+    {#if children.length > 0}
+      <CtxSubmenuItem label={g.name}>
+        <CtxItem
+          onclick={() => {
+            if (!folderCtx) return;
+            const group = folderCtx.group;
+            folderCtx = null;
+            moveGroupTo(group, g.id);
+          }}>Move here</CtxItem
+        >
+        <CtxSep />
+        {@render folderMoveToSubmenu(g.id)}
+      </CtxSubmenuItem>
+    {:else}
+      <CtxItem
+        onclick={() => {
+          if (!folderCtx) return;
+          const group = folderCtx.group;
+          folderCtx = null;
+          moveGroupTo(group, g.id);
+        }}>{g.name}</CtxItem
+      >
+    {/if}
+  {/each}
+{/snippet}
 
 <!-- ── Per-card context menu ─────────────────────────────────────────────── -->
 
@@ -693,20 +907,10 @@
     {/if}
     {#if hasGroups && !p.unsaved}
       <CtxSep />
-      {@const otherGroups = connectionStore.groups.filter((g) => g.id !== p.groupId)}
-      {#if otherGroups.length > 0}
+      {@const hasMoveTarget = connectionStore.groups.some((g) => g.id !== p.groupId)}
+      {#if hasMoveTarget}
         <CtxSubmenuItem label="Move to">
-          {#each otherGroups as g (g.id)}
-            <CtxItem
-              onclick={() => {
-                const prof = p;
-                cardCtx = null;
-                handleMoveToGroup(prof, g.id);
-              }}
-            >
-              {g.name}
-            </CtxItem>
-          {/each}
+          {@render connMoveToSubmenu(null, p)}
         </CtxSubmenuItem>
       {/if}
       {#if p.groupId !== null}
@@ -760,12 +964,13 @@
 
 <!-- New folder modal -->
 {#if showCreateGroupModal}
+  {@const modalTitle = newGroupParentId !== null ? 'New Subfolder' : 'New Folder'}
   <Modal
-    label="New Folder"
+    label={modalTitle}
     onbackdropclick={newGroupLoading ? undefined : () => (showCreateGroupModal = false)}
   >
     <div class="create-modal-card">
-      <div class="create-modal-title">New Folder</div>
+      <div class="create-modal-title">{modalTitle}</div>
       <div class="create-modal-body">
         <label class="field-label" for="new-group-name">Folder Name</label>
         <!-- svelte-ignore a11y_autofocus -->
@@ -800,6 +1005,108 @@
           disabled={newGroupLoading || !newGroupName.trim()}
         >
           {newGroupLoading ? 'Creating…' : 'Create Folder'}
+        </button>
+      </div>
+    </div>
+  </Modal>
+{/if}
+
+<!-- ── Folder context menu ────────────────────────────────────────────────── -->
+{#if folderCtx}
+  <ContextMenu x={folderCtx.x} y={folderCtx.y} open={true} onclose={() => (folderCtx = null)}>
+    <CtxItem
+      onclick={() => {
+        if (folderCtx) {
+          newConnectionGroupId = folderCtx.group.id;
+          folderCtx = null;
+          editingProfile = undefined;
+          showAddForm = true;
+        }
+      }}>New Connection in Folder</CtxItem
+    >
+    <CtxItem
+      onclick={() => {
+        if (folderCtx) {
+          const parentId = folderCtx.group.id;
+          folderCtx = null;
+          startCreateGroup(parentId);
+        }
+      }}>New Subfolder</CtxItem
+    >
+    <CtxItem
+      onclick={() => {
+        if (folderCtx) {
+          renamingGroupId = folderCtx.group.id;
+          renameValue = folderCtx.group.name;
+          renameError = '';
+          folderCtx = null;
+        }
+      }}>Rename Folder</CtxItem
+    >
+    {#if connectionStore.groups.length > 1}
+      <CtxSubmenuItem label="Move to Folder">
+        {#if folderCtx.group.parentId !== null}
+          <CtxItem
+            onclick={() => {
+              if (!folderCtx) return;
+              const group = folderCtx.group;
+              folderCtx = null;
+              moveGroupTo(group, null);
+            }}>Root (Top Level)</CtxItem
+          >
+          <CtxSep />
+        {/if}
+        {@render folderMoveToSubmenu(null)}
+      </CtxSubmenuItem>
+    {/if}
+    {#if (grouped.byGroup.get(folderCtx.group.id) ?? []).length > 0}
+      <CtxSep />
+      <CtxItem
+        onclick={() => {
+          if (folderCtx) {
+            const ids = (grouped.byGroup.get(folderCtx.group.id) ?? []).map((p) => p.id);
+            exportPreselectIds = ids;
+            folderCtx = null;
+            showExportDialog = true;
+          }
+        }}>Export Connections…</CtxItem
+      >
+    {/if}
+    <CtxSep />
+    <CtxItem danger onclick={() => folderCtx && deleteGroup(folderCtx.group)}>Delete Folder</CtxItem>
+  </ContextMenu>
+{/if}
+
+<!-- Rename folder modal -->
+{#if renamingGroupId}
+  <Modal label="Rename Folder" onbackdropclick={() => (renamingGroupId = null)}>
+    <div class="create-modal-card">
+      <div class="create-modal-title">Rename Folder</div>
+      <div class="create-modal-body">
+        <label class="field-label" for="rename-group-name">Folder Name</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          id="rename-group-name"
+          class="field-input"
+          type="text"
+          bind:value={renameValue}
+          disabled={renameLoading}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') commitRenameGroup();
+            if (e.key === 'Escape') renamingGroupId = null;
+          }}
+          autofocus
+        />
+        {#if renameError}
+          <ErrorMessage message={renameError} />
+        {/if}
+      </div>
+      <div class="create-modal-footer">
+        <button class="btn-secondary" onclick={() => (renamingGroupId = null)} disabled={renameLoading}>
+          Cancel
+        </button>
+        <button class="btn-primary" onclick={commitRenameGroup} disabled={renameLoading}>
+          {renameLoading ? 'Saving…' : 'Save'}
         </button>
       </div>
     </div>
@@ -876,9 +1183,12 @@
     class:card--connected={connected}
     class:card--error={error}
     class:card--dragging={cardIsDragging && cardDragId === profile.id}
-    class:card--drop-before={cardDropTarget?.id === profile.id &&
+    class:card--drop-before={cardDropTarget?.kind === 'row' &&
+      cardDropTarget.id === profile.id &&
       cardDropTarget.position === 'before'}
-    class:card--drop-after={cardDropTarget?.id === profile.id && cardDropTarget.position === 'after'}
+    class:card--drop-after={cardDropTarget?.kind === 'row' &&
+      cardDropTarget.id === profile.id &&
+      cardDropTarget.position === 'after'}
     style="--conn-color: {profile.color ?? 'var(--color-accent)'}"
     data-card-drag-id={profile.id}
     onpointerdown={(e) => onCardPointerDown(e, profile)}
@@ -1236,6 +1546,67 @@
 
   .group-label:first-child {
     margin-top: 0;
+  }
+
+  .group-block {
+    margin-top: var(--spacing-2);
+  }
+
+  .group-block:first-child {
+    margin-top: 0;
+  }
+
+  .group-block .group-label {
+    margin-top: 0;
+  }
+
+  /* Indent guide for nested folders — one line per ancestor, compounding
+     naturally through DOM nesting so it works at any depth. */
+  .group-children {
+    margin-left: 11px;
+    padding-left: 12px;
+    margin-top: var(--spacing-2);
+    border-left: 1px solid var(--color-border);
+  }
+
+  .group-label--clickable {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: background var(--transition-fast);
+  }
+
+  .group-label--clickable:hover {
+    background: var(--color-bg-hover);
+  }
+
+  .group-label--drop-target {
+    background: var(--color-bg-active);
+    outline: 1px dashed var(--color-accent);
+    outline-offset: -1px;
+  }
+
+  .group-label--clickable .chevron {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: var(--color-text-muted);
+  }
+
+  .group-label--clickable .chevron :global(svg) {
+    transition: transform var(--transition-fast);
+  }
+
+  .group-label--clickable .chevron.open :global(svg) {
+    transform: rotate(90deg);
   }
 
   .cards-grid {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { portal } from '$lib/actions/portal';
+  import { getContext, setContext } from 'svelte';
   import type { Snippet } from 'svelte';
 
   interface Props {
@@ -11,16 +12,50 @@
 
   let triggerEl = $state<HTMLButtonElement | null>(null);
   let submenuEl = $state<HTMLDivElement | null>(null);
-  let open = $state(false);
   let left = $state(0);
   let top = $state(0);
 
-  function openSubmenu(): void {
+  // A submenu can itself contain another CtxSubmenuItem (nested folders, etc).
+  // Because each level's popup is portaled to <body>, it's not a DOM descendant
+  // of its parent's popup, so plain mouseenter/mouseleave containment checks
+  // can't tell "the pointer moved into a deeper flyout" from "the pointer left
+  // entirely" — the parent would close (and unmount the child) the moment the
+  // pointer crosses into a nested popup. Instead, track two independent
+  // signals and stay open if either is true: the pointer is directly over
+  // this trigger/popup, or a descendant submenu (any depth) reports itself open.
+  const CTX_KEY = 'ctx-submenu-child-notify';
+  const parentNotify = getContext<{ notifyOpen: () => void; notifyClose: () => void } | undefined>(
+    CTX_KEY,
+  );
+  setContext(CTX_KEY, {
+    notifyOpen: () => {
+      openDescendantCount += 1;
+    },
+    notifyClose: () => {
+      openDescendantCount = Math.max(0, openDescendantCount - 1);
+    },
+  });
+
+  let pointerInside = $state(false);
+  let openDescendantCount = $state(0);
+  const open = $derived(pointerInside || openDescendantCount > 0);
+
+  let closeTimer: ReturnType<typeof setTimeout> | null = null;
+  let wasOpen = false;
+
+  $effect(() => {
+    if (open !== wasOpen) {
+      wasOpen = open;
+      if (open) parentNotify?.notifyOpen();
+      else parentNotify?.notifyClose();
+    }
+  });
+
+  function positionSubmenu(): void {
     if (!triggerEl) return;
     const rect = triggerEl.getBoundingClientRect();
     left = rect.right;
     top = rect.top;
-    open = true;
     requestAnimationFrame(() => {
       if (!submenuEl) return;
       const { width, height } = submenuEl.getBoundingClientRect();
@@ -33,14 +68,24 @@
     });
   }
 
-  function handleTriggerMouseleave(e: MouseEvent): void {
-    if (submenuEl?.contains(e.relatedTarget as Node)) return;
-    open = false;
+  function handleEnter(): void {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    const wasInside = pointerInside;
+    pointerInside = true;
+    if (!wasInside) positionSubmenu();
   }
 
-  function handleSubmenuMouseleave(e: MouseEvent): void {
-    if (triggerEl?.contains(e.relatedTarget as Node)) return;
-    open = false;
+  function handleLeave(): void {
+    if (closeTimer) clearTimeout(closeTimer);
+    // Small grace period so a fast diagonal move from the trigger into the
+    // popup (or between a popup and its own nested submenu) doesn't flicker.
+    closeTimer = setTimeout(() => {
+      pointerInside = false;
+      closeTimer = null;
+    }, 150);
   }
 </script>
 
@@ -48,8 +93,8 @@
   bind:this={triggerEl}
   class="ctx-submenu-trigger"
   role="menuitem"
-  onmouseenter={openSubmenu}
-  onmouseleave={handleTriggerMouseleave}
+  onmouseenter={handleEnter}
+  onmouseleave={handleLeave}
 >
   <span>{label}</span>
   <span class="arrow">›</span>
@@ -64,8 +109,8 @@
     data-ctx-submenu
     style:left="{left}px"
     style:top="{top}px"
-    onmouseenter={() => (open = true)}
-    onmouseleave={handleSubmenuMouseleave}
+    onmouseenter={handleEnter}
+    onmouseleave={handleLeave}
     use:portal
   >
     {@render children()}

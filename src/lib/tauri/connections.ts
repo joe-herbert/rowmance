@@ -103,6 +103,16 @@ export async function deleteConnectionGroup(id: string): Promise<void> {
   return invoke<void>('connection_groups_delete', { id });
 }
 
+export interface GroupReorderItem {
+  id: string;
+  parentId: string | null;
+  position: number;
+}
+
+export async function reorderConnectionGroups(updates: GroupReorderItem[]): Promise<void> {
+  return invoke<void>('connection_groups_reorder', { updates });
+}
+
 export interface ConnectionImportResult {
   imported: number;
 }

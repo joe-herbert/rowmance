@@ -934,6 +934,8 @@ pub struct ConnectionGroupInput {
     pub name: String,
     #[serde(rename = "parentId")]
     pub parent_id: Option<String>,
+    #[serde(default)]
+    pub position: Option<i64>,
 }
 
 /// Create a new connection group.
@@ -985,9 +987,10 @@ pub async fn connection_groups_update(
     input: ConnectionGroupInput,
 ) -> Result<ConnectionGroup, AppError> {
     sqlx::query!(
-        "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+        "UPDATE connection_groups SET name = ?, parent_id = ?, position = COALESCE(?, position) WHERE id = ?",
         input.name,
         input.parent_id,
+        input.position,
         id
     )
     .execute(sqlite.inner())
@@ -1777,9 +1780,10 @@ mod tests {
         insert_group(&pool, "g-upd", "Old Name").await;
 
         sqlx::query!(
-            "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+            "UPDATE connection_groups SET name = ?, parent_id = ?, position = COALESCE(?, position) WHERE id = ?",
             "New Name",
             None::<String>,
+            None::<i64>,
             "g-upd"
         )
         .execute(&pool)
@@ -1803,9 +1807,10 @@ mod tests {
         insert_group(&pool, "g-child", "Child").await;
 
         sqlx::query!(
-            "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+            "UPDATE connection_groups SET name = ?, parent_id = ?, position = COALESCE(?, position) WHERE id = ?",
             "Child",
             "g-parent",
+            None::<i64>,
             "g-child"
         )
         .execute(&pool)
@@ -1840,9 +1845,10 @@ mod tests {
 
         // Update clearing parent_id.
         sqlx::query!(
-            "UPDATE connection_groups SET name = ?, parent_id = ?, position = 0 WHERE id = ?",
+            "UPDATE connection_groups SET name = ?, parent_id = ?, position = COALESCE(?, position) WHERE id = ?",
             "Nested",
             None::<String>,
+            None::<i64>,
             "g-nested"
         )
         .execute(&pool)
@@ -1857,6 +1863,39 @@ mod tests {
                 .unwrap();
 
         assert!(row.parent_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_group_preserves_position_when_omitted() {
+        let pool = setup_db().await;
+        insert_group(&pool, "g-pos", "Positioned").await;
+
+        sqlx::query!("UPDATE connection_groups SET position = ? WHERE id = ?", 3i64, "g-pos")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Rename without supplying a position — it should not reset to 0.
+        sqlx::query!(
+            "UPDATE connection_groups SET name = ?, parent_id = ?, position = COALESCE(?, position) WHERE id = ?",
+            "Renamed",
+            None::<String>,
+            None::<i64>,
+            "g-pos"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let row =
+            sqlx::query_as::<_, ConnectionGroupRow>("SELECT * FROM connection_groups WHERE id = ?")
+                .bind("g-pos")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(row.name, "Renamed");
+        assert_eq!(row.position, 3);
     }
 
     // ── connection_groups_reorder ─────────────────────────────────────────────

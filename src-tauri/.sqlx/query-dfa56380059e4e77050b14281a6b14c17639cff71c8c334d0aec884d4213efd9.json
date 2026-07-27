@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE connection_groups SET name = ?, parent_id = ?, position = COALESCE(?, position) WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "dfa56380059e4e77050b14281a6b14c17639cff71c8c334d0aec884d4213efd9"
+}
