@@ -143,8 +143,13 @@
   let draggingId = $state<string | null>(null);
   let dragPreviewX = $state(0);
   let dragPreviewY = $state(0);
+  let dragSwapTargetId = $state<string | null>(null);
   let dragOffsetX = 0;
   let dragOffsetY = 0;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragStartW = 0;
+  let dragStartH = 0;
 
   function startDrag(widgetId: string, e: PointerEvent) {
     const widget = dashboard?.widgets.find((w) => w.id === widgetId);
@@ -156,6 +161,11 @@
     draggingId = widgetId;
     dragPreviewX = widget.x;
     dragPreviewY = widget.y;
+    dragStartX = widget.x;
+    dragStartY = widget.y;
+    dragStartW = widget.w;
+    dragStartH = widget.h;
+    dragSwapTargetId = null;
   }
 
   $effect(() => {
@@ -170,24 +180,63 @@
       );
     }
 
+    // The widget whose own cells the pointer is actually over right now —
+    // this is the swap target, not merely whatever the dragged rect covers.
+    function widgetUnderPointer(cell: { x: number; y: number }) {
+      return others.find(
+        (o) => cell.x >= o.x && cell.x < o.x + o.w && cell.y >= o.y && cell.y < o.y + o.h,
+      );
+    }
+
     function onMove(e: PointerEvent) {
       const cell = pointerToCell(e);
       if (!cell) return;
       const nx = Math.max(1, Math.min(13 - widget!.w, cell.x - dragOffsetX));
       const ny = Math.max(1, cell.y - dragOffsetY);
-      if (!wouldOverlap(nx, ny)) {
-        dragPreviewX = nx;
-        dragPreviewY = ny;
+      const hovered = widgetUnderPointer(cell);
+      if (hovered) {
+        // Swapping — keep the dragged widget's slot at its original position
+        // rather than following the pointer onto the target.
+        dragSwapTargetId = hovered.id;
+        dragPreviewX = dragStartX;
+        dragPreviewY = dragStartY;
+      } else {
+        dragSwapTargetId = null;
+        if (!wouldOverlap(nx, ny)) {
+          dragPreviewX = nx;
+          dragPreviewY = ny;
+        }
       }
     }
     function onUp() {
       if (draggingId) {
-        dashboardsStore.updateWidget(dashboardId, draggingId, {
-          x: dragPreviewX,
-          y: dragPreviewY,
-        });
+        if (dragSwapTargetId) {
+          const target = dashboard?.widgets.find((w) => w.id === dragSwapTargetId);
+          if (target) {
+            // Swap both position and size so each widget exactly fills the
+            // other's former slot — otherwise mismatched sizes would overlap.
+            dashboardsStore.updateWidget(dashboardId, draggingId, {
+              x: target.x,
+              y: target.y,
+              w: target.w,
+              h: target.h,
+            });
+            dashboardsStore.updateWidget(dashboardId, dragSwapTargetId, {
+              x: dragStartX,
+              y: dragStartY,
+              w: dragStartW,
+              h: dragStartH,
+            });
+          }
+        } else {
+          dashboardsStore.updateWidget(dashboardId, draggingId, {
+            x: dragPreviewX,
+            y: dragPreviewY,
+          });
+        }
       }
       draggingId = null;
+      dragSwapTargetId = null;
     }
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -536,6 +585,7 @@
         {#each dashboard.widgets as widget (widget.id)}
           {@const isDragging = draggingId === widget.id}
           {@const isResizing = resizingId === widget.id}
+          {@const isSwapTarget = dragSwapTargetId === widget.id}
           {@const pushed = resizingId ? resizePushPreview.get(widget.id) : undefined}
           {@const slotX = isDragging ? dragPreviewX : (pushed?.x ?? widget.x)}
           {@const slotY = isDragging ? dragPreviewY : (pushed?.y ?? widget.y)}
@@ -546,6 +596,7 @@
             class:is-dragging={isDragging}
             class:is-resizing={isResizing}
             class:is-pushed={!!pushed}
+            class:is-swap-target={isSwapTarget}
             data-widget-id={widget.id}
             style="grid-column: {slotX} / span {slotW}; grid-row: {slotY} / span {slotH};"
           >
@@ -925,6 +976,12 @@
       opacity var(--transition-fast),
       outline var(--transition-fast),
       grid-row var(--transition-fast);
+  }
+
+  .widget-slot.is-swap-target {
+    outline: 2px dashed var(--dash-accent, var(--color-accent));
+    outline-offset: 2px;
+    border-radius: var(--radius-md);
   }
 
   /* ── Empty state ─────────────────────────────────────────────────────────── */
