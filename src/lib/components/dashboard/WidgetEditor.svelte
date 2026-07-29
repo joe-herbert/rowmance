@@ -11,6 +11,7 @@
     SingleValueFormat,
   } from '$lib/types';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useShortcuts } from '$lib/stores/shortcuts.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { BUILTIN_VARIABLES } from '$lib/utils/widget-templates';
   import Select from '$lib/components/ui/Select.svelte';
@@ -21,6 +22,7 @@
   import CodeBracketsIcon from '$lib/components/icons/CodeBracketsIcon.svelte';
   import QueryBuilderModal from '$lib/components/editor/QueryBuilderModal.svelte';
   import type { SchemaTable, SchemaColumn } from '$lib/components/editor/QueryBuilderModal.svelte';
+  import SqlEditor from '$lib/components/editor/SqlEditor.svelte';
 
   interface Props {
     widget?: DashboardWidget | null;
@@ -32,6 +34,7 @@
   const { widget, dashboardVariables, onsave, oncancel }: Props = $props();
 
   const connectionsStore = useConnections();
+  const shortcutsStore = useShortcuts();
 
   // ── Form state ────────────────────────────────────────────────────────────
 
@@ -57,7 +60,9 @@
 
   // ── Insert built-in variable ──────────────────────────────────────────────
 
-  let sqlTextareaEl = $state<HTMLTextAreaElement | undefined>(undefined);
+  let sqlEditorRef = $state<
+    { insertAtCursor: (_text: string) => void; format: () => void } | undefined
+  >(undefined);
   let showVariableMenu = $state(false);
   let variableMenuX = $state(0);
   let variableMenuY = $state(0);
@@ -96,21 +101,17 @@
 
   function insertVariable(name: string) {
     const token = `{{${name}}}`;
-    const el = sqlTextareaEl;
-    if (el) {
-      const start = el.selectionStart ?? sql.length;
-      const end = el.selectionEnd ?? sql.length;
-      sql = sql.slice(0, start) + token + sql.slice(end);
-      const caret = start + token.length;
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(caret, caret);
-      });
+    if (sqlEditorRef) {
+      sqlEditorRef.insertAtCursor(token);
     } else {
       sql += token;
     }
     showVariableMenu = false;
   }
+
+  const sqlDialect = $derived(
+    connectionsStore.getById(connectionId)?.dialectInfo?.editorDialect ?? 'sql',
+  );
 
   // ── Query Builder state ───────────────────────────────────────────────────
 
@@ -264,6 +265,14 @@
           <label class="field-label" for="widget-sql">SQL</label>
           <div class="sql-label-actions">
             <button
+              class="builder-open-btn"
+              type="button"
+              onclick={() => sqlEditorRef?.format()}
+              title={`Format SQL (${shortcutsStore.getShortcut('QUERY_FORMAT')})`}
+            >
+              <CodeBracketsIcon size={11} /> Format
+            </button>
+            <button
               bind:this={variableMenuBtnEl}
               class="builder-open-btn"
               type="button"
@@ -283,15 +292,14 @@
           </div>
         </div>
         {#if qbError}<p class="builder-error">{qbError}</p>{/if}
-        <textarea
-          bind:this={sqlTextareaEl}
-          id="widget-sql"
-          class="sql-input"
-          placeholder="SELECT COUNT(*) FROM ..."
-          rows="5"
-          spellcheck={false}
+        <SqlEditor
+          bind:this={sqlEditorRef}
           bind:value={sql}
-        ></textarea>
+          dialect={sqlDialect}
+          id="widget-sql"
+          placeholder="SELECT COUNT(*) FROM ..."
+          minHeight="110px"
+        />
       </div>
 
       <ContextMenu
@@ -503,23 +511,6 @@
 
   .field-input--sm {
     width: 100px;
-  }
-
-  .sql-input {
-    padding: var(--spacing-2);
-    font-size: 12.5px;
-    font-family: var(--font-family-mono);
-    background: var(--color-bg-input, var(--color-bg-secondary));
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-text-primary);
-    resize: vertical;
-    outline: none;
-    line-height: 1.6;
-  }
-
-  .sql-input:focus {
-    border-color: var(--color-accent);
   }
 
   .display-types {

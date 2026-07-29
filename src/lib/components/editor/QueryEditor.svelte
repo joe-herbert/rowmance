@@ -48,7 +48,7 @@
     type CompletionSource,
   } from '@codemirror/autocomplete';
   import { lintGutter, setDiagnostics } from '@codemirror/lint';
-  import { format as sqlFormat } from 'sql-formatter';
+  import { formatSqlText } from '$lib/utils/sqlFormat';
   import { buildDiagnosticsFromErrors } from '$lib/utils/sqlErrorHighlight';
   import type { QueryResult, ForeignKeyInfo, VirtualRelation } from '$lib/types';
   import { executeMultiQuery, explainQuery } from '$lib/tauri/query';
@@ -1787,111 +1787,12 @@
   }
 
   // Returns true if the line contains a -- comment outside string literals.
-  // Used to avoid joining subsequent SQL onto the same line as a -- comment.
-  function lineHasLineComment(line: string): boolean {
-    const stripped = line
-      .replace(/'(?:[^'\\]|\\.)*'/g, '')
-      .replace(/"(?:[^"\\]|\\.)*"/g, '')
-      .replace(/`[^`]*/g, '');
-    return stripped.includes('--');
-  }
-
   function formatQuery(): void {
     if (!editorView) return;
-    const dialect = sqlDialect();
-    const s = settingsStore.settings;
-    const style = s.formatStyle ?? (s.formatCompact ? 'compact' : 'expanded');
-    const options: Parameters<typeof sqlFormat>[1] = {
-      language: dialect as NonNullable<Parameters<typeof sqlFormat>[1]>['language'],
-      keywordCase: s.formatKeywordCase,
-      indentStyle: style === 'comfortable' ? 'standard' : s.formatIndentStyle,
-      linesBetweenQueries: s.formatLinesBetweenQueries,
-    };
-    try {
-      let formatted = sqlFormat(sqlText, options);
-      if (style === 'compact') {
-        const separator = ';\n' + '\n'.repeat(s.formatLinesBetweenQueries);
-        // Process line by line so -- comment lines are never joined with the
-        // following SQL (which would hide the SQL inside the comment).
-        const resultParts: string[] = [];
-        let sqlBuffer = '';
-        const flushBuffer = () => {
-          const trimmed = sqlBuffer.trim();
-          if (!trimmed) return;
-          resultParts.push(trimmed.replace(/\s*;\s*/g, separator).trimEnd());
-          sqlBuffer = '';
-        };
-        for (const rawLine of [...formatted.split(/\n/), null]) {
-          const line = rawLine !== null ? rawLine.trim() : null;
-          if (line === null) {
-            flushBuffer();
-            break;
-          }
-          if (!line) continue;
-          if (lineHasLineComment(line)) {
-            // Append comment line to buffer, then flush — nothing can follow on same line
-            sqlBuffer += (sqlBuffer ? ' ' : '') + line;
-            flushBuffer();
-          } else {
-            sqlBuffer += (sqlBuffer ? ' ' : '') + line;
-          }
-        }
-        formatted = resultParts.join('\n').trim();
-      } else if (style === 'comfortable') {
-        const THRESHOLD = 80;
-        const blankSep = '\n'.repeat(s.formatLinesBetweenQueries + 1);
-        formatted = formatted
-          .split(/\n{2,}/)
-          .map((stmt) => {
-            const trimmed = stmt.trim();
-            const origLines = trimmed.split('\n');
-            const flatLines = origLines.map((l) => l.trim()).filter(Boolean);
-            if (!flatLines.some(lineHasLineComment)) {
-              const oneLiner = flatLines.join(' ');
-              return oneLiner.length <= THRESHOLD ? oneLiner : trimmed;
-            }
-            // Block contains -- comments: process each SQL run between comments
-            // with the same threshold logic as the comment-free path.
-            const resultParts: string[] = [];
-            let sqlFlat: string[] = [];
-            let sqlOrig: string[] = [];
-            for (const origLine of [...origLines, null]) {
-              const flat = origLine !== null ? origLine.trim() : null;
-              if (flat === null || (flat && lineHasLineComment(flat))) {
-                if (sqlFlat.length > 0) {
-                  const oneLiner = sqlFlat.join(' ');
-                  resultParts.push(
-                    oneLiner.length <= THRESHOLD ? oneLiner : sqlOrig.join('\n').trim(),
-                  );
-                  sqlFlat = [];
-                  sqlOrig = [];
-                }
-                if (flat) resultParts.push(flat);
-              } else if (flat) {
-                sqlFlat.push(flat);
-                sqlOrig.push(origLine as string);
-              }
-            }
-            return resultParts.join('\n');
-          })
-          .join(blankSep);
-      }
-      editorView.dispatch({
-        changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
-      });
-    } catch {
-      // sql-formatter can fail on certain comment styles. Strip block/line
-      // comments and retry — this preserves structure even if comments are lost.
-      try {
-        const stripped = sqlText.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '');
-        const formatted = sqlFormat(stripped, options);
-        editorView.dispatch({
-          changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
-        });
-      } catch {
-        // If even the stripped version fails, leave content unchanged.
-      }
-    }
+    const formatted = formatSqlText(sqlText, sqlDialect(), settingsStore.settings);
+    editorView.dispatch({
+      changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
+    });
   }
 
   async function runExplain(): Promise<void> {
