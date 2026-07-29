@@ -23,6 +23,7 @@
   import OracleClientHelp from '$lib/components/connections/OracleClientHelp.svelte';
   import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
   import DashboardPanel from '$lib/components/dashboard/DashboardPanel.svelte';
+  import AiChatTabPanel from '$lib/components/ai/AiChatTabPanel.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
 
   interface Props {
@@ -125,6 +126,10 @@
   {:else if panel.content.kind === 'dashboard'}
     {#key panel.content.dashboardId}
       <DashboardPanel dashboardId={panel.content.dashboardId} />
+    {/key}
+  {:else if panel.content.kind === 'ai_chat'}
+    {#key panel.content.conversationId}
+      <AiChatTabPanel conversationId={panel.content.conversationId} />
     {/key}
   {:else}
     <!-- Empty panel placeholder -->

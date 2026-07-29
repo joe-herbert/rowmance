@@ -1,4 +1,5 @@
 import type { PanelKind } from '$lib/types';
+import { useAiChat } from '$lib/stores/aiChat.svelte';
 
 export function panelLabel(
   content: PanelKind,
@@ -36,6 +37,8 @@ export function panelLabel(
       return 'Connections';
     case 'dashboard':
       return dashboardsById.get(content.dashboardId)?.name ?? 'Dashboard';
+    case 'ai_chat':
+      return useAiChat().getById(content.conversationId)?.title ?? 'AI Chat';
     case 'empty':
       return 'Empty';
   }

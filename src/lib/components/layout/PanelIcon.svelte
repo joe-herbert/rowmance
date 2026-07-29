@@ -10,6 +10,7 @@
   import InfoCircleIcon from '$lib/components/icons/InfoCircleIcon.svelte';
   import ConnectionsIcon from '$lib/components/icons/ConnectionsIcon.svelte';
   import BoxIcon from '$lib/components/icons/BoxIcon.svelte';
+  import ChatIcon from '$lib/components/icons/ChatIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -58,6 +59,8 @@
   <InfoCircleIcon width={size} height={size} />
 {:else if content.kind === 'connections'}
   <ConnectionsIcon {size} />
+{:else if content.kind === 'ai_chat'}
+  <ChatIcon width={size} height={size} />
 {:else if content.kind === 'dashboard'}
   <span class="dash-icon" style="width:{size}px;height:{size}px">
     {@html dashboardsById.get(content.dashboardId)?.icon ?? ''}

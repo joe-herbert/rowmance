@@ -394,6 +394,13 @@ pub fn run() {
             commands::dashboards::dashboards_touch_viewed,
             commands::dashboards::dashboards_delete,
             // Saved queries (SQLite, kept for migration purposes)
+            commands::ai_chat::ai_chat_find_conversation,
+            commands::ai_chat::ai_chat_list_conversations,
+            commands::ai_chat::ai_chat_create_conversation,
+            commands::ai_chat::ai_chat_rename_conversation,
+            commands::ai_chat::ai_chat_delete_conversation,
+            commands::ai_chat::ai_chat_get_messages,
+            commands::ai_chat::ai_chat_add_message,
             commands::saved_queries::saved_queries_list_folders,
             commands::saved_queries::saved_queries_create_folder,
             commands::saved_queries::saved_queries_update_folder,

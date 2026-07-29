@@ -335,6 +335,40 @@ export function isDeleteWithoutWhere(sql: string): boolean {
   return !/\bwhere\b/i.test(stripQuotedAndComments(trimmed));
 }
 
+const SQL_LEADING_KEYWORDS =
+  /^(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER|DROP|TRUNCATE|EXPLAIN|SHOW|USE|BEGIN|COMMIT|ROLLBACK|MERGE|CALL|GRANT|REVOKE|DESCRIBE|REPLACE|PRAGMA|SET)\b/i;
+
+/**
+ * If the whole text is a single fenced code block (e.g. a model wrapping its
+ * SQL reply in ```sql ... ```), return the unfenced body. Otherwise return the
+ * text trimmed as-is.
+ */
+export function stripSqlCodeFence(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:sql)?\s*\n([\s\S]*?)\n?```$/i);
+  return (fenced ? fenced[1] : trimmed).trim();
+}
+
+/**
+ * Heuristic for whether an AI "generate query" reply is actually raw SQL, as
+ * opposed to a prose answer (e.g. the user followed up asking it to explain
+ * the query). Used to pick SQL-highlighted vs markdown rendering for a reply,
+ * since a model can ignore the "SQL only" system prompt on follow-up turns.
+ */
+export function looksLikeSql(text: string): boolean {
+  const body = stripSqlCodeFence(text);
+  if (!body || !SQL_LEADING_KEYWORDS.test(body)) return false;
+
+  // Prose sentence boundary — lowercase letter, then a period, then whitespace,
+  // then an uppercase letter — is essentially never found in raw SQL.
+  if (/[a-z]\.\s+[A-Z]/.test(body)) return false;
+
+  // Markdown structure (headings, bullet/numbered lists) means this is prose.
+  if (/^#{1,6}\s|^[-*]\s|^\d+\.\s/m.test(body)) return false;
+
+  return true;
+}
+
 export function isMutatingStatement(sql: string): boolean {
   const keyword = sql.trim().split(/\s+/)[0]?.toUpperCase();
   return [

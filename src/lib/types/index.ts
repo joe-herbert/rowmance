@@ -509,6 +509,7 @@ export type PanelKind =
   | { kind: 'oracle_client_help' }
   | { kind: 'connections' }
   | { kind: 'dashboard'; dashboardId: string }
+  | { kind: 'ai_chat'; conversationId: string }
   | { kind: 'empty' };
 
 export interface PanelState {
@@ -535,6 +536,27 @@ export interface SplitChild {
 
 export type AiProvider = 'none' | 'claude' | 'openai' | 'gemini' | 'ollama' | 'custom';
 export type AiContextLevel = 'none' | 'structure' | 'structure_and_data';
+
+export type AiChatMode = 'generate' | 'explain' | 'describe' | 'summarise';
+
+export interface AiConversation {
+  id: string;
+  mode: AiChatMode;
+  contextKey: string | null;
+  title: string;
+  connectionId: string | null;
+  database: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiMessage {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
 
 export type SoftDeleteConditionType = 'not-null' | 'is-null' | 'true' | 'false' | 'equals';
 

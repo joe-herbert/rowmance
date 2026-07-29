@@ -1,3 +1,4 @@
+pub mod ai_chat;
 pub mod connections;
 pub mod dashboards;
 pub mod erd;

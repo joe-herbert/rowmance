@@ -77,6 +77,8 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
       return true;
     case 'dashboard':
       return b.kind === 'dashboard' && a.dashboardId === b.dashboardId;
+    case 'ai_chat':
+      return b.kind === 'ai_chat' && a.conversationId === b.conversationId;
     case 'empty':
       return true;
   }

@@ -36,6 +36,8 @@
   import RelationsPanel from '$lib/components/relations/RelationsPanel.svelte';
   import DashboardsPanel from '$lib/components/dashboard/DashboardsPanel.svelte';
   import JsonViewerPanel from '$lib/components/json/JsonViewerPanel.svelte';
+  import AiChatPanel from '$lib/components/ai/AiChatPanel.svelte';
+  import ChatIcon from '$lib/components/icons/ChatIcon.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -53,6 +55,7 @@
     | 'relations'
     | 'json'
     | 'dashboards'
+    | 'ai-chat'
     | null;
 
   interface Props {
@@ -984,6 +987,21 @@
     >
       <GridIcon width={13} height={13} />
     </button>
+
+    <button
+      class="tab-btn"
+      class:active={activePanel === 'ai-chat'}
+      role="tab"
+      aria-selected={activePanel === 'ai-chat'}
+      aria-controls="panel-ai-chat"
+      title="AI Chats"
+      onclick={(e) => {
+        e.stopPropagation();
+        selectPanel('ai-chat');
+      }}
+    >
+      <ChatIcon width={15} height={15} />
+    </button>
   </div>
 
   <!-- Panel content -->
@@ -1379,6 +1397,10 @@
     {:else if activePanel === 'dashboards'}
       <div id="panel-dashboards" role="tabpanel" aria-label="Dashboards" class="relations-tabpanel">
         <DashboardsPanel />
+      </div>
+    {:else if activePanel === 'ai-chat'}
+      <div id="panel-ai-chat" role="tabpanel" aria-label="AI Chats" class="relations-tabpanel">
+        <AiChatPanel />
       </div>
     {/if}
   </div>

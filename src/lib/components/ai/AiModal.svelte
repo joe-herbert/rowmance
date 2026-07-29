@@ -4,6 +4,7 @@
   Explain mode: automatically explains the provided SQL on open.
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import Modal from '$lib/components/Modal.svelte';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -12,14 +13,20 @@
     explainQuery,
     describeTable,
     summariseResult,
+    buildFollowUpSystemPrompt as buildFollowUpSystemPromptForMode,
     type AiConfig,
   } from '$lib/ai/service';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useAiChat } from '$lib/stores/aiChat.svelte';
+  import type { AiConversation, AiMessage } from '$lib/types';
   import { defaultDialectInfo } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
+  import { fnv1aHash } from '$lib/utils/hash';
+  import { looksLikeSql, stripSqlCodeFence } from '$lib/utils/sql';
   import { marked } from 'marked';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import CopyButton from '$lib/components/ui/CopyButton.svelte';
 
   interface GenerateProps {
     mode: 'generate';
@@ -71,6 +78,8 @@
 
   const dialectInfo = $derived(connections.getById(props.connectionId)?.dialectInfo);
 
+  const aiChat = useAiChat();
+
   let prompt = $state('');
   let result = $state('');
   let isLoading = $state(false);
@@ -78,18 +87,129 @@
   let promptEl = $state<HTMLTextAreaElement | undefined>(undefined);
   let hasRun = $state(false);
 
+  // Persisted conversation this modal is showing/continuing (null until the first
+  // exchange completes and is saved, or an existing thread for this source is resumed).
+  let conversation = $state<AiConversation | null>(null);
+  let messages = $state<AiMessage[]>([]);
+  let resumedExisting = $state(false);
+
+  let followUpText = $state('');
+  let followUpLoading = $state(false);
+  let followUpError = $state<string | null>(null);
+  let pendingQuestion = $state<string | null>(null);
+  let bodyEl = $state<HTMLDivElement | undefined>(undefined);
+
+  async function scrollToBottom() {
+    await tick();
+    bodyEl?.scrollTo({ top: bodyEl.scrollHeight });
+  }
+
+  // Follow-up exchanges beyond the first user/assistant pair (which `result` already shows).
+  const followUpPairs = $derived.by(() => {
+    const rest = messages.slice(2);
+    const pairs: { question: string; answer: string }[] = [];
+    for (let i = 0; i < rest.length; i += 2) {
+      pairs.push({ question: rest[i]?.content ?? '', answer: rest[i + 1]?.content ?? '' });
+    }
+    return pairs;
+  });
+
+  const latestAssistantContent = $derived(
+    followUpPairs.length > 0 ? followUpPairs[followUpPairs.length - 1].answer : result,
+  );
+
+  function computeContextKey(): string | null {
+    if (props.mode === 'describe') {
+      return `${props.connectionId}:${props.database}:${props.tableName}`;
+    }
+    if (props.mode === 'explain' || props.mode === 'summarise') {
+      return `${props.connectionId}:${props.database}:${fnv1aHash(props.sql)}`;
+    }
+    return null;
+  }
+
+  function computeTitle(): string {
+    if (props.mode === 'describe') return `Describe: ${props.tableName}`;
+    if (props.mode === 'explain') return `Explain: ${props.sql.slice(0, 60)}`;
+    if (props.mode === 'summarise') return `Summarise: ${props.sql.slice(0, 60)}`;
+    return `Generate: ${prompt.slice(0, 60)}`;
+  }
+
+  async function buildFollowUpSystemPrompt(): Promise<string> {
+    return buildFollowUpSystemPromptForMode(
+      props.mode,
+      config,
+      props.connectionId,
+      props.database,
+      dialectInfo ?? defaultDialectInfo,
+    );
+  }
+
+  async function persistFirstExchange(firstUserMessage: string) {
+    if (props.mode === 'generate' && conversation) return; // regenerate: don't duplicate
+    const { conversation: conv, messages: msgs } = await aiChat.create({
+      mode: props.mode,
+      contextKey: computeContextKey(),
+      title: computeTitle(),
+      connectionId: props.connectionId,
+      database: props.database,
+      firstUserMessage,
+      firstAssistantMessage: result,
+    });
+    conversation = conv;
+    messages = msgs;
+  }
+
+  async function initConversation(forceNew = false) {
+    if (!forceNew) {
+      const existing = await aiChat.find(
+        props.mode,
+        computeContextKey(),
+        props.connectionId,
+        props.database,
+      );
+      if (existing) {
+        conversation = existing;
+        messages = await aiChat.ensureMessagesLoaded(existing.id);
+        result = messages[1]?.content ?? '';
+        resumedExisting = true;
+        return;
+      }
+    }
+    resumedExisting = false;
+    conversation = null;
+    messages = [];
+    if (props.mode === 'explain') await runExplain();
+    else if (props.mode === 'describe') await runDescribe();
+    else if (props.mode === 'summarise') await runSummarise();
+  }
+
+  async function sendFollowUp() {
+    if (!followUpText.trim() || !conversation || followUpLoading) return;
+    followUpLoading = true;
+    followUpError = null;
+    const text = followUpText.trim();
+    followUpText = '';
+    pendingQuestion = text;
+    await scrollToBottom();
+    try {
+      const systemPrompt = await buildFollowUpSystemPrompt();
+      await aiChat.sendFollowUp(conversation.id, config, systemPrompt, text);
+      messages = aiChat.getMessages(conversation.id);
+    } catch (err) {
+      followUpError = errorMessage(err);
+      followUpText = text;
+    } finally {
+      followUpLoading = false;
+      pendingQuestion = null;
+      await scrollToBottom();
+    }
+  }
+
   $effect(() => {
-    if (props.mode === 'explain' && !hasRun) {
+    if (props.mode !== 'generate' && !hasRun) {
       hasRun = true;
-      runExplain();
-    }
-    if (props.mode === 'describe' && !hasRun) {
-      hasRun = true;
-      runDescribe();
-    }
-    if (props.mode === 'summarise' && !hasRun) {
-      hasRun = true;
-      runSummarise();
+      initConversation();
     }
   });
 
@@ -112,6 +232,7 @@
         props.database,
         dialectInfo ?? defaultDialectInfo,
       );
+      await persistFirstExchange(prompt);
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -132,6 +253,7 @@
         props.database,
         dialectInfo ?? defaultDialectInfo,
       );
+      await persistFirstExchange(`Explain this SQL:\n\n${props.sql}`);
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -146,6 +268,7 @@
     result = '';
     try {
       result = await summariseResult(config, props.sql, props.columns, props.rows);
+      await persistFirstExchange(`Summarise the results of:\n\n${props.sql}`);
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -167,6 +290,7 @@
         props.database,
         dialectInfo ?? defaultDialectInfo,
       );
+      await persistFirstExchange(`Describe the table "${props.tableName}".`);
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -202,7 +326,7 @@
       </button>
     </header>
 
-    <div class="ai-modal-body">
+    <div class="ai-modal-body" bind:this={bodyEl}>
       {#if props.mode === 'generate' && config.contextLevel === 'none'}
         <div class="ai-context-warning">
           AI has no schema context — results may be inaccurate. Enable schema access in Settings →
@@ -252,10 +376,72 @@
                 : 'Summarising…'}
         </div>
       {:else if result}
-        {#if props.mode === 'generate'}
-          <pre class="ai-result"><SqlHighlight sql={result} /></pre>
-        {:else}
-          <div class="ai-explain-result markdown-body">{@html marked(result)}</div>
+        <div class="ai-response">
+          {#if props.mode === 'generate' && looksLikeSql(result)}
+            <pre class="ai-result"><SqlHighlight sql={stripSqlCodeFence(result)} /></pre>
+            <CopyButton text={stripSqlCodeFence(result)} />
+          {:else}
+            <div class="ai-explain-result markdown-body">{@html marked(result)}</div>
+            <CopyButton text={result} />
+          {/if}
+        </div>
+
+        {#if resumedExisting}
+          <div class="ai-resumed-note">Continuing a previous conversation about this.</div>
+        {/if}
+
+        {#each followUpPairs as pair, i (i)}
+          <div class="ai-followup-question">{pair.question}</div>
+          <div class="ai-response">
+            {#if props.mode === 'generate' && looksLikeSql(pair.answer)}
+              <pre class="ai-result"><SqlHighlight sql={stripSqlCodeFence(pair.answer)} /></pre>
+              <CopyButton text={stripSqlCodeFence(pair.answer)} />
+            {:else}
+              <div class="ai-explain-result markdown-body">{@html marked(pair.answer)}</div>
+              <CopyButton text={pair.answer} />
+            {/if}
+          </div>
+        {/each}
+
+        {#if pendingQuestion}
+          <div class="ai-followup-question">{pendingQuestion}</div>
+          <div class="ai-loading">
+            <Spinner size={14} label="Loading" />
+            Thinking…
+          </div>
+        {/if}
+
+        {#if followUpError}
+          <div class="ai-error">{followUpError}</div>
+        {/if}
+
+        {#if conversation}
+          <div class="ai-followup-input">
+            <textarea
+              class="ai-followup-textarea"
+              bind:value={followUpText}
+              placeholder="Ask a follow-up…"
+              rows="2"
+              disabled={followUpLoading}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendFollowUp();
+                }
+              }}
+            ></textarea>
+            <button
+              class="ai-btn ai-btn--primary"
+              onclick={sendFollowUp}
+              disabled={followUpLoading || !followUpText.trim()}
+            >
+              {#if followUpLoading}
+                <Spinner size={12} label="Sending" />
+              {:else}
+                Send
+              {/if}
+            </button>
+          </div>
         {/if}
       {/if}
     </div>
@@ -272,8 +458,12 @@
           <button
             class="ai-btn ai-btn--primary"
             onclick={() => {
-              if (props.mode === 'generate') props.oninsert(result);
+              if (props.mode === 'generate') props.oninsert(stripSqlCodeFence(latestAssistantContent));
             }}
+            disabled={!looksLikeSql(latestAssistantContent)}
+            title={looksLikeSql(latestAssistantContent)
+              ? undefined
+              : 'The latest reply is not a SQL query'}
           >
             Insert into editor
           </button>
@@ -290,17 +480,13 @@
             {/if}
           </button>
         {/if}
-      {:else if props.mode === 'explain' && (result || error)}
-        <button class="ai-btn ai-btn--primary" onclick={runExplain} disabled={isLoading}>
-          Regenerate
-        </button>
-      {:else if props.mode === 'describe' && (result || error)}
-        <button class="ai-btn ai-btn--primary" onclick={runDescribe} disabled={isLoading}>
-          Regenerate
-        </button>
-      {:else if props.mode === 'summarise' && (result || error)}
-        <button class="ai-btn ai-btn--primary" onclick={runSummarise} disabled={isLoading}>
-          Regenerate
+      {:else if result || error}
+        <button
+          class="ai-btn ai-btn--primary"
+          onclick={() => initConversation(true)}
+          disabled={isLoading}
+        >
+          New conversation
         </button>
       {/if}
     </footer>
@@ -445,9 +631,68 @@
     flex-shrink: 0;
   }
 
-  .ai-explain-result {
+  .ai-explain-result,
+  .ai-explain-result :global(*) {
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  .ai-resumed-note {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .ai-response {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .ai-response .ai-result,
+  .ai-response .ai-explain-result.markdown-body {
+    padding-right: calc(var(--spacing-5) + 12px);
+  }
+
+  .ai-followup-question {
+    align-self: flex-end;
+    max-width: 85%;
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-accent-subtle, var(--color-bg-secondary));
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    white-space: pre-wrap;
+    word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  .ai-followup-input {
+    display: flex;
+    gap: var(--spacing-2);
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+
+  .ai-followup-textarea {
+    flex: 1;
+    box-sizing: border-box;
+    resize: vertical;
+    min-height: 44px;
+    padding: var(--spacing-2) var(--spacing-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family-ui);
+    outline: none;
+    line-height: 1.5;
+    transition: border-color var(--transition-fast);
+  }
+
+  .ai-followup-textarea:focus {
+    border-color: var(--color-accent);
   }
 
   :global(.ai-explain-result.markdown-body) {

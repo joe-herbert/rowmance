@@ -235,6 +235,12 @@
     font-family: var(--font-family-mono);
   }
 
+  .sql-hl,
+  .sql-hl :global(*) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   .tok-keyword {
     color: var(--color-editor-keyword);
   }
