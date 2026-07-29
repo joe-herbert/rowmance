@@ -3,11 +3,10 @@
   Fetches query data and displays it as count, table, bar chart, or line chart.
 -->
 <script lang="ts">
-  import type { DashboardWidget } from '$lib/types';
+  import type { DashboardWidget, DashboardVariable } from '$lib/types';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import * as queryApi from '$lib/tauri/query';
-  import { onMount } from 'svelte';
   import DragHandleIcon from '$lib/components/icons/DragHandleIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
@@ -16,9 +15,13 @@
   import CloseCircleIcon from '$lib/components/icons/CloseCircleIcon.svelte';
   import ResizeIcon from '$lib/components/icons/ResizeIcon.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import { resolveBuiltinVariables, substituteVariables } from '$lib/utils/widget-templates';
 
   interface Props {
     widget: DashboardWidget;
+    dashboardId: string;
+    dashboardLastViewedAt: string | null;
+    dashboardVariables: DashboardVariable[];
     editMode: boolean;
     onEdit: () => void;
     onDelete: () => void;
@@ -26,17 +29,32 @@
     onResizeStart?: (_e: PointerEvent) => void;
   }
 
-  const { widget, editMode, onEdit, onDelete, onDragStart, onResizeStart }: Props = $props();
+  const {
+    widget,
+    dashboardId,
+    dashboardLastViewedAt,
+    dashboardVariables,
+    editMode,
+    onEdit,
+    onDelete,
+    onDragStart,
+    onResizeStart,
+  }: Props = $props();
 
   const connectionsStore = useConnections();
   const panelStore = usePanels();
 
   function openInEditor() {
+    const builtins = resolveBuiltinVariables({
+      dashboardId,
+      widgetId: widget.id,
+      lastViewedAt: dashboardLastViewedAt,
+    });
     panelStore.openInFocused({
       kind: 'query_editor',
       connectionId: widget.connectionId,
       database: widget.database ?? undefined,
-      initialSql: widget.sql,
+      initialSql: substituteVariables(widget.sql, builtins, dashboardVariables),
     });
   }
 
@@ -47,7 +65,13 @@
   let columns = $state<string[]>([]);
   let rows = $state<Row[]>([]);
 
+  // Guards against out-of-order responses: fetchData can be re-triggered (e.g. by
+  // dashboardLastViewedAt correcting itself shortly after mount) before an earlier
+  // in-flight request resolves. Only the most recently started request may apply its result.
+  let fetchToken = 0;
+
   async function fetchData() {
+    const token = ++fetchToken;
     if (!widget.sql.trim()) {
       loading = false;
       return;
@@ -61,13 +85,20 @@
     loading = true;
     error = null;
     try {
+      const builtins = resolveBuiltinVariables({
+        dashboardId,
+        widgetId: widget.id,
+        lastViewedAt: dashboardLastViewedAt,
+      });
+      const sql = substituteVariables(widget.sql, builtins, dashboardVariables);
       const result = await queryApi.executeQuery(
         widget.connectionId,
-        widget.sql,
+        sql,
         0,
         widget.displayType === 'count' ? 1 : widget.displayType === 'table' ? 200 : 100,
         widget.database,
       );
+      if (token !== fetchToken) return;
       if (result.error) {
         error = result.error;
       } else {
@@ -75,18 +106,19 @@
         rows = result.rows;
       }
     } catch (e) {
+      if (token !== fetchToken) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (token === fetchToken) loading = false;
     }
   }
-
-  onMount(fetchData);
 
   $effect(() => {
     void widget.sql;
     void widget.connectionId;
     void widget.database;
+    void dashboardVariables;
+    void dashboardLastViewedAt;
     if (connectionsStore.isActive(widget.connectionId)) {
       fetchData();
     }

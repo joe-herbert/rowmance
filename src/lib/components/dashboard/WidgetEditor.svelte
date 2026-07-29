@@ -4,22 +4,32 @@
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
-  import type { DashboardWidget, WidgetDisplayType, SingleValueFormat } from '$lib/types';
+  import type {
+    DashboardWidget,
+    DashboardVariable,
+    WidgetDisplayType,
+    SingleValueFormat,
+  } from '$lib/types';
   import { useConnections } from '$lib/stores/connections.svelte';
   import * as schemaApi from '$lib/tauri/schema';
+  import { BUILTIN_VARIABLES } from '$lib/utils/widget-templates';
   import Select from '$lib/components/ui/Select.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+  import CtxItem from '$lib/components/ui/CtxItem.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
+  import CodeBracketsIcon from '$lib/components/icons/CodeBracketsIcon.svelte';
   import QueryBuilderModal from '$lib/components/editor/QueryBuilderModal.svelte';
   import type { SchemaTable, SchemaColumn } from '$lib/components/editor/QueryBuilderModal.svelte';
 
   interface Props {
     widget?: DashboardWidget | null;
+    dashboardVariables: DashboardVariable[];
     onsave: (_w: Omit<DashboardWidget, 'id' | 'x' | 'y'>) => void;
     oncancel: () => void;
   }
 
-  const { widget, onsave, oncancel }: Props = $props();
+  const { widget, dashboardVariables, onsave, oncancel }: Props = $props();
 
   const connectionsStore = useConnections();
 
@@ -44,6 +54,63 @@
   let singleValueCurrency = $state(untrack(() => widget?.singleValueCurrency ?? 'GBP'));
   let w = $state(untrack(() => widget?.w ?? 6));
   let h = $state(untrack(() => widget?.h ?? 3));
+
+  // ── Insert built-in variable ──────────────────────────────────────────────
+
+  let sqlTextareaEl = $state<HTMLTextAreaElement | undefined>(undefined);
+  let showVariableMenu = $state(false);
+  let variableMenuX = $state(0);
+  let variableMenuY = $state(0);
+  let variableMenuBtnEl = $state<HTMLButtonElement | undefined>(undefined);
+
+  const BUILTIN_VARIABLE_GROUPS = Object.entries(
+    BUILTIN_VARIABLES.reduce<Record<string, typeof BUILTIN_VARIABLES>>((acc, v) => {
+      (acc[v.category] ??= []).push(v);
+      return acc;
+    }, {}),
+  );
+
+  const VARIABLE_GROUPS = $derived.by(() => {
+    const dashboardVars = dashboardVariables.filter((v) => v.name.trim());
+    const groups: [string, { name: string; description: string }[]][] = [];
+    if (dashboardVars.length > 0) {
+      groups.push([
+        'Dashboard variables',
+        dashboardVars.map((v) => ({
+          name: v.name,
+          description: v.value ? `Current value: ${v.value}` : 'No value set yet',
+        })),
+      ]);
+    }
+    groups.push(...BUILTIN_VARIABLE_GROUPS);
+    return groups;
+  });
+
+  function openVariableMenu() {
+    if (!variableMenuBtnEl) return;
+    const r = variableMenuBtnEl.getBoundingClientRect();
+    variableMenuX = r.left;
+    variableMenuY = r.bottom + 4;
+    showVariableMenu = true;
+  }
+
+  function insertVariable(name: string) {
+    const token = `{{${name}}}`;
+    const el = sqlTextareaEl;
+    if (el) {
+      const start = el.selectionStart ?? sql.length;
+      const end = el.selectionEnd ?? sql.length;
+      sql = sql.slice(0, start) + token + sql.slice(end);
+      const caret = start + token.length;
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      });
+    } else {
+      sql += token;
+    }
+    showVariableMenu = false;
+  }
 
   // ── Query Builder state ───────────────────────────────────────────────────
 
@@ -195,17 +262,29 @@
       <div class="field">
         <div class="sql-label-row">
           <label class="field-label" for="widget-sql">SQL</label>
-          <button
-            class="builder-open-btn"
-            type="button"
-            disabled={qbLoading || !connectionsStore.isActive(connectionId)}
-            onclick={openBuilder}
-            title={!connectionsStore.isActive(connectionId) ? 'Connect to a database first' : ''}
-            >{qbLoading ? 'Loading…' : 'Query Builder'}</button
-          >
+          <div class="sql-label-actions">
+            <button
+              bind:this={variableMenuBtnEl}
+              class="builder-open-btn"
+              type="button"
+              onclick={openVariableMenu}
+              title="Insert a built-in variable"
+            >
+              <CodeBracketsIcon size={11} /> Variables
+            </button>
+            <button
+              class="builder-open-btn"
+              type="button"
+              disabled={qbLoading || !connectionsStore.isActive(connectionId)}
+              onclick={openBuilder}
+              title={!connectionsStore.isActive(connectionId) ? 'Connect to a database first' : ''}
+              >{qbLoading ? 'Loading…' : 'Query Builder'}</button
+            >
+          </div>
         </div>
         {#if qbError}<p class="builder-error">{qbError}</p>{/if}
         <textarea
+          bind:this={sqlTextareaEl}
           id="widget-sql"
           class="sql-input"
           placeholder="SELECT COUNT(*) FROM ..."
@@ -214,6 +293,26 @@
           bind:value={sql}
         ></textarea>
       </div>
+
+      <ContextMenu
+        x={variableMenuX}
+        y={variableMenuY}
+        open={showVariableMenu}
+        onclose={() => (showVariableMenu = false)}
+        minWidth={280}
+      >
+        {#each VARIABLE_GROUPS as [category, vars]}
+          <div class="variable-menu-group-label">{category}</div>
+          {#each vars as bv}
+            <CtxItem onclick={() => insertVariable(bv.name)}>
+              <div class="variable-menu-item">
+                <code>{'{{'}{bv.name}{'}}'}</code>
+                <span class="variable-menu-desc">{bv.description}</span>
+              </div>
+            </CtxItem>
+          {/each}
+        {/each}
+      </ContextMenu>
 
       <!-- Display type -->
       <div class="field">
@@ -493,6 +592,9 @@
   }
 
   .builder-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);
     padding: 2px 8px;
@@ -520,5 +622,38 @@
     font-size: var(--font-size-xs);
     color: var(--color-danger);
     margin: 0;
+  }
+
+  .sql-label-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+
+  .variable-menu-group-label {
+    padding: var(--spacing-2) var(--spacing-3) 2px;
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted);
+  }
+
+  .variable-menu-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .variable-menu-item code {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-accent);
+  }
+
+  .variable-menu-desc {
+    font-size: 10.5px;
+    color: var(--color-text-muted);
+    white-space: normal;
   }
 </style>

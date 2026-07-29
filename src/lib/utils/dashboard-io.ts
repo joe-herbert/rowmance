@@ -1,6 +1,6 @@
 import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import type { Dashboard, DashboardWidget, ConnectionProfile } from '$lib/types';
+import type { Dashboard, DashboardWidget, DashboardVariable, ConnectionProfile } from '$lib/types';
 
 // ── Export types ──────────────────────────────────────────────────────────────
 
@@ -26,6 +26,7 @@ interface DashboardExportFile {
     name: string;
     icon: string;
     widgets: ExportWidget[];
+    variables: DashboardVariable[];
   };
   connections: Record<string, ExportConnection>;
 }
@@ -67,7 +68,12 @@ export async function exportDashboard(
   const file: DashboardExportFile = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    dashboard: { name: dashboard.name, icon: dashboard.icon, widgets },
+    dashboard: {
+      name: dashboard.name,
+      icon: dashboard.icon,
+      widgets,
+      variables: dashboard.variables,
+    },
     connections,
   };
 
@@ -87,6 +93,7 @@ export interface ImportedDashboard {
   name: string;
   icon: string;
   widgets: Omit<DashboardWidget, 'id'>[];
+  variables: DashboardVariable[];
 }
 
 export async function importDashboard(
@@ -124,5 +131,10 @@ export async function importDashboard(
     return { ...rest, connectionId: resolveConnectionId(connectionKey) };
   });
 
-  return { name: file.dashboard.name, icon: file.dashboard.icon, widgets };
+  return {
+    name: file.dashboard.name,
+    icon: file.dashboard.icon,
+    widgets,
+    variables: file.dashboard.variables ?? [],
+  };
 }

@@ -17,6 +17,7 @@
   import DownloadIcon from '$lib/components/icons/DownloadIcon.svelte';
   import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
   import GridIcon from '$lib/components/icons/GridIcon.svelte';
+  import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
 
   interface Props {
     dashboardId: string;
@@ -38,6 +39,7 @@
 
   onMount(() => {
     autoConnect();
+    void dashboardsStore.touchViewed(dashboardId);
   });
 
   $effect(() => {
@@ -78,6 +80,24 @@
 
   function handleDeleteWidget(widgetId: string) {
     dashboardsStore.deleteWidget(dashboardId, widgetId);
+  }
+
+  // ── Dashboard variables ────────────────────────────────────────────────────
+
+  function addVariable() {
+    dashboardsStore.addVariable(dashboardId, { name: '', value: '' });
+  }
+
+  function commitVariableName(index: number, value: string) {
+    dashboardsStore.updateVariable(dashboardId, index, { name: value.trim().toUpperCase() });
+  }
+
+  function commitVariableValue(index: number, value: string) {
+    dashboardsStore.updateVariable(dashboardId, index, { value });
+  }
+
+  function removeVariable(index: number) {
+    dashboardsStore.removeVariable(dashboardId, index);
   }
 
   // ── Shared grid helpers ───────────────────────────────────────────────────
@@ -364,6 +384,43 @@
       </div>
     </div>
 
+    <!-- Variables bar -->
+    {#if editMode}
+      <div class="variables-bar">
+        {#each dashboard.variables as variable, i}
+          <div class="variable-control">
+            <input
+              class="variable-name-input"
+              type="text"
+              placeholder="NAME"
+              value={variable.name}
+              aria-label="Variable name"
+              onchange={(e) => commitVariableName(i, e.currentTarget.value)}
+            />
+            <input
+              class="variable-value-input"
+              type="text"
+              placeholder="value"
+              value={variable.value}
+              aria-label="{variable.name || 'Variable'} value"
+              onchange={(e) => commitVariableValue(i, e.currentTarget.value)}
+            />
+            <button
+              class="variable-remove-btn"
+              type="button"
+              onclick={() => removeVariable(i)}
+              aria-label="Remove variable"
+            >
+              <TrashIcon width={11} height={11} strokeWidth={2} />
+            </button>
+          </div>
+        {/each}
+        <button class="variable-add-btn" type="button" onclick={addVariable}>
+          <PlusIcon width={11} height={11} strokeWidth={2.2} /> Add variable
+        </button>
+      </div>
+    {/if}
+
     <!-- Widget grid -->
     <div bind:this={gridEl} class="widget-grid">
       {#if dashboard.widgets.length === 0}
@@ -398,6 +455,9 @@
           >
             <DashboardWidgetComponent
               {widget}
+              dashboardId={dashboard.id}
+              dashboardLastViewedAt={dashboard.lastViewedAt}
+              dashboardVariables={dashboard?.variables ?? []}
               {editMode}
               onEdit={() => (editingWidget = widget)}
               onDelete={() => handleDeleteWidget(widget.id)}
@@ -412,12 +472,18 @@
 {/if}
 
 {#if addingWidget}
-  <WidgetEditor widget={null} onsave={handleAddWidget} oncancel={() => (addingWidget = false)} />
+  <WidgetEditor
+    widget={null}
+    dashboardVariables={dashboard?.variables ?? []}
+    onsave={handleAddWidget}
+    oncancel={() => (addingWidget = false)}
+  />
 {/if}
 
 {#if editingWidget}
   <WidgetEditor
     widget={editingWidget}
+    dashboardVariables={dashboard?.variables ?? []}
     onsave={handleEditWidget}
     oncancel={() => (editingWidget = null)}
   />
@@ -534,13 +600,17 @@
     font-size: var(--font-size-md);
     font-weight: var(--font-weight-semibold);
     background: var(--color-bg-input, var(--color-bg-secondary));
-    border: 1px solid var(--color-accent);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     padding: 2px var(--spacing-2);
     color: var(--color-text-primary);
     outline: none;
     min-width: 120px;
     max-width: 260px;
+  }
+
+  .rename-input:focus {
+    border-color: var(--color-accent);
   }
 
   .connecting-badge {
@@ -595,6 +665,93 @@
     background: var(--color-accent);
     opacity: 0.9;
     color: #fff;
+  }
+
+  /* ── Variables bar ───────────────────────────────────────────────────────── */
+
+  .variables-bar {
+    display: flex;
+    align-items: center;
+    align-content: flex-start;
+    flex-wrap: wrap;
+    gap: var(--spacing-3);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    flex-shrink: 0;
+    max-height: 50%;
+    overflow-y: auto;
+  }
+
+  .variable-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .variable-name-input,
+  .variable-value-input {
+    padding: 4px 8px;
+    font-size: var(--font-size-xs);
+    background: var(--color-bg-input, var(--color-bg-primary));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    outline: none;
+  }
+
+  .variable-name-input {
+    width: 110px;
+    font-family: var(--font-family-mono);
+    text-transform: uppercase;
+  }
+
+  .variable-value-input {
+    width: 140px;
+  }
+
+  .variable-name-input:focus,
+  .variable-value-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .variable-remove-btn {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .variable-remove-btn:hover {
+    background: var(--color-danger-subtle);
+    color: var(--color-danger);
+  }
+
+  .variable-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition:
+      background var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .variable-add-btn:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
   }
 
   /* ── Grid ────────────────────────────────────────────────────────────────── */

@@ -1,4 +1,4 @@
-import type { Dashboard, DashboardWidget } from '$lib/types';
+import type { Dashboard, DashboardWidget, DashboardVariable } from '$lib/types';
 import * as api from '$lib/tauri/dashboards';
 
 const LEGACY_KEY = 'rowmance:dashboards';
@@ -52,6 +52,7 @@ async function persist(id: string) {
     pinned: d.pinned,
     pinnedOrder: d.pinnedOrder,
     widgets: d.widgets,
+    variables: d.variables,
   });
 }
 
@@ -93,6 +94,7 @@ export function useDashboards() {
               pinned: d.pinned,
               pinnedOrder: d.pinnedOrder,
               widgets: migratePositions(d.widgets),
+              variables: d.variables ?? [],
             });
           }
           localStorage.removeItem(LEGACY_KEY);
@@ -115,17 +117,65 @@ export function useDashboards() {
       return d;
     },
 
+    async touchViewed(id: string) {
+      try {
+        const previous = await api.touchViewed(id);
+        dashboards = dashboards.map((d) => (d.id === id ? { ...d, lastViewedAt: previous } : d));
+      } catch (e) {
+        console.error('Failed to record dashboard view:', e);
+      }
+    },
+
     async delete(id: string) {
       dashboards = dashboards.filter((d) => d.id !== id);
       resequencePinned();
       await api.deleteDashboard(id);
     },
 
-    update(id: string, input: Partial<Pick<Dashboard, 'name' | 'icon' | 'widgets'>>) {
+    update(id: string, input: Partial<Pick<Dashboard, 'name' | 'icon' | 'widgets' | 'variables'>>) {
       dashboards = dashboards.map((d) =>
         d.id === id ? { ...d, ...input, updatedAt: new Date().toISOString() } : d,
       );
       void persist(id);
+    },
+
+    addVariable(dashboardId: string, variable: DashboardVariable) {
+      dashboards = dashboards.map((d) =>
+        d.id === dashboardId
+          ? {
+              ...d,
+              variables: [...d.variables, variable],
+              updatedAt: new Date().toISOString(),
+            }
+          : d,
+      );
+      void persist(dashboardId);
+    },
+
+    updateVariable(dashboardId: string, index: number, input: Partial<DashboardVariable>) {
+      dashboards = dashboards.map((d) =>
+        d.id === dashboardId
+          ? {
+              ...d,
+              variables: d.variables.map((v, i) => (i === index ? { ...v, ...input } : v)),
+              updatedAt: new Date().toISOString(),
+            }
+          : d,
+      );
+      void persist(dashboardId);
+    },
+
+    removeVariable(dashboardId: string, index: number) {
+      dashboards = dashboards.map((d) =>
+        d.id === dashboardId
+          ? {
+              ...d,
+              variables: d.variables.filter((_, i) => i !== index),
+              updatedAt: new Date().toISOString(),
+            }
+          : d,
+      );
+      void persist(dashboardId);
     },
 
     togglePin(id: string) {

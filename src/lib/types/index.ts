@@ -712,6 +712,12 @@ export interface DashboardWidget {
   singleValueCurrency?: string;
 }
 
+/** A dashboard-level `{{NAME}}` variable, substituted into every widget's SQL alongside the built-ins. */
+export interface DashboardVariable {
+  name: string;
+  value: string;
+}
+
 export interface Dashboard {
   id: string;
   name: string;
@@ -720,8 +726,11 @@ export interface Dashboard {
   pinned: boolean;
   pinnedOrder: number | null;
   widgets: DashboardWidget[];
+  variables: DashboardVariable[];
   createdAt: string;
   updatedAt: string;
+  /** ISO timestamp of the last time this dashboard was opened, as of the *previous* visit */
+  lastViewedAt: string | null;
 }
 
 // ── Server Admin ─────────────────────────────────────────────────────────────

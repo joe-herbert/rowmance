@@ -391,6 +391,7 @@ pub fn run() {
             commands::dashboards::dashboards_list,
             commands::dashboards::dashboards_create,
             commands::dashboards::dashboards_update,
+            commands::dashboards::dashboards_touch_viewed,
             commands::dashboards::dashboards_delete,
             // Saved queries (SQLite, kept for migration purposes)
             commands::saved_queries::saved_queries_list_folders,

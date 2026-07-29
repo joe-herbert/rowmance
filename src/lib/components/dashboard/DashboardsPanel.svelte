@@ -108,6 +108,9 @@
         dashboardsStore.updateWidget(dashboard.id, created.id, { x, y });
       }
     }
+    if (imported.variables.length > 0) {
+      dashboardsStore.update(dashboard.id, { variables: imported.variables });
+    }
     panelStore.openInFocused({ kind: 'dashboard', dashboardId: dashboard.id });
   }
 
