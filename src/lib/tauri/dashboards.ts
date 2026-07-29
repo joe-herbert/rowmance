@@ -4,6 +4,7 @@ import type { Dashboard, DashboardWidget, DashboardVariable } from '$lib/types';
 export interface DashboardUpdateInput {
   name: string;
   icon: string;
+  color: string | null;
   pinned: boolean;
   pinnedOrder: number | null;
   widgets: DashboardWidget[];

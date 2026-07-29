@@ -276,7 +276,7 @@
     class="select-dropdown select-dropdown--{size}"
     class:select-dropdown--mono={mono}
     class:select-dropdown--up={openUp}
-    style="top:{dropTop}px;left:{dropLeft}px;min-width:{dropWidth}px"
+    style="top:{dropTop}px;left:{dropLeft}px;min-width:{dropWidth}px;{style}"
     role="listbox"
     aria-label={ariaLabel}
     tabindex="-1"
@@ -412,14 +412,16 @@
   }
 
   .select-trigger--open {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 2px var(--color-accent-subtle);
+    border-color: var(--dash-accent, var(--color-accent));
+    box-shadow: 0 0 0 2px
+      color-mix(in srgb, var(--dash-accent, var(--color-accent)) 15%, transparent);
     background: var(--color-bg-hover);
   }
 
   .select-trigger:focus-visible {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 2px var(--color-accent-subtle);
+    border-color: var(--dash-accent, var(--color-accent));
+    box-shadow: 0 0 0 2px
+      color-mix(in srgb, var(--dash-accent, var(--color-accent)) 15%, transparent);
     outline: none;
   }
 
@@ -465,7 +467,7 @@
 
   .trigger-chevron--open {
     transform: translateY(-50%) rotate(180deg);
-    color: var(--color-accent);
+    color: var(--dash-accent, var(--color-accent));
   }
 
   /* ── Dropdown ─────────────────────────────────────────────────────────────── */
@@ -615,12 +617,12 @@
 
   .option--focused,
   .option:hover {
-    background: var(--color-accent-subtle);
+    background: color-mix(in srgb, var(--dash-accent, var(--color-accent)) 15%, transparent);
     color: var(--color-text-primary);
   }
 
   .option--selected {
-    color: var(--color-accent);
+    color: var(--dash-accent, var(--color-accent));
     font-weight: var(--font-weight-medium);
   }
 
@@ -631,7 +633,7 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--color-accent);
+    background: var(--dash-accent, var(--color-accent));
     opacity: 0;
     transition: opacity var(--transition-fast);
   }

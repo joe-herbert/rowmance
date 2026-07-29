@@ -706,7 +706,7 @@
   .count-value {
     font-size: 3rem;
     font-weight: 700;
-    color: var(--color-accent);
+    color: var(--dash-accent, var(--color-accent));
     line-height: 1;
     letter-spacing: -0.02em;
     text-align: center;
@@ -748,7 +748,7 @@
   .countdown-num {
     font-size: 2.2rem;
     font-weight: 700;
-    color: var(--color-accent);
+    color: var(--dash-accent, var(--color-accent));
     line-height: 1;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
@@ -854,7 +854,7 @@
   }
 
   .bar {
-    fill: var(--color-accent);
+    fill: var(--dash-accent, var(--color-accent));
     opacity: 0.8;
     transition: opacity var(--transition-fast);
   }
@@ -865,19 +865,19 @@
 
   .line-path {
     fill: none;
-    stroke: var(--color-accent);
+    stroke: var(--dash-accent, var(--color-accent));
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
 
   .line-area {
-    fill: var(--color-accent);
+    fill: var(--dash-accent, var(--color-accent));
     opacity: 0.1;
   }
 
   .line-dot {
-    fill: var(--color-accent);
+    fill: var(--dash-accent, var(--color-accent));
     stroke: var(--color-bg-primary);
     stroke-width: 1.5;
   }

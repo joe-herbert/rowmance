@@ -13,6 +13,7 @@ pub struct Dashboard {
     pub id: String,
     pub name: String,
     pub icon: String,
+    pub color: Option<String>,
     pub pinned: bool,
     #[serde(rename = "pinnedOrder")]
     pub pinned_order: Option<i64>,
@@ -36,6 +37,7 @@ pub struct DashboardCreateInput {
 pub struct DashboardUpdateInput {
     pub name: String,
     pub icon: String,
+    pub color: Option<String>,
     pub pinned: bool,
     #[serde(rename = "pinnedOrder")]
     pub pinned_order: Option<i64>,
@@ -50,6 +52,7 @@ struct DashboardRow {
     id: String,
     name: String,
     icon: String,
+    color: Option<String>,
     pinned: bool,
     pinned_order: Option<i64>,
     widgets_json: String,
@@ -69,6 +72,7 @@ impl From<DashboardRow> for Dashboard {
             id: r.id,
             name: r.name,
             icon: r.icon,
+            color: r.color,
             pinned: r.pinned,
             pinned_order: r.pinned_order,
             widgets,
@@ -136,11 +140,12 @@ pub async fn dashboards_update(
 
     sqlx::query(
         "UPDATE dashboards
-         SET name = ?, icon = ?, pinned = ?, pinned_order = ?, widgets_json = ?, variables_json = ?, updated_at = ?
+         SET name = ?, icon = ?, color = ?, pinned = ?, pinned_order = ?, widgets_json = ?, variables_json = ?, updated_at = ?
          WHERE id = ?",
     )
     .bind(&input.name)
     .bind(&input.icon)
+    .bind(&input.color)
     .bind(pinned_i)
     .bind(input.pinned_order)
     .bind(&widgets_json)

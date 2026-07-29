@@ -27,11 +27,14 @@
   interface Props {
     widget?: DashboardWidget | null;
     dashboardVariables: DashboardVariable[];
+    accentColor?: string | null;
     onsave: (_w: Omit<DashboardWidget, 'id' | 'x' | 'y'>) => void;
     oncancel: () => void;
   }
 
-  const { widget, dashboardVariables, onsave, oncancel }: Props = $props();
+  const { widget, dashboardVariables, accentColor, onsave, oncancel }: Props = $props();
+
+  const accentStyle = $derived(accentColor ? `--dash-accent: ${accentColor};` : '');
 
   const connectionsStore = useConnections();
   const shortcutsStore = useShortcuts();
@@ -214,7 +217,7 @@
 </script>
 
 <Modal label="Widget Editor" onbackdropclick={oncancel}>
-  <div class="dialog">
+  <div class="dialog" style:--dash-accent={accentColor}>
     <div class="dialog-header">
       <h3 class="dialog-title">{widget ? 'Edit Widget' : 'Add Widget'}</h3>
       <button class="close-btn" onclick={oncancel} aria-label="Close" type="button">
@@ -244,6 +247,7 @@
           options={connectionsStore.profiles.map((p) => ({ value: p.id, label: p.name }))}
           aria-label="Connection"
           size="sm"
+          style={accentStyle}
         />
       </div>
 
@@ -309,17 +313,19 @@
         onclose={() => (showVariableMenu = false)}
         minWidth={280}
       >
-        {#each VARIABLE_GROUPS as [category, vars]}
-          <div class="variable-menu-group-label">{category}</div>
-          {#each vars as bv}
-            <CtxItem onclick={() => insertVariable(bv.name)}>
-              <div class="variable-menu-item">
-                <code>{'{{'}{bv.name}{'}}'}</code>
-                <span class="variable-menu-desc">{bv.description}</span>
-              </div>
-            </CtxItem>
+        <div style:--dash-accent={accentColor}>
+          {#each VARIABLE_GROUPS as [category, vars]}
+            <div class="variable-menu-group-label">{category}</div>
+            {#each vars as bv}
+              <CtxItem onclick={() => insertVariable(bv.name)}>
+                <div class="variable-menu-item">
+                  <code>{'{{'}{bv.name}{'}}'}</code>
+                  <span class="variable-menu-desc">{bv.description}</span>
+                </div>
+              </CtxItem>
+            {/each}
           {/each}
-        {/each}
+        </div>
       </ContextMenu>
 
       <!-- Display type -->
@@ -345,6 +351,7 @@
             bind:value={singleValueFormat}
             options={SINGLE_VALUE_FORMATS}
             size="sm"
+            style={accentStyle}
           />
         </div>
         {#if singleValueFormat === 'currency'}
@@ -356,6 +363,7 @@
               options={CURRENCIES}
               size="sm"
               searchable
+              style={accentStyle}
             />
           </div>
         {/if}
@@ -506,7 +514,7 @@
   }
 
   .field-input:focus {
-    border-color: var(--color-accent);
+    border-color: var(--dash-accent, var(--color-accent));
   }
 
   .field-input--sm {
@@ -534,9 +542,9 @@
   }
 
   .display-btn.active {
-    background: var(--color-accent-subtle);
-    color: var(--color-accent);
-    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--dash-accent, var(--color-accent)) 15%, transparent);
+    color: var(--dash-accent, var(--color-accent));
+    border-color: var(--dash-accent, var(--color-accent));
     font-weight: var(--font-weight-medium);
   }
 
@@ -563,7 +571,7 @@
   }
 
   .btn-primary {
-    background: var(--color-accent);
+    background: var(--dash-accent, var(--color-accent));
     color: #fff;
   }
 
@@ -639,7 +647,7 @@
   .variable-menu-item code {
     font-family: var(--font-family-mono);
     font-size: var(--font-size-xs);
-    color: var(--color-accent);
+    color: var(--dash-accent, var(--color-accent));
   }
 
   .variable-menu-desc {

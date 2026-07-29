@@ -213,7 +213,11 @@
                 title="Open {dashboard.name}"
                 type="button"
               >
-                <span class="dash-icon" aria-hidden="true">
+                <span
+                  class="dash-icon"
+                  aria-hidden="true"
+                  style:color={dashboard.color || undefined}
+                >
                   {@html dashboard.icon}
                 </span>
                 <span class="dash-name">{dashboard.name}</span>

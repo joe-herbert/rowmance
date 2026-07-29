@@ -268,6 +268,10 @@
     }
   }
 
+  function commitColor(color: string) {
+    dashboardsStore.update(dashboardId, { color: color || null });
+  }
+
   async function handleExport() {
     if (!dashboard) return;
     await exportDashboard(dashboard, (id) => connectionsStore.getById(id));
@@ -277,7 +281,7 @@
 {#if !dashboard}
   <div class="not-found">Dashboard not found.</div>
 {:else}
-  <div class="dashboard-panel">
+  <div class="dashboard-panel" style:--dash-accent={dashboard.color}>
     <!-- Header -->
     <div class="dash-header">
       {#if editMode}
@@ -332,6 +336,24 @@
             }
           }}
         />
+        <!-- Accent colour -->
+        <div class="color-row" title="Accent colour">
+          <input
+            class="color-input"
+            type="color"
+            value={dashboard.color ?? '#4f46e5'}
+            oninput={(e) => commitColor(e.currentTarget.value)}
+            aria-label="Dashboard accent colour"
+          />
+          {#if dashboard.color}
+            <button
+              type="button"
+              class="color-clear"
+              onclick={() => commitColor('')}
+              aria-label="Clear accent colour">Clear</button
+            >
+          {/if}
+        </div>
       {:else}
         <div class="dash-icon" aria-hidden="true">
           {@html dashboard.icon}
@@ -475,6 +497,7 @@
   <WidgetEditor
     widget={null}
     dashboardVariables={dashboard?.variables ?? []}
+    accentColor={dashboard?.color}
     onsave={handleAddWidget}
     oncancel={() => (addingWidget = false)}
   />
@@ -484,6 +507,7 @@
   <WidgetEditor
     widget={editingWidget}
     dashboardVariables={dashboard?.variables ?? []}
+    accentColor={dashboard?.color}
     onsave={handleEditWidget}
     oncancel={() => (editingWidget = null)}
   />
@@ -522,7 +546,7 @@
   .dash-icon {
     display: flex;
     align-items: center;
-    color: var(--color-accent);
+    color: var(--dash-accent, var(--color-accent));
     flex-shrink: 0;
     width: 20px;
     height: 20px;
@@ -540,15 +564,15 @@
     cursor: pointer;
     position: relative;
     flex-shrink: 0;
-    color: var(--color-accent);
+    color: var(--dash-accent, var(--color-accent));
     transition:
       border-color var(--transition-fast),
       background var(--transition-fast);
   }
 
   .dash-icon--btn:hover {
-    border-color: var(--color-accent);
-    background: var(--color-accent-subtle, var(--color-bg-hover));
+    border-color: var(--dash-accent, var(--color-accent));
+    background: color-mix(in srgb, var(--dash-accent, var(--color-accent)) 12%, var(--color-bg-hover));
   }
 
   .icon-edit-hint {
@@ -557,12 +581,40 @@
     right: -3px;
     width: 12px;
     height: 12px;
-    background: var(--color-accent);
+    background: var(--dash-accent, var(--color-accent));
     color: #fff;
     border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    flex-shrink: 0;
+  }
+
+  .color-input {
+    width: 28px;
+    height: 28px;
+    padding: 2px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-primary);
+    cursor: pointer;
+  }
+
+  .color-clear {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
+  .color-clear:hover {
+    color: var(--color-text-secondary);
   }
 
   :global(.icon-picker-popover) {
@@ -610,7 +662,7 @@
   }
 
   .rename-input:focus {
-    border-color: var(--color-accent);
+    border-color: var(--dash-accent, var(--color-accent));
   }
 
   .connecting-badge {
@@ -656,13 +708,13 @@
   }
 
   .header-btn--accent {
-    background: var(--color-accent);
+    background: var(--dash-accent, var(--color-accent));
     color: #fff;
     border-color: transparent;
   }
 
   .header-btn--accent:hover {
-    background: var(--color-accent);
+    background: var(--dash-accent, var(--color-accent));
     opacity: 0.9;
     color: #fff;
   }
@@ -712,7 +764,7 @@
 
   .variable-name-input:focus,
   .variable-value-input:focus {
-    border-color: var(--color-accent);
+    border-color: var(--dash-accent, var(--color-accent));
   }
 
   .variable-remove-btn {
@@ -777,7 +829,7 @@
   }
 
   .widget-slot.is-resizing {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--dash-accent, var(--color-accent));
     outline-offset: 2px;
     border-radius: var(--radius-md);
   }
@@ -804,7 +856,7 @@
   .empty-add-btn {
     padding: 6px 16px;
     font-size: var(--font-size-sm);
-    background: var(--color-accent);
+    background: var(--dash-accent, var(--color-accent));
     color: #fff;
     border: none;
     border-radius: var(--radius-md);

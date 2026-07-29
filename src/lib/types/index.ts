@@ -723,6 +723,8 @@ export interface Dashboard {
   name: string;
   /** SVG string for the icon */
   icon: string;
+  /** Hex colour string, e.g. '#4f46e5'. */
+  color: string | null;
   pinned: boolean;
   pinnedOrder: number | null;
   widgets: DashboardWidget[];

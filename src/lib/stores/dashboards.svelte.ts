@@ -49,6 +49,7 @@ async function persist(id: string) {
   await api.updateDashboard(id, {
     name: d.name,
     icon: d.icon,
+    color: d.color,
     pinned: d.pinned,
     pinnedOrder: d.pinnedOrder,
     widgets: d.widgets,
@@ -91,6 +92,7 @@ export function useDashboards() {
             await api.updateDashboard(created.id, {
               name: d.name,
               icon: d.icon,
+              color: d.color ?? null,
               pinned: d.pinned,
               pinnedOrder: d.pinnedOrder,
               widgets: migratePositions(d.widgets),
@@ -132,7 +134,10 @@ export function useDashboards() {
       await api.deleteDashboard(id);
     },
 
-    update(id: string, input: Partial<Pick<Dashboard, 'name' | 'icon' | 'widgets' | 'variables'>>) {
+    update(
+      id: string,
+      input: Partial<Pick<Dashboard, 'name' | 'icon' | 'color' | 'widgets' | 'variables'>>,
+    ) {
       dashboards = dashboards.map((d) =>
         d.id === id ? { ...d, ...input, updatedAt: new Date().toISOString() } : d,
       );
