@@ -7,6 +7,8 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import * as queryApi from '$lib/tauri/query';
+  import { listColumns } from '$lib/tauri/schema';
+  import { tableSchemaCache } from '$lib/stores/tableDataCache';
   import DragHandleIcon from '$lib/components/icons/DragHandleIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
@@ -15,7 +17,9 @@
   import CloseCircleIcon from '$lib/components/icons/CloseCircleIcon.svelte';
   import ResizeIcon from '$lib/components/icons/ResizeIcon.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
+  import RowDetailModal from '$lib/components/dashboard/RowDetailModal.svelte';
   import { resolveBuiltinVariables, substituteVariables } from '$lib/utils/widget-templates';
+  import { qi as dialectQi, formatSqlValue } from '$lib/utils/dialect';
 
   interface Props {
     widget: DashboardWidget;
@@ -58,12 +62,66 @@
     });
   }
 
+  // Best-effort detection of the source table from the widget's SQL, so a
+  // row can be opened in the table browser filtered down to that row.
+  const detectedTable = $derived.by(() => {
+    const m = widget.sql.match(/\bFROM\s+(?:[`"']?\w+[`"']?\s*\.\s*)?[`"']?(\w+)[`"']?\b/i);
+    return m ? m[1] : null;
+  });
+  const detectedDatabase = $derived.by(() => {
+    if (widget.database) return widget.database;
+    const m = widget.sql.match(/\bFROM\s+[`"']?(\w+)[`"']?\s*\.\s*[`"']?\w+[`"']?\b/i);
+    return m ? m[1] : null;
+  });
+
+  // Query-result column metadata never carries real primary-key info (the
+  // backend hardcodes isPrimaryKey: false for arbitrary SELECTs), so the
+  // actual table schema has to be fetched separately to find the PK columns.
+  async function openRowInTable(row: Row) {
+    if (!detectedTable || !detectedDatabase) return;
+    const dialect = connectionsStore.getById(widget.connectionId)?.dialectInfo;
+    const q = (name: string) => (dialect ? dialectQi(name, dialect) : `\`${name}\``);
+    const v = (val: unknown) => (dialect ? formatSqlValue(val, dialect) : String(val ?? 'NULL'));
+
+    const schemaKey = `${widget.connectionId}:${detectedDatabase}:${detectedTable}`;
+    let schemaColumns = tableSchemaCache.get(schemaKey)?.columns;
+    if (!schemaColumns) {
+      try {
+        schemaColumns = await listColumns(widget.connectionId, detectedDatabase, detectedTable);
+      } catch {
+        schemaColumns = [];
+      }
+    }
+    const pkNames = new Set(
+      schemaColumns.filter((c) => c.isPrimaryKey && columns.includes(c.name)).map((c) => c.name),
+    );
+
+    const filterColNames = pkNames.size > 0 ? [...pkNames] : columns;
+    const filter = filterColNames
+      .map((name) => {
+        const idx = columns.indexOf(name);
+        const val = row[idx];
+        return val === null ? `${q(name)} IS NULL` : `${q(name)} = ${v(val)}`;
+      })
+      .join(' AND ');
+
+    panelStore.openInFocused({
+      kind: 'table_browser',
+      connectionId: widget.connectionId,
+      database: detectedDatabase,
+      table: detectedTable,
+      initialFilter: filter || undefined,
+    });
+    selectedRow = null;
+  }
+
   type Row = (string | number | boolean | null)[];
 
   let loading = $state(true);
   let error = $state<string | null>(null);
   let columns = $state<string[]>([]);
   let rows = $state<Row[]>([]);
+  let selectedRow = $state<Row | null>(null);
 
   // Guards against out-of-order responses: fetchData can be re-triggered (e.g. by
   // dashboardLastViewedAt correcting itself shortly after mount) before an earlier
@@ -411,7 +469,17 @@
             </thead>
             <tbody>
               {#each rows as row}
-                <tr>
+                <tr
+                  class="data-row"
+                  tabindex="0"
+                  onclick={() => (selectedRow = row)}
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      selectedRow = row;
+                    }
+                  }}
+                >
                   {#each row as cell}
                     <td>{cell === null ? 'NULL' : String(cell)}</td>
                   {/each}
@@ -538,6 +606,18 @@
     </button>
   {/if}
 </div>
+
+{#if selectedRow}
+  <RowDetailModal
+    title={widget.title}
+    {columns}
+    row={selectedRow}
+    onOpenInTable={detectedTable && detectedDatabase
+      ? () => openRowInTable(selectedRow!)
+      : undefined}
+    onClose={() => (selectedRow = null)}
+  />
+{/if}
 
 <style>
   .widget {
@@ -821,6 +901,19 @@
 
   .data-table tr:last-child td {
     border-bottom: none;
+  }
+
+  .data-row {
+    cursor: pointer;
+  }
+
+  .data-row:hover td,
+  .data-row:focus-visible td {
+    background: var(--color-bg-hover);
+  }
+
+  .data-row:focus-visible {
+    outline: none;
   }
 
   /* ── Charts ──────────────────────────────────────────────────────────────── */
