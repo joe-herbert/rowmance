@@ -20,6 +20,7 @@
   import RowDetailModal from '$lib/components/dashboard/RowDetailModal.svelte';
   import { resolveBuiltinVariables, substituteVariables } from '$lib/utils/widget-templates';
   import { qi as dialectQi, formatSqlValue } from '$lib/utils/dialect';
+  import { errorMessage } from '$lib/utils/errors';
 
   interface Props {
     widget: DashboardWidget;
@@ -165,7 +166,7 @@
       }
     } catch (e) {
       if (token !== fetchToken) return;
-      error = String(e);
+      error = errorMessage(e);
     } finally {
       if (token === fetchToken) loading = false;
     }

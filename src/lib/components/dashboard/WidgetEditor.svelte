@@ -14,6 +14,7 @@
   import { useShortcuts } from '$lib/stores/shortcuts.svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { BUILTIN_VARIABLES } from '$lib/utils/widget-templates';
+  import { errorMessage } from '$lib/utils/errors';
   import Select from '$lib/components/ui/Select.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
@@ -138,7 +139,7 @@
       qbTables = rows;
       showQueryBuilder = true;
     } catch (e) {
-      qbError = String(e);
+      qbError = errorMessage(e);
     } finally {
       qbLoading = false;
     }
