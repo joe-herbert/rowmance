@@ -207,6 +207,46 @@
   let resizeColWidth = 0;
   let resizePreviewW = $state(0);
   let resizePreviewH = $state(0);
+  let resizePushPreview = $state(new Map<string, { x: number; y: number }>());
+
+  interface Rect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }
+
+  function rectsOverlap(a: Rect, b: Rect) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  // Grows `movedRect` in place of `movedId` and pushes any widgets it now
+  // overlaps straight down, cascading until nothing overlaps.
+  function resolvePushDown(widgets: DashboardWidget[], movedId: string, movedRect: Rect) {
+    const rects = new Map<string, Rect>(
+      widgets.map((w) => [w.id, { x: w.x, y: w.y, w: w.w, h: w.h }]),
+    );
+    rects.set(movedId, movedRect);
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const [id, rect] of rects) {
+        if (id === movedId) continue;
+        for (const [otherId, other] of rects) {
+          if (otherId === id) continue;
+          if (rectsOverlap(rect, other)) {
+            const newY = other.y + other.h;
+            if (newY > rect.y) {
+              rect.y = newY;
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    return rects;
+  }
 
   function startResize(widgetId: string, e: PointerEvent) {
     const widget = dashboard?.widgets.find((w) => w.id === widgetId);
@@ -223,15 +263,34 @@
     resizeStartY = e.clientY;
     resizePreviewW = widget.w;
     resizePreviewH = widget.h;
+    resizePushPreview = new Map();
   }
 
   $effect(() => {
     if (!resizingId) return;
+    const widget = dashboard?.widgets.find((w) => w.id === resizingId);
+    if (!widget) return;
+
     function onMove(e: PointerEvent) {
       const dx = e.clientX - resizeStartX;
       const dy = e.clientY - resizeStartY;
       resizePreviewW = Math.max(1, Math.min(12, Math.round(resizeStartW + dx / resizeColWidth)));
       resizePreviewH = Math.max(1, Math.round(resizeStartH + dy / ROW_HEIGHT));
+
+      const movedRect: Rect = {
+        x: widget!.x,
+        y: widget!.y,
+        w: resizePreviewW,
+        h: resizePreviewH,
+      };
+      const resolved = resolvePushDown(dashboard!.widgets, resizingId!, movedRect);
+      const positions = new Map<string, { x: number; y: number }>();
+      for (const w of dashboard!.widgets) {
+        if (w.id === resizingId) continue;
+        const r = resolved.get(w.id)!;
+        if (r.x !== w.x || r.y !== w.y) positions.set(w.id, { x: r.x, y: r.y });
+      }
+      resizePushPreview = positions;
     }
     function onUp() {
       if (resizingId) {
@@ -239,8 +298,12 @@
           w: resizePreviewW,
           h: resizePreviewH,
         });
+        for (const [id, pos] of resizePushPreview) {
+          dashboardsStore.updateWidget(dashboardId, id, { x: pos.x, y: pos.y });
+        }
       }
       resizingId = null;
+      resizePushPreview = new Map();
     }
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -473,14 +536,16 @@
         {#each dashboard.widgets as widget (widget.id)}
           {@const isDragging = draggingId === widget.id}
           {@const isResizing = resizingId === widget.id}
-          {@const slotX = isDragging ? dragPreviewX : widget.x}
-          {@const slotY = isDragging ? dragPreviewY : widget.y}
+          {@const pushed = resizingId ? resizePushPreview.get(widget.id) : undefined}
+          {@const slotX = isDragging ? dragPreviewX : (pushed?.x ?? widget.x)}
+          {@const slotY = isDragging ? dragPreviewY : (pushed?.y ?? widget.y)}
           {@const slotW = isResizing ? resizePreviewW : widget.w}
           {@const slotH = isResizing ? resizePreviewH : widget.h}
           <div
             class="widget-slot"
             class:is-dragging={isDragging}
             class:is-resizing={isResizing}
+            class:is-pushed={!!pushed}
             data-widget-id={widget.id}
             style="grid-column: {slotX} / span {slotW}; grid-row: {slotY} / span {slotH};"
           >
@@ -853,6 +918,13 @@
     outline: 2px solid var(--dash-accent, var(--color-accent));
     outline-offset: 2px;
     border-radius: var(--radius-md);
+  }
+
+  .widget-slot.is-pushed {
+    transition:
+      opacity var(--transition-fast),
+      outline var(--transition-fast),
+      grid-row var(--transition-fast);
   }
 
   /* ── Empty state ─────────────────────────────────────────────────────────── */
