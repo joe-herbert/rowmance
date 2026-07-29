@@ -12,6 +12,7 @@
   import IconPicker from './IconPicker.svelte';
   import { portal } from '$lib/actions/portal';
   import { exportDashboard } from '$lib/utils/dashboard-io';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
   import DownloadIcon from '$lib/components/icons/DownloadIcon.svelte';
@@ -78,8 +79,16 @@
     editingWidget = null;
   }
 
+  let confirmDeleteWidgetId = $state<string | null>(null);
+
   function handleDeleteWidget(widgetId: string) {
-    dashboardsStore.deleteWidget(dashboardId, widgetId);
+    confirmDeleteWidgetId = widgetId;
+  }
+
+  function confirmDeleteWidget() {
+    if (!confirmDeleteWidgetId) return;
+    dashboardsStore.deleteWidget(dashboardId, confirmDeleteWidgetId);
+    confirmDeleteWidgetId = null;
   }
 
   // ── Dashboard variables ────────────────────────────────────────────────────
@@ -510,6 +519,18 @@
     accentColor={dashboard?.color}
     onsave={handleEditWidget}
     oncancel={() => (editingWidget = null)}
+  />
+{/if}
+
+{#if confirmDeleteWidgetId}
+  <ConfirmDialog
+    title="Delete widget"
+    message="Delete this widget? This cannot be undone."
+    confirmText="Delete"
+    cancelText="Cancel"
+    danger
+    onconfirm={confirmDeleteWidget}
+    oncancel={() => (confirmDeleteWidgetId = null)}
   />
 {/if}
 
