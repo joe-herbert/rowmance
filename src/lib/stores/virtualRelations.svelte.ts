@@ -217,5 +217,23 @@ export function useVirtualRelations() {
         ) ?? null
       );
     },
+
+    /** Find the polymorphic VR where the given column is either the value column or the type column. */
+    findPolymorphicForColumn(
+      connectionId: string,
+      database: string,
+      table: string,
+      column: string,
+    ): PolymorphicVirtualRelation | null {
+      return (
+        polymorphicRelations.find(
+          (r) =>
+            r.connectionId === connectionId &&
+            r.database === database &&
+            r.table === table &&
+            (r.valueColumn === column || r.typeColumn === column),
+        ) ?? null
+      );
+    },
   };
 }

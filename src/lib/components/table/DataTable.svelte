@@ -85,6 +85,8 @@
     ) => boolean;
     onConnectColumn?: (_colName: string) => void;
     onConnectPolymorphic?: (_colName: string) => void;
+    onEditPolymorphic?: (_colName: string) => void;
+    hasPolymorphicRelation?: (_colName: string) => boolean;
     initialColWidths?: Record<string, number>;
     initialColumnOrder?: string[];
     columnOrderOverride?: string[];
@@ -191,6 +193,8 @@
     isForeignKeyNavigable,
     onConnectColumn,
     onConnectPolymorphic,
+    onEditPolymorphic,
+    hasPolymorphicRelation,
     initialColWidths,
     initialColumnOrder,
     columnOrderOverride,
@@ -4608,6 +4612,16 @@
                 Connect polymorphic…
               </CtxItem>
             {/if}
+            {#if onEditPolymorphic && hasPolymorphicRelation?.(contextMenu.colName)}
+              <CtxItem
+                onclick={() => {
+                  onEditPolymorphic!(contextMenu!.colName!);
+                  dismissContextMenu();
+                }}
+              >
+                Edit polymorphic…
+              </CtxItem>
+            {/if}
           {/if}
           <CtxSep />
           <CtxItem onclick={() => copyRowTabSeparated(getContextRows()[0]?.row ?? [])}>
@@ -4751,6 +4765,16 @@
               }}
             >
               Connect polymorphic…
+            </CtxItem>
+          {/if}
+          {#if onEditPolymorphic && hasPolymorphicRelation?.(contextMenu.colName)}
+            <CtxItem
+              onclick={() => {
+                onEditPolymorphic!(contextMenu!.colName!);
+                dismissContextMenu();
+              }}
+            >
+              Edit polymorphic…
             </CtxItem>
           {/if}
         {/if}

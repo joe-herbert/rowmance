@@ -47,7 +47,14 @@
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import VirtualRelationModal from '$lib/components/relations/VirtualRelationModal.svelte';
   import PolymorphicVirtualRelationModal from '$lib/components/relations/PolymorphicVirtualRelationModal.svelte';
-  import type { QueryResult, ColumnMeta, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
+  import type {
+    QueryResult,
+    ColumnMeta,
+    ColumnInfo,
+    IndexInfo,
+    ForeignKeyInfo,
+    PolymorphicVirtualRelation,
+  } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { fetchTableSnapshot } from '$lib/utils/tableSnapshot';
   import { useLiveView } from '$lib/stores/liveView.svelte';
@@ -185,6 +192,7 @@
   }
   let connectColumnName = $state<string | null>(null);
   let connectPolymorphicColumnName = $state<string | null>(null);
+  let editPolymorphicRelation = $state<PolymorphicVirtualRelation | null>(null);
   const statusBar = useStatusBar();
   const toast = useToast();
   const settings = useSettings();
@@ -2266,6 +2274,16 @@
           onConnectPolymorphic={(colName) => {
             connectPolymorphicColumnName = colName;
           }}
+          onEditPolymorphic={(colName) => {
+            editPolymorphicRelation = vrStore.findPolymorphicForColumn(
+              connectionId,
+              database,
+              table,
+              colName,
+            );
+          }}
+          hasPolymorphicRelation={(colName) =>
+            vrStore.findPolymorphicForColumn(connectionId, database, table, colName) !== null}
           {initialColWidths}
           {initialColumnOrder}
           onColWidthsChange={(widths) =>
@@ -2387,6 +2405,16 @@
     {table}
     initialColumn={connectPolymorphicColumnName}
     onClose={() => (connectPolymorphicColumnName = null)}
+  />
+{/if}
+
+{#if editPolymorphicRelation !== null}
+  <PolymorphicVirtualRelationModal
+    connectionId={editPolymorphicRelation.connectionId}
+    database={editPolymorphicRelation.database}
+    table={editPolymorphicRelation.table}
+    editRelation={editPolymorphicRelation}
+    onClose={() => (editPolymorphicRelation = null)}
   />
 {/if}
 
