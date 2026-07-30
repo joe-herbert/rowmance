@@ -41,6 +41,7 @@ export type ShortcutAction =
   | 'OPEN_SETTINGS'
   | 'TOGGLE_SYSTEM_ITEMS'
   | 'CLOSE_OTHER_TABS'
+  | 'REOPEN_CLOSED_TAB'
   | 'GLOBAL_SEARCH'
   | 'TOGGLE_READ_ONLY'
   | 'TABLE_VIEW_RELATIONS'
@@ -235,6 +236,16 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+Shift+W',
     jetbrains: 'Mod+Shift+W',
     vim: 'Mod+Shift+W',
+  },
+  {
+    action: 'REOPEN_CLOSED_TAB',
+    label: 'Reopen Closed Tab',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Shift+T',
+    jetbrains: 'Mod+Shift+T',
+    vim: 'Mod+Shift+T',
   },
   {
     action: 'TAB_1',

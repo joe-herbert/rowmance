@@ -41,6 +41,7 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
   'OPEN_SETTINGS',
   'TOGGLE_SYSTEM_ITEMS',
   'CLOSE_OTHER_TABS',
+  'REOPEN_CLOSED_TAB',
   'GLOBAL_SEARCH',
   'TOGGLE_READ_ONLY',
   'TABLE_VIEW_RELATIONS',
@@ -57,8 +58,8 @@ const EXPECTED_ACTIONS: ShortcutAction[] = [
 ];
 
 describe('SHORTCUT_DEFINITIONS', () => {
-  it('contains exactly 45 action definitions', () => {
-    expect(SHORTCUT_DEFINITIONS).toHaveLength(45);
+  it('contains exactly 48 action definitions', () => {
+    expect(SHORTCUT_DEFINITIONS).toHaveLength(48);
   });
 
   it('contains all expected action IDs', () => {

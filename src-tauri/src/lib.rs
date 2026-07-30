@@ -136,6 +136,13 @@ pub fn run() {
                 MenuItem::with_id(app, "split-down", "Split Down", true, None::<&str>)?;
             let split_close_item =
                 MenuItem::with_id(app, "split-close", "Close Split", true, None::<&str>)?;
+            let reopen_closed_tab_item = MenuItem::with_id(
+                app,
+                "reopen-closed-tab",
+                "Reopen Closed Tab",
+                true,
+                None::<&str>,
+            )?;
             let view_submenu = Submenu::with_items(
                 app,
                 "View",
@@ -148,6 +155,7 @@ pub fn run() {
                     &toggle_system_item,
                     &PredefinedMenuItem::separator(app)?,
                     &command_palette_item,
+                    &reopen_closed_tab_item,
                     &PredefinedMenuItem::separator(app)?,
                     &split_right_item,
                     &split_down_item,
@@ -287,6 +295,9 @@ pub fn run() {
                     }
                     "split-close" => {
                         let _ = app.emit("menu:split-close", ());
+                    }
+                    "reopen-closed-tab" => {
+                        let _ = app.emit("menu:reopen-closed-tab", ());
                     }
                     #[cfg(debug_assertions)]
                     "dev-speed-analysis" => {

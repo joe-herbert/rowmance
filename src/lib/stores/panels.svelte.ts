@@ -8,7 +8,7 @@
  */
 import { untrack } from 'svelte';
 import type { PanelState, PanelKind, SplitNode, SplitChild } from '$lib/types';
-import { queryEditorCache } from './queryEditorState';
+import { queryEditorCache, type SavedQueryEditorState } from './queryEditorState';
 import { clearTableFilterCache } from '$lib/stores/tableBrowserFilterCache';
 import { useSettings } from './settings.svelte';
 
@@ -18,6 +18,15 @@ export interface OpenItem {
   /** Timestamp (ms) this item was last focused/viewed. */
   lastViewedAt: number;
 }
+
+interface ClosedItem {
+  content: PanelKind;
+  /** Split the item was closed from; reopened there if it still exists, else the focused split. */
+  splitId: string;
+  queryState?: SavedQueryEditorState;
+}
+
+const MAX_CLOSED_ITEMS = 20;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -296,6 +305,7 @@ let splitStates = $state<Map<string, SplitState>>(
 );
 let focusedSplitIdState = $state<string>(initialSplitId);
 let dirtyItemKeys = $state<Set<string>>(new Set());
+let closedStack = $state<ClosedItem[]>([]);
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -410,10 +420,22 @@ function cleanupSplitItems(splitId: string) {
   const state = splitStates.get(splitId);
   if (!state) return;
   for (const item of state.openItems) {
+    pushClosed(item, splitId);
     if (item.content.kind === 'query_editor' && item.content.editorId) {
       queryEditorCache.delete(item.content.editorId);
     }
   }
+}
+
+/** Record a closed item (and its query editor state, if any) so it can be reopened. */
+function pushClosed(item: OpenItem, splitId: string) {
+  if (item.content.kind === 'empty') return;
+  const entry: ClosedItem = { content: item.content, splitId };
+  if (item.content.kind === 'query_editor' && item.content.editorId) {
+    const queryState = queryEditorCache.get(item.content.editorId);
+    if (queryState) entry.queryState = queryState;
+  }
+  closedStack = [...closedStack, entry].slice(-MAX_CLOSED_ITEMS);
 }
 
 // ── Public interface ──────────────────────────────────────────────────────────
@@ -665,6 +687,7 @@ export function usePanels() {
       const item = state.openItems.find((i) => i.id === itemId);
       if (!item) return;
 
+      pushClosed(item, splitId);
       if (item.content.kind === 'query_editor' && item.content.editorId) {
         queryEditorCache.delete(item.content.editorId);
       }
@@ -694,6 +717,7 @@ export function usePanels() {
       const state = getSplitState(splitId);
       const toClose = state.openItems.filter((i) => i.id !== keepItemId);
       for (const item of toClose) {
+        pushClosed(item, splitId);
         if (item.content.kind === 'query_editor' && item.content.editorId) {
           queryEditorCache.delete(item.content.editorId);
         }
@@ -718,6 +742,7 @@ export function usePanels() {
 
       const toClose = state.openItems.slice(0, idx);
       for (const item of toClose) {
+        pushClosed(item, splitId);
         if (item.content.kind === 'query_editor' && item.content.editorId) {
           queryEditorCache.delete(item.content.editorId);
         }
@@ -737,6 +762,7 @@ export function usePanels() {
 
       const toClose = state.openItems.slice(idx + 1);
       for (const item of toClose) {
+        pushClosed(item, splitId);
         if (item.content.kind === 'query_editor' && item.content.editorId) {
           queryEditorCache.delete(item.content.editorId);
         }
@@ -761,6 +787,7 @@ export function usePanels() {
         if (toClose.length === 0) continue;
 
         for (const item of toClose) {
+          pushClosed(item, splitId);
           if (item.content.kind === 'query_editor' && item.content.editorId) {
             queryEditorCache.delete(item.content.editorId);
           }
@@ -852,6 +879,7 @@ export function usePanels() {
       const item = state.openItems.find((i) => i.id === state.focusedItemId);
       if (!item || item.content.kind === 'empty') return;
 
+      pushClosed(item, focusedSplitIdState);
       if (item.content.kind === 'query_editor' && item.content.editorId) {
         queryEditorCache.delete(item.content.editorId);
       }
@@ -869,6 +897,41 @@ export function usePanels() {
       if (newItems.length === 0) {
         autoCloseSplitIfEmpty(focusedSplitIdState);
       }
+    },
+
+    get hasClosedItems(): boolean {
+      return closedStack.length > 0;
+    },
+
+    /**
+     * Reopen the most recently closed tab. Can be called repeatedly to walk back
+     * through closed tabs, most-recent first. Reopens into its original split if
+     * that split still exists, otherwise the currently focused split.
+     */
+    reopenLastClosedItem(): boolean {
+      if (closedStack.length === 0) return false;
+      const entry = closedStack[closedStack.length - 1];
+      closedStack = closedStack.slice(0, -1);
+
+      let content = entry.content;
+      if (content.kind === 'query_editor') {
+        const newEditorId = createId();
+        content = { ...content, editorId: newEditorId };
+        if (entry.queryState) {
+          queryEditorCache.save(newEditorId, entry.queryState);
+        }
+      }
+
+      const targetSplitId = splitStates.has(entry.splitId) ? entry.splitId : focusedSplitIdState;
+      const state = getSplitState(targetSplitId);
+      const newItem: OpenItem = { id: createId(), content, lastViewedAt: Date.now() };
+      setSplitState(targetSplitId, {
+        ...state,
+        openItems: insertPositioned(state.openItems, newItem, state.focusedItemId),
+        focusedItemId: newItem.id,
+      });
+      focusedSplitIdState = targetSplitId;
+      return true;
     },
 
     /** Reorder open items within a specific split (or the split containing fromId). */

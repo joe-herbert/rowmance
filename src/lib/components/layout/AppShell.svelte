@@ -417,6 +417,7 @@
         panelStore.splitFocused('down', settings.maxHorizontalSplits, settings.maxVerticalSplits),
       ),
       listen('menu:split-close', () => panelStore.closeSplit(panelStore.focusedSplitId)),
+      listen('menu:reopen-closed-tab', () => panelStore.reopenLastClosedItem()),
       listen<string>('connection:ssh-dropped', (event) => {
         const id = event.payload;
         const profile = connectionsStore.getById(id);
@@ -562,6 +563,9 @@
       const splitItems = panelStore.getSplitItems(panelStore.focusedSplitId);
       const focusedItem = splitItems.find((i) => sameContent(i.content, focusedContent));
       if (focusedItem) panelStore.closeOtherItems(focusedItem.id);
+    }
+    if (action === 'REOPEN_CLOSED_TAB') {
+      panelStore.reopenLastClosedItem();
     }
     if (action === 'NEW_QUERY_EDITOR') {
       const focused = panelStore.focusedPanel.content;
