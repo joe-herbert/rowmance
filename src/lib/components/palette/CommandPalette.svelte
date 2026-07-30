@@ -327,7 +327,7 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-2);
-    padding: var(--spacing-3) var(--spacing-4);
+    padding: var(--spacing-3) var(--spacing-4) var(--spacing-3) 26px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }

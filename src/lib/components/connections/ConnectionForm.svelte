@@ -30,11 +30,12 @@
   interface Props {
     profile?: ConnectionProfile;
     groupId?: string | null;
+    zindex?: number;
     onclose: () => void;
     ondelete?: () => void;
   }
 
-  const { profile, groupId, onclose, ondelete }: Props = $props();
+  const { profile, groupId, zindex = 200, onclose, ondelete }: Props = $props();
 
   const connectionStore = useConnections();
   const tagsStore = useTags();
@@ -362,7 +363,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<Modal zindex={200} label={title} onbackdropclick={onclose}>
+<Modal {zindex} label={title} onbackdropclick={onclose}>
   <div class="dialog">
     <header class="dialog-header">
       <h2 class="dialog-title">{title}</h2>

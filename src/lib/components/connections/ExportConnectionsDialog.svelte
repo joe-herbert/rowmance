@@ -16,12 +16,13 @@
     profiles: ConnectionProfile[];
     /** When set, only these connections are pre-selected. Null = select all. */
     preselectIds?: string[] | null;
+    zindex?: number;
     onclose: () => void;
     onsuccess: (_count: number) => void;
     onerror: (_msg: string) => void;
   }
 
-  let { profiles, preselectIds = null, onclose, onsuccess, onerror }: Props = $props();
+  let { profiles, preselectIds = null, zindex, onclose, onsuccess, onerror }: Props = $props();
 
   const initialIds = untrack(() =>
     preselectIds ? new Set(preselectIds) : new Set(profiles.map((p) => p.id)),
@@ -70,7 +71,7 @@
   }
 </script>
 
-<Modal label="Export Connections" onbackdropclick={exporting ? undefined : onclose}>
+<Modal {zindex} label="Export Connections" onbackdropclick={exporting ? undefined : onclose}>
   <div class="export-dialog">
     <p class="description">
       Select which connections to export. The file can be imported on another machine.

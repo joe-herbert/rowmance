@@ -59,7 +59,8 @@ export type ShortcutAction =
   | 'SPLIT_CLOSE'
   | 'SPLIT_FOCUS_NEXT'
   | 'SPLIT_FOCUS_PREV'
-  | 'TABLE_CLONE_ROW';
+  | 'TABLE_CLONE_ROW'
+  | 'CONNECT_TO_CONNECTION';
 
 export type ShortcutGroup = 'Query Editor' | 'Navigation' | 'Table View' | 'General';
 export type ShortcutLocation = 'global' | 'query-editor' | 'table-view';
@@ -549,6 +550,16 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Mod+Shift+L',
     jetbrains: 'Mod+Shift+L',
     vim: 'Mod+Shift+L',
+  },
+  {
+    action: 'CONNECT_TO_CONNECTION',
+    label: 'Connect to Connection',
+    group: 'General',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Shift+C',
+    jetbrains: 'Mod+Shift+C',
+    vim: 'g c',
   },
 ];
 

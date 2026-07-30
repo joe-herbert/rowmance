@@ -37,6 +37,7 @@
   type Kind = 'connection' | 'database' | 'schema' | 'table' | 'column';
   type MatchMode = 'strict' | 'normal' | 'fuzzy';
   type AccessFilter = 'readonly' | 'writable' | null;
+  type ConnectedFilter = 'all' | 'connected';
 
   const STORAGE_KEY = 'globalSearch.filters';
 
@@ -54,6 +55,7 @@
   let matchMode = $state<MatchMode>((saved.matchMode as MatchMode) ?? 'normal');
   let filterDbTypes = $state<DbType[]>((saved.filterDbTypes as DbType[]) ?? []);
   let filterAccess = $state<AccessFilter>((saved.filterAccess as AccessFilter) ?? null);
+  let filterConnected = $state<ConnectedFilter>((saved.filterConnected as ConnectedFilter) ?? 'all');
   let filterGroups = $state<string[]>((saved.filterGroups as string[]) ?? []);
   let filtersExpanded = $state<boolean>((saved.filtersExpanded as boolean) ?? true);
   let excludedDbs = $state<string[]>((saved.excludedDbs as string[]) ?? []);
@@ -69,6 +71,7 @@
         matchMode,
         filterDbTypes,
         filterAccess,
+        filterConnected,
         filterGroups,
         filtersExpanded,
         excludedDbs,
@@ -82,6 +85,7 @@
       matchMode !== 'normal' ||
       filterDbTypes.length > 0 ||
       filterAccess !== null ||
+      filterConnected !== 'all' ||
       filterGroups.length > 0 ||
       excludedDbs.length > 0 ||
       excludedTables.length > 0,
@@ -92,6 +96,7 @@
     matchMode = 'normal';
     filterDbTypes = [];
     filterAccess = null;
+    filterConnected = 'all';
     filterGroups = [];
     excludedDbs = [];
     excludedTables = [];
@@ -191,6 +196,11 @@
     { label: 'Read-only', value: 'readonly' },
   ];
 
+  const connectedOptions: Array<{ label: string; value: ConnectedFilter }> = [
+    { label: 'All', value: 'all' },
+    { label: 'Connected', value: 'connected' },
+  ];
+
   const fuseOptions = $derived.by(() => {
     switch (matchMode) {
       case 'strict':
@@ -236,10 +246,12 @@
     dbType: DbType,
     readOnly: boolean,
     groupId: string | null,
+    connectionId: string,
   ): boolean {
     if (filterDbTypes.length > 0 && !filterDbTypes.includes(dbType)) return false;
     if (filterAccess === 'readonly' && !readOnly) return false;
     if (filterAccess === 'writable' && readOnly) return false;
+    if (filterConnected === 'connected' && !connections.activeIds.has(connectionId)) return false;
     if (filterGroups.length > 0 && !filterGroups.includes(groupId ?? 'ungrouped')) return false;
     return true;
   }
@@ -249,7 +261,7 @@
   const fuseConnections = $derived(
     new Fuse(
       connections.profiles
-        .filter((p) => matchesConnectionFilters(p.dbType, p.readOnly, p.groupId))
+        .filter((p) => matchesConnectionFilters(p.dbType, p.readOnly, p.groupId, p.id))
         .map((p) => ({
           kind: 'connection' as const,
           id: p.id,
@@ -265,7 +277,7 @@
     new Fuse(
       databaseEntries.filter(
         (e) =>
-          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId, e.connectionId) &&
           !matchesExcludePattern(e.database, excludedDbs),
       ),
       { keys: ['database', 'connectionName'], includeScore: true, ...fuseOptions },
@@ -276,7 +288,7 @@
     new Fuse(
       schemaEntries.filter(
         (e) =>
-          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId, e.connectionId) &&
           !matchesExcludePattern(e.instanceDb, excludedDbs),
       ),
       { keys: ['schema', 'instanceDb', 'connectionName'], includeScore: true, ...fuseOptions },
@@ -287,7 +299,7 @@
     new Fuse(
       tableEntries.filter(
         (e) =>
-          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId, e.connectionId) &&
           !matchesExcludePattern(e.database, excludedDbs) &&
           !(e.instanceDb && matchesExcludePattern(e.instanceDb, excludedDbs)) &&
           !matchesExcludePattern(e.name, excludedTables),
@@ -300,7 +312,7 @@
     new Fuse(
       columnEntries.filter(
         (e) =>
-          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId) &&
+          matchesConnectionFilters(e.connectionDbType, e.connectionReadOnly, e.connectionGroupId, e.connectionId) &&
           !matchesExcludePattern(e.database, excludedDbs) &&
           !(e.instanceDb && matchesExcludePattern(e.instanceDb, excludedDbs)) &&
           !matchesExcludePattern(e.table, excludedTables),
@@ -318,7 +330,7 @@
 
     if (!q) {
       const all: ResultItem[] = connections.profiles
-        .filter((p) => matchesConnectionFilters(p.dbType, p.readOnly, p.groupId))
+        .filter((p) => matchesConnectionFilters(p.dbType, p.readOnly, p.groupId, p.id))
         .slice(0, 5)
         .map((p) => ({
           kind: 'connection' as const,
@@ -420,6 +432,7 @@
     filterKinds;
     filterDbTypes;
     filterAccess;
+    filterConnected;
     filterGroups;
     selectedIndex = 0;
   });
@@ -612,6 +625,19 @@
               class:active={filterAccess === opt.value}
               onclick={() => {
                 filterAccess = opt.value;
+                inputEl?.focus();
+              }}
+              type="button">{opt.label}</button
+            >
+          {/each}
+        </div>
+        <div role="group" aria-label="Filter by connection status" class="filter-group filter-group--right">
+          {#each connectedOptions as opt}
+            <button
+              class="filter-chip"
+              class:active={filterConnected === opt.value}
+              onclick={() => {
+                filterConnected = opt.value;
                 inputEl?.focus();
               }}
               type="button">{opt.label}</button

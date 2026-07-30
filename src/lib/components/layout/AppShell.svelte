@@ -22,6 +22,7 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
   import GlobalSearch from '$lib/components/palette/GlobalSearch.svelte';
+  import ConnectionSwitcher from '$lib/components/palette/ConnectionSwitcher.svelte';
   import RecordingModal from '$lib/components/ui/RecordingModal.svelte';
   import RevertModal from '$lib/components/ui/RevertModal.svelte';
   import { useRecording } from '$lib/stores/recording.svelte';
@@ -542,6 +543,7 @@
       if (connectionId) panelStore.openInFocused({ kind: 'query_editor', connectionId });
     }
     if (action === 'GLOBAL_SEARCH') openGlobalSearch();
+    if (action === 'CONNECT_TO_CONNECTION') openConnectionSwitcher();
     if (action.startsWith('TAB_')) {
       const n = parseInt(action.slice(4), 10);
       const items = panelStore.getSplitItems(panelStore.focusedSplitId);
@@ -563,6 +565,7 @@
 
   let paletteOpen = $state(false);
   let globalSearchOpen = $state(false);
+  let connectionSwitcherOpen = $state(false);
   let confirmCloseFocused = $state(false);
   let confirmCloseFocusedKey = $state<string | null>(null);
 
@@ -769,6 +772,12 @@
   }
   function closeGlobalSearch() {
     globalSearchOpen = false;
+  }
+  function openConnectionSwitcher() {
+    connectionSwitcherOpen = true;
+  }
+  function closeConnectionSwitcher() {
+    connectionSwitcherOpen = false;
   }
 
   // On macOS with titleBarStyle:"overlay" the webview fills behind the native traffic
@@ -1378,6 +1387,10 @@
 
 {#if globalSearchOpen}
   <GlobalSearch onclose={closeGlobalSearch} />
+{/if}
+
+{#if connectionSwitcherOpen}
+  <ConnectionSwitcher onclose={closeConnectionSwitcher} />
 {/if}
 
 {#if recordingStore.reviewOpen}

@@ -12,6 +12,7 @@
     requireTypedText?: string;
     /** When set, shown below the message in a scrollable monospace code block. */
     code?: string;
+    zindex?: number;
     onconfirm: () => void;
     oncancel: () => void;
   }
@@ -24,6 +25,7 @@
     danger = false,
     requireTypedText,
     code,
+    zindex,
     onconfirm,
     oncancel,
   }: Props = $props();
@@ -46,7 +48,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<Modal label={title} onbackdropclick={oncancel}>
+<Modal {zindex} label={title} onbackdropclick={oncancel}>
   <div class="modal-card" class:modal-card--wide={!!code}>
     <div class="modal-title">{title}</div>
     <div class="modal-body">
