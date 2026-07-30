@@ -198,35 +198,49 @@
       return { ...data.variables };
     }
 
-    // Built-in theme: snapshot computed CSS by temporarily switching data-theme.
-    const root = document.documentElement;
-    const style = root.style;
+    // Built-in theme: read the raw declared values from the CSS theme rules.
+    // We deliberately avoid getComputedStyle here — it resolves nested var()
+    // references (e.g. --app-background's var(--color-connection)) into static
+    // literals, which would freeze what's meant to stay a live composite.
+    const rules = collectStyleRules();
+    const themeSelector = new RegExp(`\\[data-theme=(['"])${base}\\1\\]`);
+    const isRoot = (selectorText: string) =>
+      selectorText.split(',').some((s) => s.trim() === ':root');
+    const isTheme = (selectorText: string) =>
+      selectorText.split(',').some((s) => themeSelector.test(s.trim()));
 
-    // Stash and clear inline custom properties so computed values reflect the
-    // CSS theme file rather than any active custom theme.
-    const stash: Record<string, string> = {};
-    const inlineProps: string[] = [];
-    for (let i = 0; i < style.length; i++) {
-      if (style[i].startsWith('--')) inlineProps.push(style[i]);
-    }
-    inlineProps.forEach((p) => {
-      stash[p] = style.getPropertyValue(p);
-      style.removeProperty(p);
-    });
-
-    const prevTheme = root.getAttribute('data-theme') ?? 'system';
-    root.setAttribute('data-theme', base);
-
-    const computed = getComputedStyle(root);
     const variables: Record<string, string> = {};
     for (const v of ALL_THEME_VARS) {
-      variables[v] = computed.getPropertyValue(v).trim();
+      let rootValue: string | undefined;
+      let themeValue: string | undefined;
+      for (const rule of rules) {
+        const value = rule.style.getPropertyValue(v).trim();
+        if (!value) continue;
+        if (isTheme(rule.selectorText)) themeValue = value;
+        else if (isRoot(rule.selectorText)) rootValue = value;
+      }
+      variables[v] = themeValue ?? rootValue ?? '';
     }
 
-    root.setAttribute('data-theme', prevTheme);
-    inlineProps.forEach((p) => style.setProperty(p, stash[p]));
-
     return variables;
+  }
+
+  function collectStyleRules(): CSSStyleRule[] {
+    const rules: CSSStyleRule[] = [];
+    const walk = (list: CSSRuleList) => {
+      for (const rule of Array.from(list)) {
+        if (rule instanceof CSSStyleRule) rules.push(rule);
+        else if (rule instanceof CSSMediaRule) walk(rule.cssRules);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        walk(sheet.cssRules);
+      } catch {
+        // Cross-origin stylesheet; nothing we can read from it.
+      }
+    }
+    return rules;
   }
 
   function cancelCreateTheme() {
