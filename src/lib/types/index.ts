@@ -596,6 +596,10 @@ export interface AppSettings {
   /** Controls overall formatting density. Takes priority over formatCompact. */
   formatStyle: 'expanded' | 'comfortable' | 'compact';
   openItemsLocation: 'sidebar' | 'top';
+  /** What to show in a panel when there are no open tabs. */
+  emptyPanelMode: 'full' | 'minimal' | 'dashboard';
+  /** Dashboard to auto-open when emptyPanelMode is 'dashboard'. */
+  emptyPanelDashboardId: string;
   maxHorizontalSplits: number;
   maxVerticalSplits: number;
   cellMaxLines: number;
@@ -655,6 +659,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formatCompact: false,
   formatStyle: 'expanded',
   openItemsLocation: 'sidebar',
+  emptyPanelMode: 'full',
+  emptyPanelDashboardId: '',
   maxHorizontalSplits: 2,
   maxVerticalSplits: 2,
   cellMaxLines: 1,

@@ -12,6 +12,7 @@
   import { onMount, tick } from 'svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useTags } from '$lib/stores/tags.svelte';
+  import { useDashboards } from '$lib/stores/dashboards.svelte';
   import KeyboardShortcuts from '$lib/components/settings/KeyboardShortcuts.svelte';
   import ThemeEditor from '$lib/components/settings/ThemeEditor.svelte';
   import * as themesApi from '$lib/tauri/themes';
@@ -69,6 +70,7 @@
 
   const settingsStore = useSettings();
   const settings = $derived(settingsStore.settings);
+  const dashboardsStore = useDashboards();
   const toast = useToast();
 
   const BUILTIN_THEMES = [
@@ -1101,6 +1103,37 @@
             onchange={(v) => update('openItemsLocation', v as 'sidebar' | 'top')}
           />
         </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Empty Tab Behaviour</span>
+            <span class="label-hint">What to show in a panel when there are no open tabs</span>
+          </div>
+          <Select
+            value={settings.emptyPanelMode}
+            options={[
+              { value: 'full', label: 'Launch screen' },
+              { value: 'minimal', label: 'No open tabs message' },
+              { value: 'dashboard', label: 'Open a dashboard' },
+            ]}
+            onchange={(v) => update('emptyPanelMode', v as 'full' | 'minimal' | 'dashboard')}
+          />
+        </div>
+
+        {#if settings.emptyPanelMode === 'dashboard'}
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="label-text">Empty Tab Dashboard</span>
+              <span class="label-hint">Dashboard to open automatically when there are no tabs</span>
+            </div>
+            <Select
+              value={settings.emptyPanelDashboardId}
+              options={dashboardsStore.dashboards.map((d) => ({ value: d.id, label: d.name }))}
+              placeholder="Select a dashboard…"
+              onchange={(v) => update('emptyPanelDashboardId', v as string)}
+            />
+          </div>
+        {/if}
 
         <div class="setting-row">
           <div class="setting-label">

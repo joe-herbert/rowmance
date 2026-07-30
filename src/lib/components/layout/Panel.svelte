@@ -7,6 +7,8 @@
   import type { PanelState } from '$lib/types';
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
+  import { useSettings } from '$lib/stores/settings.svelte';
+  import { useDashboards } from '$lib/stores/dashboards.svelte';
   import QueryEditor from '$lib/components/editor/QueryEditor.svelte';
   import TableBrowser from '$lib/components/table/TableBrowser.svelte';
   import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
@@ -24,6 +26,7 @@
   import DashboardPanel from '$lib/components/dashboard/DashboardPanel.svelte';
   import AiChatTabPanel from '$lib/components/ai/AiChatTabPanel.svelte';
   import EmptyPanelPlaceholder from '$lib/components/layout/EmptyPanelPlaceholder.svelte';
+  import NoTabsMessage from '$lib/components/layout/NoTabsMessage.svelte';
 
   interface Props {
     panel: PanelState;
@@ -35,12 +38,24 @@
   const { panel, isFocused, splitId, itemId }: Props = $props();
   const panelStore = usePanels();
   const statusBar = useStatusBar();
+  const settingsStore = useSettings();
+  const dashboardsStore = useDashboards();
+
+  const emptyPanelMode = $derived(settingsStore.settings.emptyPanelMode ?? 'full');
 
   // When a non-table panel gains focus, clear any stale status bar state.
   $effect(() => {
     if (isFocused && panel.content.kind !== 'table_browser') {
       statusBar.clear();
     }
+  });
+
+  // Auto-open the configured dashboard when this split has no tabs.
+  $effect(() => {
+    if (panel.content.kind !== 'empty' || emptyPanelMode !== 'dashboard') return;
+    const dashboardId = settingsStore.settings.emptyPanelDashboardId;
+    if (!dashboardId || !dashboardsStore.getById(dashboardId)) return;
+    panelStore.openInSplit({ kind: 'dashboard', dashboardId }, splitId);
   });
 </script>
 
@@ -127,8 +142,10 @@
     {#key panel.content.conversationId}
       <AiChatTabPanel conversationId={panel.content.conversationId} />
     {/key}
-  {:else}
+  {:else if emptyPanelMode === 'full'}
     <EmptyPanelPlaceholder />
+  {:else}
+    <NoTabsMessage />
   {/if}
 </div>
 
