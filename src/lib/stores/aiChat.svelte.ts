@@ -198,6 +198,17 @@ export function useAiChat() {
       upsertConversation(updated);
     },
 
+    /** Scope a conversation to a connection/database, e.g. after the user picks one to open a query in an editor. */
+    async setConnection(
+      id: string,
+      connectionId: string | null,
+      database: string | null,
+    ): Promise<AiConversation> {
+      const updated = await api.setConnection(id, connectionId, database);
+      upsertConversation(updated);
+      return updated;
+    },
+
     async remove(id: string) {
       await api.deleteConversation(id);
       conversations = conversations.filter((c) => c.id !== id);

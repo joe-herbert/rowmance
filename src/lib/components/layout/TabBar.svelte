@@ -7,6 +7,7 @@
   import type { OpenItem } from '$lib/stores/panels.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useAiChat } from '$lib/stores/aiChat.svelte';
   import type { PanelKind } from '$lib/types';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { clearTablePendingState } from '$lib/components/table/TableBrowser.svelte';
@@ -29,10 +30,17 @@
   const tabDrag = useTabDrag();
   const connectionStore = useConnections();
   const dashboardsStore = useDashboards();
+  const aiChat = useAiChat();
 
   function panelConnInfo(content: PanelKind): { color: string | null } | null {
-    if (!('connectionId' in content)) return null;
-    const conn = connectionStore.getById(content.connectionId);
+    const connectionId =
+      content.kind === 'ai_chat'
+        ? aiChat.getById(content.conversationId)?.connectionId ?? null
+        : 'connectionId' in content
+          ? content.connectionId
+          : null;
+    if (!connectionId) return null;
+    const conn = connectionStore.getById(connectionId);
     if (!conn) return null;
     return { color: conn.color };
   }

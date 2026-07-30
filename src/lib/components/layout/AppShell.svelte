@@ -20,6 +20,7 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import { useShortcuts } from '$lib/stores/shortcuts.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useAiChat } from '$lib/stores/aiChat.svelte';
   import CommandPalette from '$lib/components/palette/CommandPalette.svelte';
   import GlobalSearch from '$lib/components/palette/GlobalSearch.svelte';
   import ConnectionSwitcher from '$lib/components/palette/ConnectionSwitcher.svelte';
@@ -72,6 +73,7 @@
   const panelStore = usePanels();
   const shortcutsStore = useShortcuts();
   const connectionsStore = useConnections();
+  const aiChat = useAiChat();
   const dashboardsStore = useDashboards();
   const toast = useToast();
   const recordingStore = useRecording();
@@ -95,6 +97,10 @@
 
   const activeConnection = $derived.by(() => {
     const c = focusedContent;
+    if (c.kind === 'ai_chat') {
+      const chatConnectionId = aiChat.getById(c.conversationId)?.connectionId;
+      return chatConnectionId ? connectionsStore.getById(chatConnectionId) ?? null : null;
+    }
     if ('connectionId' in c) return connectionsStore.getById(c.connectionId) ?? null;
     return null;
   });

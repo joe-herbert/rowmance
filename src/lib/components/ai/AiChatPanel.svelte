@@ -47,9 +47,8 @@
     selectedId = null;
   }
 
-  function openInNewTab() {
-    if (!selectedId) return;
-    panelStore.openInFocused({ kind: 'ai_chat', conversationId: selectedId });
+  function openInNewTab(id: string) {
+    panelStore.openInFocused({ kind: 'ai_chat', conversationId: id });
   }
 
   // ── Context menu / rename / delete ─────────────────────────────────────────
@@ -177,7 +176,7 @@
       <span class="panel-title thread-title">{selectedConversation.title}</span>
       <button
         class="icon-btn"
-        onclick={openInNewTab}
+        onclick={() => openInNewTab(selectedConversation.id)}
         aria-label="Open in new tab"
         title="Open in new tab"
         type="button"
@@ -214,6 +213,14 @@
 >
   {#if ctxMenu}
     <CtxItem onclick={() => openConversation(ctxMenu!.id)}>Open</CtxItem>
+    <CtxItem
+      onclick={() => {
+        openInNewTab(ctxMenu!.id);
+        ctxMenu = null;
+      }}
+    >
+      Open in New Tab
+    </CtxItem>
     <CtxItem onclick={() => startRename(ctxMenu!.id, ctxMenu!.title)}>Rename</CtxItem>
     <CtxSep />
     <CtxItem danger onclick={() => startDelete(ctxMenu!.id, ctxMenu!.title)}>Delete</CtxItem>

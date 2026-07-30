@@ -9,6 +9,7 @@
   import { usePanels } from '$lib/stores/panels.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useToast } from '$lib/stores/toast.svelte';
   import {
     buildSchemaContext,
     buildFollowUpSystemPrompt as buildFollowUpSystemPromptForMode,
@@ -23,10 +24,13 @@
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
   import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
+  import OpenInPanelIcon from '$lib/components/icons/OpenInPanelIcon.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import CopyButton from '$lib/components/ui/CopyButton.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import Select from '$lib/components/ui/Select.svelte';
+  import ChatCodeBlock from '$lib/components/ai/ChatCodeBlock.svelte';
+  import ConnectionPickerDialog from '$lib/components/ai/ConnectionPickerDialog.svelte';
 
   interface Props {
     conversationId: string;
@@ -43,10 +47,14 @@
   const panels = usePanels();
   const settingsStore = useSettings();
   const connections = useConnections();
+  const toast = useToast();
 
   // A chat opened via "New AI chat" gets a client-only `draft-` id and isn't
   // persisted (or shown in history) until its first message is actually sent.
-  const isDraft = $derived(conversationId.startsWith('draft-'));
+  // conversationId can transiently be missing while the host panel is mid
+  // re-render (e.g. right after opening another tab shifts focus elsewhere),
+  // so guard rather than crash on `.startsWith`.
+  const isDraft = $derived(!conversationId || conversationId.startsWith('draft-'));
   const draftConversation = $derived<AiConversation>({
     id: conversationId,
     mode: 'chat',
@@ -67,7 +75,9 @@
     dataSampleRows: settingsStore.settings.aiDataSampleRows,
   });
 
-  const conversation = $derived(isDraft ? draftConversation : aiChat.getById(conversationId) ?? null);
+  const conversation = $derived(
+    !conversationId ? null : isDraft ? draftConversation : aiChat.getById(conversationId) ?? null,
+  );
   const messages = $derived(isDraft ? [] : aiChat.getMessages(conversationId));
 
   let threadBodyEl = $state<HTMLDivElement | undefined>(undefined);
@@ -75,6 +85,98 @@
   async function scrollToBottom() {
     await tick();
     threadBodyEl?.scrollTo({ top: threadBodyEl.scrollHeight });
+  }
+
+  // ── Markdown + code block rendering ─────────────────────────────────────────
+
+  type MessageSegment =
+    | { type: 'text'; html: string }
+    | { type: 'code'; code: string; lang?: string };
+
+  // Pulls fenced code blocks out of a reply so they can be rendered by
+  // ChatCodeBlock (syntax coloring, copy, "open in editor") instead of the
+  // plain <pre><code> that marked() would otherwise produce for them.
+  function parseMessageSegments(content: string): MessageSegment[] {
+    const segments: MessageSegment[] = [];
+    const fenceRe = /```(\w+)?\r?\n([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = fenceRe.exec(content)) !== null) {
+      const text = content.slice(lastIndex, match.index);
+      if (text.trim()) segments.push({ type: 'text', html: marked(text) as string });
+      segments.push({ type: 'code', code: match[2].replace(/\n$/, ''), lang: match[1]?.toLowerCase() });
+      lastIndex = fenceRe.lastIndex;
+    }
+    const rest = content.slice(lastIndex);
+    if (rest.trim()) segments.push({ type: 'text', html: marked(rest) as string });
+    return segments;
+  }
+
+  // Best-effort connection to target when opening a code block's SQL in a new
+  // query editor: the chat's fixed context, then whatever the user last picked
+  // in the ad-hoc schema selector, then whichever connection the focused panel
+  // is already scoped to.
+  function resolveEditorConnection(): { connectionId: string; database?: string } | null {
+    if (conversation?.connectionId) {
+      return { connectionId: conversation.connectionId, database: conversation.database ?? undefined };
+    }
+    if (adHocConnectionId) return { connectionId: adHocConnectionId, database: adHocDatabase || undefined };
+    if (lastEditorConnection) return lastEditorConnection;
+    const focused = panels.focusedPanel.content;
+    if ('connectionId' in focused && focused.connectionId) {
+      return { connectionId: focused.connectionId, database: 'database' in focused ? focused.database : undefined };
+    }
+    return null;
+  }
+
+  // Set when openInQueryEditor can't resolve a connection on its own, so the
+  // user can pick one; the pending SQL waits here until they confirm or cancel.
+  let pendingEditorSql = $state<string | null>(null);
+
+  function openInQueryEditor(sql: string) {
+    const target = resolveEditorConnection();
+    if (!target) {
+      pendingEditorSql = sql;
+      return;
+    }
+    panels.openInFocused({
+      kind: 'query_editor',
+      connectionId: target.connectionId,
+      database: target.database,
+      initialSql: sql,
+    });
+  }
+
+  async function confirmEditorConnection(
+    connectionId: string,
+    database: string | undefined,
+    remember: boolean,
+  ) {
+    if (pendingEditorSql === null) return;
+    // Snapshot before opening the editor: openInFocused switches the split's
+    // focused tab away from this chat, which unmounts this very component (a
+    // split only keeps its currently-focused item's component alive) — so any
+    // $derived read (conversation, isDraft) made after that call reflects a
+    // torn-down instance, not the chat we were just looking at.
+    const targetConversation = conversation;
+    const wasDraft = isDraft;
+    panels.openInFocused({ kind: 'query_editor', connectionId, database, initialSql: pendingEditorSql });
+    pendingEditorSql = null;
+    if (!remember) return;
+    // Set immediately so later clicks in this session don't re-prompt even if
+    // the persist call below fails (e.g. the app backend hasn't picked up a
+    // newly added command yet).
+    lastEditorConnection = { connectionId, database: database ?? '' };
+    if (!targetConversation || wasDraft) return;
+    try {
+      const updated = await aiChat.setConnection(targetConversation.id, connectionId, database ?? null);
+      console.log('[AI] Remembered connection for chat', targetConversation.id, updated);
+    } catch (err) {
+      // Not folded into followUpError: that banner gets cleared by the very
+      // next send, and this can fail well before the user sends again.
+      console.error('[AI] Failed to remember connection for chat', targetConversation.id, err);
+      toast.addToast(`Couldn't remember this connection for the chat: ${errorMessage(err)}`, 'error', 0);
+    }
   }
 
   // ── Follow-up ──────────────────────────────────────────────────────────────
@@ -94,6 +196,12 @@
   let adHocDatabase = $state('');
   let adHocDatabases = $state<string[]>([]);
   let adHocDbLoading = $state(false);
+
+  // The connection/database a message was actually sent with (fixed context or
+  // whatever was ad hoc-picked at send time). adHocConnectionId/adHocDatabase get
+  // reset right after sending so the picker is blank for the next message, so this
+  // is what "open in query editor" falls back on for general chat mode.
+  let lastEditorConnection = $state<{ connectionId: string; database: string } | null>(null);
 
   const hasFixedContext = $derived(!!conversation?.connectionId && !!conversation?.database);
 
@@ -144,6 +252,7 @@
       adHocDatabase = '';
       adHocDatabases = [];
       lastSchemaAttachment = null;
+      lastEditorConnection = null;
       if (draft) return;
       if (!aiChat.loaded) aiChat.loadConversations();
       void aiChat.ensureMessagesLoaded(id).then(scrollToBottom);
@@ -199,6 +308,7 @@
     await scrollToBottom();
     const schemaConnectionId = conversation.connectionId ?? adHocConnectionId;
     const schemaDatabase = conversation.database ?? adHocDatabase;
+    if (schemaConnectionId) lastEditorConnection = { connectionId: schemaConnectionId, database: schemaDatabase };
     adHocConnectionId = '';
     adHocDatabase = '';
     adHocDatabases = [];
@@ -218,6 +328,11 @@
       lastSchemaAttachment = schemaContext
         ? { database: schemaDatabase, chars: schemaContext.length }
         : null;
+      // Attaching structure implies the chat is now about this connection —
+      // link it so later actions (e.g. "open in query editor") don't need to
+      // ask again.
+      const linkConnectionId = schemaContext ? schemaConnectionId : null;
+      const linkDatabase = schemaContext ? schemaDatabase : null;
       // For 'chat' mode, fold the schema + strict "use only these names" rules into
       // the system prompt (stronger adherence than appending it to the user message).
       const systemPrompt =
@@ -230,7 +345,7 @@
       if (isDraft) {
         const title = text.length > 60 ? `${text.slice(0, 60)}…` : text;
         const { conversation: created } = await aiChat.startConversation(
-          { mode: 'chat', contextKey: null, connectionId: null, database: null, title },
+          { mode: 'chat', contextKey: null, connectionId: linkConnectionId, database: linkDatabase, title },
           config,
           systemPrompt,
           text,
@@ -245,6 +360,19 @@
           text,
           userMessageSchemaContext,
         );
+        if (
+          linkConnectionId &&
+          (conversation.connectionId !== linkConnectionId || conversation.database !== linkDatabase)
+        ) {
+          // Isolated from the outer catch: the message already sent
+          // successfully, so a failure here shouldn't look like a failed send.
+          try {
+            await aiChat.setConnection(conversation.id, linkConnectionId, linkDatabase);
+          } catch (err) {
+            console.error('[AI] Failed to link connection after attaching structure', conversation.id, err);
+            toast.addToast(`Couldn't link this chat to its connection: ${errorMessage(err)}`, 'error', 0);
+          }
+        }
       }
     } catch (err) {
       followUpError = errorMessage(err);
@@ -308,9 +436,28 @@
             <pre class="thread-result"><SqlHighlight
                 sql={stripSqlCodeFence(message.content)}
               /></pre>
+            <div class="thread-result-toolbar">
+              <button
+                class="chat-code-toolbar-btn"
+                onclick={() => openInQueryEditor(stripSqlCodeFence(message.content))}
+                title="Open in new query editor"
+                aria-label="Open in new query editor"
+                type="button"
+              >
+                <OpenInPanelIcon width={12} height={12} />
+              </button>
+            </div>
             <CopyButton text={stripSqlCodeFence(message.content)} />
           {:else}
-            <div class="thread-answer markdown-body">{@html marked(message.content)}</div>
+            <div class="thread-answer markdown-body">
+              {#each parseMessageSegments(message.content) as segment}
+                {#if segment.type === 'code'}
+                  <ChatCodeBlock code={segment.code} lang={segment.lang} onOpenInEditor={openInQueryEditor} />
+                {:else}
+                  {@html segment.html}
+                {/if}
+              {/each}
+            </div>
             <CopyButton text={message.content} />
           {/if}
         </div>
@@ -421,6 +568,16 @@
   />
 {/if}
 
+{#if pendingEditorSql !== null}
+  <ConnectionPickerDialog
+    title="Open in query editor"
+    message="This chat isn't tied to a connection. Choose one to open the query in."
+    rememberLabel="Always use this connection for this chat"
+    onconfirm={confirmEditorConnection}
+    oncancel={() => (pendingEditorSql = null)}
+  />
+{/if}
+
 <style>
   .thread-toolbar {
     display: flex;
@@ -481,9 +638,36 @@
     padding-right: calc(var(--spacing-5) + 12px);
   }
 
+  .thread-result-toolbar {
+    position: absolute;
+    top: var(--spacing-2);
+    right: calc(var(--spacing-2) + 24px);
+  }
+
+  .chat-code-toolbar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    color: var(--color-text-muted);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    opacity: 0.8;
+    transition:
+      opacity var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .chat-code-toolbar-btn:hover {
+    opacity: 1;
+    background: var(--color-bg-hover);
+  }
+
   .thread-result {
     margin: 0;
-    padding: var(--spacing-3) calc(var(--spacing-5) + 12px) var(--spacing-3) var(--spacing-3);
+    padding: var(--spacing-3) calc(var(--spacing-5) + 36px) var(--spacing-3) var(--spacing-3);
     background: var(--color-editor-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);

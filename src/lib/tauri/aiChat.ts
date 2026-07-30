@@ -38,6 +38,14 @@ export async function renameConversation(id: string, title: string): Promise<AiC
   return invoke<AiConversation>('ai_chat_rename_conversation', { id, title });
 }
 
+export async function setConnection(
+  id: string,
+  connectionId: string | null,
+  database: string | null,
+): Promise<AiConversation> {
+  return invoke<AiConversation>('ai_chat_set_connection', { id, connectionId, database });
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   return invoke<void>('ai_chat_delete_conversation', { id });
 }

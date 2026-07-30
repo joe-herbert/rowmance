@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE ai_conversations SET connection_id = ?, database = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "00b1ed6869f7ca83610ef71f3285f43d50e0847f4550eaf4364dffc01b13bd77"
+}

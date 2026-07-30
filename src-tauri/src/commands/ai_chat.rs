@@ -232,6 +232,35 @@ pub async fn ai_chat_rename_conversation(
     Ok(AiConversation::from(row))
 }
 
+/// Set the connection/database a conversation is scoped to, so "open in query
+/// editor" from a general chat can remember the connection the user picked
+/// instead of prompting again on every code block.
+#[tauri::command]
+pub async fn ai_chat_set_connection(
+    sqlite: State<'_, SqlitePool>,
+    id: String,
+    connection_id: Option<String>,
+    database: Option<String>,
+) -> Result<AiConversation, AppError> {
+    sqlx::query!(
+        "UPDATE ai_conversations SET connection_id = ?, database = ? WHERE id = ?",
+        connection_id,
+        database,
+        id
+    )
+    .execute(sqlite.inner())
+    .await
+    .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    let row = sqlx::query_as::<_, AiConversationRow>("SELECT * FROM ai_conversations WHERE id = ?")
+        .bind(&id)
+        .fetch_one(sqlite.inner())
+        .await
+        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+
+    Ok(AiConversation::from(row))
+}
+
 /// Delete a conversation and all of its messages (cascades via FK).
 #[tauri::command]
 pub async fn ai_chat_delete_conversation(

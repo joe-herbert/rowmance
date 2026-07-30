@@ -8,6 +8,7 @@
   import type { OpenItem } from '$lib/stores/panels.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useAiChat } from '$lib/stores/aiChat.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import type { PanelKind } from '$lib/types';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -24,14 +25,21 @@
   const panelStore = usePanels();
   const tabDrag = useTabDrag();
   const connectionStore = useConnections();
+  const aiChat = useAiChat();
   const settingsStore = useSettings();
   const dashboardsStore = useDashboards();
   const dashboardsById = $derived(new Map(dashboardsStore.dashboards.map((d) => [d.id, d])));
   const ambiguousTables = $derived(ambiguousTableKeys(panelStore.openItems));
 
   function panelConnInfo(content: PanelKind): { color: string | null; shortName: string } | null {
-    if (!('connectionId' in content)) return null;
-    const conn = connectionStore.getById(content.connectionId);
+    const connectionId =
+      content.kind === 'ai_chat'
+        ? aiChat.getById(content.conversationId)?.connectionId ?? null
+        : 'connectionId' in content
+          ? content.connectionId
+          : null;
+    if (!connectionId) return null;
+    const conn = connectionStore.getById(connectionId);
     if (!conn) return null;
     const shortName = conn.name.length > 14 ? conn.name.slice(0, 13) + '…' : conn.name;
     return { color: conn.color, shortName };

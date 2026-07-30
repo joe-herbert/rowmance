@@ -398,6 +398,7 @@ pub fn run() {
             commands::ai_chat::ai_chat_list_conversations,
             commands::ai_chat::ai_chat_create_conversation,
             commands::ai_chat::ai_chat_rename_conversation,
+            commands::ai_chat::ai_chat_set_connection,
             commands::ai_chat::ai_chat_delete_conversation,
             commands::ai_chat::ai_chat_get_messages,
             commands::ai_chat::ai_chat_add_message,

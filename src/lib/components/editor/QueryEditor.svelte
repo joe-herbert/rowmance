@@ -3315,15 +3315,6 @@
     cursor: not-allowed;
   }
 
-  .note-menu-item--builder {
-    color: var(--color-accent);
-    font-weight: var(--font-weight-medium);
-  }
-
-  .note-menu-item--builder:hover {
-    background: var(--color-accent-subtle);
-  }
-
   .note-menu-item--ai {
     color: var(--color-accent);
   }
