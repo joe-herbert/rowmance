@@ -729,29 +729,14 @@
         const firstVisCol = visibleColumns[0];
         if (!firstVisCol) return;
 
-        const newRowEl = tableContainerEl.querySelector(`[data-new-row-key="${key}"]`);
-        if (!newRowEl) return;
-        const firstTd = newRowEl.querySelectorAll('.data-cell')[0] as
-          | HTMLTableCellElement
-          | undefined;
-        if (!firstTd) return;
-
-        const tdRect = firstTd.getBoundingClientRect();
-
         focusedCell = null;
-        editTarget = {
-          rowKey: key,
-          colName: firstVisCol.col.name,
-          colIndex: firstVisCol.originalIndex,
-          value: null,
-          originalValue: null,
-          dataType: firstVisCol.col.dataType,
-          nullable: firstVisCol.col.nullable,
-          initialViewportTop: tdRect.top,
-          initialViewportLeft: tdRect.left,
-          width: Math.max(tdRect.width, 160),
-          height: tdRect.height,
-        };
+        editTarget = null;
+        newRowAnchorCell = { rowKey: key, col: 0 };
+        newRowFocusedCell = { rowKey: key, col: 0 };
+
+        const el = getNewRowCellEl(key, 0);
+        el?.focus();
+        el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       });
     });
   });
