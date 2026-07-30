@@ -304,7 +304,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 15vh;
+    padding: 15vh var(--spacing-4) 5vh;
     z-index: 500;
   }
 
@@ -317,7 +317,7 @@
     box-shadow: var(--shadow-overlay);
     width: 560px;
     max-width: calc(100vw - var(--spacing-8));
-    max-height: 480px;
+    max-height: min(480px, 80vh);
     display: flex;
     flex-direction: column;
     overflow: hidden;
