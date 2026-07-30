@@ -9,6 +9,8 @@
   }
 
   const { zindex = 300, label, onbackdropclick, children }: Props = $props();
+
+  let mousedownOnBackdrop = false;
 </script>
 
 <div
@@ -18,8 +20,11 @@
   aria-modal="true"
   aria-label={label}
   tabindex="-1"
+  onmousedown={(e) => {
+    mousedownOnBackdrop = e.target === e.currentTarget;
+  }}
   onclick={(e) => {
-    if (e.target === e.currentTarget) onbackdropclick?.();
+    if (e.target === e.currentTarget && mousedownOnBackdrop) onbackdropclick?.();
   }}
   onkeydown={(e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onbackdropclick?.();
