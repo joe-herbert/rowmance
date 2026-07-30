@@ -2337,6 +2337,15 @@
     return `${date} ${time}`;
   }
 
+  function formatNowUtc(d: Date, type: 'date' | 'time' | 'datetime-local'): string {
+    const p = (n: number) => String(n).padStart(2, '0');
+    const date = `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+    const time = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+    if (type === 'date') return date;
+    if (type === 'time') return time;
+    return `${date} ${time}`;
+  }
+
   function parseDbNow(raw: string, type: 'date' | 'time' | 'datetime-local'): string {
     const normalized = String(raw)
       .replace('T', ' ')
@@ -2368,7 +2377,10 @@
 
     function getNowForType(dataType: string): string {
       const type = getDatetimeInputType(dataType);
-      return rawDbString ? parseDbNow(rawDbString, type) : formatNow(rawDate!, type);
+      if (rawDbString) return parseDbNow(rawDbString, type);
+      return settings.nowTimeSource === 'utc'
+        ? formatNowUtc(rawDate!, type)
+        : formatNow(rawDate!, type);
     }
 
     if (contextMenuSnapshotIsMultiCell) {

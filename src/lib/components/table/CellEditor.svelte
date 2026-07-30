@@ -342,6 +342,15 @@
     return `${date} ${time}`;
   }
 
+  function formatNowUtc(d: Date, type: typeof inputType): string {
+    const p = (n: number) => String(n).padStart(2, '0');
+    const date = `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+    const time = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+    if (type === 'date') return date;
+    if (type === 'time') return time;
+    return `${date} ${time}`;
+  }
+
   function parseDbNow(raw: string, type: typeof inputType): string {
     const normalized = String(raw)
       .replace('T', ' ')
@@ -365,6 +374,10 @@
       } catch {
         // fall through to user time on error
       }
+    }
+    if (settings.nowTimeSource === 'utc') {
+      onConfirm(formatNowUtc(new Date(), inputType));
+      return;
     }
     onConfirm(formatNow(new Date(), inputType));
   }
@@ -485,7 +498,11 @@
     <button
       class="action-btn now-btn"
       onclick={handleNow}
-      title="Set to current {settings.nowTimeSource === 'database' ? 'database' : 'local'} time"
+      title="Set to current {settings.nowTimeSource === 'database'
+        ? 'database'
+        : settings.nowTimeSource === 'utc'
+          ? 'UTC'
+          : 'local'} time"
       aria-label="Set to now">NOW</button
     >
   {/if}

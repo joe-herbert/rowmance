@@ -533,8 +533,9 @@
             options={[
               { value: 'user', label: 'My machine' },
               { value: 'database', label: 'Database server' },
+              { value: 'utc', label: 'UTC from my machine' },
             ]}
-            onchange={(v) => update('nowTimeSource', v as 'user' | 'database')}
+            onchange={(v) => update('nowTimeSource', v as 'user' | 'database' | 'utc')}
           />
         </div>
 

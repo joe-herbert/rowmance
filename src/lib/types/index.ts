@@ -584,7 +584,7 @@ export interface AppSettings {
   rightSidebarVisible: boolean;
   rightSidebarPanel: string;
   clickOutsideEdit: 'discard' | 'confirm';
-  nowTimeSource: 'user' | 'database';
+  nowTimeSource: 'user' | 'database' | 'utc';
   booleanDisplay: 'tick-cross' | 'true-false' | '1-0' | 'as-saved';
   systemDatabases: string[];
   systemTablePatterns: string[];
