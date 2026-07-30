@@ -38,6 +38,7 @@
     | 'connections'
     | 'tags'
     | 'appearance'
+    | 'tabs'
     | 'ai';
 
   const tagsStore = useTags();
@@ -320,7 +321,7 @@
 <div class="settings-page">
   <!-- Sidebar nav -->
   <nav class="settings-nav" aria-label="Settings sections">
-    {#each ['general', 'table-view', 'editor', 'keyboard', 'connections', 'tags', 'appearance', 'ai'] as const as section}
+    {#each ['general', 'table-view', 'editor', 'keyboard', 'connections', 'tags', 'appearance', 'tabs', 'ai'] as const as section}
       <button
         class="nav-item"
         class:active={activeSection === section}
@@ -1106,49 +1107,28 @@
 
         <div class="setting-row">
           <div class="setting-label">
-            <span class="label-text">Open Tabs Location</span>
-            <span class="label-hint">Where open tabs are displayed</span>
+            <span class="label-text">Show Status Bar</span>
+            <span class="label-hint"
+              >Show the bottom status bar. Hiding it also hides the sidebar toggle buttons</span
+            >
           </div>
-          <Select
-            value={settings.openItemsLocation}
-            options={[
-              { value: 'sidebar', label: 'Open panel (sidebar)' },
-              { value: 'top', label: 'Tab bar (top of main area)' },
-            ]}
-            onchange={(v) => update('openItemsLocation', v as 'sidebar' | 'top')}
+          <Checkbox
+            checked={settings.statusBarVisible}
+            onchange={(c) => update('statusBarVisible', c)}
           />
         </div>
 
         <div class="setting-row">
           <div class="setting-label">
-            <span class="label-text">Empty Tab Behaviour</span>
-            <span class="label-hint">What to show in a panel when there are no open tabs</span>
+            <span class="label-text">Show Sidebar Toggle Buttons</span>
+            <span class="label-hint">Show the show/hide buttons next to the status bar</span>
           </div>
-          <Select
-            value={settings.emptyPanelMode}
-            options={[
-              { value: 'full', label: 'Launch screen' },
-              { value: 'minimal', label: 'No open tabs message' },
-              { value: 'dashboard', label: 'Open a dashboard' },
-            ]}
-            onchange={(v) => update('emptyPanelMode', v as 'full' | 'minimal' | 'dashboard')}
+          <Checkbox
+            checked={settings.statusBarVisible && settings.sidebarToggleButtonsVisible}
+            disabled={!settings.statusBarVisible}
+            onchange={(c) => update('sidebarToggleButtonsVisible', c)}
           />
         </div>
-
-        {#if settings.emptyPanelMode === 'dashboard'}
-          <div class="setting-row">
-            <div class="setting-label">
-              <span class="label-text">Empty Tab Dashboard</span>
-              <span class="label-hint">Dashboard to open automatically when there are no tabs</span>
-            </div>
-            <Select
-              value={settings.emptyPanelDashboardId}
-              options={dashboardsStore.dashboards.map((d) => ({ value: d.id, label: d.name }))}
-              placeholder="Select a dashboard…"
-              onchange={(v) => update('emptyPanelDashboardId', v as string)}
-            />
-          </div>
-        {/if}
 
         <div class="setting-row">
           <div class="setting-label">
@@ -1210,6 +1190,95 @@
           </div>
         {/key}
       {/if}
+    {:else if activeSection === 'tabs'}
+      <h2 class="section-title">Tabs</h2>
+
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Open Tabs Location</span>
+            <span class="label-hint">Where open tabs are displayed</span>
+          </div>
+          <Select
+            value={settings.openItemsLocation}
+            options={[
+              { value: 'sidebar', label: 'Open panel (sidebar)' },
+              { value: 'top', label: 'Tab bar (top of main area)' },
+            ]}
+            onchange={(v) => update('openItemsLocation', v as 'sidebar' | 'top')}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">On Tab Close, Focus</span>
+            <span class="label-hint">Which tab becomes active after closing the current one</span>
+          </div>
+          <Select
+            value={settings.tabCloseFocusBehavior}
+            options={[
+              { value: 'next', label: 'Next tab' },
+              { value: 'previous', label: 'Previous tab' },
+              { value: 'lastViewed', label: 'Last viewed tab' },
+              { value: 'none', label: 'Nothing' },
+            ]}
+            onchange={(v) =>
+              update('tabCloseFocusBehavior', v as 'none' | 'previous' | 'next' | 'lastViewed')}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">New Tab Position</span>
+            <span class="label-hint">Where a newly opened tab is inserted</span>
+          </div>
+          <Select
+            value={settings.newTabPosition}
+            options={[
+              { value: 'end', label: 'At the end' },
+              { value: 'start', label: 'At the start' },
+              { value: 'after-current', label: 'After current tab' },
+              { value: 'before-current', label: 'Before current tab' },
+            ]}
+            onchange={(v) =>
+              update(
+                'newTabPosition',
+                v as 'start' | 'end' | 'before-current' | 'after-current',
+              )}
+          />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="label-text">Empty Tab Behaviour</span>
+            <span class="label-hint">What to show in a panel when there are no open tabs</span>
+          </div>
+          <Select
+            value={settings.emptyPanelMode}
+            options={[
+              { value: 'full', label: 'Launch screen' },
+              { value: 'minimal', label: 'No open tabs message' },
+              { value: 'dashboard', label: 'Open a dashboard' },
+            ]}
+            onchange={(v) => update('emptyPanelMode', v as 'full' | 'minimal' | 'dashboard')}
+          />
+        </div>
+
+        {#if settings.emptyPanelMode === 'dashboard'}
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="label-text">Empty Tab Dashboard</span>
+              <span class="label-hint">Dashboard to open automatically when there are no tabs</span>
+            </div>
+            <Select
+              value={settings.emptyPanelDashboardId}
+              options={dashboardsStore.dashboards.map((d) => ({ value: d.id, label: d.name }))}
+              placeholder="Select a dashboard…"
+              onchange={(v) => update('emptyPanelDashboardId', v as string)}
+            />
+          </div>
+        {/if}
+      </div>
     {:else if activeSection === 'ai'}
       <h2 class="section-title">AI</h2>
       <p class="section-description">

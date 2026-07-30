@@ -6,6 +6,17 @@
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
+  import type { StatusBarSegment } from '$lib/types';
+
+  interface Props {
+    hiddenSegments?: StatusBarSegment[];
+  }
+
+  const { hiddenSegments = [] }: Props = $props();
+
+  function segmentHidden(segment: StatusBarSegment): boolean {
+    return hiddenSegments.includes(segment);
+  }
 
   const statusBar = useStatusBar();
   const connectionStore = useConnections();
@@ -59,10 +70,10 @@
         <span class="conn-name">{connName}</span>
       </span>
     {/if}
-    {#if connType}
+    {#if connType && !segmentHidden('connectionType')}
       <span class="item hide-xs">{connType}</span>
     {/if}
-    {#if host}
+    {#if host && !segmentHidden('host')}
       <span class="item faint hide-sm">{host}</span>
     {/if}
   </div>
@@ -71,17 +82,19 @@
 
   <!-- Right: stats -->
   <div class="right">
-    {#if dirtyText}
+    {#if dirtyText && !segmentHidden('unsavedChanges')}
       <span class="item dirty">{dirtyText}</span>
     {/if}
 
-    {#if rowCountText}
+    {#if rowCountText && !segmentHidden('rowCount')}
       <span class="item hide-xs">{rowCountText}</span>
     {/if}
 
-    <span class="item faint hide-sm">UTF-8</span>
+    {#if !segmentHidden('encoding')}
+      <span class="item faint hide-sm">UTF-8</span>
+    {/if}
 
-    {#if timingText}
+    {#if timingText && !segmentHidden('timing')}
       <span class="item accent">{timingText}</span>
     {/if}
   </div>

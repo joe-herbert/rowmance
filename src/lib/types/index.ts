@@ -567,6 +567,15 @@ export interface SoftDeleteCondition {
   value?: string;
 }
 
+/** Individual pieces of information the status bar can show, toggleable via its context menu. */
+export type StatusBarSegment =
+  | 'connectionType'
+  | 'host'
+  | 'unsavedChanges'
+  | 'rowCount'
+  | 'encoding'
+  | 'timing';
+
 export interface AppSettings {
   theme: string;
   pageSize: number;
@@ -629,6 +638,16 @@ export interface AppSettings {
   tableLivePollIntervalMs: number;
   /** Poll interval (ms) used by Live mode in the query editor. */
   queryLivePollIntervalMs: number;
+  /** Whether the sidebar show/hide toggle buttons are shown next to the status bar. */
+  sidebarToggleButtonsVisible: boolean;
+  /** Whether the status bar is shown. When false, the sidebar toggle buttons are hidden too. */
+  statusBarVisible: boolean;
+  /** Status bar segments hidden via its right-click menu. */
+  statusBarHiddenSegments: StatusBarSegment[];
+  /** What to focus after closing a tab. */
+  tabCloseFocusBehavior: 'none' | 'previous' | 'next' | 'lastViewed';
+  /** Where a newly opened tab is inserted relative to the existing tabs. */
+  newTabPosition: 'start' | 'end' | 'before-current' | 'after-current';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -702,6 +721,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
   tableLivePollIntervalMs: 5000,
   queryLivePollIntervalMs: 5000,
+  sidebarToggleButtonsVisible: true,
+  statusBarVisible: true,
+  statusBarHiddenSegments: [],
+  tabCloseFocusBehavior: 'next',
+  newTabPosition: 'end',
 };
 
 // ── Dashboards ───────────────────────────────────────────────────────────────

@@ -10,9 +10,19 @@
     children: Snippet;
     minWidth?: number;
     zIndex?: number;
+    class?: string;
   }
 
-  let { x, y, open, onclose, children, minWidth = 160, zIndex = 500 }: Props = $props();
+  let {
+    x,
+    y,
+    open,
+    onclose,
+    children,
+    minWidth = 160,
+    zIndex = 500,
+    class: className = '',
+  }: Props = $props();
 
   let menuEl = $state<HTMLDivElement | undefined>(undefined);
   let left = $state(0);
@@ -85,7 +95,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     bind:this={menuEl}
-    class="ctx-menu"
+    class="ctx-menu {className}"
     role="menu"
     tabindex="-1"
     style:top="{top}px"

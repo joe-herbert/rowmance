@@ -109,6 +109,13 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
+            let toggle_status_bar_item = MenuItem::with_id(
+                app,
+                "toggle-status-bar",
+                "Toggle Status Bar",
+                true,
+                None::<&str>,
+            )?;
             let toggle_system_item = MenuItem::with_id(
                 app,
                 "toggle-system-items",
@@ -136,6 +143,7 @@ pub fn run() {
                 &[
                     &toggle_left_item,
                     &toggle_right_item,
+                    &toggle_status_bar_item,
                     &PredefinedMenuItem::separator(app)?,
                     &toggle_system_item,
                     &PredefinedMenuItem::separator(app)?,
@@ -261,6 +269,9 @@ pub fn run() {
                     }
                     "toggle-right-sidebar" => {
                         let _ = app.emit("menu:toggle-right-sidebar", ());
+                    }
+                    "toggle-status-bar" => {
+                        let _ = app.emit("menu:toggle-status-bar", ());
                     }
                     "toggle-system-items" => {
                         let _ = app.emit("menu:toggle-system-items", ());

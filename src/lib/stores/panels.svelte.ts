@@ -10,10 +10,13 @@ import { untrack } from 'svelte';
 import type { PanelState, PanelKind, SplitNode, SplitChild } from '$lib/types';
 import { queryEditorCache } from './queryEditorState';
 import { clearTableFilterCache } from '$lib/stores/tableBrowserFilterCache';
+import { useSettings } from './settings.svelte';
 
 export interface OpenItem {
   id: string;
   content: PanelKind;
+  /** Timestamp (ms) this item was last focused/viewed. */
+  lastViewedAt: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -93,6 +96,52 @@ export function dirtyKeyForContent(content: PanelKind): string | null {
     return `${content.connectionId}:${content.database}:${content.objectName}`;
   if (content.kind === 'query_editor' && content.editorId) return `query:${content.editorId}`;
   return null;
+}
+
+/** Mark an item as just-viewed (for the "last viewed" tab-close-focus behavior). */
+function touchItem(items: OpenItem[], itemId: string | null): OpenItem[] {
+  if (!itemId) return items;
+  return items.map((i) => (i.id === itemId ? { ...i, lastViewedAt: Date.now() } : i));
+}
+
+/** Insert a newly created item into an open-items list at the position chosen in settings. */
+function insertPositioned(
+  items: OpenItem[],
+  newItem: OpenItem,
+  currentFocusedId: string | null,
+): OpenItem[] {
+  const position = useSettings().settings.newTabPosition;
+  if (position === 'start') return [newItem, ...items];
+  if (position === 'end') return [...items, newItem];
+
+  const idx = currentFocusedId ? items.findIndex((i) => i.id === currentFocusedId) : -1;
+  if (idx === -1) return [...items, newItem];
+  const insertAt = position === 'before-current' ? idx : idx + 1;
+  return [...items.slice(0, insertAt), newItem, ...items.slice(insertAt)];
+}
+
+/**
+ * Choose which item to focus after removing the item at removedIndex, based on the
+ * tabCloseFocusBehavior setting. remainingItems is the list with that item already removed.
+ */
+function pickNextFocusedItem(remainingItems: OpenItem[], removedIndex: number): OpenItem | null {
+  if (remainingItems.length === 0) return null;
+
+  const behavior = useSettings().settings.tabCloseFocusBehavior;
+  switch (behavior) {
+    case 'none':
+      return null;
+    case 'previous':
+      return remainingItems[removedIndex - 1] ?? remainingItems[removedIndex] ?? null;
+    case 'lastViewed':
+      return remainingItems.reduce(
+        (best, cur) => (cur.lastViewedAt > (best?.lastViewedAt ?? -1) ? cur : best),
+        null as OpenItem | null,
+      );
+    case 'next':
+    default:
+      return remainingItems[removedIndex] ?? remainingItems[removedIndex - 1] ?? null;
+  }
 }
 
 // ── Tree helpers ──────────────────────────────────────────────────────────────
@@ -342,7 +391,7 @@ function moveItemBetweenSplits(itemId: string, targetSplitId: string): boolean {
   const targetState = getSplitState(targetSplitId);
   setSplitState(targetSplitId, {
     ...targetState,
-    openItems: [...targetState.openItems, item],
+    openItems: touchItem([...targetState.openItems, item], item.id),
     focusedItemId: item.id,
   });
 
@@ -483,7 +532,7 @@ export function usePanels() {
             }
             setSplitState(existingSplitId, {
               ...state,
-              openItems: newItems,
+              openItems: touchItem(newItems, newItems[itemIdx].id),
               focusedItemId: newItems[itemIdx].id,
             });
           }
@@ -494,10 +543,14 @@ export function usePanels() {
         // Add to focused split's open items if not already tracked there
         const focusedState = getSplitState(focusedSplitIdState);
         if (!focusedState.openItems.find((item) => sameContent(item.content, content))) {
-          const newItem: OpenItem = { id: createId(), content };
+          const newItem: OpenItem = { id: createId(), content, lastViewedAt: Date.now() };
           setSplitState(focusedSplitIdState, {
             ...focusedState,
-            openItems: [...focusedState.openItems, newItem],
+            openItems: insertPositioned(
+              focusedState.openItems,
+              newItem,
+              focusedState.focusedItemId,
+            ),
             focusedItemId: newItem.id,
           });
         } else {
@@ -506,6 +559,7 @@ export function usePanels() {
           if (existing) {
             setSplitState(focusedSplitIdState, {
               ...focusedState,
+              openItems: touchItem(focusedState.openItems, existing.id),
               focusedItemId: existing.id,
             });
           }
@@ -523,10 +577,10 @@ export function usePanels() {
         content = { ...content, editorId: createId() };
       }
       const focusedState = getSplitState(focusedSplitIdState);
-      const newItem: OpenItem = { id: createId(), content };
+      const newItem: OpenItem = { id: createId(), content, lastViewedAt: Date.now() };
       setSplitState(focusedSplitIdState, {
         ...focusedState,
-        openItems: [...focusedState.openItems, newItem],
+        openItems: insertPositioned(focusedState.openItems, newItem, focusedState.focusedItemId),
         focusedItemId: newItem.id,
       });
     },
@@ -555,10 +609,10 @@ export function usePanels() {
 
         const state = getSplitState(splitId);
         if (allowDuplicate || !state.openItems.find((item) => sameContent(item.content, content))) {
-          const newItem: OpenItem = { id: createId(), content };
+          const newItem: OpenItem = { id: createId(), content, lastViewedAt: Date.now() };
           setSplitState(splitId, {
             ...state,
-            openItems: [...state.openItems, newItem],
+            openItems: insertPositioned(state.openItems, newItem, state.focusedItemId),
             focusedItemId: newItem.id,
           });
         }
@@ -575,14 +629,14 @@ export function usePanels() {
       if (currentItem) {
         const itemIndex = state.openItems.indexOf(currentItem);
         const newItems = [...state.openItems];
-        newItems[itemIndex] = { ...currentItem, content };
+        newItems[itemIndex] = { ...currentItem, content, lastViewedAt: Date.now() };
         setSplitState(focusedSplitIdState, { ...state, openItems: newItems });
       } else {
         // No focused item — add it
-        const newItem: OpenItem = { id: createId(), content };
+        const newItem: OpenItem = { id: createId(), content, lastViewedAt: Date.now() };
         setSplitState(focusedSplitIdState, {
           ...state,
-          openItems: [...state.openItems, newItem],
+          openItems: insertPositioned(state.openItems, newItem, state.focusedItemId),
           focusedItemId: newItem.id,
         });
       }
@@ -593,7 +647,11 @@ export function usePanels() {
       const splitId = findSplitForItem(item.id);
       if (splitId) {
         const state = getSplitState(splitId);
-        setSplitState(splitId, { ...state, focusedItemId: item.id });
+        setSplitState(splitId, {
+          ...state,
+          openItems: touchItem(state.openItems, item.id),
+          focusedItemId: item.id,
+        });
         focusedSplitIdState = splitId;
       }
     },
@@ -617,8 +675,7 @@ export function usePanels() {
       let newFocusedId = state.focusedItemId;
       if (newFocusedId === itemId) {
         const idx = state.openItems.findIndex((i) => i.id === itemId);
-        const next = state.openItems[idx + 1] ?? state.openItems[idx - 1] ?? null;
-        newFocusedId = next?.id ?? null;
+        newFocusedId = pickNextFocusedItem(newItems, idx)?.id ?? null;
       }
 
       setSplitState(splitId, { ...state, openItems: newItems, focusedItemId: newFocusedId });
@@ -801,7 +858,7 @@ export function usePanels() {
 
       const itemIndex = state.openItems.findIndex((i) => i.id === state.focusedItemId);
       const newItems = state.openItems.filter((_, i) => i !== itemIndex);
-      const next = newItems[itemIndex] ?? newItems[itemIndex - 1] ?? null;
+      const next = pickNextFocusedItem(newItems, itemIndex);
 
       setSplitState(focusedSplitIdState, {
         ...state,
@@ -1093,10 +1150,10 @@ export function usePanels() {
       if (content.kind === 'query_editor') {
         const newContent = { ...content, editorId: createId() };
         const state = getSplitState(targetSplitId);
-        const newItem: OpenItem = { id: createId(), content: newContent };
+        const newItem: OpenItem = { id: createId(), content: newContent, lastViewedAt: Date.now() };
         setSplitState(targetSplitId, {
           ...state,
-          openItems: [...state.openItems, newItem],
+          openItems: insertPositioned(state.openItems, newItem, state.focusedItemId),
           focusedItemId: newItem.id,
         });
         focusedSplitIdState = targetSplitId;
@@ -1107,15 +1164,19 @@ export function usePanels() {
       const targetState = getSplitState(targetSplitId);
       const existing = targetState.openItems.find((i) => sameContent(i.content, content));
       if (existing) {
-        setSplitState(targetSplitId, { ...targetState, focusedItemId: existing.id });
+        setSplitState(targetSplitId, {
+          ...targetState,
+          openItems: touchItem(targetState.openItems, existing.id),
+          focusedItemId: existing.id,
+        });
         focusedSplitIdState = targetSplitId;
         return;
       }
 
-      const newItem: OpenItem = { id: createId(), content };
+      const newItem: OpenItem = { id: createId(), content, lastViewedAt: Date.now() };
       setSplitState(targetSplitId, {
         ...targetState,
-        openItems: [...targetState.openItems, newItem],
+        openItems: insertPositioned(targetState.openItems, newItem, targetState.focusedItemId),
         focusedItemId: newItem.id,
       });
       focusedSplitIdState = targetSplitId;

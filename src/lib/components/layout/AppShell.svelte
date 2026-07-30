@@ -11,6 +11,7 @@
   import SplitPanel from './SplitPanel.svelte';
   import RightSidebar from './RightSidebar.svelte';
   import StatusBar from './StatusBar.svelte';
+  import StatusBarContextMenu from './StatusBarContextMenu.svelte';
   import Toast from '$lib/components/ui/Toast.svelte';
   import OnboardingTip from '$lib/components/ui/OnboardingTip.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -65,6 +66,22 @@
   let activeRightPanel = $state<RightPanel>(
     untrack(() => (settings.rightSidebarPanel as RightPanel) || 'history'),
   );
+
+  // ── Status bar ────────────────────────────────────────────────────────────
+
+  const toggleButtonsVisible = $derived(
+    settings.statusBarVisible && settings.sidebarToggleButtonsVisible,
+  );
+  let statusBarMenuOpen = $state(false);
+  let statusBarMenuX = $state(0);
+  let statusBarMenuY = $state(0);
+
+  function onStatusBarContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    statusBarMenuX = e.clientX;
+    statusBarMenuY = e.clientY;
+    statusBarMenuOpen = true;
+  }
 
   const SIDEBAR_INSET = 0;
 
@@ -327,6 +344,9 @@
       listen('menu:new-window', () => openNewWindow()),
       listen('menu:toggle-left-sidebar', () => toggleLeftSidebar()),
       listen('menu:toggle-right-sidebar', () => toggleRightSidebar()),
+      listen('menu:toggle-status-bar', () =>
+        settingsStore.set('statusBarVisible', !settings.statusBarVisible),
+      ),
       listen('menu:toggle-system-items', () =>
         settingsStore.set('showSystemItems', !settingsStore.settings.showSystemItems),
       ),
@@ -1041,28 +1061,50 @@
     {/if}
   </div>
 
-  <div class="statusbar-row">
-    <button
-      class="sidebar-toggle-btn"
-      class:sidebar-toggle-btn--active={leftVisible}
-      onclick={toggleLeftSidebar}
-      aria-label="{leftVisible ? 'Hide' : 'Show'} left sidebar"
-      title="{leftVisible ? 'Hide' : 'Show'} left sidebar"
-    >
-      <SidebarLeftIcon />
-    </button>
-    <StatusBar />
-    <button
-      class="sidebar-toggle-btn"
-      class:sidebar-toggle-btn--active={rightVisible}
-      onclick={toggleRightSidebar}
-      aria-label="{rightVisible ? 'Hide' : 'Show'} right sidebar"
-      title="{rightVisible ? 'Hide' : 'Show'} right sidebar"
-    >
-      <SidebarRightIcon />
-    </button>
-  </div>
+  {#if settings.statusBarVisible || toggleButtonsVisible}
+    <div class="statusbar-row">
+      {#if toggleButtonsVisible}
+        <button
+          class="sidebar-toggle-btn"
+          class:sidebar-toggle-btn--active={leftVisible}
+          onclick={toggleLeftSidebar}
+          aria-label="{leftVisible ? 'Hide' : 'Show'} left sidebar"
+          title="{leftVisible ? 'Hide' : 'Show'} left sidebar"
+        >
+          <SidebarLeftIcon />
+        </button>
+      {/if}
+      {#if settings.statusBarVisible}
+        <div
+          class="statusbar-wrap"
+          role="group"
+          aria-label="Status bar"
+          oncontextmenu={onStatusBarContextMenu}
+        >
+          <StatusBar hiddenSegments={settings.statusBarHiddenSegments} />
+        </div>
+      {/if}
+      {#if toggleButtonsVisible}
+        <button
+          class="sidebar-toggle-btn"
+          class:sidebar-toggle-btn--active={rightVisible}
+          onclick={toggleRightSidebar}
+          aria-label="{rightVisible ? 'Hide' : 'Show'} right sidebar"
+          title="{rightVisible ? 'Hide' : 'Show'} right sidebar"
+        >
+          <SidebarRightIcon />
+        </button>
+      {/if}
+    </div>
+  {/if}
 </div>
+
+<StatusBarContextMenu
+  x={statusBarMenuX}
+  y={statusBarMenuY}
+  open={statusBarMenuOpen}
+  onclose={() => (statusBarMenuOpen = false)}
+/>
 
 {#if connChipOpen && activeConnection}
   <div
@@ -2348,6 +2390,12 @@
     align-items: stretch;
     gap: var(--panel-spacing);
     flex-shrink: 0;
+  }
+
+  .statusbar-wrap {
+    display: flex;
+    flex: 1;
+    min-width: 0;
   }
 
   .sidebar-toggle-btn {
