@@ -18,14 +18,29 @@ interface CreateConversationInput {
   connectionId: string | null;
   database: string | null;
   title: string;
-  firstUserMessage: string;
-  firstAssistantMessage: string;
+  firstUserMessage?: string;
+  firstAssistantMessage?: string;
 }
 
 async function loadMessages(conversationId: string): Promise<AiMessage[]> {
   const msgs = await api.getMessages(conversationId);
   messagesByConversation = { ...messagesByConversation, [conversationId]: msgs };
   return msgs;
+}
+
+function withSchemaContext(text: string, schemaContext?: string): string {
+  if (!schemaContext) return text;
+  const merged = [
+    'Database schema for context — use ONLY these tables and columns;',
+    'do not invent or guess any other table or column name. If a field you need',
+    "isn't listed on the table you'd expect, check the FK lines for the join",
+    'path to reach it — do not assume it exists elsewhere:',
+    schemaContext,
+    '',
+    text,
+  ].join('\n');
+  console.log('[AI] Sending message with schema context attached:', merged);
+  return merged;
 }
 
 function upsertConversation(conversation: AiConversation) {
@@ -109,6 +124,43 @@ export function useAiChat() {
       return { conversation, messages };
     },
 
+    /**
+     * Create a brand-new conversation from its first user message: get the AI
+     * reply first, then persist the conversation together with both messages
+     * as a single unit. Used for draft chats that shouldn't appear in history
+     * until something has actually been sent.
+     */
+    async startConversation(
+      input: {
+        mode: AiChatMode;
+        contextKey: string | null;
+        connectionId: string | null;
+        database: string | null;
+        title: string;
+      },
+      config: AiConfig,
+      systemPrompt: string,
+      firstMessage: string,
+      schemaContext?: string,
+    ): Promise<{ conversation: AiConversation; reply: string }> {
+      const messageForApi = withSchemaContext(firstMessage, schemaContext);
+      const reply = await continueConversation(config, systemPrompt, [], messageForApi);
+
+      const conversation = await api.createConversation({
+        mode: input.mode,
+        contextKey: input.contextKey,
+        title: input.title,
+        connectionId: input.connectionId,
+        database: input.database,
+        firstUserMessage: firstMessage,
+        firstAssistantMessage: reply,
+      });
+      await loadMessages(conversation.id);
+      upsertConversation(conversation);
+
+      return { conversation, reply };
+    },
+
     /** Send a follow-up in an existing conversation, persist both turns, and return the reply. */
     async sendFollowUp(
       conversationId: string,
@@ -123,9 +175,7 @@ export function useAiChat() {
         content: m.content,
       }));
 
-      const messageForApi = schemaContext
-        ? `Database schema for context:\n${schemaContext}\n\n${followUpText}`
-        : followUpText;
+      const messageForApi = withSchemaContext(followUpText, schemaContext);
 
       const reply = await continueConversation(config, systemPrompt, history, messageForApi);
 

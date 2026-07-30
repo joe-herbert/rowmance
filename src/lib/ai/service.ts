@@ -398,6 +398,31 @@ export function buildSummariseSystemPrompt(): string {
   ].join('\n');
 }
 
+export function buildChatSystemPrompt(schemaContext?: string): string {
+  const lines = [
+    `You are a helpful database assistant embedded in a SQL client.`,
+    `Answer questions about databases, SQL, and data modelling clearly and concisely.`,
+    `Use markdown formatting where helpful.`,
+  ];
+  if (schemaContext) {
+    const tableNames = [...schemaContext.matchAll(/^(\w+):$/gm)].map((m) => m[1]).join(', ');
+    lines.push(
+      ``,
+      `AVAILABLE TABLES (these are the ONLY tables that exist — do not use any other name):`,
+      tableNames,
+      ``,
+      `FULL SCHEMA:`,
+      schemaContext,
+      ``,
+      `RULES:`,
+      `- Use ONLY the table and column names listed above. Do NOT invent or guess any other table or column name.`,
+      `- If a field the user wants isn't listed on the table you'd expect, do NOT assume it exists there anyway — find it on whichever table actually lists it, or state that you couldn't find it.`,
+      `- Use the FK lines to determine the correct join path between tables. Never write a query that references a column not shown above.`,
+    );
+  }
+  return lines.join('\n');
+}
+
 /** Build the system prompt for a follow-up message in an existing conversation,
  *  including schema context for modes that use it (mirrors the prompt used for
  *  that mode's initial exchange, so schema knowledge isn't lost on later turns). */
@@ -407,8 +432,10 @@ export async function buildFollowUpSystemPrompt(
   connectionId: string,
   database: string,
   dialectInfo: DialectInfo,
+  chatSchemaContext?: string,
 ): Promise<string> {
   if (mode === 'summarise') return buildSummariseSystemPrompt();
+  if (mode === 'chat') return buildChatSystemPrompt(chatSchemaContext);
 
   let schemaContext = '';
   if (config.contextLevel !== 'none' && database) {

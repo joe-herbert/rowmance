@@ -11,6 +11,7 @@
   --color-bg-secondary: #0a0a0a;
   --color-bg-tertiary: #111111;
   --color-bg-overlay: #000000;
+  --color-bg-opaque: #000000;
   --color-bg-hover: rgba(255, 255, 255, 0.12);
   --color-bg-active: rgba(255, 255, 255, 0.2);
 
@@ -84,6 +85,7 @@
     --color-bg-secondary: Canvas;
     --color-bg-tertiary: Canvas;
     --color-bg-overlay: Canvas;
+    --color-bg-opaque: Canvas;
     --color-border: ButtonText;
     --color-border-strong: ButtonText;
     --color-text-primary: CanvasText;

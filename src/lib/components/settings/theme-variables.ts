@@ -14,6 +14,7 @@ export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
       '--color-bg-secondary',
       '--color-bg-tertiary',
       '--color-bg-overlay',
+      '--color-bg-opaque',
       '--color-bg-hover',
       '--color-bg-active',
       '--color-border',
@@ -109,7 +110,7 @@ export const VARIABLE_GROUPS: { label: string; vars: string[] }[] = [
   },
   {
     label: 'Transitions',
-    vars: ['--transition-fast', '--transition-md'],
+    vars: ['--transition-fast', '--transition-md', '--transition-slow', '--transition-slower'],
   },
 ];
 

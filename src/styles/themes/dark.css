@@ -19,6 +19,7 @@
     --color-bg-secondary: rgba(255, 255, 255, 0.05);
     --color-bg-tertiary: rgba(255, 255, 255, 0.04);
     --color-bg-overlay: rgba(18, 16, 32, 0.82);
+    --color-bg-opaque: #121020;
     --color-bg-hover: rgba(255, 255, 255, 0.07);
     --color-bg-active: rgba(255, 255, 255, 0.1);
 
@@ -96,6 +97,7 @@
   --color-bg-secondary: rgba(255, 255, 255, 0.05);
   --color-bg-tertiary: rgba(255, 255, 255, 0.04);
   --color-bg-overlay: rgba(18, 16, 32, 0.82);
+  --color-bg-opaque: #121020;
   --color-bg-hover: rgba(255, 255, 255, 0.07);
   --color-bg-active: rgba(255, 255, 255, 0.1);
 

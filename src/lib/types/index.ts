@@ -537,7 +537,7 @@ export interface SplitChild {
 export type AiProvider = 'none' | 'claude' | 'openai' | 'gemini' | 'ollama' | 'custom';
 export type AiContextLevel = 'none' | 'structure' | 'structure_and_data';
 
-export type AiChatMode = 'generate' | 'explain' | 'describe' | 'summarise';
+export type AiChatMode = 'generate' | 'explain' | 'describe' | 'summarise' | 'chat';
 
 export interface AiConversation {
   id: string;

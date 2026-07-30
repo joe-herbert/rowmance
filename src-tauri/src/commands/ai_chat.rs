@@ -34,9 +34,9 @@ pub struct AiConversationInput {
     pub connection_id: Option<String>,
     pub database: Option<String>,
     #[serde(rename = "firstUserMessage")]
-    pub first_user_message: String,
+    pub first_user_message: Option<String>,
     #[serde(rename = "firstAssistantMessage")]
-    pub first_assistant_message: String,
+    pub first_assistant_message: Option<String>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -176,22 +176,23 @@ pub async fn ai_chat_create_conversation(
     .await
     .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
 
-    for (role, content) in [
-        ("user", &input.first_user_message),
-        ("assistant", &input.first_assistant_message),
-    ] {
-        let message_id = Uuid::new_v4().to_string();
-        sqlx::query!(
-            "INSERT INTO ai_messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-            message_id,
-            id,
-            role,
-            content,
-            now
-        )
-        .execute(sqlite.inner())
-        .await
-        .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+    if let (Some(user_message), Some(assistant_message)) =
+        (&input.first_user_message, &input.first_assistant_message)
+    {
+        for (role, content) in [("user", user_message), ("assistant", assistant_message)] {
+            let message_id = Uuid::new_v4().to_string();
+            sqlx::query!(
+                "INSERT INTO ai_messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
+                message_id,
+                id,
+                role,
+                content,
+                now
+            )
+            .execute(sqlite.inner())
+            .await
+            .map_err(|e| AppError::new("DB_ERROR", e.to_string()))?;
+        }
     }
 
     let row = sqlx::query_as::<_, AiConversationRow>("SELECT * FROM ai_conversations WHERE id = ?")

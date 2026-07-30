@@ -1142,6 +1142,31 @@ export function usePanels() {
       return dirtyItemKeys.has(key);
     },
 
+    /** Swap a draft ai_chat tab's conversationId for its real persisted id, across all splits. */
+    updateAiChatConversationId(oldConversationId: string, newConversationId: string) {
+      const applyUpdate = (content: PanelKind): PanelKind => {
+        if (content.kind === 'ai_chat' && content.conversationId === oldConversationId) {
+          return { ...content, conversationId: newConversationId };
+        }
+        return content;
+      };
+
+      for (const [splitId, state] of splitStates) {
+        const changed = state.openItems.some(
+          (i) => i.content.kind === 'ai_chat' && i.content.conversationId === oldConversationId,
+        );
+        if (changed) {
+          setSplitState(splitId, {
+            ...state,
+            openItems: state.openItems.map((item) => ({
+              ...item,
+              content: applyUpdate(item.content),
+            })),
+          });
+        }
+      }
+    },
+
     /** Update saved query metadata on a query_editor open item across all splits. */
     updateQueryEditorMeta(
       editorId: string,

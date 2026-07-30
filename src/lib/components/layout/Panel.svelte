@@ -6,7 +6,6 @@
 <script lang="ts">
   import type { PanelState } from '$lib/types';
   import { usePanels } from '$lib/stores/panels.svelte';
-  import { useConnections } from '$lib/stores/connections.svelte';
   import { useStatusBar } from '$lib/stores/statusBar.svelte';
   import QueryEditor from '$lib/components/editor/QueryEditor.svelte';
   import TableBrowser from '$lib/components/table/TableBrowser.svelte';
@@ -24,7 +23,7 @@
   import ConnectionsPage from '$lib/components/connections/ConnectionsPage.svelte';
   import DashboardPanel from '$lib/components/dashboard/DashboardPanel.svelte';
   import AiChatTabPanel from '$lib/components/ai/AiChatTabPanel.svelte';
-  import DbIcon from '$lib/components/icons/DbIcon.svelte';
+  import EmptyPanelPlaceholder from '$lib/components/layout/EmptyPanelPlaceholder.svelte';
 
   interface Props {
     panel: PanelState;
@@ -35,10 +34,7 @@
 
   const { panel, isFocused, splitId, itemId }: Props = $props();
   const panelStore = usePanels();
-  const connectionStore = useConnections();
   const statusBar = useStatusBar();
-
-  const hasConnections = $derived(connectionStore.profiles.length > 0);
 
   // When a non-table panel gains focus, clear any stale status bar state.
   $effect(() => {
@@ -132,22 +128,7 @@
       <AiChatTabPanel conversationId={panel.content.conversationId} />
     {/key}
   {:else}
-    <!-- Empty panel placeholder -->
-    <div class="empty-panel">
-      {#if !hasConnections}
-        <div class="empty-panel-hint">
-          <div class="empty-panel-icon" aria-hidden="true">
-            <DbIcon size={48} />
-          </div>
-          <p class="empty-panel-title">No database connections</p>
-          <p class="empty-panel-subtitle">Add a connection in the left sidebar to get started</p>
-        </div>
-      {:else}
-        <div class="empty-panel-hint">
-          <p>Open a table from the sidebar, or start a new query.</p>
-        </div>
-      {/if}
-    </div>
+    <EmptyPanelPlaceholder />
   {/if}
 </div>
 
@@ -173,40 +154,4 @@
     background: rgba(0, 0, 0, 0.02);
   }
 
-  .empty-panel {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-  }
-
-  .empty-panel-hint {
-    text-align: center;
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    max-width: 260px;
-    line-height: var(--line-height-normal);
-  }
-
-  .empty-panel-icon {
-    font-size: 40px;
-    margin-bottom: var(--spacing-3);
-    line-height: 1;
-    opacity: 0.5;
-  }
-
-  .empty-panel-title {
-    font-size: var(--font-size-md);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-secondary);
-    margin: 0 0 var(--spacing-2);
-  }
-
-  .empty-panel-subtitle {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin: 0;
-    line-height: var(--line-height-normal);
-  }
 </style>

@@ -8,8 +8,8 @@ export interface AiConversationInput {
   title: string;
   connectionId?: string | null;
   database?: string | null;
-  firstUserMessage: string;
-  firstAssistantMessage: string;
+  firstUserMessage?: string;
+  firstAssistantMessage?: string;
 }
 
 export async function findConversation(

@@ -24,6 +24,7 @@
     explain: 'Explain',
     describe: 'Describe',
     summarise: 'Summarise',
+    chat: 'Chat',
   };
 
   $effect(() => {

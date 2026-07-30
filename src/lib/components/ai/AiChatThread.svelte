@@ -6,6 +6,7 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte';
   import { useAiChat } from '$lib/stores/aiChat.svelte';
+  import { usePanels } from '$lib/stores/panels.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
   import {
@@ -18,12 +19,14 @@
   import { errorMessage } from '$lib/utils/errors';
   import { looksLikeSql, stripSqlCodeFence } from '$lib/utils/sql';
   import { marked } from 'marked';
+  import * as schemaApi from '$lib/tauri/schema';
   import SqlHighlight from '$lib/components/ui/SqlHighlight.svelte';
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
   import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import CopyButton from '$lib/components/ui/CopyButton.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import Select from '$lib/components/ui/Select.svelte';
 
   interface Props {
     conversationId: string;
@@ -37,8 +40,23 @@
   const { conversationId, onDeleted, showDeleteButton = true }: Props = $props();
 
   const aiChat = useAiChat();
+  const panels = usePanels();
   const settingsStore = useSettings();
   const connections = useConnections();
+
+  // A chat opened via "New AI chat" gets a client-only `draft-` id and isn't
+  // persisted (or shown in history) until its first message is actually sent.
+  const isDraft = $derived(conversationId.startsWith('draft-'));
+  const draftConversation = $derived<AiConversation>({
+    id: conversationId,
+    mode: 'chat',
+    contextKey: null,
+    title: 'New Chat',
+    connectionId: null,
+    database: null,
+    createdAt: '',
+    updatedAt: '',
+  });
 
   const config = $derived<AiConfig>({
     provider: settingsStore.settings.aiProvider,
@@ -49,8 +67,8 @@
     dataSampleRows: settingsStore.settings.aiDataSampleRows,
   });
 
-  const conversation = $derived(aiChat.getById(conversationId) ?? null);
-  const messages = $derived(aiChat.getMessages(conversationId));
+  const conversation = $derived(isDraft ? draftConversation : aiChat.getById(conversationId) ?? null);
+  const messages = $derived(isDraft ? [] : aiChat.getMessages(conversationId));
 
   let threadBodyEl = $state<HTMLDivElement | undefined>(undefined);
 
@@ -66,6 +84,46 @@
   let followUpError = $state<string | null>(null);
   let pendingQuestion = $state<string | null>(null);
   let includeSchema = $state(false);
+  // Set right before sending, so the UI can confirm what (if anything) was
+  // actually attached to the last message — useful for verifying the toggle worked.
+  let lastSchemaAttachment = $state<{ database: string; chars: number } | null>(null);
+
+  // When the conversation isn't already scoped to one connection+database
+  // (e.g. general chat mode), the user picks one ad hoc to attach structure from.
+  let adHocConnectionId = $state('');
+  let adHocDatabase = $state('');
+  let adHocDatabases = $state<string[]>([]);
+  let adHocDbLoading = $state(false);
+
+  const hasFixedContext = $derived(!!conversation?.connectionId && !!conversation?.database);
+
+  const connectionOptions = $derived([
+    { value: '', label: 'Select connection…' },
+    ...connections.profiles
+      .filter((p) => connections.isActive(p.id))
+      .map((p) => ({ value: p.id, label: p.name })),
+  ]);
+
+  const adHocDatabaseOptions = $derived([
+    { value: '', label: adHocDbLoading ? 'Loading…' : 'Select database…' },
+    ...adHocDatabases.map((db) => ({ value: db, label: db })),
+  ]);
+
+  async function onAdHocConnectionChange(id: string) {
+    adHocConnectionId = id;
+    adHocDatabase = '';
+    adHocDatabases = [];
+    if (!id) return;
+    adHocDbLoading = true;
+    try {
+      adHocDatabases = await schemaApi.listDatabases(id);
+      if (adHocDatabases.length === 1) adHocDatabase = adHocDatabases[0];
+    } catch {
+      adHocDatabases = [];
+    } finally {
+      adHocDbLoading = false;
+    }
+  }
 
   // Reset per-thread UI state and (re)load messages whenever the conversation changes.
   // Restores any unsent draft for the new conversation, and persists whatever was
@@ -75,22 +133,32 @@
   // re-run whenever the draft changes, immediately clobbering what was just typed.
   $effect(() => {
     const id = conversationId;
+    const draft = isDraft;
     untrack(() => {
-      followUpText = aiChat.getDraft(id);
+      followUpText = draft ? '' : aiChat.getDraft(id);
       followUpLoading = false;
       followUpError = null;
       pendingQuestion = null;
       includeSchema = false;
+      adHocConnectionId = '';
+      adHocDatabase = '';
+      adHocDatabases = [];
+      lastSchemaAttachment = null;
+      if (draft) return;
       if (!aiChat.loaded) aiChat.loadConversations();
       void aiChat.ensureMessagesLoaded(id).then(scrollToBottom);
     });
 
     return () => {
+      if (draft) return;
       untrack(() => aiChat.setDraft(id, followUpText));
     };
   });
 
-  async function buildFollowUpSystemPrompt(conv: AiConversation): Promise<string> {
+  async function buildFollowUpSystemPrompt(
+    conv: AiConversation,
+    chatSchemaContext?: string,
+  ): Promise<string> {
     const dialectInfo =
       connections.getById(conv.connectionId ?? '')?.dialectInfo ?? defaultDialectInfo;
     return buildFollowUpSystemPromptForMode(
@@ -99,18 +167,28 @@
       conv.connectionId ?? '',
       conv.database ?? '',
       dialectInfo,
+      chatSchemaContext,
     );
   }
 
-  // Modes other than 'summarise' already fold full schema into the system prompt
-  // whenever schema context is enabled in settings (see buildFollowUpSystemPrompt),
-  // so the manual toggle only needs to fetch anything when that automatic path is off.
+  // Only 'generate'/'explain'/'describe' fold full schema into the system prompt
+  // automatically when schema context is enabled in settings (see
+  // buildFollowUpSystemPrompt) — 'summarise' and 'chat' never do, regardless of
+  // that setting — so the manual toggle only needs to fetch anything when that
+  // automatic path doesn't apply.
   const schemaAlreadyAutomatic = $derived(
-    !!conversation && conversation.mode !== 'summarise' && config.contextLevel !== 'none',
+    !!conversation &&
+      conversation.mode !== 'summarise' &&
+      conversation.mode !== 'chat' &&
+      config.contextLevel !== 'none',
   );
 
   async function sendFollowUp() {
     if (!followUpText.trim() || !conversation || followUpLoading) return;
+    if (includeSchema && !schemaAlreadyAutomatic && !hasFixedContext && (!adHocConnectionId || !adHocDatabase)) {
+      followUpError = 'Select a connection and database to include table structures, or turn off "Table structures".';
+      return;
+    }
     followUpLoading = true;
     followUpError = null;
     const text = followUpText.trim();
@@ -119,30 +197,70 @@
     const attachSchema = includeSchema;
     includeSchema = false;
     await scrollToBottom();
+    const schemaConnectionId = conversation.connectionId ?? adHocConnectionId;
+    const schemaDatabase = conversation.database ?? adHocDatabase;
+    adHocConnectionId = '';
+    adHocDatabase = '';
+    adHocDatabases = [];
     try {
-      const systemPrompt = await buildFollowUpSystemPrompt(conversation);
       let schemaContext: string | undefined;
-      if (
-        attachSchema &&
-        !schemaAlreadyAutomatic &&
-        conversation.connectionId &&
-        conversation.database
-      ) {
+      if (attachSchema && !schemaAlreadyAutomatic && schemaConnectionId && schemaDatabase) {
         const dialectInfo =
-          connections.getById(conversation.connectionId)?.dialectInfo ?? defaultDialectInfo;
+          connections.getById(schemaConnectionId)?.dialectInfo ?? defaultDialectInfo;
         schemaContext = await buildSchemaContext(
-          conversation.connectionId,
-          conversation.database,
+          schemaConnectionId,
+          schemaDatabase,
           'structure',
           0,
           dialectInfo,
         );
       }
-      await aiChat.sendFollowUp(conversation.id, config, systemPrompt, text, schemaContext);
+      lastSchemaAttachment = schemaContext
+        ? { database: schemaDatabase, chars: schemaContext.length }
+        : null;
+      // For 'chat' mode, fold the schema + strict "use only these names" rules into
+      // the system prompt (stronger adherence than appending it to the user message).
+      const systemPrompt =
+        conversation.mode === 'chat'
+          ? await buildFollowUpSystemPrompt(conversation, schemaContext)
+          : await buildFollowUpSystemPrompt(conversation);
+      // Already folded into the system prompt above for chat mode — don't send it
+      // again in the user message, which would just double token usage.
+      const userMessageSchemaContext = conversation.mode === 'chat' ? undefined : schemaContext;
+      if (isDraft) {
+        const title = text.length > 60 ? `${text.slice(0, 60)}…` : text;
+        const { conversation: created } = await aiChat.startConversation(
+          { mode: 'chat', contextKey: null, connectionId: null, database: null, title },
+          config,
+          systemPrompt,
+          text,
+          userMessageSchemaContext,
+        );
+        panels.updateAiChatConversationId(conversationId, created.id);
+      } else {
+        await aiChat.sendFollowUp(
+          conversation.id,
+          config,
+          systemPrompt,
+          text,
+          userMessageSchemaContext,
+        );
+      }
     } catch (err) {
       followUpError = errorMessage(err);
       followUpText = text;
       includeSchema = attachSchema;
+      if (!conversation.connectionId && !conversation.database) {
+        adHocConnectionId = schemaConnectionId;
+        adHocDatabase = schemaDatabase;
+        if (schemaConnectionId) {
+          adHocDbLoading = true;
+          schemaApi
+            .listDatabases(schemaConnectionId)
+            .then((dbs) => (adHocDatabases = dbs))
+            .finally(() => (adHocDbLoading = false));
+        }
+      }
     } finally {
       followUpLoading = false;
       pendingQuestion = null;
@@ -160,7 +278,7 @@
 
   async function deleteConversation() {
     confirmingDelete = false;
-    await aiChat.remove(conversationId);
+    if (!isDraft) await aiChat.remove(conversationId);
     onDeleted?.();
   }
 </script>
@@ -213,28 +331,59 @@
   </div>
 
   <div class="thread-followup">
-    {#if conversation.connectionId && conversation.database}
+    {#if lastSchemaAttachment}
+      <div class="schema-attachment-note">
+        <TableIcon size={11} />
+        Table structures for "{lastSchemaAttachment.database}" attached to last message ({lastSchemaAttachment.chars.toLocaleString()}
+        chars)
+      </div>
+    {/if}
+    {#if !schemaAlreadyAutomatic}
       <div class="followup-options">
         <button
           class="schema-toggle"
-          class:active={includeSchema && !schemaAlreadyAutomatic}
+          class:active={includeSchema}
           onclick={() => (includeSchema = !includeSchema)}
-          disabled={followUpLoading || schemaAlreadyAutomatic}
-          title={schemaAlreadyAutomatic
-            ? 'Table structures are already included automatically (AI schema context is enabled in Settings)'
-            : 'Include table structures with this message'}
+          disabled={followUpLoading}
+          title="Include table structures with this message"
           type="button"
         >
           <TableIcon size={12} />
-          {schemaAlreadyAutomatic ? 'Table structures included' : 'Table structures'}
+          Table structures
         </button>
+        {#if includeSchema && !hasFixedContext}
+          <Select
+            aria-label="Connection"
+            bind:value={adHocConnectionId}
+            options={connectionOptions}
+            onchange={onAdHocConnectionChange}
+            disabled={followUpLoading}
+            size="sm"
+            searchable
+          />
+          <Select
+            aria-label="Database"
+            bind:value={adHocDatabase}
+            options={adHocDatabaseOptions}
+            disabled={followUpLoading || !adHocConnectionId || adHocDbLoading}
+            size="sm"
+            searchable
+          />
+        {/if}
+      </div>
+    {:else}
+      <div class="followup-options">
+        <span class="schema-auto-note" title="AI schema context is enabled in Settings">
+          <TableIcon size={12} />
+          Table structures included
+        </span>
       </div>
     {/if}
     <div class="followup-input-row">
       <textarea
         class="followup-textarea"
         bind:value={followUpText}
-        placeholder="Continue this conversation…"
+        placeholder={messages.length > 0 ? 'Continue this conversation…' : 'Ask me anything…'}
         rows="2"
         disabled={followUpLoading}
         onkeydown={(e) => {
@@ -421,7 +570,27 @@
 
   .followup-options {
     display: flex;
+    align-items: center;
     gap: var(--spacing-2);
+    flex-wrap: wrap;
+  }
+
+  .schema-attachment-note {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .schema-auto-note {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: 2px var(--spacing-2);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
   }
 
   .schema-toggle {
