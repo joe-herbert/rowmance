@@ -228,6 +228,41 @@
     return key ? panelStore.isItemDirty(key) : false;
   }
 
+  // ── Bulk close (from context menu) ──────────────────────────────────────────
+
+  type BulkCloseAction = 'before' | 'after' | 'others';
+  let pendingBulkClose = $state<{ action: BulkCloseAction; itemId: string } | null>(null);
+
+  function itemsForBulkClose(action: BulkCloseAction, itemId: string): OpenItem[] {
+    const idx = items.findIndex((i) => i.id === itemId);
+    if (idx < 0) return [];
+    if (action === 'before') return items.slice(0, idx);
+    if (action === 'after') return items.slice(idx + 1);
+    return items.filter((i) => i.id !== itemId);
+  }
+
+  function performBulkClose(action: BulkCloseAction, itemId: string) {
+    for (const item of itemsForBulkClose(action, itemId)) {
+      const key = dirtyKeyForContent(item.content);
+      if (key) {
+        clearTablePendingState(key);
+        panelStore.setItemDirty(key, false);
+      }
+    }
+    if (action === 'before') panelStore.closeItemsBefore(itemId);
+    else if (action === 'after') panelStore.closeItemsAfter(itemId);
+    else panelStore.closeOtherItems(itemId);
+  }
+
+  function requestBulkClose(action: BulkCloseAction, itemId: string) {
+    const hasDirty = itemsForBulkClose(action, itemId).some(itemIsDirty);
+    if (hasDirty) {
+      pendingBulkClose = { action, itemId };
+    } else {
+      performBulkClose(action, itemId);
+    }
+  }
+
   function openNewQueryEditor() {
     if (!splitActiveContent) return;
     const connectionId =
@@ -380,6 +415,9 @@
         renameValue =
           item.content.kind === 'query_editor' ? (item.content.savedQueryName ?? 'Query') : '';
       }}
+      onclosebefore={(id) => requestBulkClose('before', id)}
+      oncloseafter={(id) => requestBulkClose('after', id)}
+      oncloseothers={(id) => requestBulkClose('others', id)}
     />
   {/if}
 {/if}
@@ -405,6 +443,27 @@
       }}
     />
   {/if}
+{/if}
+
+{#if pendingBulkClose !== null}
+  {@const dirtyCount = itemsForBulkClose(
+    pendingBulkClose.action,
+    pendingBulkClose.itemId,
+  ).filter(itemIsDirty).length}
+  <ConfirmDialog
+    title="Close tabs"
+    message={`${dirtyCount} tab${dirtyCount === 1 ? '' : 's'} ${dirtyCount === 1 ? 'has' : 'have'} unsaved changes. Close anyway?`}
+    confirmText="Close"
+    cancelText="Cancel"
+    danger={true}
+    onconfirm={() => {
+      performBulkClose(pendingBulkClose!.action, pendingBulkClose!.itemId);
+      pendingBulkClose = null;
+    }}
+    oncancel={() => {
+      pendingBulkClose = null;
+    }}
+  />
 {/if}
 
 <style>

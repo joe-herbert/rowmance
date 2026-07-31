@@ -23,9 +23,24 @@
     minWidth?: number;
     onclose: () => void;
     onrename: (_item: OpenItem) => void;
+    onclosebefore: (_itemId: string) => void;
+    oncloseafter: (_itemId: string) => void;
+    oncloseothers: (_itemId: string) => void;
   }
 
-  const { item, splitId, x, y, open, minWidth, onclose, onrename }: Props = $props();
+  const {
+    item,
+    splitId,
+    x,
+    y,
+    open,
+    minWidth,
+    onclose,
+    onrename,
+    onclosebefore,
+    oncloseafter,
+    oncloseothers,
+  }: Props = $props();
 
   const panelStore = usePanels();
   const connectionStore = useConnections();
@@ -107,7 +122,7 @@
       onclick={() => {
         const id = item.id;
         onclose();
-        panelStore.closeItemsBefore(id);
+        onclosebefore(id);
       }}>{beforeLabel}</CtxItem
     >
   {/if}
@@ -116,7 +131,7 @@
       onclick={() => {
         const id = item.id;
         onclose();
-        panelStore.closeItemsAfter(id);
+        oncloseafter(id);
       }}>{afterLabel}</CtxItem
     >
   {/if}
@@ -125,7 +140,7 @@
       onclick={() => {
         const id = item.id;
         onclose();
-        panelStore.closeOtherItems(id);
+        oncloseothers(id);
       }}>Close other tabs</CtxItem
     >
   {/if}

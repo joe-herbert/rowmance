@@ -203,6 +203,44 @@
     return key ? panelStore.isItemDirty(key) : false;
   }
 
+  // ── Bulk close (from context menu) ──────────────────────────────────────────
+
+  type BulkCloseAction = 'before' | 'after' | 'others';
+  let pendingBulkClose = $state<{ action: BulkCloseAction; itemId: string; splitId: string } | null>(
+    null,
+  );
+
+  function itemsForBulkClose(action: BulkCloseAction, itemId: string, splitId: string): OpenItem[] {
+    const splitItems = panelStore.getSplitItems(splitId);
+    const idx = splitItems.findIndex((i) => i.id === itemId);
+    if (idx < 0) return [];
+    if (action === 'before') return splitItems.slice(0, idx);
+    if (action === 'after') return splitItems.slice(idx + 1);
+    return splitItems.filter((i) => i.id !== itemId);
+  }
+
+  function performBulkClose(action: BulkCloseAction, itemId: string, splitId: string) {
+    for (const item of itemsForBulkClose(action, itemId, splitId)) {
+      const key = dirtyKeyForContent(item.content);
+      if (key) {
+        clearTablePendingState(key);
+        panelStore.setItemDirty(key, false);
+      }
+    }
+    if (action === 'before') panelStore.closeItemsBefore(itemId);
+    else if (action === 'after') panelStore.closeItemsAfter(itemId);
+    else panelStore.closeOtherItems(itemId);
+  }
+
+  function requestBulkClose(action: BulkCloseAction, itemId: string, splitId: string) {
+    const hasDirty = itemsForBulkClose(action, itemId, splitId).some(itemIsDirty);
+    if (hasDirty) {
+      pendingBulkClose = { action, itemId, splitId };
+    } else {
+      performBulkClose(action, itemId, splitId);
+    }
+  }
+
   function openNewQueryEditor() {
     const focused = panelStore.focusedPanel.content;
     const connectionId = 'connectionId' in focused ? focused.connectionId : null;
@@ -491,6 +529,9 @@
         renamingItemId = item.id;
         renameValue = item.content.savedQueryName ?? 'Query';
       }}
+      onclosebefore={(id) => requestBulkClose('before', id, contextMenuItemSplitId!)}
+      oncloseafter={(id) => requestBulkClose('after', id, contextMenuItemSplitId!)}
+      oncloseothers={(id) => requestBulkClose('others', id, contextMenuItemSplitId!)}
     />
   {/if}
 {/if}
@@ -516,6 +557,32 @@
       }}
     />
   {/if}
+{/if}
+
+{#if pendingBulkClose !== null}
+  {@const dirtyCount = itemsForBulkClose(
+    pendingBulkClose.action,
+    pendingBulkClose.itemId,
+    pendingBulkClose.splitId,
+  ).filter(itemIsDirty).length}
+  <ConfirmDialog
+    title="Close tabs"
+    message={`${dirtyCount} tab${dirtyCount === 1 ? '' : 's'} ${dirtyCount === 1 ? 'has' : 'have'} unsaved changes. Close anyway?`}
+    confirmText="Close"
+    cancelText="Cancel"
+    danger={true}
+    onconfirm={() => {
+      performBulkClose(
+        pendingBulkClose!.action,
+        pendingBulkClose!.itemId,
+        pendingBulkClose!.splitId,
+      );
+      pendingBulkClose = null;
+    }}
+    oncancel={() => {
+      pendingBulkClose = null;
+    }}
+  />
 {/if}
 
 <style>
