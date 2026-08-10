@@ -23,6 +23,7 @@
   import * as historyApi from '$lib/tauri/history';
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import * as schemaApi from '$lib/tauri/schema';
+  import { getErdGraph } from '$lib/tauri/erd';
   import type {
     QueryHistoryEntry,
     FileQuery,
@@ -30,6 +31,7 @@
     ColumnInfo,
     IndexInfo,
     ForeignKeyInfo,
+    ErdRelation,
   } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
@@ -88,6 +90,7 @@
   let columnInfoData = $state<ColumnInfo | null>(null);
   let columnIndexes = $state<IndexInfo[]>([]);
   let columnForeignKeys = $state<ForeignKeyInfo[]>([]);
+  let columnReferencedBy = $state<ErdRelation[]>([]);
   let columnInspectorKey = $state<string | null>(null);
 
   $effect(() => {
@@ -104,6 +107,7 @@
       columnInfoData = null;
       columnIndexes = [];
       columnForeignKeys = [];
+      columnReferencedBy = [];
       return;
     }
 
@@ -113,11 +117,15 @@
       schemaApi.listColumns(sel.connectionId, sel.database, sel.table),
       schemaApi.listIndexes(sel.connectionId, sel.database, sel.table),
       schemaApi.listForeignKeys(sel.connectionId, sel.database, sel.table),
+      getErdGraph(sel.connectionId, sel.database),
     ])
-      .then(([cols, idxs, fks]) => {
+      .then(([cols, idxs, fks, graph]) => {
         columnInfoData = cols.find((c) => c.name === columnName) ?? null;
         columnIndexes = idxs.filter((idx) => idx.columns.includes(columnName));
         columnForeignKeys = fks.filter((fk) => fk.columns.includes(columnName));
+        columnReferencedBy = graph.edges.filter(
+          (edge) => edge.toTable === sel.table && edge.toColumns.includes(columnName),
+        );
         columnInfoLoading = false;
       })
       .catch((err) => {
@@ -174,6 +182,17 @@
       kind: 'query_editor',
       connectionId: entry.connectionId,
       initialSql: entry.sql,
+    });
+  }
+
+  function openReferencingTable(edge: ErdRelation) {
+    const sel = cellSelectionStore.current;
+    if (!sel) return;
+    panelStore.openInFocused({
+      kind: 'table_browser',
+      connectionId: sel.connectionId,
+      database: sel.database,
+      table: edge.fromTable,
     });
   }
 
@@ -1367,14 +1386,33 @@
               <div class="info-section-title">Foreign Keys</div>
               {#each columnForeignKeys as fk (fk.constraintName)}
                 <div class="fk-card">
-                  <div class="fk-name mono">{fk.constraintName}</div>
-                  <div class="fk-ref">
-                    → <span class="mono"
-                      >{fk.referencedTable}.{fk.referencedColumns.join(', ')}</span
-                    >
+                  <div class="fk-ref-main">
+                    <span class="ctx-table">{fk.referencedTable}</span><span class="ctx-dot"
+                      >.</span
+                    ><span class="ctx-col">{fk.referencedColumns.join(', ')}</span>
                   </div>
+                  <div class="fk-name">{fk.constraintName}</div>
                   <div class="fk-actions">ON DELETE {fk.onDelete} · ON UPDATE {fk.onUpdate}</div>
                 </div>
+              {/each}
+            </div>
+          {/if}
+          {#if columnReferencedBy.length > 0}
+            <div class="info-section">
+              <div class="info-section-title">Referenced By</div>
+              {#each columnReferencedBy as edge (edge.constraintName)}
+                <button
+                  type="button"
+                  class="fk-card fk-card-clickable"
+                  onclick={() => openReferencingTable(edge)}
+                >
+                  <div class="fk-ref-main">
+                    <span class="ctx-table">{edge.fromTable}</span><span class="ctx-dot"
+                      >.</span
+                    ><span class="ctx-col">{edge.fromColumns.join(', ')}</span>
+                  </div>
+                  <div class="fk-name">{edge.constraintName}</div>
+                </button>
               {/each}
             </div>
           {/if}
@@ -2190,17 +2228,36 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .fk-ref {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-primary);
-    margin-top: 1px;
+    font-style: italic;
   }
 
   .fk-actions {
     font-size: 10px;
     color: var(--color-text-muted);
+    margin-top: 1px;
+  }
+
+  .fk-ref-main {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-sm);
+  }
+
+  .fk-card-clickable {
+    display: block;
+    width: calc(100% - var(--spacing-2) * 2);
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
+  }
+
+  .fk-card-clickable:hover {
+    background: var(--color-bg-hover);
+  }
+
+  .fk-card-clickable .fk-name {
     margin-top: 1px;
   }
 
