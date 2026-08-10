@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Pure functions redefined locally to avoid rune compilation issues in test context.
-// These mirror the inline functions in RightSidebar.svelte.
+// These mirror the inline functions in HistoryPanel.svelte.
 
 function formatDuration(ms: number | null): string {
   if (ms === null) return '';
