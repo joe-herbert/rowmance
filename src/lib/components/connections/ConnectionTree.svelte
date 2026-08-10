@@ -119,6 +119,10 @@
 
   let filterQuery = $state('');
   let filterInputEl = $state<HTMLInputElement | undefined>(undefined);
+  // Nodes the user has explicitly collapsed while a search is active — search
+  // auto-expands matching nodes, but an explicit collapse here overrides that.
+  let filterCollapseOverrides = $state<Set<string>>(new Set());
+  const UNGROUPED_FILTER_KEY = '__ungrouped__';
 
   // ── Context menus ─────────────────────────────────────────────────────────
 
@@ -324,7 +328,21 @@
 
   // ── Schema helpers ────────────────────────────────────────────────────────
 
+  function isNodeOpen(key: string, expandedSet: Set<string>): boolean {
+    return filterQuery ? !filterCollapseOverrides.has(key) : expandedSet.has(key);
+  }
+
+  function toggleFilterOverride(key: string) {
+    filterCollapseOverrides = filterCollapseOverrides.has(key)
+      ? new Set([...filterCollapseOverrides].filter((k) => k !== key))
+      : new Set([...filterCollapseOverrides, key]);
+  }
+
   async function toggleExpand(connectionId: string) {
+    if (filterQuery) {
+      toggleFilterOverride(connectionId);
+      return;
+    }
     if (expandedConnections.has(connectionId)) {
       expandedConnections = new Set([...expandedConnections].filter((id) => id !== connectionId));
     } else {
@@ -350,6 +368,10 @@
 
   async function toggleDatabase(connectionId: string, database: string) {
     const key = `${connectionId}/${database}`;
+    if (filterQuery) {
+      toggleFilterOverride(key);
+      return;
+    }
     if (expandedDatabases.has(key)) {
       expandedDatabases = new Set([...expandedDatabases].filter((k) => k !== key));
     } else {
@@ -450,6 +472,10 @@
   // ── Group helpers ─────────────────────────────────────────────────────────
 
   function toggleGroup(groupId: string) {
+    if (filterQuery) {
+      toggleFilterOverride(groupId);
+      return;
+    }
     if (expandedGroups.has(groupId)) {
       expandedGroups = new Set([...expandedGroups].filter((id) => id !== groupId));
     } else {
@@ -1404,6 +1430,10 @@
     globalSearchCache.populate(connectedProfiles);
   });
 
+  $effect(() => {
+    if (!filterQuery && filterCollapseOverrides.size > 0) filterCollapseOverrides = new Set();
+  });
+
   function profileMatchesFilter(profile: ConnectionProfile): boolean {
     if (!filterQuery) return true;
     const q = filterQuery.toLowerCase();
@@ -1695,25 +1725,27 @@
       <!-- Ungrouped profiles -->
       {#if connectionStore.groups.length > 0 && grouped().ungrouped.length > 0}
         {@const filteredUngrouped = grouped().ungrouped.filter(profileMatchesFilter)}
+        {@const ungroupedOpen = filterQuery
+          ? !filterCollapseOverrides.has(UNGROUPED_FILTER_KEY)
+          : ungroupedExpanded}
         {#if filteredUngrouped.length > 0}
           <div class="group-section" data-group-drop-id={UNGROUPED_DROP_ID}>
             <button
               class="group-row"
               class:group-row--drop-target={connDropTarget?.kind === 'group' &&
                 connDropTarget.groupId === null}
-              onclick={() => (ungroupedExpanded = !ungroupedExpanded)}
+              onclick={() => {
+                if (filterQuery) toggleFilterOverride(UNGROUPED_FILTER_KEY);
+                else ungroupedExpanded = !ungroupedExpanded;
+              }}
             >
-              <span
-                class="chevron"
-                class:open={ungroupedExpanded || !!filterQuery}
-                aria-hidden="true"
-              >
+              <span class="chevron" class:open={ungroupedOpen} aria-hidden="true">
                 <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
               </span>
               <span class="group-name">Ungrouped</span>
               <span class="group-count">{filteredUngrouped.length}</span>
             </button>
-            {#if ungroupedExpanded || filterQuery}
+            {#if ungroupedOpen}
               {#each filteredUngrouped as profile (profile.id)}
                 {@render connectionRow(profile)}
               {/each}
@@ -1757,7 +1789,7 @@
      children in one more `.group-children` box, so the indent + guide line
      compound naturally through plain DOM nesting, with no cap. ── -->
 {#snippet groupNode(group: ConnectionGroup)}
-  {@const isExpanded = expandedGroups.has(group.id)}
+  {@const isExpanded = isNodeOpen(group.id, expandedGroups)}
   {@const groupProfiles = (grouped().byGroup.get(group.id) ?? []).filter(profileMatchesFilter)}
   {@const childGroups = groupTree.get(group.id) ?? []}
   {#if !filterQuery || groupProfiles.length > 0 || childGroups.length > 0}
@@ -1769,13 +1801,13 @@
           connDropTarget.groupId === group.id}
         onclick={() => toggleGroup(group.id)}
       >
-        <span class="chevron" class:open={isExpanded || !!filterQuery} aria-hidden="true">
+        <span class="chevron" class:open={isExpanded} aria-hidden="true">
           <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
         </span>
         <span class="group-name">{group.name}</span>
         <span class="group-count">{subtreeConnectionCount(group.id)}</span>
       </button>
-      {#if isExpanded || filterQuery}
+      {#if isExpanded}
         <div class="group-children">
           {#each childGroups as child (child.id)}
             {@render groupNode(child)}
@@ -1833,7 +1865,7 @@
   {@const connected = isConnected(profile.id)}
   {@const connecting = isConnecting(profile.id)}
   {@const errored = hasError(profile.id)}
-  {@const expanded = expandedConnections.has(profile.id)}
+  {@const expanded = isNodeOpen(profile.id, expandedConnections)}
   {@const color = dotColor(profile)}
 
   <div class="conn-item">
@@ -2002,7 +2034,7 @@
     {/if}
 
     <!-- Schema tree when expanded -->
-    {#if (expanded || filterQuery) && connected}
+    {#if expanded && connected}
       {@const schemaDb = schemaCache.get(profile.id)}
       {@const databases = filterQuery ? buildFilterMap(profile.id, schemaDb) : schemaDb}
       {@const isLoadingConn = loadingKeys.has(profile.id)}
@@ -2106,12 +2138,16 @@
             {#if usesSchema && !usesDatabaseKeyword}
               <!-- Schema-based (Postgres): static database node wrapping schema list -->
               {@const dbNodeKey = `${profile.id}/__db__`}
-              {@const isDbNodeExpanded = expandedDatabases.has(dbNodeKey)}
+              {@const isDbNodeExpanded = isNodeOpen(dbNodeKey, expandedDatabases)}
               <div class="db-item">
                 <button
                   class="db-row"
-                  class:open={isDbNodeExpanded || !!filterQuery}
+                  class:open={isDbNodeExpanded}
                   onclick={() => {
+                    if (filterQuery) {
+                      toggleFilterOverride(dbNodeKey);
+                      return;
+                    }
                     expandedDatabases = isDbNodeExpanded
                       ? new Set([...expandedDatabases].filter((k) => k !== dbNodeKey))
                       : new Set([...expandedDatabases, dbNodeKey]);
@@ -2119,37 +2155,29 @@
                   oncontextmenu={(e) => showStaticDbCtx(e, profile.id, profile.database)}
                   aria-label="{isDbNodeExpanded ? 'Collapse' : 'Expand'} {profile.database}"
                 >
-                  <span
-                    class="chevron"
-                    class:open={isDbNodeExpanded || !!filterQuery}
-                    aria-hidden="true"
-                  >
+                  <span class="chevron" class:open={isDbNodeExpanded} aria-hidden="true">
                     <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
                   </span>
                   <DbIcon system={false} aria-hidden="true" />
                   <span class="db-name">{profile.database || '(server)'}</span>
                 </button>
 
-                {#if isDbNodeExpanded || filterQuery}
+                {#if isDbNodeExpanded}
                   <div class="schema-item">
                     {#each [...databases.keys()].filter((db) => (settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) && dbMatchesFilter(profile.id, db)) as database}
                       {@const dbKey = `${profile.id}/${database}`}
-                      {@const isDbExpanded = expandedDatabases.has(dbKey)}
+                      {@const isDbExpanded = isNodeOpen(dbKey, expandedDatabases)}
                       {@const isDbLoading = loadingKeys.has(dbKey)}
                       {@const tables = databases.get(database) ?? []}
                       <div class="db-item">
                         <button
                           class="db-row schema-row"
-                          class:open={isDbExpanded || !!filterQuery}
+                          class:open={isDbExpanded}
                           onclick={() => toggleDatabase(profile.id, database)}
                           oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
                           aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
                         >
-                          <span
-                            class="chevron"
-                            class:open={isDbExpanded || !!filterQuery}
-                            aria-hidden="true"
-                          >
+                          <span class="chevron" class:open={isDbExpanded} aria-hidden="true">
                             <ChevronIcon
                               direction="right"
                               width={10}
@@ -2162,7 +2190,7 @@
                           {#if isDbLoading}<Spinner label="Loading" />{/if}
                         </button>
 
-                        {#if (isDbExpanded || filterQuery) && tables.length > 0}
+                        {#if isDbExpanded && tables.length > 0}
                           <div class="table-list">
                             {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !checkSystemTable(t.name)) && (!filterQuery || t.name
                                     .toLowerCase()
@@ -2211,7 +2239,7 @@
               <!-- Regular 2-level: Database → Tables (MySQL, MariaDB, SQLite) -->
               {#each [...databases.keys()].filter((db) => (settingsStore.settings.showSystemItems || !checkSystemDatabase(db)) && dbMatchesFilter(profile.id, db)) as database}
                 {@const dbKey = `${profile.id}/${database}`}
-                {@const isDbExpanded = expandedDatabases.has(dbKey)}
+                {@const isDbExpanded = isNodeOpen(dbKey, expandedDatabases)}
                 {@const isDbLoading = loadingKeys.has(dbKey)}
                 {@const tables = databases.get(database) ?? []}
 
@@ -2219,16 +2247,12 @@
                 <div class="db-item" class:system-item={isDbSystem}>
                   <button
                     class="db-row"
-                    class:open={isDbExpanded || !!filterQuery}
+                    class:open={isDbExpanded}
                     onclick={() => toggleDatabase(profile.id, database)}
                     oncontextmenu={(e) => showDbCtx(e, profile.id, database)}
                     aria-label="{isDbExpanded ? 'Collapse' : 'Expand'} {database}"
                   >
-                    <span
-                      class="chevron"
-                      class:open={isDbExpanded || !!filterQuery}
-                      aria-hidden="true"
-                    >
+                    <span class="chevron" class:open={isDbExpanded} aria-hidden="true">
                       <ChevronIcon direction="right" width={10} height={10} strokeWidth={2.2} />
                     </span>
                     <DbIcon system={isDbSystem} aria-hidden="true" />
@@ -2238,7 +2262,7 @@
                     {/if}
                   </button>
 
-                  {#if (isDbExpanded || filterQuery) && tables.length > 0}
+                  {#if isDbExpanded && tables.length > 0}
                     <div class="table-list">
                       {#each tables.filter((t) => (settingsStore.settings.showSystemItems || !(isDbSystem || checkSystemTable(t.name))) && (!filterQuery || t.name
                               .toLowerCase()
