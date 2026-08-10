@@ -6,6 +6,7 @@
   import type { ColumnInfo, IndexInfo, ForeignKeyInfo, ErdRelation } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
+  import Loader from '$lib/components/ui/Loader.svelte';
 
   const panelStore = usePanels();
   const cellSelectionStore = useCellSelection();
@@ -79,7 +80,7 @@
       <p>Select a cell in a table to inspect its column.</p>
     </div>
   {:else if columnInfoLoading}
-    <div class="loading-row">Loading…</div>
+    <div class="loading-row"><Loader /></div>
   {:else if !columnInfoData}
     <div class="placeholder-panel"><p>Column not found.</p></div>
   {:else}
@@ -179,6 +180,13 @@
 </div>
 
 <style>
+  #panel-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
   .panel-toolbar {
     display: flex;
     align-items: center;
@@ -198,10 +206,11 @@
   }
 
   .loading-row {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
     padding: var(--spacing-3) var(--spacing-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    font-style: italic;
   }
 
   .placeholder-panel {
