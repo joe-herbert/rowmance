@@ -403,6 +403,11 @@ pub fn run() {
             commands::schema::schema_list_all_columns,
             commands::schema::schema_list_indexes,
             commands::schema::schema_list_foreign_keys,
+            commands::schema::schema_list_views,
+            commands::schema::schema_list_all_indexes,
+            commands::schema::schema_list_all_foreign_keys,
+            commands::schema::schema_list_check_constraints,
+            commands::schema::schema_list_triggers,
             commands::schema::schema_get_ddl,
             commands::schema::schema_execute_ddl,
             // Query history

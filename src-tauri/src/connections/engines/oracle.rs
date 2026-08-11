@@ -8,10 +8,11 @@ use async_trait::async_trait;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::group_into_tables;
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn,
-    ErdGraph, ErdRelation, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
-    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
-    TableInfo, VarScope,
+    BulkColumnRow, BulkForeignKeyRow, BulkIndexRow, CapabilityStatus, CheckConstraintInfo,
+    ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn, ErdGraph, ErdRelation, ExplainResult,
+    ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange, RowDelete, ScheduledJob,
+    ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo, TriggerInfo, VarScope,
+    ViewInfo,
 };
 use crate::error::RowmanceError;
 
@@ -263,6 +264,109 @@ impl DatabaseEngine for OracleEngine {
         tokio::task::spawn_blocking(move || {
             let conn = pool.get()?;
             let result = crate::connections::oracle::list_foreign_keys(conn.conn(), &owner, &table);
+            pool.return_conn(conn);
+            result
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_views(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<ViewInfo>, RowmanceError> {
+        let pool = self.pool.clone();
+        let owner = database.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let result = crate::connections::oracle::list_views(conn.conn(), &owner);
+            pool.return_conn(conn);
+            result
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_all_indexes(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkIndexRow>, RowmanceError> {
+        let pool = self.pool.clone();
+        let owner = database.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let pairs = crate::connections::oracle::list_all_indexes(conn.conn(), &owner)?;
+            pool.return_conn(conn);
+            Ok(pairs
+                .into_iter()
+                .map(|(table_name, index)| BulkIndexRow { table_name, index })
+                .collect())
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_all_foreign_keys(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkForeignKeyRow>, RowmanceError> {
+        let pool = self.pool.clone();
+        let owner = database.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let pairs = crate::connections::oracle::list_all_foreign_keys(conn.conn(), &owner)?;
+            pool.return_conn(conn);
+            Ok(pairs
+                .into_iter()
+                .map(|(table_name, foreign_key)| BulkForeignKeyRow {
+                    table_name,
+                    foreign_key,
+                })
+                .collect())
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_check_constraints(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+        let pool = self.pool.clone();
+        let owner = database.to_string();
+        let table = table.map(|t| t.to_string());
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let result = crate::connections::oracle::list_check_constraints(
+                conn.conn(),
+                &owner,
+                table.as_deref(),
+            );
+            pool.return_conn(conn);
+            result
+        })
+        .await
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?
+    }
+
+    async fn list_triggers(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<TriggerInfo>, RowmanceError> {
+        let pool = self.pool.clone();
+        let owner = database.to_string();
+        let table = table.map(|t| t.to_string());
+        tokio::task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            let result =
+                crate::connections::oracle::list_triggers(conn.conn(), &owner, table.as_deref());
             pool.return_conn(conn);
             result
         })

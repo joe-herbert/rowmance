@@ -13,10 +13,11 @@ use sqlx::TypeInfo;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::{build_edges_from_fk_rows, group_into_tables, FkNorm};
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, DbUser, EngineQueryResult, ErdColumn,
-    ErdGraph, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange,
-    RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo,
-    VarScope,
+    BulkColumnRow, BulkForeignKeyRow, BulkIndexRow, CapabilityStatus, CheckConstraintInfo,
+    ColumnInfo, ColumnMeta, DbUser, EngineQueryResult, ErdColumn, ErdGraph, ExplainResult,
+    ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange, RowDelete, ScheduledJob,
+    ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo, TriggerInfo, VarScope,
+    ViewInfo,
 };
 use crate::error::RowmanceError;
 
@@ -109,6 +110,59 @@ impl DatabaseEngine for MySqlEngine {
         _instance_db: Option<&str>,
     ) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
         crate::connections::mysql::list_foreign_keys(&self.pool, database, table).await
+    }
+
+    async fn list_views(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<ViewInfo>, RowmanceError> {
+        crate::connections::mysql::list_views(&self.pool, database).await
+    }
+
+    async fn list_all_indexes(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkIndexRow>, RowmanceError> {
+        let pairs = crate::connections::mysql::list_all_indexes(&self.pool, database).await?;
+        Ok(pairs
+            .into_iter()
+            .map(|(table_name, index)| BulkIndexRow { table_name, index })
+            .collect())
+    }
+
+    async fn list_all_foreign_keys(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkForeignKeyRow>, RowmanceError> {
+        let pairs = crate::connections::mysql::list_all_foreign_keys(&self.pool, database).await?;
+        Ok(pairs
+            .into_iter()
+            .map(|(table_name, foreign_key)| BulkForeignKeyRow {
+                table_name,
+                foreign_key,
+            })
+            .collect())
+    }
+
+    async fn list_check_constraints(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+        crate::connections::mysql::list_check_constraints(&self.pool, database, table).await
+    }
+
+    async fn list_triggers(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<TriggerInfo>, RowmanceError> {
+        crate::connections::mysql::list_triggers(&self.pool, database, table).await
     }
 
     async fn count_table(

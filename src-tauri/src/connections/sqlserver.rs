@@ -3,7 +3,9 @@ use futures::TryStreamExt;
 use tiberius::{Client, QueryItem};
 use tokio_util::compat::Compat;
 
-use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
+use crate::connections::types::{
+    CheckConstraintInfo, ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, TriggerInfo, ViewInfo,
+};
 use crate::error::RowmanceError;
 
 pub type MssqlConn = Client<Compat<tokio::net::TcpStream>>;
@@ -433,6 +435,156 @@ pub async fn list_foreign_keys(
     Ok(map.into_values().collect())
 }
 
+/// List all views in the given schema, including their SQL definitions.
+pub async fn list_views(
+    conn: &mut MssqlConn,
+    schema: &str,
+    instance_db: Option<&str>,
+) -> Result<Vec<ViewInfo>, RowmanceError> {
+    let prefix = db_prefix(instance_db);
+    let sql = format!(
+        "SELECT TABLE_NAME, VIEW_DEFINITION FROM {prefix}INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = @P1 ORDER BY TABLE_NAME",
+        prefix = prefix
+    );
+    let rows = collect_rows(conn, &sql, &[&schema]).await?;
+    Ok(rows
+        .iter()
+        .map(|r| ViewInfo {
+            name: get_str(r, 0).unwrap_or_default(),
+            definition: get_str(r, 1).unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// List indexes for every table in the given schema in one query.
+pub async fn list_all_indexes(
+    conn: &mut MssqlConn,
+    schema: &str,
+    instance_db: Option<&str>,
+) -> Result<Vec<(String, IndexInfo)>, RowmanceError> {
+    let prefix = db_prefix(instance_db);
+    let sql = format!(
+        "
+        SELECT
+            o.name AS table_name,
+            i.name AS index_name,
+            c.name AS column_name,
+            i.is_unique,
+            i.type_desc
+        FROM {prefix}sys.indexes i
+        JOIN {prefix}sys.objects o
+            ON o.object_id = i.object_id
+        JOIN {prefix}sys.schemas s
+            ON s.schema_id = o.schema_id
+        JOIN {prefix}sys.index_columns ic
+            ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+        JOIN {prefix}sys.columns c
+            ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+        WHERE s.name = @P1
+            AND i.name IS NOT NULL
+            AND i.is_hypothetical = 0
+        ORDER BY o.name, i.name, ic.key_ordinal
+    ",
+        prefix = prefix
+    );
+    let rows = collect_rows(conn, &sql, &[&schema]).await?;
+
+    let mut map: std::collections::BTreeMap<(String, String), IndexInfo> =
+        std::collections::BTreeMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
+    for r in &rows {
+        let table_name = get_str(r, 0).unwrap_or_default();
+        let name = get_str(r, 1).unwrap_or_default();
+        let col = get_str(r, 2).unwrap_or_default();
+        let unique = get_bit(r, 3).unwrap_or(false);
+        let type_desc = get_str(r, 4).unwrap_or_else(|| "NONCLUSTERED".to_string());
+        let key = (table_name, name.clone());
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+        }
+        let entry = map.entry(key).or_insert_with(|| IndexInfo {
+            name: name.clone(),
+            columns: vec![],
+            unique,
+            index_type: type_desc,
+        });
+        entry.columns.push(col);
+    }
+    Ok(order
+        .into_iter()
+        .filter_map(|key| map.remove(&key).map(|idx| (key.0, idx)))
+        .collect())
+}
+
+/// List foreign keys for every table in the given schema in one query.
+pub async fn list_all_foreign_keys(
+    conn: &mut MssqlConn,
+    schema: &str,
+    instance_db: Option<&str>,
+) -> Result<Vec<(String, ForeignKeyInfo)>, RowmanceError> {
+    let prefix = db_prefix(instance_db);
+    let sql = format!(
+        "
+        SELECT
+            po.name AS table_name,
+            fk.name AS constraint_name,
+            c_parent.name AS column_name,
+            OBJECT_NAME(fk.referenced_object_id) AS referenced_table,
+            c_ref.name AS referenced_column,
+            fk.delete_referential_action_desc AS on_delete,
+            fk.update_referential_action_desc AS on_update
+        FROM {prefix}sys.foreign_keys fk
+        JOIN {prefix}sys.objects po
+            ON po.object_id = fk.parent_object_id
+        JOIN {prefix}sys.schemas s
+            ON s.schema_id = po.schema_id
+        JOIN {prefix}sys.foreign_key_columns fkc
+            ON fk.object_id = fkc.constraint_object_id
+        JOIN {prefix}sys.columns c_parent
+            ON fkc.parent_object_id = c_parent.object_id
+            AND fkc.parent_column_id = c_parent.column_id
+        JOIN {prefix}sys.columns c_ref
+            ON fkc.referenced_object_id = c_ref.object_id
+            AND fkc.referenced_column_id = c_ref.column_id
+        WHERE s.name = @P1
+        ORDER BY po.name, fk.name, fkc.constraint_column_id
+    ",
+        prefix = prefix
+    );
+    let rows = collect_rows(conn, &sql, &[&schema]).await?;
+
+    let mut map: std::collections::BTreeMap<(String, String), ForeignKeyInfo> =
+        std::collections::BTreeMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
+    for r in &rows {
+        let table_name = get_str(r, 0).unwrap_or_default();
+        let name = get_str(r, 1).unwrap_or_default();
+        let col = get_str(r, 2).unwrap_or_default();
+        let ref_table = get_str(r, 3).unwrap_or_default();
+        let ref_col = get_str(r, 4).unwrap_or_default();
+        let on_delete = get_str(r, 5).unwrap_or_else(|| "NO_ACTION".to_string());
+        let on_update = get_str(r, 6).unwrap_or_else(|| "NO_ACTION".to_string());
+        let key = (table_name, name.clone());
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+        }
+        let entry = map.entry(key).or_insert_with(|| ForeignKeyInfo {
+            constraint_name: name.clone(),
+            columns: vec![],
+            referenced_table: ref_table,
+            referenced_columns: vec![],
+            on_delete: on_delete.replace('_', " "),
+            on_update: on_update.replace('_', " "),
+        });
+        entry.columns.push(col);
+        entry.referenced_columns.push(ref_col);
+    }
+    Ok(order
+        .into_iter()
+        .filter_map(|key| map.remove(&key).map(|fk| (key.0, fk)))
+        .collect())
+}
+
 /// Count rows in a table using sys.partitions (fast, no full scan).
 pub async fn count_table(
     conn: &mut MssqlConn,
@@ -457,6 +609,144 @@ pub async fn count_table(
         return Ok(get_i64(r, 0).unwrap_or(0));
     }
     Ok(0)
+}
+
+/// List CHECK constraints. Pass `table: Some(name)` to scope to a single
+/// table, or `None` to fetch every table's check constraints in the schema.
+pub async fn list_check_constraints(
+    conn: &mut MssqlConn,
+    schema: &str,
+    table: Option<&str>,
+    instance_db: Option<&str>,
+) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+    let prefix = db_prefix(instance_db);
+    let rows = if let Some(table) = table {
+        let sql = format!(
+            "
+            SELECT
+                cc.name AS constraint_name,
+                t.name AS table_name,
+                cc.definition AS expression
+            FROM {prefix}sys.check_constraints cc
+            JOIN {prefix}sys.tables t ON t.object_id = cc.parent_object_id
+            JOIN {prefix}sys.schemas s ON s.schema_id = t.schema_id
+            WHERE s.name = @P1 AND t.name = @P2
+            ORDER BY t.name, cc.name
+        ",
+            prefix = prefix
+        );
+        collect_rows(conn, &sql, &[&schema, &table]).await?
+    } else {
+        let sql = format!(
+            "
+            SELECT
+                cc.name AS constraint_name,
+                t.name AS table_name,
+                cc.definition AS expression
+            FROM {prefix}sys.check_constraints cc
+            JOIN {prefix}sys.tables t ON t.object_id = cc.parent_object_id
+            JOIN {prefix}sys.schemas s ON s.schema_id = t.schema_id
+            WHERE s.name = @P1
+            ORDER BY t.name, cc.name
+        ",
+            prefix = prefix
+        );
+        collect_rows(conn, &sql, &[&schema]).await?
+    };
+
+    Ok(rows
+        .iter()
+        .map(|r| CheckConstraintInfo {
+            constraint_name: get_str(r, 0).unwrap_or_default(),
+            table_name: get_str(r, 1).unwrap_or_default(),
+            expression: get_str(r, 2).unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// List triggers. Pass `table: Some(name)` to scope to a single table, or
+/// `None` to fetch every table's triggers in the schema. Scoped to DML
+/// triggers on tables (`parent_class = 1`); server/database-level DDL
+/// triggers are excluded via the join to `sys.tables`.
+///
+/// SQL Server has no `BEFORE` trigger concept — triggers fire `AFTER` the
+/// event by default, or `INSTEAD OF` when `is_instead_of_trigger = 1`. A
+/// trigger can fire on multiple events, reported as one row per event in
+/// `sys.trigger_events`, so those are concatenated (via `FOR XML PATH`,
+/// there being no `STRING_AGG` on older SQL Server versions this codebase
+/// still targets) into a single comma-joined `event` string.
+/// `OBJECT_DEFINITION()` reconstructs the full `CREATE TRIGGER` statement.
+pub async fn list_triggers(
+    conn: &mut MssqlConn,
+    schema: &str,
+    table: Option<&str>,
+    instance_db: Option<&str>,
+) -> Result<Vec<TriggerInfo>, RowmanceError> {
+    let prefix = db_prefix(instance_db);
+    let rows = if let Some(table) = table {
+        let sql = format!(
+            "
+            SELECT
+                tr.name AS trigger_name,
+                t.name AS table_name,
+                tr.is_instead_of_trigger,
+                STUFF((
+                    SELECT ', ' + te.type_desc
+                    FROM {prefix}sys.trigger_events te
+                    WHERE te.object_id = tr.object_id
+                    ORDER BY te.type_desc
+                    FOR XML PATH('')
+                ), 1, 2, '') AS events,
+                OBJECT_DEFINITION(tr.object_id) AS definition
+            FROM {prefix}sys.triggers tr
+            JOIN {prefix}sys.tables t ON t.object_id = tr.parent_id
+            JOIN {prefix}sys.schemas s ON s.schema_id = t.schema_id
+            WHERE s.name = @P1 AND t.name = @P2 AND tr.parent_class = 1
+            ORDER BY t.name, tr.name
+        ",
+            prefix = prefix
+        );
+        collect_rows(conn, &sql, &[&schema, &table]).await?
+    } else {
+        let sql = format!(
+            "
+            SELECT
+                tr.name AS trigger_name,
+                t.name AS table_name,
+                tr.is_instead_of_trigger,
+                STUFF((
+                    SELECT ', ' + te.type_desc
+                    FROM {prefix}sys.trigger_events te
+                    WHERE te.object_id = tr.object_id
+                    ORDER BY te.type_desc
+                    FOR XML PATH('')
+                ), 1, 2, '') AS events,
+                OBJECT_DEFINITION(tr.object_id) AS definition
+            FROM {prefix}sys.triggers tr
+            JOIN {prefix}sys.tables t ON t.object_id = tr.parent_id
+            JOIN {prefix}sys.schemas s ON s.schema_id = t.schema_id
+            WHERE s.name = @P1 AND tr.parent_class = 1
+            ORDER BY t.name, tr.name
+        ",
+            prefix = prefix
+        );
+        collect_rows(conn, &sql, &[&schema]).await?
+    };
+
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let is_instead_of = get_bit(r, 2).unwrap_or(false);
+            let timing = if is_instead_of { "INSTEAD OF" } else { "AFTER" }.to_string();
+            TriggerInfo {
+                name: get_str(r, 0).unwrap_or_default(),
+                table_name: get_str(r, 1).unwrap_or_default(),
+                timing,
+                event: get_str(r, 3).unwrap_or_default(),
+                definition: get_str(r, 4).unwrap_or_default(),
+            }
+        })
+        .collect())
 }
 
 /// Get the DDL for a table or view.

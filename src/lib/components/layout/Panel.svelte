@@ -14,6 +14,7 @@
   import DdlViewer from '$lib/components/schema/DdlViewer.svelte';
   import TableStructure from '$lib/components/schema/TableStructure.svelte';
   import ErdCanvas from '$lib/components/erd/ErdCanvas.svelte';
+  import SchemaComparePanel from '$lib/components/compare/SchemaComparePanel.svelte';
   import ExplainCanvas from '$lib/components/explain/ExplainCanvas.svelte';
   import Settings from '$lib/components/settings/Settings.svelte';
   import UserManager from '$lib/components/users/UserManager.svelte';
@@ -116,6 +117,8 @@
       database={panel.content.database}
       instanceDb={panel.content.instanceDb}
     />
+  {:else if panel.content.kind === 'schema_compare'}
+    <SchemaComparePanel left={panel.content.left} right={panel.content.right} />
   {:else if panel.content.kind === 'explain'}
     <ExplainCanvas rawJson={panel.content.sql} dialect={panel.content.dialect} />
   {:else if panel.content.kind === 'settings'}

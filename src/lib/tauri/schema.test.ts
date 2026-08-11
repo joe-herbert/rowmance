@@ -6,6 +6,11 @@ import {
   listColumns,
   listIndexes,
   listForeignKeys,
+  listCheckConstraints,
+  listTriggers,
+  listViews,
+  listAllIndexes,
+  listAllForeignKeys,
   getDdl,
 } from './schema';
 
@@ -71,6 +76,142 @@ describe('listForeignKeys', () => {
       database: 'my_db',
       instanceDb: null,
       table: 'orders',
+    });
+  });
+});
+
+describe('listCheckConstraints', () => {
+  it('invokes schema_list_check_constraints with connectionId, database, and table', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listCheckConstraints('conn-1', 'my_db', 'orders');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_check_constraints', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      table: 'orders',
+      instanceDb: null,
+    });
+  });
+
+  it('passes null table when omitted (database-wide listing)', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listCheckConstraints('conn-1', 'my_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_check_constraints', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      table: null,
+      instanceDb: null,
+    });
+  });
+
+  it('passes instanceDb when provided', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listCheckConstraints('conn-1', 'my_db', 'orders', 'instance_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_check_constraints', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      table: 'orders',
+      instanceDb: 'instance_db',
+    });
+  });
+});
+
+describe('listTriggers', () => {
+  it('invokes schema_list_triggers with connectionId, database, and table', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listTriggers('conn-1', 'my_db', 'orders');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_triggers', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      table: 'orders',
+      instanceDb: null,
+    });
+  });
+
+  it('passes null table when omitted (database-wide listing)', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listTriggers('conn-1', 'my_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_triggers', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      table: null,
+      instanceDb: null,
+    });
+  });
+
+  it('passes instanceDb when provided', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listTriggers('conn-1', 'my_db', 'orders', 'instance_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_triggers', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      table: 'orders',
+      instanceDb: 'instance_db',
+    });
+  });
+});
+
+describe('listViews', () => {
+  it('invokes schema_list_views with connectionId and database', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listViews('conn-1', 'my_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_views', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      instanceDb: null,
+    });
+  });
+
+  it('passes instanceDb when provided', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listViews('conn-1', 'my_db', 'instance_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_views', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      instanceDb: 'instance_db',
+    });
+  });
+});
+
+describe('listAllIndexes', () => {
+  it('invokes schema_list_all_indexes with connectionId and database', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listAllIndexes('conn-1', 'my_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_all_indexes', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      instanceDb: null,
+    });
+  });
+
+  it('passes instanceDb when provided', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listAllIndexes('conn-1', 'my_db', 'instance_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_all_indexes', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      instanceDb: 'instance_db',
+    });
+  });
+});
+
+describe('listAllForeignKeys', () => {
+  it('invokes schema_list_all_foreign_keys with connectionId and database', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listAllForeignKeys('conn-1', 'my_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_all_foreign_keys', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      instanceDb: null,
+    });
+  });
+
+  it('passes instanceDb when provided', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listAllForeignKeys('conn-1', 'my_db', 'instance_db');
+    expect(mockInvoke).toHaveBeenCalledWith('schema_list_all_foreign_keys', {
+      connectionId: 'conn-1',
+      database: 'my_db',
+      instanceDb: 'instance_db',
     });
   });
 });

@@ -12,8 +12,9 @@ use sqlx::TypeInfo;
 
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::types::{
-    BulkColumnRow, ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn, ErdGraph, ErdRelation,
-    ErdTable, ExplainResult, ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
+    BulkColumnRow, BulkForeignKeyRow, BulkIndexRow, CheckConstraintInfo, ColumnInfo, ColumnMeta,
+    EngineQueryResult, ErdColumn, ErdGraph, ErdRelation, ErdTable, ExplainResult, ForeignKeyInfo,
+    IndexInfo, RowChange, RowDelete, TableInfo, TriggerInfo, ViewInfo,
 };
 use crate::error::RowmanceError;
 
@@ -105,6 +106,59 @@ impl DatabaseEngine for SqliteEngine {
         _instance_db: Option<&str>,
     ) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
         crate::connections::sqlite::list_foreign_keys(&self.pool, database, table).await
+    }
+
+    async fn list_views(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<ViewInfo>, RowmanceError> {
+        crate::connections::sqlite::list_views(&self.pool, database).await
+    }
+
+    async fn list_all_indexes(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkIndexRow>, RowmanceError> {
+        let pairs = crate::connections::sqlite::list_all_indexes(&self.pool, database).await?;
+        Ok(pairs
+            .into_iter()
+            .map(|(table_name, index)| BulkIndexRow { table_name, index })
+            .collect())
+    }
+
+    async fn list_all_foreign_keys(
+        &self,
+        database: &str,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<BulkForeignKeyRow>, RowmanceError> {
+        let pairs = crate::connections::sqlite::list_all_foreign_keys(&self.pool, database).await?;
+        Ok(pairs
+            .into_iter()
+            .map(|(table_name, foreign_key)| BulkForeignKeyRow {
+                table_name,
+                foreign_key,
+            })
+            .collect())
+    }
+
+    async fn list_check_constraints(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+        crate::connections::sqlite::list_check_constraints(&self.pool, database, table).await
+    }
+
+    async fn list_triggers(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        _instance_db: Option<&str>,
+    ) -> Result<Vec<TriggerInfo>, RowmanceError> {
+        crate::connections::sqlite::list_triggers(&self.pool, database, table).await
     }
 
     async fn count_table(

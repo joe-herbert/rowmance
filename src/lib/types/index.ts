@@ -283,6 +283,25 @@ export interface ForeignKeyInfo {
   onUpdate: string;
 }
 
+export interface ViewInfo {
+  name: string;
+  definition: string;
+}
+
+export interface CheckConstraintInfo {
+  constraintName: string;
+  tableName: string;
+  expression: string;
+}
+
+export interface TriggerInfo {
+  name: string;
+  tableName: string;
+  timing: string;
+  event: string;
+  definition: string;
+}
+
 /** Full schema for a single database. */
 export interface DatabaseSchema {
   database: string;
@@ -499,6 +518,11 @@ export type PanelKind =
       instanceDb?: string;
     }
   | { kind: 'erd'; connectionId: string; database: string; instanceDb?: string }
+  | {
+      kind: 'schema_compare';
+      left: { connectionId: string; database: string; instanceDb?: string; table?: string };
+      right: { connectionId: string; database: string; instanceDb?: string; table?: string };
+    }
   | { kind: 'explain'; connectionId: string; sql: string; dialect: string }
   | { kind: 'settings' }
   | { kind: 'user_manager'; connectionId: string }

@@ -11,6 +11,7 @@
   import ConnectionsIcon from '$lib/components/icons/ConnectionsIcon.svelte';
   import BoxIcon from '$lib/components/icons/BoxIcon.svelte';
   import ChatIcon from '$lib/components/icons/ChatIcon.svelte';
+  import CompareIcon from '$lib/components/icons/CompareIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
   import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
@@ -43,6 +44,8 @@
   <CodeBracketsIcon {size} />
 {:else if content.kind === 'ddl_viewer'}
   <FileDocIcon {size} />
+{:else if content.kind === 'schema_compare'}
+  <CompareIcon {size} />
 {:else if content.kind === 'settings'}
   <GearIcon width={size} height={size} />
 {:else if content.kind === 'user_manager'}

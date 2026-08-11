@@ -4,7 +4,10 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 
 use crate::connections::pool_manager::ConnectionManager;
-use crate::connections::types::{BulkColumnRow, ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
+use crate::connections::types::{
+    BulkColumnRow, BulkForeignKeyRow, BulkIndexRow, CheckConstraintInfo, ColumnInfo,
+    ForeignKeyInfo, IndexInfo, TableInfo, TriggerInfo, ViewInfo,
+};
 use crate::error::AppError;
 
 #[derive(Clone, Serialize)]
@@ -166,6 +169,98 @@ pub async fn schema_list_foreign_keys(
         .map_err(AppError::from)?;
     engine
         .list_foreign_keys(&database, &table, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
+}
+
+/// List all views in the given database/schema, including their definitions.
+#[tauri::command]
+pub async fn schema_list_views(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+    instance_db: Option<String>,
+) -> Result<Vec<ViewInfo>, AppError> {
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_views(&database, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
+}
+
+/// List all indexes for every table in the given database/schema in one round-trip.
+#[tauri::command]
+pub async fn schema_list_all_indexes(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+    instance_db: Option<String>,
+) -> Result<Vec<BulkIndexRow>, AppError> {
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_all_indexes(&database, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
+}
+
+/// List all foreign keys for every table in the given database/schema in one round-trip.
+#[tauri::command]
+pub async fn schema_list_all_foreign_keys(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+    instance_db: Option<String>,
+) -> Result<Vec<BulkForeignKeyRow>, AppError> {
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_all_foreign_keys(&database, instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
+}
+
+/// List CHECK constraints. Pass `table: Some(name)` to scope to a single
+/// table (table-to-table compare), or `None` to fetch every table's check
+/// constraints in the database/schema in one round-trip (database-to-database
+/// compare).
+#[tauri::command]
+pub async fn schema_list_check_constraints(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+    table: Option<String>,
+    instance_db: Option<String>,
+) -> Result<Vec<CheckConstraintInfo>, AppError> {
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_check_constraints(&database, table.as_deref(), instance_db.as_deref())
+        .await
+        .map_err(AppError::from)
+}
+
+/// List triggers. Pass `table: Some(name)` to scope to a single table
+/// (table-to-table compare), or `None` to fetch every table's triggers in
+/// the database/schema in one round-trip (database-to-database compare).
+#[tauri::command]
+pub async fn schema_list_triggers(
+    connections: State<'_, Arc<ConnectionManager>>,
+    connection_id: String,
+    database: String,
+    table: Option<String>,
+    instance_db: Option<String>,
+) -> Result<Vec<TriggerInfo>, AppError> {
+    let engine = connections
+        .get_engine(&connection_id)
+        .map_err(AppError::from)?;
+    engine
+        .list_triggers(&database, table.as_deref(), instance_db.as_deref())
         .await
         .map_err(AppError::from)
 }

@@ -31,6 +31,7 @@
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ExportConnectionsDialog from './ExportConnectionsDialog.svelte';
+  import ComparePickerDialog from '$lib/components/compare/ComparePickerDialog.svelte';
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import Select from '$lib/components/ui/Select.svelte';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
@@ -182,6 +183,14 @@
   let panelCtx = $state<PanelCtxMenu | null>(null);
   let instDbCtx = $state<InstDbCtxMenu | null>(null);
   let schemaCtx = $state<SchemaCtxMenu | null>(null);
+  let compareLeft = $state<{
+    connectionId: string;
+    database: string;
+    instanceDb?: string;
+    table?: string;
+  } | null>(null);
+  let comparePickerMode = $state<'table' | 'database'>('table');
+  let showComparePicker = $state(false);
   let staticDbCtx = $state<StaticDbCtxMenu | null>(null);
 
 
@@ -1043,6 +1052,18 @@
     tableCtx = null;
   }
 
+  function ctxCompareTable() {
+    if (!tableCtx) return;
+    compareLeft = {
+      connectionId: tableCtx.connectionId,
+      database: tableCtx.database,
+      table: tableCtx.table.name,
+    };
+    comparePickerMode = 'table';
+    showComparePicker = true;
+    tableCtx = null;
+  }
+
   function ctxCopyName() {
     if (!tableCtx) return;
     navigator.clipboard.writeText(tableCtx.table.name);
@@ -1157,6 +1178,14 @@
       connectionId: dbCtx.connectionId,
       database: dbCtx.database,
     });
+    dbCtx = null;
+  }
+
+  function ctxCompareDatabase() {
+    if (!dbCtx) return;
+    compareLeft = { connectionId: dbCtx.connectionId, database: dbCtx.database };
+    comparePickerMode = 'database';
+    showComparePicker = true;
     dbCtx = null;
   }
 
@@ -2344,6 +2373,7 @@
     <CtxItem onclick={ctxOpenTable}>Open Table</CtxItem>
     <CtxItem onclick={ctxOpenTableCopy}>Open Copy</CtxItem>
     <CtxItem onclick={ctxViewDdl}>View DDL</CtxItem>
+    <CtxItem onclick={ctxCompareTable}>Compare with...</CtxItem>
     <CtxItem onclick={ctxCopyName}>Copy Name</CtxItem>
     <CtxSep />
     <CtxItem onclick={ctxGenerateSqlSelectAll}>Select All Rows</CtxItem>
@@ -2380,6 +2410,7 @@
     <CtxSep />
     <CtxItem onclick={ctxRefreshDatabase}>Refresh</CtxItem>
     <CtxItem onclick={ctxOpenErd}>Open ERD</CtxItem>
+    <CtxItem onclick={ctxCompareDatabase}>Compare with...</CtxItem>
     <CtxSep />
     <CtxItem
       onclick={() => {
@@ -3120,6 +3151,23 @@
       exportSingleId = null;
       exportPreselectIds = null;
       toast.addToast(`Export failed: ${msg}`, 'error', 0);
+    }}
+  />
+{/if}
+
+{#if showComparePicker && compareLeft}
+  <ComparePickerDialog
+    mode={comparePickerMode}
+    onconfirm={(result) => {
+      if (compareLeft) {
+        panelStore.openInFocused({ kind: 'schema_compare', left: compareLeft, right: result });
+      }
+      showComparePicker = false;
+      compareLeft = null;
+    }}
+    oncancel={() => {
+      showComparePicker = false;
+      compareLeft = null;
     }}
   />
 {/if}

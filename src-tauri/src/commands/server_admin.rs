@@ -162,8 +162,9 @@ mod tests {
     use super::*;
     use crate::connections::engine::DatabaseEngine;
     use crate::connections::types::{
-        BulkColumnRow, CapabilityStatus, ColumnInfo, EngineQueryResult, ErdGraph, ExplainResult,
-        ForeignKeyInfo, IndexInfo, RowChange, RowDelete, TableInfo,
+        BulkColumnRow, BulkForeignKeyRow, BulkIndexRow, CapabilityStatus, CheckConstraintInfo,
+        ColumnInfo, EngineQueryResult, ErdGraph, ExplainResult, ForeignKeyInfo, IndexInfo,
+        RowChange, RowDelete, TableInfo, TriggerInfo, ViewInfo,
     };
     use crate::error::RowmanceError;
     use async_trait::async_trait;
@@ -267,6 +268,43 @@ mod tests {
             _t: &str,
             _inst: Option<&str>,
         ) -> Result<Vec<ForeignKeyInfo>, RowmanceError> {
+            Ok(vec![])
+        }
+        async fn list_views(
+            &self,
+            _db: &str,
+            _inst: Option<&str>,
+        ) -> Result<Vec<ViewInfo>, RowmanceError> {
+            Ok(vec![])
+        }
+        async fn list_all_indexes(
+            &self,
+            _db: &str,
+            _inst: Option<&str>,
+        ) -> Result<Vec<BulkIndexRow>, RowmanceError> {
+            Ok(vec![])
+        }
+        async fn list_all_foreign_keys(
+            &self,
+            _db: &str,
+            _inst: Option<&str>,
+        ) -> Result<Vec<BulkForeignKeyRow>, RowmanceError> {
+            Ok(vec![])
+        }
+        async fn list_check_constraints(
+            &self,
+            _db: &str,
+            _t: Option<&str>,
+            _inst: Option<&str>,
+        ) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+            Ok(vec![])
+        }
+        async fn list_triggers(
+            &self,
+            _db: &str,
+            _t: Option<&str>,
+            _inst: Option<&str>,
+        ) -> Result<Vec<TriggerInfo>, RowmanceError> {
             Ok(vec![])
         }
         async fn count_table(

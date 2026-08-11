@@ -7,10 +7,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, DbUser, EngineQueryResult, ErdGraph,
-    ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange, RowDelete,
-    ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo, VacuumInfo,
-    VarScope,
+    BulkColumnRow, BulkForeignKeyRow, BulkIndexRow, CapabilityStatus, CheckConstraintInfo,
+    ColumnInfo, DbUser, EngineQueryResult, ErdGraph, ExplainResult, ForeignKeyInfo, IndexInfo,
+    LockInfo, ProcessInfo, RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags,
+    ServerStatus, ServerVariable, TableInfo, TriggerInfo, VacuumInfo, VarScope, ViewInfo,
 };
 use crate::error::RowmanceError;
 
@@ -75,6 +75,42 @@ pub trait DatabaseEngine: Send + Sync {
         table: &str,
         instance_db: Option<&str>,
     ) -> Result<Vec<ForeignKeyInfo>, RowmanceError>;
+    /// List all views in the given database/schema, including their definitions.
+    async fn list_views(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<ViewInfo>, RowmanceError>;
+    /// List all indexes for every table in the given database/schema in one call.
+    async fn list_all_indexes(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<BulkIndexRow>, RowmanceError>;
+    /// List all foreign keys for every table in the given database/schema in one call.
+    async fn list_all_foreign_keys(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<BulkForeignKeyRow>, RowmanceError>;
+    /// List CHECK constraints. Pass `table: Some(name)` for a single table's
+    /// constraints, or `None` to fetch every table's check constraints in the
+    /// database/schema in one call (used for whole-database schema comparison).
+    async fn list_check_constraints(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<CheckConstraintInfo>, RowmanceError>;
+    /// List triggers. Pass `table: Some(name)` for a single table's triggers,
+    /// or `None` to fetch every table's triggers in the database/schema in
+    /// one call (used for whole-database schema comparison).
+    async fn list_triggers(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<TriggerInfo>, RowmanceError>;
     async fn count_table(
         &self,
         database: &str,

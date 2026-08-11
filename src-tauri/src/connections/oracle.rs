@@ -1,5 +1,7 @@
 /// Oracle-specific schema introspection queries using the oracle crate (sync).
-use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
+use crate::connections::types::{
+    CheckConstraintInfo, ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, TriggerInfo, ViewInfo,
+};
 use crate::error::RowmanceError;
 
 /// List all user tables and views in the given schema (Oracle owner).
@@ -408,6 +410,162 @@ pub fn list_foreign_keys(
     Ok(map.into_values().collect())
 }
 
+/// List all views in the given schema (Oracle owner), including their text.
+/// `TEXT` is a `LONG` column; the oracle crate fetches it as a `String` the
+/// same way `get_ddl` fetches the CLOB result of `DBMS_METADATA.GET_DDL`.
+pub fn list_views(conn: &oracle::Connection, owner: &str) -> Result<Vec<ViewInfo>, RowmanceError> {
+    let owner_upper = owner.to_uppercase();
+    let sql = "
+        SELECT view_name, text
+        FROM all_views
+        WHERE owner = :1
+        ORDER BY view_name
+    ";
+    let mut stmt = conn
+        .statement(sql)
+        .build()
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+    let rows = stmt
+        .query(&[&owner_upper])
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+    let mut views = Vec::new();
+    for row_result in rows {
+        let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let name: String = row.get(0).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let definition: Option<String> =
+            row.get(1).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        views.push(ViewInfo {
+            name,
+            definition: definition.unwrap_or_default(),
+        });
+    }
+    Ok(views)
+}
+
+/// List indexes for every table in the given schema (Oracle owner) in one query.
+pub fn list_all_indexes(
+    conn: &oracle::Connection,
+    owner: &str,
+) -> Result<Vec<(String, IndexInfo)>, RowmanceError> {
+    let owner_upper = owner.to_uppercase();
+
+    let sql = "
+        SELECT
+            i.table_name,
+            i.index_name,
+            ic.column_name,
+            CASE i.uniqueness WHEN 'UNIQUE' THEN 1 ELSE 0 END AS is_unique,
+            i.index_type
+        FROM all_indexes i
+        JOIN all_ind_columns ic
+            ON ic.index_owner = i.owner AND ic.index_name = i.index_name
+        WHERE i.owner = :1
+        ORDER BY i.table_name, i.index_name, ic.column_position
+    ";
+    let mut stmt = conn
+        .statement(sql)
+        .build()
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+    let rows = stmt
+        .query(&[&owner_upper])
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+    let mut map: std::collections::BTreeMap<(String, String), IndexInfo> =
+        std::collections::BTreeMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
+    for row_result in rows {
+        let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let table_name: String = row.get(0).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let name: String = row.get(1).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let col: String = row.get(2).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let unique_i: i64 = row.get(3).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let itype: String = row.get(4).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let key = (table_name, name.clone());
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+        }
+        let entry = map.entry(key).or_insert_with(|| IndexInfo {
+            name: name.clone(),
+            columns: vec![],
+            unique: unique_i == 1,
+            index_type: itype,
+        });
+        entry.columns.push(col);
+    }
+    Ok(order
+        .into_iter()
+        .filter_map(|key| map.remove(&key).map(|idx| (key.0, idx)))
+        .collect())
+}
+
+/// List foreign keys for every table in the given schema (Oracle owner) in one query.
+pub fn list_all_foreign_keys(
+    conn: &oracle::Connection,
+    owner: &str,
+) -> Result<Vec<(String, ForeignKeyInfo)>, RowmanceError> {
+    let owner_upper = owner.to_uppercase();
+
+    let sql = "
+        SELECT
+            ac.table_name,
+            ac.constraint_name,
+            acc.column_name,
+            rcc.table_name AS ref_table,
+            rcc.column_name AS ref_col,
+            acc.position,
+            ac.delete_rule
+        FROM all_constraints ac
+        JOIN all_cons_columns acc
+            ON acc.owner = ac.owner AND acc.constraint_name = ac.constraint_name
+        JOIN all_constraints rc
+            ON rc.constraint_name = ac.r_constraint_name AND rc.owner = ac.r_owner
+        JOIN all_cons_columns rcc
+            ON rcc.constraint_name = rc.constraint_name AND rcc.owner = rc.owner
+            AND rcc.position = acc.position
+        WHERE ac.owner = :1 AND ac.constraint_type = 'R'
+        ORDER BY ac.table_name, ac.constraint_name, acc.position
+    ";
+    let mut stmt = conn
+        .statement(sql)
+        .build()
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+    let rows = stmt
+        .query(&[&owner_upper])
+        .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+
+    let mut map: std::collections::BTreeMap<(String, String), ForeignKeyInfo> =
+        std::collections::BTreeMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
+    for row_result in rows {
+        let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let table_name: String = row.get(0).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let cname: String = row.get(1).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let col: String = row.get(2).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let ref_table: String = row.get(3).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let ref_col: String = row.get(4).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let delete_rule: String = row.get(6).map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let key = (table_name, cname.clone());
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+        }
+        let entry = map.entry(key).or_insert_with(|| ForeignKeyInfo {
+            constraint_name: cname.clone(),
+            columns: vec![],
+            referenced_table: ref_table,
+            referenced_columns: vec![],
+            on_delete: delete_rule,
+            on_update: "NO ACTION".to_string(),
+        });
+        entry.columns.push(col);
+        entry.referenced_columns.push(ref_col);
+    }
+    Ok(order
+        .into_iter()
+        .filter_map(|key| map.remove(&key).map(|fk| (key.0, fk)))
+        .collect())
+}
+
 /// Count rows in a table.
 pub fn count_table(
     conn: &oracle::Connection,
@@ -425,6 +583,262 @@ pub fn count_table(
         .query_row_as::<i64>(&sql, &[])
         .map_err(|e| RowmanceError::Pool(e.to_string()))?;
     Ok(row)
+}
+
+/// Oracle stores NOT NULL column constraints as `all_constraints` rows with
+/// `constraint_type = 'C'` too (there's no separate NOT NULL constraint
+/// type), using a system-generated name and a `search_condition` of the form
+/// `"COL" IS NOT NULL`. These are not real check constraints and must be
+/// filtered out here, otherwise every NOT NULL column in the schema would
+/// show up as a spurious "check constraint" when diffing schemas.
+fn is_synthetic_not_null_constraint(generated: &str, search_condition: &str) -> bool {
+    if !generated.eq_ignore_ascii_case("GENERATED NAME") {
+        return false;
+    }
+    // Collapse internal whitespace so formatting variations don't matter.
+    let normalized = search_condition.split_whitespace().collect::<Vec<_>>().join(" ");
+    let upper = normalized.to_uppercase();
+    let Some(prefix) = upper.strip_suffix("IS NOT NULL") else {
+        return false;
+    };
+    let prefix = prefix.trim();
+    let col = prefix.trim_matches('"');
+    !col.is_empty()
+        && col
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '#')
+}
+
+/// List CHECK constraints. Pass `table: Some(name)` to scope to a single
+/// table, or `None` to fetch every table's check constraints in the schema
+/// (Oracle owner). Filters out the synthetic NOT NULL "check constraints"
+/// Oracle generates for every NOT NULL column (see
+/// `is_synthetic_not_null_constraint`).
+pub fn list_check_constraints(
+    conn: &oracle::Connection,
+    owner: &str,
+    table: Option<&str>,
+) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+    let owner_upper = owner.to_uppercase();
+
+    struct Raw {
+        table_name: String,
+        constraint_name: String,
+        generated: String,
+        search_condition: Option<String>,
+    }
+
+    let raws: Vec<Raw> = if let Some(table) = table {
+        let table_upper = table.to_uppercase();
+        let sql = "
+            SELECT
+                ac.table_name,
+                ac.constraint_name,
+                ac.generated,
+                ac.search_condition
+            FROM all_constraints ac
+            WHERE ac.owner = :1 AND ac.table_name = :2 AND ac.constraint_type = 'C'
+            ORDER BY ac.table_name, ac.constraint_name
+        ";
+        let mut stmt = conn
+            .statement(sql)
+            .build()
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let rows = stmt
+            .query(&[&owner_upper, &table_upper])
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let mut out = Vec::new();
+        for row_result in rows {
+            let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            out.push(Raw {
+                table_name: row.get(0).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                constraint_name: row.get(1).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                generated: row.get(2).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                search_condition: row.get(3).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+            });
+        }
+        out
+    } else {
+        let sql = "
+            SELECT
+                ac.table_name,
+                ac.constraint_name,
+                ac.generated,
+                ac.search_condition
+            FROM all_constraints ac
+            WHERE ac.owner = :1 AND ac.constraint_type = 'C'
+            ORDER BY ac.table_name, ac.constraint_name
+        ";
+        let mut stmt = conn
+            .statement(sql)
+            .build()
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let rows = stmt
+            .query(&[&owner_upper])
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let mut out = Vec::new();
+        for row_result in rows {
+            let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            out.push(Raw {
+                table_name: row.get(0).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                constraint_name: row.get(1).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                generated: row.get(2).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                search_condition: row.get(3).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+            });
+        }
+        out
+    };
+
+    Ok(raws
+        .into_iter()
+        .filter_map(|r| {
+            let expression = r.search_condition.unwrap_or_default();
+            if is_synthetic_not_null_constraint(&r.generated, &expression) {
+                return None;
+            }
+            Some(CheckConstraintInfo {
+                constraint_name: r.constraint_name,
+                table_name: r.table_name,
+                expression,
+            })
+        })
+        .collect())
+}
+
+/// Extracts just the `BEFORE`/`AFTER`/`INSTEAD OF` timing prefix from
+/// Oracle's `all_triggers.trigger_type` column, which combines timing with
+/// firing granularity (e.g. `"BEFORE EACH ROW"`, `"AFTER STATEMENT"`,
+/// `"INSTEAD OF"`). Compound triggers report `"COMPOUND"`, which has no
+/// timing prefix to extract — such triggers fall back to the raw value.
+fn extract_oracle_trigger_timing(trigger_type: &str) -> String {
+    let upper = trigger_type.to_uppercase();
+    if upper.starts_with("BEFORE") {
+        "BEFORE".to_string()
+    } else if upper.starts_with("AFTER") {
+        "AFTER".to_string()
+    } else if upper.starts_with("INSTEAD OF") {
+        "INSTEAD OF".to_string()
+    } else {
+        trigger_type.to_string()
+    }
+}
+
+/// List triggers. Pass `table: Some(name)` to scope to a single table, or
+/// `None` to fetch every table's triggers in the schema (Oracle owner).
+///
+/// `all_triggers` gives one row per trigger with `trigger_type` (timing +
+/// granularity, e.g. `"BEFORE EACH ROW"`) and `triggering_event` (event,
+/// already a single text field even for multi-event triggers like
+/// `"INSERT OR UPDATE"` — no concatenation needed here). Unlike SQLite's
+/// `sqlite_master.sql` or SQL Server's `OBJECT_DEFINITION()`, Oracle's
+/// catalog does not expose a ready-made full `CREATE TRIGGER` statement, so
+/// `definition` is assembled here from `trigger_type` + `triggering_event` +
+/// the table name + `trigger_body` (fetched as `Option<String>` the same way
+/// `list_views` reads the LONG `all_views.text` column above).
+pub fn list_triggers(
+    conn: &oracle::Connection,
+    owner: &str,
+    table: Option<&str>,
+) -> Result<Vec<TriggerInfo>, RowmanceError> {
+    let owner_upper = owner.to_uppercase();
+
+    struct Raw {
+        table_name: String,
+        trigger_name: String,
+        trigger_type: String,
+        triggering_event: String,
+        trigger_body: Option<String>,
+    }
+
+    let raws: Vec<Raw> = if let Some(table) = table {
+        let table_upper = table.to_uppercase();
+        let sql = "
+            SELECT
+                t.table_name,
+                t.trigger_name,
+                t.trigger_type,
+                t.triggering_event,
+                t.trigger_body
+            FROM all_triggers t
+            WHERE t.owner = :1 AND t.table_name = :2
+            ORDER BY t.table_name, t.trigger_name
+        ";
+        let mut stmt = conn
+            .statement(sql)
+            .build()
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let rows = stmt
+            .query(&[&owner_upper, &table_upper])
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let mut out = Vec::new();
+        for row_result in rows {
+            let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            out.push(Raw {
+                table_name: row.get(0).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                trigger_name: row.get(1).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                trigger_type: row.get(2).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                triggering_event: row.get(3).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                trigger_body: row.get(4).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+            });
+        }
+        out
+    } else {
+        let sql = "
+            SELECT
+                t.table_name,
+                t.trigger_name,
+                t.trigger_type,
+                t.triggering_event,
+                t.trigger_body
+            FROM all_triggers t
+            WHERE t.owner = :1
+            ORDER BY t.table_name, t.trigger_name
+        ";
+        let mut stmt = conn
+            .statement(sql)
+            .build()
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let rows = stmt
+            .query(&[&owner_upper])
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let mut out = Vec::new();
+        for row_result in rows {
+            let row = row_result.map_err(|e| RowmanceError::Pool(e.to_string()))?;
+            out.push(Raw {
+                table_name: row.get(0).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                trigger_name: row.get(1).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                trigger_type: row.get(2).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                triggering_event: row.get(3).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+                trigger_body: row.get(4).map_err(|e| RowmanceError::Pool(e.to_string()))?,
+            });
+        }
+        out
+    };
+
+    Ok(raws
+        .into_iter()
+        .map(|r| {
+            let timing = extract_oracle_trigger_timing(&r.trigger_type);
+            let body = r.trigger_body.unwrap_or_default();
+            let definition = format!(
+                "CREATE OR REPLACE TRIGGER \"{}\".\"{}\"\n{} {}\nON \"{}\".\"{}\"\n{}",
+                owner_upper,
+                r.trigger_name,
+                r.trigger_type,
+                r.triggering_event,
+                owner_upper,
+                r.table_name,
+                body
+            );
+            TriggerInfo {
+                name: r.trigger_name,
+                table_name: r.table_name,
+                timing,
+                event: r.triggering_event,
+                definition,
+            }
+        })
+        .collect())
 }
 
 /// Get DDL for a table using DBMS_METADATA.

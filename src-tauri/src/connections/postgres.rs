@@ -1,7 +1,9 @@
 /// PostgreSQL-specific schema introspection queries.
 use sqlx::PgPool;
 
-use crate::connections::types::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo};
+use crate::connections::types::{
+    CheckConstraintInfo, ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, TriggerInfo, ViewInfo,
+};
 use crate::error::RowmanceError;
 
 /// List all user schemas in the connected database.
@@ -368,6 +370,329 @@ pub async fn list_foreign_keys(
         entry.referenced_columns.push(ref_col);
     }
     Ok(map.into_values().collect())
+}
+
+/// List all views in the given schema, including their SQL definitions.
+pub async fn list_views(pool: &PgPool, schema: &str) -> Result<Vec<ViewInfo>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        table_name: Option<String>,
+        view_definition: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT table_name, view_definition FROM information_schema.views \
+         WHERE table_schema = $1 ORDER BY table_name",
+    )
+    .bind(schema)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| ViewInfo {
+            name: r.table_name.unwrap_or_default(),
+            definition: r.view_definition.unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// List all indexes for every table in the given schema in one query.
+/// Returns (table_name, IndexInfo) pairs.
+pub async fn list_all_indexes(
+    pool: &PgPool,
+    schema: &str,
+) -> Result<Vec<(String, IndexInfo)>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        table_name: Option<String>,
+        index_name: Option<String>,
+        column_name: Option<String>,
+        is_unique: Option<bool>,
+        index_type: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            t.relname AS table_name,
+            i.relname AS index_name,
+            a.attname AS column_name,
+            ix.indisunique AS is_unique,
+            am.amname AS index_type
+        FROM pg_index ix
+        JOIN pg_class t  ON t.oid  = ix.indrelid
+        JOIN pg_class i  ON i.oid  = ix.indexrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN pg_am am    ON am.oid = i.relam
+        JOIN pg_attribute a ON a.attrelid = t.oid
+            AND a.attnum = ANY(ix.indkey)
+        WHERE n.nspname = $1
+        ORDER BY t.relname, i.relname, array_position(ix.indkey, a.attnum)
+        "#,
+    )
+    .bind(schema)
+    .fetch_all(pool)
+    .await?;
+
+    let mut map: std::collections::BTreeMap<(String, String), IndexInfo> =
+        std::collections::BTreeMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
+    for r in rows {
+        let table_name = r.table_name.unwrap_or_default();
+        let name = r.index_name.unwrap_or_default();
+        let col = r.column_name.unwrap_or_default();
+        let key = (table_name, name.clone());
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+        }
+        let entry = map.entry(key).or_insert_with(|| IndexInfo {
+            name: name.clone(),
+            columns: vec![],
+            unique: r.is_unique.unwrap_or(false),
+            index_type: r.index_type.unwrap_or_else(|| "btree".to_owned()),
+        });
+        entry.columns.push(col);
+    }
+    Ok(order
+        .into_iter()
+        .filter_map(|key| map.remove(&key).map(|idx| (key.0, idx)))
+        .collect())
+}
+
+/// List all foreign keys for every table in the given schema in one query.
+/// Returns (table_name, ForeignKeyInfo) pairs.
+pub async fn list_all_foreign_keys(
+    pool: &PgPool,
+    schema: &str,
+) -> Result<Vec<(String, ForeignKeyInfo)>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        table_name: Option<String>,
+        constraint_name: Option<String>,
+        column_name: Option<String>,
+        referenced_table: Option<String>,
+        referenced_column: Option<String>,
+        on_delete: Option<String>,
+        on_update: Option<String>,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            t.relname AS table_name,
+            c.conname AS constraint_name,
+            a.attname AS column_name,
+            rt.relname AS referenced_table,
+            ra.attname AS referenced_column,
+            CASE c.confdeltype
+                WHEN 'a' THEN 'NO ACTION'
+                WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'
+                WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT'
+            END AS on_delete,
+            CASE c.confupdtype
+                WHEN 'a' THEN 'NO ACTION'
+                WHEN 'r' THEN 'RESTRICT'
+                WHEN 'c' THEN 'CASCADE'
+                WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT'
+            END AS on_update
+        FROM pg_constraint c
+        JOIN pg_class t  ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN pg_class rt ON rt.oid = c.confrelid
+        JOIN pg_attribute a  ON a.attrelid = c.conrelid  AND a.attnum = ANY(c.conkey)
+        JOIN pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = ANY(c.confkey)
+        WHERE c.contype = 'f'
+          AND n.nspname = $1
+        ORDER BY t.relname, c.conname,
+                 array_position(c.conkey,  a.attnum),
+                 array_position(c.confkey, ra.attnum)
+        "#,
+    )
+    .bind(schema)
+    .fetch_all(pool)
+    .await?;
+
+    let mut map: std::collections::BTreeMap<(String, String), ForeignKeyInfo> =
+        std::collections::BTreeMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
+    for r in rows {
+        let table_name = r.table_name.unwrap_or_default();
+        let name = r.constraint_name.unwrap_or_default();
+        let col = r.column_name.unwrap_or_default();
+        let ref_col = r.referenced_column.unwrap_or_default();
+        let key = (table_name, name.clone());
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+        }
+        let entry = map.entry(key).or_insert_with(|| ForeignKeyInfo {
+            constraint_name: name.clone(),
+            columns: vec![],
+            referenced_table: r.referenced_table.unwrap_or_default(),
+            referenced_columns: vec![],
+            on_delete: r.on_delete.unwrap_or_else(|| "NO ACTION".to_owned()),
+            on_update: r.on_update.unwrap_or_else(|| "NO ACTION".to_owned()),
+        });
+        entry.columns.push(col);
+        entry.referenced_columns.push(ref_col);
+    }
+    Ok(order
+        .into_iter()
+        .filter_map(|key| map.remove(&key).map(|fk| (key.0, fk)))
+        .collect())
+}
+
+/// List CHECK constraints. Pass `table: Some(name)` to scope to a single
+/// table, or `None` to fetch every table's check constraints in the schema.
+pub async fn list_check_constraints(
+    pool: &PgPool,
+    schema: &str,
+    table: Option<&str>,
+) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        constraint_name: Option<String>,
+        table_name: Option<String>,
+        expression: Option<String>,
+    }
+
+    let rows = if let Some(table) = table {
+        sqlx::query_as::<_, Row>(
+            r#"
+            SELECT
+                c.conname AS constraint_name,
+                t.relname AS table_name,
+                pg_get_constraintdef(c.oid) AS expression
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE c.contype = 'c'
+              AND n.nspname = $1
+              AND t.relname = $2
+            ORDER BY t.relname, c.conname
+            "#,
+        )
+        .bind(schema)
+        .bind(table)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, Row>(
+            r#"
+            SELECT
+                c.conname AS constraint_name,
+                t.relname AS table_name,
+                pg_get_constraintdef(c.oid) AS expression
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE c.contype = 'c'
+              AND n.nspname = $1
+            ORDER BY t.relname, c.conname
+            "#,
+        )
+        .bind(schema)
+        .fetch_all(pool)
+        .await?
+    };
+
+    Ok(rows
+        .into_iter()
+        .map(|r| CheckConstraintInfo {
+            constraint_name: r.constraint_name.unwrap_or_default(),
+            table_name: r.table_name.unwrap_or_default(),
+            expression: r.expression.unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// List triggers. Pass `table: Some(name)` to scope to a single table, or
+/// `None` to fetch every table's triggers in the schema.
+///
+/// Uses `information_schema.triggers` for the timing/event columns (plain
+/// text, no bitmask decoding needed) joined back to `pg_trigger` (via
+/// `pg_class`/`pg_namespace` to disambiguate same-named triggers on
+/// different tables) purely to get the trigger's oid for
+/// `pg_get_triggerdef()`, which reconstructs the full `CREATE TRIGGER`
+/// statement. A multi-event trigger (e.g. `INSERT OR UPDATE`) appears as one
+/// row per event in `information_schema.triggers`, so those are grouped and
+/// concatenated into a single comma-joined `event` string. Internal/
+/// constraint-backing triggers (`tgisinternal`) are excluded.
+pub async fn list_triggers(
+    pool: &PgPool,
+    schema: &str,
+    table: Option<&str>,
+) -> Result<Vec<TriggerInfo>, RowmanceError> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        trigger_name: Option<String>,
+        table_name: Option<String>,
+        timing: Option<String>,
+        events: Option<String>,
+        definition: Option<String>,
+    }
+
+    let rows = if let Some(table) = table {
+        sqlx::query_as::<_, Row>(
+            r#"
+            SELECT
+                t.trigger_name AS trigger_name,
+                t.event_object_table AS table_name,
+                MIN(t.action_timing) AS timing,
+                string_agg(DISTINCT t.event_manipulation, ', ' ORDER BY t.event_manipulation) AS events,
+                pg_get_triggerdef(pt.oid, true) AS definition
+            FROM information_schema.triggers t
+            JOIN pg_namespace n ON n.nspname = t.trigger_schema
+            JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = t.event_object_table
+            JOIN pg_trigger pt ON pt.tgrelid = c.oid AND pt.tgname = t.trigger_name
+            WHERE t.trigger_schema = $1
+              AND t.event_object_table = $2
+              AND NOT pt.tgisinternal
+            GROUP BY t.trigger_name, t.event_object_table, pt.oid
+            ORDER BY t.event_object_table, t.trigger_name
+            "#,
+        )
+        .bind(schema)
+        .bind(table)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, Row>(
+            r#"
+            SELECT
+                t.trigger_name AS trigger_name,
+                t.event_object_table AS table_name,
+                MIN(t.action_timing) AS timing,
+                string_agg(DISTINCT t.event_manipulation, ', ' ORDER BY t.event_manipulation) AS events,
+                pg_get_triggerdef(pt.oid, true) AS definition
+            FROM information_schema.triggers t
+            JOIN pg_namespace n ON n.nspname = t.trigger_schema
+            JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = t.event_object_table
+            JOIN pg_trigger pt ON pt.tgrelid = c.oid AND pt.tgname = t.trigger_name
+            WHERE t.trigger_schema = $1
+              AND NOT pt.tgisinternal
+            GROUP BY t.trigger_name, t.event_object_table, pt.oid
+            ORDER BY t.event_object_table, t.trigger_name
+            "#,
+        )
+        .bind(schema)
+        .fetch_all(pool)
+        .await?
+    };
+
+    Ok(rows
+        .into_iter()
+        .map(|r| TriggerInfo {
+            name: r.trigger_name.unwrap_or_default(),
+            table_name: r.table_name.unwrap_or_default(),
+            timing: r.timing.unwrap_or_default(),
+            event: r.events.unwrap_or_default(),
+            definition: r.definition.unwrap_or_default(),
+        })
+        .collect())
 }
 
 /// Return the DDL for a table or view using pg_get_tabledef-compatible approach.

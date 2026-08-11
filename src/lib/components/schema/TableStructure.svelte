@@ -15,6 +15,19 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import { errorMessage } from '$lib/utils/errors';
+  import { qi, tableRef, defaultDialectInfo } from '$lib/utils/dialect';
+  import {
+    buildAddColSqls,
+    buildEditColSqls,
+    buildDropColSql,
+    buildAddIdxSql,
+    buildDropIdxSql,
+    buildAddFkSql,
+    buildDropFkSql,
+    type ColForm,
+    type IdxForm,
+    type FkForm,
+  } from '$lib/utils/ddl-generation';
   import Checkbox from '$lib/components/ui/Checkbox.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ErrorMessage from '$lib/components/ErrorMessage.svelte';
@@ -84,6 +97,7 @@
   }
   const profile = $derived(connections.getById(connectionId));
   const dialect = $derived(profile?.dialectInfo);
+  const effDialect = $derived(dialect ?? defaultDialectInfo);
   const isReadOnly = $derived(profile?.readOnly ?? false);
   const supportsChangeColumn = $derived(dialect?.supportsChangeColumn ?? false);
   const supportsRoles = $derived(dialect?.supportsRoles ?? false);
@@ -143,34 +157,10 @@
     6 + (editMode ? 1 : 0) + (editMode && supportsChangeColumn ? 1 : 0),
   );
 
-  interface ColForm {
-    mode: 'add' | 'edit';
-    original: ColumnInfo | null;
-    name: string;
-    dataType: string;
-    nullable: boolean;
-    defaultValue: string;
-    autoIncrement: boolean;
-    comment: string;
-  }
   let columnForm = $state<ColForm | null>(null);
 
-  interface IdxForm {
-    name: string;
-    selectedColumns: string[];
-    unique: boolean;
-    isPrimary: boolean;
-  }
   let indexForm = $state<IdxForm | null>(null);
 
-  interface FkForm {
-    constraintName: string;
-    selectedColumns: string[];
-    referencedTable: string;
-    referencedColumns: string;
-    onDelete: string;
-    onUpdate: string;
-  }
   let fkForm = $state<FkForm | null>(null);
   let fkRefTableOptions = $state<{ value: string; label: string }[]>([]);
   let fkRefColumnOptions = $state<{ value: string; label: string }[]>([]);
@@ -205,17 +195,6 @@
 
   // ── SQL helpers ────────────────────────────────────────────────────────────
 
-  function qi(name: string): string {
-    if (!dialect) return `"${name.replace(/"/g, '""')}"`;
-    const escaped = name.split(dialect.identifierClose).join(dialect.identifierEscape);
-    return dialect.identifierOpen + escaped + dialect.identifierClose;
-  }
-
-  function tRef(): string {
-    if (!dialect?.usesSchema) return qi(table);
-    return qi(database) + '.' + qi(table);
-  }
-
   function escStr(s: string): string {
     return "'" + s.replace(/'/g, "''") + "'";
   }
@@ -224,95 +203,6 @@
     for (const sql of sqls) {
       await schemaApi.executeDdl(connectionId, sql);
     }
-  }
-
-  // ── Column SQL ─────────────────────────────────────────────────────────────
-
-  function colDef(form: ColForm): string {
-    let s = `${qi(form.name)} ${form.dataType}`;
-    if (!form.nullable) s += ' NOT NULL';
-    if (dialect?.supportsAutoIncrement && form.autoIncrement) s += ' AUTO_INCREMENT';
-    if (form.defaultValue.trim()) s += ` DEFAULT ${form.defaultValue.trim()}`;
-    if (dialect?.supportsColumnComment && form.comment.trim())
-      s += ` COMMENT ${escStr(form.comment.trim())}`;
-    return s;
-  }
-
-  function buildAddColSqls(form: ColForm): string[] {
-    return [`ALTER TABLE ${tRef()} ADD COLUMN ${colDef(form)}`];
-  }
-
-  function buildEditColSqls(orig: ColumnInfo, form: ColForm): string[] {
-    if (dialect?.supportsChangeColumn) {
-      return [`ALTER TABLE ${tRef()} CHANGE COLUMN ${qi(orig.name)} ${colDef(form)}`];
-    }
-    const stmts: string[] = [];
-    const t = tRef();
-    const oq = qi(orig.name);
-    if (form.dataType !== orig.dataType) {
-      stmts.push(`ALTER TABLE ${t} ALTER COLUMN ${oq} TYPE ${form.dataType}`);
-    }
-    if (form.nullable !== orig.nullable) {
-      stmts.push(
-        `ALTER TABLE ${t} ALTER COLUMN ${oq} ${form.nullable ? 'DROP NOT NULL' : 'SET NOT NULL'}`,
-      );
-    }
-    const origDef = orig.defaultValue ?? '';
-    const newDef = form.defaultValue.trim();
-    if (newDef !== origDef) {
-      stmts.push(
-        newDef
-          ? `ALTER TABLE ${t} ALTER COLUMN ${oq} SET DEFAULT ${newDef}`
-          : `ALTER TABLE ${t} ALTER COLUMN ${oq} DROP DEFAULT`,
-      );
-    }
-    if (form.name !== orig.name && dialect?.supportsRenameColumn) {
-      stmts.push(`ALTER TABLE ${t} RENAME COLUMN ${oq} TO ${qi(form.name)}`);
-    }
-    return stmts;
-  }
-
-  function buildDropColSql(name: string): string {
-    return `ALTER TABLE ${tRef()} DROP COLUMN ${qi(name)}`;
-  }
-
-  // ── Index SQL ──────────────────────────────────────────────────────────────
-
-  function buildAddIdxSql(form: IdxForm): string {
-    const cols = form.selectedColumns.map(qi).join(', ');
-    if (form.isPrimary) {
-      return `ALTER TABLE ${tRef()} ADD PRIMARY KEY (${cols})`;
-    }
-    const name = form.name.trim() || `idx_${table}_${form.selectedColumns.join('_')}`;
-    return `CREATE ${form.unique ? 'UNIQUE ' : ''}INDEX ${qi(name)} ON ${tRef()} (${cols})`;
-  }
-
-  function buildDropIdxSql(name: string): string {
-    const syntax = dialect?.dropIndexSyntax ?? 'simple';
-    if (syntax === 'on_table') {
-      if (name === 'PRIMARY') return `ALTER TABLE ${tRef()} DROP PRIMARY KEY`;
-      return `DROP INDEX ${qi(name)} ON ${tRef()}`;
-    }
-    if (syntax === 'schema_qualified') return `DROP INDEX ${qi(database)}.${qi(name)}`;
-    if (syntax === 'on_table_no_schema') return `DROP INDEX ${qi(name)} ON ${tRef()}`;
-    return `DROP INDEX ${qi(name)}`;
-  }
-
-  // ── FK SQL ─────────────────────────────────────────────────────────────────
-
-  function buildAddFkSql(form: FkForm): string {
-    const local = form.selectedColumns.map(qi).join(', ');
-    const refCols = form.referencedColumns
-      .split(',')
-      .map((s) => qi(s.trim()))
-      .join(', ');
-    const name = form.constraintName.trim() || `fk_${table}_${form.selectedColumns.join('_')}`;
-    return `ALTER TABLE ${tRef()} ADD CONSTRAINT ${qi(name)} FOREIGN KEY (${local}) REFERENCES ${qi(form.referencedTable.trim())} (${refCols}) ON DELETE ${form.onDelete} ON UPDATE ${form.onUpdate}`;
-  }
-
-  function buildDropFkSql(name: string): string {
-    if (dialect?.usesForeignKeyKeyword) return `ALTER TABLE ${tRef()} DROP FOREIGN KEY ${qi(name)}`;
-    return `ALTER TABLE ${tRef()} DROP CONSTRAINT ${qi(name)}`;
   }
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -360,8 +250,8 @@
     try {
       const sqls =
         columnForm.mode === 'add'
-          ? buildAddColSqls(columnForm)
-          : buildEditColSqls(columnForm.original!, columnForm);
+          ? buildAddColSqls(effDialect, database, table, columnForm)
+          : buildEditColSqls(effDialect, database, table, columnForm.original!, columnForm);
       if (sqls.length > 0) await execSqls(sqls);
       columnForm = null;
       loadData();
@@ -386,7 +276,7 @@
     isSaving = true;
     saveError = null;
     try {
-      await execSqls([buildAddIdxSql(indexForm)]);
+      await execSqls([buildAddIdxSql(effDialect, database, table, indexForm)]);
       indexForm = null;
       loadData();
     } catch (err) {
@@ -428,7 +318,7 @@
     isSaving = true;
     saveError = null;
     try {
-      await execSqls([buildAddFkSql(fkForm)]);
+      await execSqls([buildAddFkSql(effDialect, database, table, fkForm)]);
       fkForm = null;
       loadData();
     } catch (err) {
@@ -533,7 +423,7 @@
   }
 
   function colDefFromInfo(col: ColumnInfo): string {
-    let s = `${qi(col.name)} ${col.dataType}`;
+    let s = `${qi(col.name, effDialect)} ${col.dataType}`;
     if (!col.nullable) s += ' NOT NULL';
     if (dialect?.supportsAutoIncrement && col.isAutoIncrement) s += ' AUTO_INCREMENT';
     if (col.defaultValue !== null && col.defaultValue !== '') s += ` DEFAULT ${col.defaultValue}`;
@@ -543,10 +433,11 @@
 
   async function applyColReorder(newCols: ColumnInfo[], movedCol: ColumnInfo) {
     const movedIdx = newCols.indexOf(movedCol);
+    const t = tableRef(database, table, effDialect);
     const sql =
       movedIdx === 0
-        ? `ALTER TABLE ${tRef()} MODIFY COLUMN ${colDefFromInfo(movedCol)} FIRST`
-        : `ALTER TABLE ${tRef()} MODIFY COLUMN ${colDefFromInfo(movedCol)} AFTER ${qi(newCols[movedIdx - 1].name)}`;
+        ? `ALTER TABLE ${t} MODIFY COLUMN ${colDefFromInfo(movedCol)} FIRST`
+        : `ALTER TABLE ${t} MODIFY COLUMN ${colDefFromInfo(movedCol)} AFTER ${qi(newCols[movedIdx - 1].name, effDialect)}`;
     columns = newCols;
     isSaving = true;
     saveError = null;
@@ -763,7 +654,9 @@
                           class="act-btn act-btn--danger"
                           title="Drop column"
                           onclick={() =>
-                            requestDrop(`Drop column "${col.name}"?`, [buildDropColSql(col.name)])}
+                            requestDrop(`Drop column "${col.name}"?`, [
+                              buildDropColSql(effDialect, database, table, col.name),
+                            ])}
                         >
                           <TrashSmIcon />
                         </button>
@@ -819,7 +712,9 @@
                         class="act-btn act-btn--danger"
                         title="Drop index"
                         onclick={() =>
-                          requestDrop(`Drop index "${idx.name}"?`, [buildDropIdxSql(idx.name)])}
+                          requestDrop(`Drop index "${idx.name}"?`, [
+                            buildDropIdxSql(effDialect, database, table, idx.name),
+                          ])}
                       >
                         <TrashSmIcon />
                       </button>
@@ -849,7 +744,7 @@
                       title="Drop foreign key"
                       onclick={() =>
                         requestDrop(`Drop foreign key "${fk.constraintName}"?`, [
-                          buildDropFkSql(fk.constraintName),
+                          buildDropFkSql(effDialect, database, table, fk.constraintName),
                         ])}
                     >
                       <TrashSmIcon />

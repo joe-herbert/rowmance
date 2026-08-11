@@ -9,10 +9,11 @@ use sqlparser::parser::Parser;
 use crate::connections::engine::{DatabaseEngine, EngineTransaction};
 use crate::connections::erd::group_into_tables;
 use crate::connections::types::{
-    BulkColumnRow, CapabilityStatus, ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn,
-    ErdGraph, ErdRelation, ExplainResult, ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo,
-    RowChange, RowDelete, ScheduledJob, ServerAdminCapabilityFlags, ServerStatus, ServerVariable,
-    TableInfo, VarScope,
+    BulkColumnRow, BulkForeignKeyRow, BulkIndexRow, CapabilityStatus, CheckConstraintInfo,
+    ColumnInfo, ColumnMeta, EngineQueryResult, ErdColumn, ErdGraph, ErdRelation, ExplainResult,
+    ForeignKeyInfo, IndexInfo, LockInfo, ProcessInfo, RowChange, RowDelete, ScheduledJob,
+    ServerAdminCapabilityFlags, ServerStatus, ServerVariable, TableInfo, TriggerInfo, VarScope,
+    ViewInfo,
 };
 use crate::error::RowmanceError;
 
@@ -164,6 +165,98 @@ impl DatabaseEngine for SqlServerEngine {
             .await
             .map_err(|e| RowmanceError::Pool(e.to_string()))?;
         crate::connections::sqlserver::list_foreign_keys(&mut conn, database, table, instance_db)
+            .await
+    }
+
+    async fn list_views(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<ViewInfo>, RowmanceError> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        crate::connections::sqlserver::list_views(&mut conn, database, instance_db).await
+    }
+
+    async fn list_all_indexes(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<BulkIndexRow>, RowmanceError> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let pairs =
+            crate::connections::sqlserver::list_all_indexes(&mut conn, database, instance_db)
+                .await?;
+        Ok(pairs
+            .into_iter()
+            .map(|(table_name, index)| BulkIndexRow { table_name, index })
+            .collect())
+    }
+
+    async fn list_all_foreign_keys(
+        &self,
+        database: &str,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<BulkForeignKeyRow>, RowmanceError> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        let pairs = crate::connections::sqlserver::list_all_foreign_keys(
+            &mut conn,
+            database,
+            instance_db,
+        )
+        .await?;
+        Ok(pairs
+            .into_iter()
+            .map(|(table_name, foreign_key)| BulkForeignKeyRow {
+                table_name,
+                foreign_key,
+            })
+            .collect())
+    }
+
+    async fn list_check_constraints(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<CheckConstraintInfo>, RowmanceError> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        crate::connections::sqlserver::list_check_constraints(
+            &mut conn,
+            database,
+            table,
+            instance_db,
+        )
+        .await
+    }
+
+    async fn list_triggers(
+        &self,
+        database: &str,
+        table: Option<&str>,
+        instance_db: Option<&str>,
+    ) -> Result<Vec<TriggerInfo>, RowmanceError> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| RowmanceError::Pool(e.to_string()))?;
+        crate::connections::sqlserver::list_triggers(&mut conn, database, table, instance_db)
             .await
     }
 

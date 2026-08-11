@@ -67,6 +67,16 @@ export function sameContent(a: PanelKind, b: PanelKind): boolean {
       );
     case 'erd':
       return b.kind === 'erd' && a.connectionId === b.connectionId && a.database === b.database;
+    case 'schema_compare':
+      return (
+        b.kind === 'schema_compare' &&
+        a.left.connectionId === b.left.connectionId &&
+        a.left.database === b.left.database &&
+        a.left.table === b.left.table &&
+        a.right.connectionId === b.right.connectionId &&
+        a.right.database === b.right.database &&
+        a.right.table === b.right.table
+      );
     case 'explain':
       return b.kind === 'explain' && a.connectionId === b.connectionId && a.sql === b.sql;
     case 'settings':

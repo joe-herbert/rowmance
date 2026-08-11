@@ -17,6 +17,10 @@ export function panelLabel(
       return content.objectName;
     case 'erd':
       return 'ERD';
+    case 'schema_compare':
+      return content.left.table
+        ? `Compare: ${content.left.table} ↔ ${content.right.table}`
+        : `Compare: ${content.left.database} ↔ ${content.right.database}`;
     case 'explain':
       return 'Explain';
     case 'settings':

@@ -624,6 +624,55 @@ mod server_admin_type_tests {
     }
 }
 
+/// A database view: its name and the SQL that defines it.
+#[derive(Debug, Serialize)]
+pub struct ViewInfo {
+    pub name: String,
+    pub definition: String,
+}
+
+/// A CHECK constraint on a table: its name, owning table, and expression text.
+#[derive(Debug, Serialize)]
+pub struct CheckConstraintInfo {
+    #[serde(rename = "constraintName")]
+    pub constraint_name: String,
+    #[serde(rename = "tableName")]
+    pub table_name: String,
+    pub expression: String,
+}
+
+/// A database trigger: its name, owning table, timing/event, and full definition.
+#[derive(Debug, Serialize)]
+pub struct TriggerInfo {
+    pub name: String,
+    #[serde(rename = "tableName")]
+    pub table_name: String,
+    /// "BEFORE" | "AFTER" | "INSTEAD OF".
+    pub timing: String,
+    /// "INSERT" | "UPDATE" | "DELETE" (comma-joined if multi-event, e.g. "INSERT, UPDATE").
+    pub event: String,
+    /// Full engine-native trigger body/DDL — opaque blob, used as-is for same-engine sync.
+    pub definition: String,
+}
+
+/// Flat index row used by `schema_list_all_indexes` for bulk index fetching.
+#[derive(Debug, Serialize)]
+pub struct BulkIndexRow {
+    #[serde(rename = "tableName")]
+    pub table_name: String,
+    #[serde(flatten)]
+    pub index: IndexInfo,
+}
+
+/// Flat foreign key row used by `schema_list_all_foreign_keys` for bulk FK fetching.
+#[derive(Debug, Serialize)]
+pub struct BulkForeignKeyRow {
+    #[serde(rename = "tableName")]
+    pub table_name: String,
+    #[serde(flatten)]
+    pub foreign_key: ForeignKeyInfo,
+}
+
 /// Flat column row used by `schema_list_all_columns` for bulk column fetching.
 #[derive(Debug, Serialize)]
 pub struct BulkColumnRow {
