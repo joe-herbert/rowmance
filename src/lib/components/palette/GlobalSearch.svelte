@@ -20,6 +20,8 @@
   import TableIcon from '$lib/components/icons/TableIcon.svelte';
   import ListIcon from '$lib/components/icons/ListIcon.svelte';
   import SchemaIcon from '$lib/components/icons/SchemaIcon.svelte';
+  import ConnectionDot from '$lib/components/ui/ConnectionDot.svelte';
+  import Badge from '$lib/components/ui/Badge.svelte';
 
   interface Props {
     onclose: () => void;
@@ -752,18 +754,14 @@
           onclick={() => executeItem(item)}
           onmouseenter={() => (selectedIndex = index)}
         >
-          <span
-            class="result-dot"
-            style={itemColor(item) ? `background: ${itemColor(item)}` : undefined}
-            aria-hidden="true"
-          ></span>
+          <ConnectionDot color={itemColor(item) ?? 'var(--color-accent)'} />
           <span class="item-main">
             <span class="item-label">{itemLabel(item)}</span>
             {#if item.kind === 'table' && item.tableType === 'view'}
-              <span class="item-badge">view</span>
+              <Badge uppercase>view</Badge>
             {/if}
             {#if item.kind === 'column' && item.isPrimaryKey}
-              <span class="item-badge item-badge--pk">PK</span>
+              <Badge variant="accent" uppercase>PK</Badge>
             {/if}
           </span>
           <span class="item-subtitle">{itemSubtitle(item)}</span>
@@ -1010,14 +1008,6 @@
     background: var(--color-bg-hover);
   }
 
-  .result-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--color-accent);
-  }
-
   .item-main {
     display: flex;
     align-items: center;
@@ -1030,26 +1020,10 @@
   .item-label {
     font-size: var(--font-size-sm);
     color: var(--color-text-primary);
+    font-family: var(--font-family-mono);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .item-badge {
-    font-size: 9px;
-    padding: 1px 5px;
-    border-radius: var(--radius-sm);
-    background: var(--color-bg-tertiary, var(--color-bg-hover));
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: var(--font-weight-semibold);
-    flex-shrink: 0;
-  }
-
-  .item-badge--pk {
-    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-    color: var(--color-accent);
   }
 
   .item-subtitle {

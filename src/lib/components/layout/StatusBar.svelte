@@ -7,6 +7,8 @@
   import { useConnections } from '$lib/stores/connections.svelte';
   import { usePanels } from '$lib/stores/panels.svelte';
   import type { StatusBarSegment } from '$lib/types';
+  import ConnectionDot from '$lib/components/ui/ConnectionDot.svelte';
+  import { connectionColor } from '$lib/utils/connectionColor';
 
   interface Props {
     hiddenSegments?: StatusBarSegment[];
@@ -28,7 +30,7 @@
     return connectionStore.getById(content.connectionId) ?? null;
   });
 
-  const connColor = $derived(focusedConnection?.color ?? 'var(--color-accent)');
+  const connColor = $derived(connectionColor(focusedConnection));
   const connName = $derived(focusedConnection?.name ?? null);
   const connType = $derived(focusedConnection?.dialectInfo.displayName ?? null);
   const host = $derived(
@@ -66,7 +68,7 @@
   <div class="left">
     {#if connName}
       <span class="conn-status">
-        <span class="conn-dot" style="background: {connColor};" aria-hidden="true"></span>
+        <ConnectionDot color={connColor} horizontalMargin />
         <span class="conn-name">{connName}</span>
       </span>
     {/if}
@@ -150,13 +152,6 @@
     gap: 6px;
     min-width: 0;
     overflow: hidden;
-  }
-
-  .conn-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
   }
 
   .conn-name {

@@ -15,7 +15,11 @@
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { useSettings } from '$lib/stores/settings.svelte';
+  import { useConnections } from '$lib/stores/connections.svelte';
   import AiModal from '$lib/components/ai/AiModal.svelte';
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import ConnectionDot from '$lib/components/ui/ConnectionDot.svelte';
+  import { connectionColor } from '$lib/utils/connectionColor';
 
   interface Props {
     connectionId: string;
@@ -39,6 +43,8 @@
 
   const tabDrag = useTabDrag();
   const settingsStore = useSettings();
+  const connections = useConnections();
+  const profile = $derived(connections.getById(connectionId));
 
   let showAiDescribeModal = $state(false);
   let labelDragActive = $state(false);
@@ -192,14 +198,18 @@
 <div class="ddl-viewer">
   <div class="toolbar">
     <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <ConnectionDot color={connectionColor(profile)} />
     <span
       class="object-label"
       title="Drag to open in another split"
       onpointerdown={onLabelPointerDown}
     >
-      <span class="object-type">{objectType}</span>
-      <span class="object-type-sep">/</span>
-      <span class="object-path">{database}.{objectName}</span>
+      <Badge variant="accent" uppercase>{objectType}</Badge>
+      <span class="object-path"
+        ><span class="object-qual">{database}</span><span class="object-sep">.</span><span
+          class="object-leaf">{objectName}</span
+        ></span
+      >
     </span>
     <div class="toolbar-spacer"></div>
     {#if settingsStore.settings.aiProvider !== 'none' && settingsStore.settings.aiContextLevel !== 'none'}
@@ -290,29 +300,27 @@
     user-select: none;
   }
 
-  .object-type {
-    font-size: 10px;
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-disabled);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    flex-shrink: 0;
-  }
-
-  .object-type-sep {
-    color: var(--color-border-strong);
-    flex-shrink: 0;
-    font-size: var(--font-size-xs);
-  }
-
   .object-path {
     font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
     font-family: var(--font-family-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+
+  .object-qual,
+  .object-sep {
+    color: var(--color-text-muted);
+  }
+
+  .object-sep {
+    margin: 0 1px;
+  }
+
+  .object-leaf {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
   }
 
   .toolbar-spacer {

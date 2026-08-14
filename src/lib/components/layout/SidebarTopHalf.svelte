@@ -736,7 +736,7 @@
   .panel-item.focused {
     background: var(--color-accent-subtle);
     color: var(--color-accent);
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
     box-shadow: inset 2px 0 0 var(--color-accent);
   }
 

@@ -35,6 +35,8 @@
   import ArrowIcon from '$lib/components/icons/ArrowIcon.svelte';
   import SchemaDiffTree from '$lib/components/compare/SchemaDiffTree.svelte';
   import SchemaSyncPreview from '$lib/components/compare/SchemaSyncPreview.svelte';
+  import ConnectionDot from '$lib/components/ui/ConnectionDot.svelte';
+  import { connectionColor } from '$lib/utils/connectionColor';
 
   interface SideRef {
     connectionId: string;
@@ -231,9 +233,8 @@
   }
 
   function sideLabel(ref: SideRef, profile: ReturnType<typeof connections.getById>): string {
-    const parts = [profile?.name ?? ref.connectionId, ref.database];
-    if (ref.table) parts.push(ref.table);
-    return parts.join(' / ');
+    const identifier = ref.table ? `${ref.database}.${ref.table}` : ref.database;
+    return `${profile?.name ?? ref.connectionId} › ${identifier}`;
   }
 
   const sourceProfile = $derived(direction === 'leftToRight' ? leftProfile : rightProfile);
@@ -251,6 +252,7 @@
 <div class="schema-compare-panel">
   <div class="toolbar">
     <div class="compare-route">
+      <ConnectionDot color={connectionColor(sourceProfile)} />
       <span class="side-path mono" title="Source — this side is not modified">{sourceLabel}</span>
       {#if sourceProfile}<span class="side-dialect">{sourceProfile.dialectInfo.displayName}</span>{/if}
       <button
@@ -262,6 +264,7 @@
         <ArrowIcon direction="right" width={12} height={12} />
         <span class="swap-btn-label">copies to</span>
       </button>
+      <ConnectionDot color={connectionColor(targetProfile)} />
       <span class="side-path mono" title="Target — will be overwritten to match the source">{targetLabel}</span>
       {#if targetProfile}<span class="side-dialect">{targetProfile.dialectInfo.displayName}</span>{/if}
       {#if crossEngine}

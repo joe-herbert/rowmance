@@ -23,12 +23,14 @@
   import ClockIcon from '$lib/components/icons/ClockIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
   import { isSystemDatabase, isSystemTable } from '$lib/utils/system-items';
+  import { connectionColor } from '$lib/utils/connectionColor';
   import { getAllSystemDatabases } from '$lib/stores/dialects.svelte';
   import * as connectionsApi from '$lib/tauri/connections';
   import * as schemaApi from '$lib/tauri/schema';
   import { errorMessage, isOracleClientMissingError } from '$lib/utils/errors';
   import { useToast } from '$lib/stores/toast.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import ConnectionDot from '$lib/components/ui/ConnectionDot.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ExportConnectionsDialog from './ExportConnectionsDialog.svelte';
   import ComparePickerDialog from '$lib/components/compare/ComparePickerDialog.svelte';
@@ -280,9 +282,6 @@
     return connectionStore.errorIds.has(id);
   }
 
-  function dotColor(profile: ConnectionProfile): string {
-    return profile.color ?? 'var(--color-accent)';
-  }
 
   async function handleConnect(profile: ConnectionProfile) {
     if (isConnected(profile.id)) return;
@@ -1895,7 +1894,7 @@
   {@const connecting = isConnecting(profile.id)}
   {@const errored = hasError(profile.id)}
   {@const expanded = isNodeOpen(profile.id, expandedConnections)}
-  {@const color = dotColor(profile)}
+  {@const color = connectionColor(profile)}
 
   <div class="conn-item">
     {#if connDropTarget?.kind === 'row' && connDropTarget.id === profile.id && connDropTarget.position === 'before'}
@@ -1943,14 +1942,7 @@
         </button>
 
         <!-- Color dot with glow -->
-        <span
-          class="color-dot"
-          class:dim={!connected && !connecting}
-          style="background:{color};{connected
-            ? `box-shadow:0 0 0 3px color-mix(in srgb,${color} 18%,transparent)`
-            : ''}"
-          aria-hidden="true"
-        ></span>
+        <ConnectionDot {color} {connected} dim={!connected && !connecting} />
 
         <!-- Name -->
         <button
@@ -3394,22 +3386,10 @@
     cursor: default;
   }
 
-  .color-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    transition: opacity var(--transition-fast);
-  }
-
-  .color-dot.dim {
-    opacity: 0.4;
-  }
-
   .conn-name {
     flex: 0 1 auto;
     font-size: 12.5px;
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
     color: var(--color-text-primary);
     text-align: left;
     overflow: hidden;

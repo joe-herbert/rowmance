@@ -16,6 +16,8 @@
   import * as savedQueriesApi from '$lib/tauri/saved_queries';
   import type { FileQuery, ConnectionProfile } from '$lib/types';
   import { errorMessage } from '$lib/utils/errors';
+  import { connectionColor } from '$lib/utils/connectionColor';
+  import ConnectionDot from '$lib/components/ui/ConnectionDot.svelte';
   import DbIcon from '$lib/components/icons/DbIcon.svelte';
   import LinkIcon from '$lib/components/icons/LinkIcon.svelte';
   import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
@@ -180,11 +182,11 @@
     panels.openInFocused({ kind: 'dashboard', dashboardId });
   }
 
-  function connectionColor(connectionId: string | null): string {
+  function connectionColorFor(connectionId: string | null): string {
     const profile = connectionId
       ? connections.profiles.find((p) => p.id === connectionId)
       : undefined;
-    return profile?.color ?? 'var(--color-accent)';
+    return connectionColor(profile);
   }
 
   function openSavedQuery(q: FileQuery) {
@@ -250,14 +252,14 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <li
                 class="start-chip start-chip--connection"
-                style="--chip-color: {profile.color ?? 'var(--color-accent)'}"
+                style="--chip-color: {connectionColor(profile)}"
                 role="button"
                 tabindex="0"
                 title="New query on {profile.name}"
                 onclick={() => newQuery(profile.id)}
                 oncontextmenu={(e) => showConnCtx(e, profile)}
               >
-                <span class="start-connection-dot" aria-hidden="true"></span>
+                <ConnectionDot color={connectionColor(profile)} />
                 <span class="start-chip-label">{profile.name}</span>
                 <span class="start-connection-type">{profile.dbType}</span>
                 <PlusIcon width={11} height={11} strokeWidth={2} />
@@ -359,7 +361,7 @@
                 <button
                   class="start-chip"
                   type="button"
-                  style="--chip-color: {connectionColor(savedQuery.connectionId)}"
+                  style="--chip-color: {connectionColorFor(savedQuery.connectionId)}"
                   onclick={() => openSavedQuery(savedQuery)}
                   title={savedQuery.name}
                 >
@@ -574,14 +576,6 @@
   .start-link-btn:hover {
     color: var(--color-text-primary);
     background: var(--color-bg-hover);
-  }
-
-  .start-connection-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--chip-color);
-    flex-shrink: 0;
   }
 
   .start-connection-type {

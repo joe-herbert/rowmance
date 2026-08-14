@@ -114,6 +114,7 @@
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { isMac } from '$lib/stores/shortcuts.svelte';
   import { portal } from '$lib/actions/portal';
+  import { connectionColor } from '$lib/utils/connectionColor';
 
   interface Props {
     connectionId: string;
@@ -736,7 +737,7 @@
   // ── DB type + SQL helpers ─────────────────────────────────────────────────
 
   let dialect = $derived(connections.getById(connectionId)?.dialectInfo);
-  let connectionColor = $derived(connections.getById(connectionId)?.color ?? null);
+  let connColor = $derived(connectionColor(connections.getById(connectionId)));
 
   function quoteIdentifier(name: string): string {
     return dialect ? dialectQi(name, dialect) : `\`${name.replace(/`/g, '``')}\``;
@@ -1671,7 +1672,7 @@
 </script>
 
 <div class="table-browser" bind:this={tableBrowserEl}>
-  <div class="toolbar" style="border-bottom: 2px solid {connectionColor ?? 'var(--color-accent)'}">
+  <div class="toolbar" style="border-bottom: 2px solid {connColor}">
     <span
       class="table-name"
       title={`Click to copy ${database}.${table} · Drag to open in another split`}

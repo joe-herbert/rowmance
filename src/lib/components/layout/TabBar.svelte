@@ -527,7 +527,7 @@
   .tab.focused {
     background: var(--color-bg-primary);
     color: var(--color-accent);
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
     box-shadow: inset 0 -2px 0 var(--color-accent);
   }
 

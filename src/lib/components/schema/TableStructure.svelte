@@ -42,6 +42,9 @@
   import PencilSmIcon from '$lib/components/icons/PencilSmIcon.svelte';
   import TrashSmIcon from '$lib/components/icons/TrashSmIcon.svelte';
   import LinkSmIcon from '$lib/components/icons/LinkSmIcon.svelte';
+  import Badge from '$lib/components/ui/Badge.svelte';
+  import ConnectionDot from '$lib/components/ui/ConnectionDot.svelte';
+  import { connectionColor } from '$lib/utils/connectionColor';
 
   interface Props {
     connectionId: string;
@@ -531,14 +534,18 @@
   <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
   <div class="toolbar">
     <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <ConnectionDot color={connectionColor(profile)} />
     <span
       class="object-label"
       title="Drag to open in another split"
       onpointerdown={onLabelPointerDown}
     >
-      <span class="object-type">table</span>
-      <span class="object-type-sep">/</span>
-      <span class="object-path">{database}.{table}</span>
+      <Badge variant="accent" uppercase>table</Badge>
+      <span class="object-path"
+        ><span class="object-qual">{database}</span><span class="object-sep">.</span><span
+          class="object-leaf">{table}</span
+        ></span
+      >
     </span>
     {#if !isLoading && !loadError}
       {#if !isReadOnly}
@@ -619,12 +626,14 @@
                   <td class="col-name mono">{col.name}</td>
                   <td class="col-type mono">{col.dataType}</td>
                   <td class="col-keys">
-                    {#if col.isPrimaryKey}<span class="badge badge--pk" title="Primary Key">PK</span
+                    {#if col.isPrimaryKey}<span title="Primary Key"
+                        ><Badge variant="accent">PK</Badge></span
                       >{/if}
-                    {#if col.isAutoIncrement}<span class="badge badge--ai" title="Auto Increment"
-                        >AI</span
+                    {#if col.isAutoIncrement}<span title="Auto Increment"
+                        ><Badge>AI</Badge></span
                       >{/if}
-                    {#if col.isForeignKey}<span class="badge badge--fk" title="Foreign Key">FK</span
+                    {#if col.isForeignKey}<span title="Foreign Key"
+                        ><Badge variant="success">FK</Badge></span
                       >{/if}
                   </td>
                   <td class="col-null center-cell"
@@ -703,7 +712,7 @@
                     <span class="index-cols mono">{idx.columns.join(', ')}</span>
                   </div>
                   <div class="index-meta">
-                    {#if idx.unique}<span class="badge badge--unique">UNIQUE</span>{/if}
+                    {#if idx.unique}<Badge variant="success">UNIQUE</Badge>{/if}
                     <span class="index-type">{idx.indexType}</span>
                   </div>
                   {#if editMode}
@@ -835,7 +844,7 @@
                     {/if}
                   </div>
                   <div class="fk-actions">
-                    <span class="badge badge--vr">virtual</span>
+                    <Badge variant="accent" uppercase>virtual</Badge>
                   </div>
                 </div>
               {/each}
@@ -905,7 +914,7 @@
                     {/each}
                   </div>
                   <div class="fk-actions">
-                    <span class="badge badge--vr">polymorphic</span>
+                    <Badge variant="accent" uppercase>polymorphic</Badge>
                   </div>
                 </div>
               {/each}
@@ -1391,29 +1400,27 @@
     user-select: none;
   }
 
-  .object-type {
-    font-size: 10px;
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-disabled);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    flex-shrink: 0;
-  }
-
-  .object-type-sep {
-    color: var(--color-border-strong);
-    flex-shrink: 0;
-    font-size: var(--font-size-xs);
-  }
-
   .object-path {
     font-size: var(--font-size-sm);
-    color: var(--color-text-primary);
     font-family: var(--font-family-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+
+  .object-qual,
+  .object-sep {
+    color: var(--color-text-muted);
+  }
+
+  .object-sep {
+    margin: 0 1px;
+  }
+
+  .object-leaf {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
   }
 
   .edit-toggle {
@@ -1733,44 +1740,6 @@
     color: var(--color-danger, #ef4444);
   }
 
-  /* ── Badges ────────────────────────────────────────────────────────────── */
-
-  .badge {
-    display: inline-block;
-    font-size: 9px;
-    font-weight: var(--font-weight-semibold);
-    padding: 1px 5px;
-    border-radius: var(--radius-sm);
-    letter-spacing: 0.04em;
-    margin-right: 2px;
-    border: 1px solid transparent;
-  }
-
-  .badge--pk {
-    background: var(--color-accent-subtle);
-    color: var(--color-accent);
-    border-color: rgba(124, 92, 255, 0.22);
-  }
-
-  .badge--ai {
-    background: var(--color-bg-tertiary, var(--color-bg-hover));
-    color: var(--color-text-muted);
-    border-color: var(--color-border);
-  }
-
-  .badge--fk {
-    background: var(--color-success-subtle);
-    color: var(--color-success);
-    border-color: rgba(22, 163, 74, 0.22);
-  }
-
-  .badge--unique {
-    background: var(--color-success-subtle);
-    color: var(--color-success);
-    border-color: rgba(22, 163, 74, 0.22);
-    font-size: 9px;
-  }
-
   /* ── Indexes ───────────────────────────────────────────────────────────── */
 
   .index-list {
@@ -1939,13 +1908,6 @@
   .act-btn--connect:hover {
     background: var(--color-accent-subtle);
     border-color: rgba(124, 92, 255, 0.22);
-  }
-
-  .badge--vr {
-    background: var(--color-accent-subtle);
-    color: var(--color-accent);
-    border-color: rgba(124, 92, 255, 0.22);
-    font-size: 9px;
   }
 
   .vr-card {
