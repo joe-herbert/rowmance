@@ -758,6 +758,8 @@ export interface DashboardWidget {
   database: string | null;
   sql: string;
   displayType: WidgetDisplayType;
+  /** Hex colour string overriding the dashboard's accent colour for this widget, e.g. '#4f46e5'. */
+  color?: string | null;
   /** Format for single-value (count) display type */
   singleValueFormat?: SingleValueFormat;
   /** ISO 4217 currency code, used when singleValueFormat === 'currency' */

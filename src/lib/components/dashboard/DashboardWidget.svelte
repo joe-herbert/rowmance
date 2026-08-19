@@ -453,7 +453,11 @@
   });
 </script>
 
-<div class="widget" style="--w: {widget.w}; --h: {widget.h};">
+<div
+  class="widget"
+  style="--w: {widget.w}; --h: {widget.h};"
+  style:--dash-accent={widget.color || undefined}
+>
   {#if editMode || widget.displayType !== 'button'}
     <div class="widget-header">
       {#if editMode}

@@ -35,7 +35,10 @@
 
   const { widget, dashboardVariables, accentColor, onsave, oncancel }: Props = $props();
 
-  const accentStyle = $derived(accentColor ? `--dash-accent: ${accentColor};` : '');
+  let color = $state(untrack(() => widget?.color ?? ''));
+
+  const previewAccent = $derived(color || accentColor);
+  const accentStyle = $derived(previewAccent ? `--dash-accent: ${previewAccent};` : '');
 
   const connectionsStore = useConnections();
   const shortcutsStore = useShortcuts();
@@ -201,6 +204,7 @@
       buttonConfirm: displayType === 'button' ? buttonConfirm : undefined,
       buttonConfirmMessage:
         displayType === 'button' && buttonConfirm ? buttonConfirmMessage : undefined,
+      color: color || null,
       w,
       h,
     });
@@ -265,13 +269,32 @@
       <!-- Title -->
       <div class="field">
         <label class="field-label" for="widget-title">Title</label>
-        <input
-          id="widget-title"
-          class="field-input"
-          type="text"
-          placeholder="Widget title…"
-          bind:value={title}
-        />
+        <div class="title-row">
+          <input
+            id="widget-title"
+            class="field-input"
+            type="text"
+            placeholder="Widget title…"
+            bind:value={title}
+          />
+          <div class="color-row" title="Accent colour">
+            <input
+              class="color-input"
+              type="color"
+              value={color || accentColor || '#4f46e5'}
+              oninput={(e) => (color = e.currentTarget.value)}
+              aria-label="Widget accent colour"
+            />
+            {#if color}
+              <button
+                type="button"
+                class="color-clear"
+                onclick={() => (color = '')}
+                aria-label="Clear widget accent colour">Clear</button
+              >
+            {/if}
+          </div>
+        </div>
       </div>
 
       <!-- Connection -->
@@ -592,6 +615,48 @@
 
   .field-input--sm {
     width: 100px;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+  }
+
+  .title-row .field-input {
+    flex: 1;
+  }
+
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    flex-shrink: 0;
+  }
+
+  .color-input {
+    width: 28px;
+    height: 28px;
+    padding: 2px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-primary);
+    cursor: pointer;
+  }
+
+  .color-clear {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-decoration: underline;
+    white-space: nowrap;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .color-clear:hover {
+    color: var(--color-text-secondary);
   }
 
   .checkbox-label {
