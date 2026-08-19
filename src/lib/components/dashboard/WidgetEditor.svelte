@@ -27,13 +27,49 @@
 
   interface Props {
     widget?: DashboardWidget | null;
+    siblingWidgets?: DashboardWidget[];
     dashboardVariables: DashboardVariable[];
     accentColor?: string | null;
     onsave: (_w: Omit<DashboardWidget, 'id' | 'x' | 'y'>) => void;
     oncancel: () => void;
   }
 
-  const { widget, dashboardVariables, accentColor, onsave, oncancel }: Props = $props();
+  const {
+    widget,
+    siblingWidgets = [],
+    dashboardVariables,
+    accentColor,
+    onsave,
+    oncancel,
+  }: Props = $props();
+
+  // Most-used connection among this dashboard's other widgets, breaking ties
+  // by whichever of the tied connections was most recently connected.
+  function mostCommonSiblingConnection(): string | undefined {
+    const counts = new Map<string, number>();
+    for (const w of siblingWidgets) {
+      if (!w.connectionId) continue;
+      counts.set(w.connectionId, (counts.get(w.connectionId) ?? 0) + 1);
+    }
+    if (counts.size === 0) return undefined;
+    const maxCount = Math.max(...counts.values());
+    const tied = [...counts.keys()].filter((id) => counts.get(id) === maxCount);
+    if (tied.length === 1) return tied[0];
+    return mostRecentlyConnected(tied) ?? tied[0];
+  }
+
+  function mostRecentlyConnected(ids: string[]): string | undefined {
+    let best: string | undefined;
+    let bestTime = -Infinity;
+    for (const id of ids) {
+      const at = connectionsStore.getConnectedAt(id);
+      if (at && at.getTime() > bestTime) {
+        bestTime = at.getTime();
+        best = id;
+      }
+    }
+    return best;
+  }
 
   let color = $state(untrack(() => widget?.color ?? ''));
 
@@ -50,6 +86,8 @@
     untrack(
       () =>
         widget?.connectionId ??
+        mostCommonSiblingConnection() ??
+        mostRecentlyConnected(connectionsStore.profiles.map((p) => p.id)) ??
         connectionsStore.profiles.find((p) => connectionsStore.isActive(p.id))?.id ??
         connectionsStore.profiles[0]?.id ??
         '',

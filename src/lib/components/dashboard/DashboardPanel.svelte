@@ -622,6 +622,7 @@
 {#if addingWidget}
   <WidgetEditor
     widget={null}
+    siblingWidgets={dashboard?.widgets ?? []}
     dashboardVariables={dashboard?.variables ?? []}
     accentColor={dashboard?.color}
     onsave={handleAddWidget}
@@ -632,6 +633,7 @@
 {#if editingWidget}
   <WidgetEditor
     widget={editingWidget}
+    siblingWidgets={dashboard?.widgets.filter((w) => w.id !== editingWidget?.id) ?? []}
     dashboardVariables={dashboard?.variables ?? []}
     accentColor={dashboard?.color}
     onsave={handleEditWidget}
