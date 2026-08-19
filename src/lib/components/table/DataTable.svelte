@@ -4942,6 +4942,9 @@
       }}
       {connectionId}
       {database}
+      {tableName}
+      colName={editTarget.colName}
+      isForeignKey={columns[editTarget.colIndex]?.isForeignKey ?? false}
     />
   {/if}
 </div>
@@ -4958,6 +4961,8 @@
     onCancel={cancelModalEdit}
     {connectionId}
     {database}
+    {tableName}
+    isForeignKey={columns[modalTarget.colIndex]?.isForeignKey ?? false}
   />
 {/if}
 

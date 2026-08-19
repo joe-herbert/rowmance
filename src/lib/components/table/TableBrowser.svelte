@@ -2298,6 +2298,7 @@
           initialDeletedRows={pendingDeletedRows.size > 0 ? pendingDeletedRows : undefined}
           {connectionId}
           {database}
+          tableName={table}
           {columnRenames}
           onRenameColumn={handleRenameColumn}
           onQuickFilter={handleQuickFilter}

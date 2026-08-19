@@ -9,6 +9,8 @@
   import TimePicker from '$lib/components/ui/TimePicker.svelte';
   import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
   import BooleanPicker from '$lib/components/ui/BooleanPicker.svelte';
+  import ForeignKeyPicker from './ForeignKeyPicker.svelte';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
   import { executeQuery } from '$lib/tauri/query';
 
   function getInputType(dt: string): 'boolean' | 'datetime-local' | 'date' | 'time' | 'text' {
@@ -33,6 +35,8 @@
     onCancel: () => void;
     connectionId?: string;
     database?: string | null;
+    tableName?: string;
+    isForeignKey?: boolean;
   }
 
   let {
@@ -45,11 +49,16 @@
     onCancel,
     connectionId,
     database,
+    tableName,
+    isForeignKey = false,
   }: Props = $props();
 
   const { settings } = useSettings();
 
   const inputType = $derived(getInputType(dataType));
+
+  const canPickForeignKey = $derived(isForeignKey && !!connectionId && !!tableName && !!colName);
+  let showFkPicker = $state(false);
 
   function toBoolState(v: typeof value): boolean | null {
     if (v === true || v === 1) return true;
@@ -283,6 +292,20 @@
           aria-label="Edit cell value"
         ></textarea>
       {/if}
+      {#if showFkPicker && canPickForeignKey}
+        <div class="fk-picker-wrap">
+          <ForeignKeyPicker
+            connectionId={connectionId!}
+            database={database ?? null}
+            table={tableName!}
+            column={colName}
+            onSelect={(v) => {
+              textValue = v === null ? '' : String(v);
+              showFkPicker = false;
+            }}
+          />
+        </div>
+      {/if}
     </div>
 
     <footer class="modal-footer">
@@ -294,6 +317,17 @@
       <div class="modal-actions">
         {#if showFormatJson}
           <button class="modal-btn btn-format-json" onclick={formatJson}>Format JSON</button>
+        {/if}
+        {#if canPickForeignKey}
+          <button
+            class="modal-btn btn-fk-picker"
+            onclick={() => (showFkPicker = !showFkPicker)}
+            title="Search referenced table"
+            aria-label="Search referenced table"
+          >
+            <SearchIcon width={12} height={12} />
+            Search values
+          </button>
         {/if}
         {#if showNow}
           <button
@@ -478,6 +512,31 @@
   .btn-format-json:hover {
     background: var(--color-accent-subtle);
     border-color: var(--color-accent);
+  }
+
+  .btn-fk-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-accent);
+  }
+
+  .btn-fk-picker:hover {
+    background: var(--color-accent-subtle);
+    border-color: var(--color-accent);
+  }
+
+  .fk-picker-wrap {
+    margin-top: var(--spacing-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-primary);
+  }
+
+  .fk-picker-wrap :global(.fk-picker) {
+    width: 100%;
   }
 
   .btn-now {

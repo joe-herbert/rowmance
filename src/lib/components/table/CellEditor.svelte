@@ -10,10 +10,12 @@
   import TimePicker from '$lib/components/ui/TimePicker.svelte';
   import DateTimePicker from '$lib/components/ui/DateTimePicker.svelte';
   import BooleanPicker from '$lib/components/ui/BooleanPicker.svelte';
+  import ForeignKeyPicker from './ForeignKeyPicker.svelte';
   import { executeQuery } from '$lib/tauri/query';
   import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
   import CloseIcon from '$lib/components/icons/CloseIcon.svelte';
   import ExpandIcon from '$lib/components/icons/ExpandIcon.svelte';
+  import SearchIcon from '$lib/components/icons/SearchIcon.svelte';
 
   type CellValue = string | number | boolean | null;
 
@@ -36,6 +38,9 @@
     onLiveValue?: (_currentValue: CellValue) => void;
     connectionId?: string;
     database?: string | null;
+    colName?: string;
+    tableName?: string;
+    isForeignKey?: boolean;
   }
 
   let {
@@ -57,7 +62,12 @@
     onLiveValue,
     connectionId,
     database,
+    colName,
+    tableName,
+    isForeignKey = false,
   }: Props = $props();
+
+  const canPickForeignKey = $derived(isForeignKey && !!connectionId && !!tableName && !!colName);
 
   const { settings } = useSettings();
 
@@ -120,12 +130,14 @@
   let cellEditorEl = $state<HTMLDivElement | null>(null);
   let actionsEl = $state<HTMLDivElement | null>(null);
   let pickerEl = $state<HTMLDivElement | null>(null);
+  let showFkPicker = $state(false);
 
   const showPicker = $derived(
     inputType === 'date' ||
       inputType === 'datetime-local' ||
       inputType === 'time' ||
-      inputType === 'boolean',
+      inputType === 'boolean' ||
+      showFkPicker,
   );
 
   // Cell editor fixed viewport position, updated on scroll to follow the cell
@@ -153,6 +165,12 @@
 
   $effect(() => {
     if (!cellEditorEl) return;
+
+    // Read synchronously so toggling the picker (e.g. opening the FK search
+    // popup after mount) is tracked as a dependency and re-runs this effect —
+    // reads inside updatePositions() below happen async (rAF/listeners) and
+    // wouldn't otherwise be tracked.
+    const pickerVisible = showPicker;
 
     // Snapshot scroll element and initial offsets as plain locals so the closure
     // below doesn't need to go through Svelte's reactive prop machinery.
@@ -200,7 +218,7 @@
       );
 
       // Picker
-      if (showPicker) {
+      if (pickerVisible) {
         const actualH = pickerEl
           ? pickerEl.offsetHeight
           : (PICKER_HEIGHT_ESTIMATE[inputType] ?? 300);
@@ -494,7 +512,15 @@
       aria-label="Open in modal"><ExpandIcon width={12} height={12} /></button
     >
   {/if}
-  {#if inputType !== 'boolean' && showPicker}
+  {#if canPickForeignKey}
+    <button
+      class="action-btn fk-picker-btn"
+      onclick={() => (showFkPicker = !showFkPicker)}
+      title="Search referenced table"
+      aria-label="Search referenced table"><SearchIcon width={12} height={12} /></button
+    >
+  {/if}
+  {#if inputType !== 'boolean' && showPicker && !showFkPicker}
     <button
       class="action-btn now-btn"
       onclick={handleNow}
@@ -529,15 +555,24 @@
     style="top:{pickerTop}px; left:{pickerLeft}px;"
     role="dialog"
     tabindex="-1"
-    aria-label="Pick {inputType === 'date'
-      ? 'date'
-      : inputType === 'time'
-        ? 'time'
-        : 'date and time'}"
+    aria-label={showFkPicker
+      ? 'Search referenced table'
+      : `Pick ${inputType === 'date' ? 'date' : inputType === 'time' ? 'time' : 'date and time'}`}
     use:portal
     onkeydown={handleKeydown}
   >
-    {#if inputType === 'boolean'}
+    {#if showFkPicker && canPickForeignKey}
+      <ForeignKeyPicker
+        connectionId={connectionId!}
+        database={database ?? null}
+        table={tableName!}
+        column={colName!}
+        onSelect={(v) => {
+          textValue = v === null ? '' : String(v);
+          showFkPicker = false;
+        }}
+      />
+    {:else if inputType === 'boolean'}
       <BooleanPicker
         value={boolState}
         displayFormat={settings.booleanDisplay ?? 'tick-cross'}
