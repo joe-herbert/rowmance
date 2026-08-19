@@ -292,6 +292,7 @@
     border-spacing: 0;
     font-size: var(--font-size-xs);
     white-space: nowrap;
+    min-width: 100%;
     width: 100%;
   }
 
@@ -302,7 +303,9 @@
     font-size: 11px;
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-secondary);
-    background: var(--color-table-header-bg);
+    /* Flat color, not the app-wide gradient var — a gradient repeats per sticky
+       cell instead of spanning the row, making columns look like separate chips. */
+    background: var(--color-bg-active);
     border-bottom: 1px solid var(--color-border-strong);
     text-align: left;
     white-space: nowrap;
