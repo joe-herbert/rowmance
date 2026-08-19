@@ -601,6 +601,16 @@
 
   const pageOffset = $derived(pageIndex * pageSize);
 
+  // Widen the row-number gutter to keep padding around large row numbers instead of
+  // clipping them against the fixed 42px column used for small tables. Based on the
+  // last row number visible on the current page, not the total row count, so early
+  // pages of a large paginated table still get a narrow gutter.
+  const rownumColWidth = $derived.by(() => {
+    const maxRowNumber = rowOffset + pageOffset + pageRows.length || 1;
+    const digits = String(maxRowNumber).length;
+    return Math.max(42, digits * 7 + 24);
+  });
+
   $effect(() => {
     rows;
     filterValues.join('|');
@@ -3503,6 +3513,7 @@
   class="data-table-wrapper"
   class:cell-multiline={settings.cellMaxLines > 1}
   style:--cell-max-lines={settings.cellMaxLines}
+  style:--rownum-col-width={`${rownumColWidth}px`}
   onpointermove={onResizePointerMove}
   onpointerup={onResizePointerUp}
   onkeydown={(e) => {
@@ -5027,15 +5038,15 @@
 
   /* No border between # and first column — no border-right anywhere */
   .rownum-header-cell {
-    width: 42px;
-    min-width: 42px;
-    max-width: 42px;
+    width: var(--rownum-col-width, 42px);
+    min-width: var(--rownum-col-width, 42px);
+    max-width: var(--rownum-col-width, 42px);
     text-align: center;
     font-size: 11px;
     color: var(--color-text-muted);
     font-weight: var(--font-weight-medium);
     vertical-align: middle;
-    padding: 0;
+    padding: 0 8px;
     border-bottom: 1px solid var(--color-border-strong);
     box-sizing: border-box;
     cursor: pointer;
@@ -5211,15 +5222,15 @@
   /* ── Row number column ──────────────────────────────────────────────────── */
 
   .rownum-cell {
-    width: 42px;
-    min-width: 42px;
-    max-width: 42px;
+    width: var(--rownum-col-width, 42px);
+    min-width: var(--rownum-col-width, 42px);
+    max-width: var(--rownum-col-width, 42px);
     height: 38px;
     text-align: center;
     vertical-align: middle;
     border-bottom: 1px solid var(--color-border);
     box-sizing: border-box;
-    padding: 0;
+    padding: 0 8px;
     cursor: pointer;
     outline: none;
   }
