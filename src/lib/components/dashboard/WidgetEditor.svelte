@@ -53,6 +53,8 @@
     ),
   );
   let database = $state(untrack(() => widget?.database ?? ''));
+  let databaseOptions = $state<string[]>([]);
+  let databaseOptionsError = $state('');
   let sql = $state(untrack(() => widget?.sql ?? ''));
   let displayType = $state<WidgetDisplayType>(untrack(() => widget?.displayType ?? 'table'));
   let singleValueFormat = $state<SingleValueFormat>(
@@ -116,6 +118,31 @@
   const sqlDialect = $derived(
     connectionsStore.getById(connectionId)?.dialectInfo?.editorDialect ?? 'sql',
   );
+
+  $effect(() => {
+    if (!connectionId || !connectionsStore.isActive(connectionId)) {
+      databaseOptions = [];
+      return;
+    }
+    let cancelled = false;
+    schemaApi
+      .listDatabases(connectionId)
+      .then((dbs) => {
+        if (!cancelled) {
+          databaseOptions = dbs;
+          databaseOptionsError = '';
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          databaseOptions = [];
+          databaseOptionsError = errorMessage(e);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   // ── Query Builder state ───────────────────────────────────────────────────
 
@@ -255,13 +282,19 @@
       <!-- Database -->
       <div class="field">
         <label class="field-label" for="widget-db">Database</label>
-        <input
+        <Select
           id="widget-db"
-          class="field-input"
-          type="text"
-          placeholder="database name (optional)"
           bind:value={database}
+          options={databaseOptions.map((d) => ({ value: d, label: d }))}
+          aria-label="Database"
+          placeholder="(optional)"
+          searchable
+          size="sm"
+          style={accentStyle}
         />
+        {#if databaseOptionsError}
+          <p class="builder-error">{databaseOptionsError}</p>
+        {/if}
       </div>
 
       <!-- SQL -->
