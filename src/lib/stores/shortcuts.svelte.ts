@@ -55,6 +55,8 @@ export type ShortcutAction =
   | 'TAB_7'
   | 'TAB_8'
   | 'TAB_9'
+  | 'TAB_NEXT'
+  | 'TAB_PREV'
   | 'SPLIT_RIGHT'
   | 'SPLIT_DOWN'
   | 'SPLIT_CLOSE'
@@ -336,6 +338,26 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     vscode: 'Alt+9',
     jetbrains: 'Alt+9',
     vim: 'Alt+9',
+  },
+  {
+    action: 'TAB_NEXT',
+    label: 'Next Tab',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Shift+]',
+    jetbrains: 'Ctrl+Tab',
+    vim: 'g l',
+  },
+  {
+    action: 'TAB_PREV',
+    label: 'Previous Tab',
+    group: 'Navigation',
+    global: true,
+    location: 'global',
+    vscode: 'Mod+Shift+[',
+    jetbrains: 'Ctrl+Shift+Tab',
+    vim: 'g h',
   },
   // ── Split View ───────────────────────────────────────────────────────────────
   {

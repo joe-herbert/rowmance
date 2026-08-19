@@ -678,6 +678,34 @@ export function usePanels() {
       }
     },
 
+    /** Focus the next open tab within the focused split (wraps around). */
+    focusNextItem() {
+      const state = getSplitState(focusedSplitIdState);
+      const items = state.openItems;
+      if (items.length === 0) return;
+      const current = Math.max(0, items.findIndex((i) => i.id === state.focusedItemId));
+      const next = items[(current + 1) % items.length];
+      setSplitState(focusedSplitIdState, {
+        ...state,
+        openItems: touchItem(items, next.id),
+        focusedItemId: next.id,
+      });
+    },
+
+    /** Focus the previous open tab within the focused split (wraps around). */
+    focusPrevItem() {
+      const state = getSplitState(focusedSplitIdState);
+      const items = state.openItems;
+      if (items.length === 0) return;
+      const current = Math.max(0, items.findIndex((i) => i.id === state.focusedItemId));
+      const prev = items[(current - 1 + items.length) % items.length];
+      setSplitState(focusedSplitIdState, {
+        ...state,
+        openItems: touchItem(items, prev.id),
+        focusedItemId: prev.id,
+      });
+    },
+
     /** Remove item from whichever split contains it. Auto-closes empty splits (except last). */
     closeOpenItem(itemId: string) {
       const splitId = findSplitForItem(itemId);

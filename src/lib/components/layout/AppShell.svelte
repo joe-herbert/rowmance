@@ -574,7 +574,9 @@
     }
     if (action === 'GLOBAL_SEARCH') openGlobalSearch();
     if (action === 'CONNECT_TO_CONNECTION') openConnectionSwitcher();
-    if (action.startsWith('TAB_')) {
+    if (action === 'TAB_NEXT') panelStore.focusNextItem();
+    if (action === 'TAB_PREV') panelStore.focusPrevItem();
+    if (action.startsWith('TAB_') && action !== 'TAB_NEXT' && action !== 'TAB_PREV') {
       const n = parseInt(action.slice(4), 10);
       const items = panelStore.getSplitItems(panelStore.focusedSplitId);
       const target = n === 9 ? items[items.length - 1] : items[n - 1];
