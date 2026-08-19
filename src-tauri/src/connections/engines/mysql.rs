@@ -1293,7 +1293,24 @@ fn mysql_value_to_json(row: &sqlx::mysql::MySqlRow, idx: usize) -> serde_json::V
             .map(|j| serde_json::Value::String(j.to_string()))
             .unwrap_or(serde_json::Value::Null);
     }
+    if let Ok(v) = row.try_get::<Option<sqlx::types::Uuid>, _>(idx) {
+        return v
+            .map(|u| serde_json::Value::String(u.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
+    if let Ok(v) = row.try_get::<Option<Vec<u8>>, _>(idx) {
+        return v
+            .map(|b| match String::from_utf8(b) {
+                Ok(s) => serde_json::Value::String(s),
+                Err(e) => serde_json::Value::String(bytes_to_hex(e.as_bytes())),
+            })
+            .unwrap_or(serde_json::Value::Null);
+    }
     serde_json::Value::Null
+}
+
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn bind_mysql_value<'q>(

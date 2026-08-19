@@ -1371,6 +1371,11 @@ fn pg_value_to_json(row: &sqlx::postgres::PgRow, idx: usize) -> serde_json::Valu
             .map(|j| serde_json::Value::String(j.to_string()))
             .unwrap_or(serde_json::Value::Null);
     }
+    if let Ok(v) = row.try_get::<Option<sqlx::types::Uuid>, _>(idx) {
+        return v
+            .map(|u| serde_json::Value::String(u.to_string()))
+            .unwrap_or(serde_json::Value::Null);
+    }
     serde_json::Value::Null
 }
 
