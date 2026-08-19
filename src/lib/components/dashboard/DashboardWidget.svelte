@@ -18,6 +18,8 @@
   import ResizeIcon from '$lib/components/icons/ResizeIcon.svelte';
   import Spinner from '$lib/components/ui/Spinner.svelte';
   import RowDetailModal from '$lib/components/dashboard/RowDetailModal.svelte';
+  import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import { useToast } from '$lib/stores/toast.svelte';
   import { resolveBuiltinVariables, substituteVariables } from '$lib/utils/widget-templates';
   import { qi as dialectQi, formatSqlValue } from '$lib/utils/dialect';
   import { errorMessage } from '$lib/utils/errors';
@@ -48,6 +50,7 @@
 
   const connectionsStore = useConnections();
   const panelStore = usePanels();
+  const toast = useToast();
 
   function openInEditor() {
     const builtins = resolveBuiltinVariables({
@@ -178,10 +181,51 @@
     void widget.database;
     void dashboardVariables;
     void dashboardLastViewedAt;
+    if (widget.displayType === 'button') {
+      loading = false;
+      return;
+    }
     if (connectionsStore.isActive(widget.connectionId)) {
       fetchData();
     }
   });
+
+  // ── Button ───────────────────────────────────────────────────────────────
+
+  let running = $state(false);
+  let showRunConfirm = $state(false);
+
+  function handleButtonClick() {
+    if (widget.buttonConfirm) {
+      showRunConfirm = true;
+    } else {
+      runButtonSql();
+    }
+  }
+
+  async function runButtonSql() {
+    showRunConfirm = false;
+    if (!widget.sql.trim()) return;
+    if (!connectionsStore.isActive(widget.connectionId)) {
+      toast.addToast('Connection not active', 'error', 0);
+      return;
+    }
+    running = true;
+    try {
+      const builtins = resolveBuiltinVariables({
+        dashboardId,
+        widgetId: widget.id,
+        lastViewedAt: dashboardLastViewedAt,
+      });
+      const sql = substituteVariables(widget.sql, builtins, dashboardVariables);
+      await queryApi.executeMultiQuery(widget.connectionId, sql, widget.database);
+      toast.addToast('Query executed successfully', 'success');
+    } catch (e) {
+      toast.addToast(errorMessage(e), 'error', 0);
+    } finally {
+      running = false;
+    }
+  }
 
   // ── Single value display ─────────────────────────────────────────────────
 
@@ -272,8 +316,7 @@
     const usableW = chartWidth - CHART_PAD_LEFT;
     const barW = Math.max(4, usableW / total - 4);
     const x = CHART_PAD_LEFT + idx * (usableW / total) + (usableW / total - barW) / 2;
-    const barH =
-      ((chartData[idx]?.value ?? 0) / chartMax) * (chartHeight - CHART_PAD_BOTTOM - 10);
+    const barH = ((chartData[idx]?.value ?? 0) / chartMax) * (chartHeight - CHART_PAD_BOTTOM - 10);
     const y = chartHeight - CHART_PAD_BOTTOM - barH;
     return { x, y, w: barW, h: barH };
   }
@@ -408,41 +451,43 @@
 </script>
 
 <div class="widget" style="--w: {widget.w}; --h: {widget.h};">
-  <div class="widget-header">
-    {#if editMode}
-      <button class="drag-handle" aria-label="Drag to reorder" onpointerdown={onDragStart}>
-        <DragHandleIcon />
-      </button>
-    {/if}
-    <span class="widget-title">{widget.title}</span>
-    <div class="widget-actions">
+  {#if editMode || widget.displayType !== 'button'}
+    <div class="widget-header">
       {#if editMode}
-        <button class="action-btn" onclick={onEdit} title="Edit widget" type="button">
-          <EditIcon width={12} height={12} strokeWidth={2} />
-        </button>
-        <button
-          class="action-btn action-btn--danger"
-          onclick={onDelete}
-          title="Delete widget"
-          type="button"
-        >
-          <TrashIcon width={12} height={12} strokeWidth={2} />
-        </button>
-      {:else}
-        <button
-          class="action-btn"
-          onclick={openInEditor}
-          title="Open in query editor"
-          type="button"
-        >
-          <ExternalLinkIcon width={12} height={12} strokeWidth={2} />
-        </button>
-        <button class="refresh-btn" onclick={fetchData} title="Refresh" type="button">
-          <RotateCcwIcon width={11} height={11} strokeWidth={2} />
+        <button class="drag-handle" aria-label="Drag to reorder" onpointerdown={onDragStart}>
+          <DragHandleIcon />
         </button>
       {/if}
+      <span class="widget-title">{widget.title}</span>
+      <div class="widget-actions">
+        {#if editMode}
+          <button class="action-btn" onclick={onEdit} title="Edit widget" type="button">
+            <EditIcon width={12} height={12} strokeWidth={2} />
+          </button>
+          <button
+            class="action-btn action-btn--danger"
+            onclick={onDelete}
+            title="Delete widget"
+            type="button"
+          >
+            <TrashIcon width={12} height={12} strokeWidth={2} />
+          </button>
+        {:else}
+          <button
+            class="action-btn"
+            onclick={openInEditor}
+            title="Open in query editor"
+            type="button"
+          >
+            <ExternalLinkIcon width={12} height={12} strokeWidth={2} />
+          </button>
+          <button class="refresh-btn" onclick={fetchData} title="Refresh" type="button">
+            <RotateCcwIcon width={11} height={11} strokeWidth={2} />
+          </button>
+        {/if}
+      </div>
     </div>
-  </div>
+  {/if}
 
   <div class="widget-body">
     {#if loading}
@@ -600,6 +645,20 @@
           <div class="countdown-target">{countdownValue.targetLabel}</div>
         </div>
       {/if}
+    {:else if widget.displayType === 'button'}
+      <div class="button-display">
+        <button
+          class="run-btn"
+          onclick={handleButtonClick}
+          disabled={running}
+          type="button"
+        >
+          {#if running}
+            <Spinner size={13} />
+          {/if}
+          {widget.buttonLabel || 'Run'}
+        </button>
+      </div>
     {/if}
   </div>
 
@@ -624,6 +683,17 @@
       ? () => openRowInTable(selectedRow!)
       : undefined}
     onClose={() => (selectedRow = null)}
+  />
+{/if}
+
+{#if showRunConfirm}
+  <ConfirmDialog
+    title="Run SQL"
+    message={widget.buttonConfirmMessage || `Are you sure you want to run "${widget.title}"?`}
+    code={widget.sql}
+    confirmText={widget.buttonLabel || 'Run'}
+    onconfirm={runButtonSql}
+    oncancel={() => (showRunConfirm = false)}
   />
 {/if}
 
@@ -806,6 +876,41 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     text-align: center;
+  }
+
+  /* ── Button ──────────────────────────────────────────────────────────────── */
+
+  .button-display {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .run-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-2);
+    width: 100%;
+    height: 100%;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-ui);
+    color: #fff;
+    background: var(--dash-accent, var(--color-accent));
+    border: none;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+  }
+
+  .run-btn:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .run-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   /* ── Countdown ───────────────────────────────────────────────────────────── */

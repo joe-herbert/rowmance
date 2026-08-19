@@ -61,6 +61,9 @@
     untrack(() => widget?.singleValueFormat ?? 'auto'),
   );
   let singleValueCurrency = $state(untrack(() => widget?.singleValueCurrency ?? 'GBP'));
+  let buttonLabel = $state(untrack(() => widget?.buttonLabel ?? 'Run'));
+  let buttonConfirm = $state(untrack(() => widget?.buttonConfirm ?? true));
+  let buttonConfirmMessage = $state(untrack(() => widget?.buttonConfirmMessage ?? ''));
   let w = $state(untrack(() => widget?.w ?? 6));
   let h = $state(untrack(() => widget?.h ?? 3));
 
@@ -194,6 +197,10 @@
         displayType === 'count' && singleValueFormat === 'currency'
           ? singleValueCurrency
           : undefined,
+      buttonLabel: displayType === 'button' ? buttonLabel || 'Run' : undefined,
+      buttonConfirm: displayType === 'button' ? buttonConfirm : undefined,
+      buttonConfirmMessage:
+        displayType === 'button' && buttonConfirm ? buttonConfirmMessage : undefined,
       w,
       h,
     });
@@ -241,6 +248,7 @@
     { value: 'bar_chart', label: 'Bar Chart' },
     { value: 'line_chart', label: 'Line Chart' },
     { value: 'countdown', label: 'Countdown' },
+    { value: 'button', label: 'Button' },
   ];
 </script>
 
@@ -403,6 +411,37 @@
         {/if}
       {/if}
 
+      {#if displayType === 'button'}
+        <div class="field">
+          <label class="field-label" for="btn-label">Button label</label>
+          <input
+            id="btn-label"
+            class="field-input"
+            type="text"
+            placeholder="Run"
+            bind:value={buttonLabel}
+          />
+        </div>
+        <div class="field">
+          <label class="checkbox-label" for="btn-confirm">
+            <input id="btn-confirm" type="checkbox" bind:checked={buttonConfirm} />
+            Ask for confirmation before running
+          </label>
+        </div>
+        {#if buttonConfirm}
+          <div class="field">
+            <label class="field-label" for="btn-confirm-message">Confirmation message</label>
+            <input
+              id="btn-confirm-message"
+              class="field-input"
+              type="text"
+              placeholder="Are you sure you want to run this?"
+              bind:value={buttonConfirmMessage}
+            />
+          </div>
+        {/if}
+      {/if}
+
       <!-- Grid size -->
       <div class="field-row">
         <div class="field">
@@ -553,6 +592,16 @@
 
   .field-input--sm {
     width: 100px;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    cursor: pointer;
   }
 
   .display-types {

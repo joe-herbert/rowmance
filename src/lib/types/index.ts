@@ -730,7 +730,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 // ── Dashboards ───────────────────────────────────────────────────────────────
 
-export type WidgetDisplayType = 'count' | 'table' | 'bar_chart' | 'line_chart' | 'countdown';
+export type WidgetDisplayType = 'count' | 'table' | 'bar_chart' | 'line_chart' | 'countdown' | 'button';
 
 export type SingleValueFormat =
   | 'auto'
@@ -762,6 +762,12 @@ export interface DashboardWidget {
   singleValueFormat?: SingleValueFormat;
   /** ISO 4217 currency code, used when singleValueFormat === 'currency' */
   singleValueCurrency?: string;
+  /** Label shown on the button, used when displayType === 'button' */
+  buttonLabel?: string;
+  /** Whether to prompt for confirmation before running the SQL, used when displayType === 'button' */
+  buttonConfirm?: boolean;
+  /** Message shown in the confirmation dialog, used when displayType === 'button' && buttonConfirm */
+  buttonConfirmMessage?: string;
 }
 
 /** A dashboard-level `{{NAME}}` variable, substituted into every widget's SQL alongside the built-ins. */
