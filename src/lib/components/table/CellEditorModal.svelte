@@ -37,6 +37,7 @@
     database?: string | null;
     tableName?: string;
     isForeignKey?: boolean;
+    rowContext?: Record<string, CellValue>;
   }
 
   let {
@@ -51,6 +52,7 @@
     database,
     tableName,
     isForeignKey = false,
+    rowContext,
   }: Props = $props();
 
   const { settings } = useSettings();
@@ -299,6 +301,7 @@
             database={database ?? null}
             table={tableName!}
             column={colName}
+            rowContext={rowContext ?? {}}
             onSelect={(v) => {
               textValue = v === null ? '' : String(v);
               showFkPicker = false;

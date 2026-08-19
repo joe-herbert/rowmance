@@ -770,6 +770,18 @@
     return rowMap ? rowMap.size > 0 : false;
   }
 
+  // Snapshot of all column values for a row, used to resolve polymorphic
+  // virtual relations (which pick a target based on a sibling "type" column).
+  function buildRowContext(rowKey: string, row: CellValue[]): Record<string, CellValue> {
+    return Object.fromEntries(
+      columns.map((c, i) => [c.name, getPendingValue(rowKey, c.name, row[i])]),
+    );
+  }
+
+  function buildNewRowContext(rowKey: string): Record<string, CellValue> {
+    return Object.fromEntries(pendingChanges.get(rowKey) ?? new Map());
+  }
+
   // ── Cell editor state ─────────────────────────────────────────────────────
 
   interface EditTarget {
@@ -784,6 +796,7 @@
     initialViewportLeft: number;
     width: number;
     height: number;
+    rowContext: Record<string, CellValue>;
   }
 
   let editTarget = $state<EditTarget | null>(null);
@@ -901,6 +914,7 @@
       initialViewportLeft: tdRect.left,
       width: Math.max(tdRect.width, 160),
       height: tdRect.height,
+      rowContext: buildRowContext(rowKey, row),
     };
   }
 
@@ -933,6 +947,7 @@
       initialViewportLeft: 0,
       width: 0,
       height: 0,
+      rowContext: buildRowContext(rowKey, row),
     };
   }
 
@@ -1066,6 +1081,7 @@
       initialViewportLeft: 0,
       width: 0,
       height: 0,
+      rowContext: target.rowContext,
     };
   }
 
@@ -1165,6 +1181,7 @@
           initialViewportLeft: tdRect.left,
           width: Math.max(tdRect.width, 160),
           height: tdRect.height,
+          rowContext: buildNewRowContext(nextRowKey),
         };
       });
       return;
@@ -1257,6 +1274,7 @@
         initialViewportLeft: tdRect.left,
         width: Math.max(tdRect.width, 160),
         height: tdRect.height,
+        rowContext: buildRowContext(nextRowKey, rowData),
       };
     });
   }
@@ -2602,6 +2620,7 @@
       initialViewportLeft: 0,
       width: 0,
       height: 0,
+      rowContext: buildRowContext(rowKey, row),
     };
     dismissContextMenu();
   }
@@ -2649,6 +2668,7 @@
       initialViewportLeft: tdRect.left,
       width: Math.max(tdRect.width, 160),
       height: tdRect.height,
+      rowContext: buildNewRowContext(newRowKey),
     };
   }
 
@@ -2688,6 +2708,7 @@
       initialViewportLeft: tdRect.left,
       width: Math.max(tdRect.width, 160),
       height: tdRect.height,
+      rowContext: buildNewRowContext(rowKey),
     };
   }
 
@@ -2713,6 +2734,7 @@
       initialViewportLeft: 0,
       width: 0,
       height: 0,
+      rowContext: buildNewRowContext(rowKey),
     };
     dismissContextMenu();
   }
@@ -4944,7 +4966,10 @@
       {database}
       {tableName}
       colName={editTarget.colName}
-      isForeignKey={columns[editTarget.colIndex]?.isForeignKey ?? false}
+      isForeignKey={isForeignKeyNavigable
+        ? isForeignKeyNavigable(editTarget.colName, editTarget.value, editTarget.rowContext)
+        : (columns[editTarget.colIndex]?.isForeignKey ?? false)}
+      rowContext={editTarget.rowContext}
     />
   {/if}
 </div>
@@ -4962,7 +4987,10 @@
     {connectionId}
     {database}
     {tableName}
-    isForeignKey={columns[modalTarget.colIndex]?.isForeignKey ?? false}
+    isForeignKey={isForeignKeyNavigable
+      ? isForeignKeyNavigable(modalTarget.colName, modalTarget.value, modalTarget.rowContext)
+      : (columns[modalTarget.colIndex]?.isForeignKey ?? false)}
+    rowContext={modalTarget.rowContext}
   />
 {/if}
 

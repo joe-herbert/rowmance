@@ -11,6 +11,7 @@
   import * as schemaApi from '$lib/tauri/schema';
   import { executeQuery } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
+  import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
   import { qi, tableRef, castToText, defaultDialectInfo } from '$lib/utils/dialect';
   import Spinner from '$lib/components/ui/Spinner.svelte';
 
@@ -21,12 +22,14 @@
     database: string | null;
     table: string;
     column: string;
+    rowContext?: Record<string, CellValue>;
     onSelect: (_value: CellValue) => void;
   }
 
-  let { connectionId, database, table, column, onSelect }: Props = $props();
+  let { connectionId, database, table, column, rowContext = {}, onSelect }: Props = $props();
 
   const connections = useConnections();
+  const vrStore = useVirtualRelations();
 
   // Column types not worth casting to text for search/preview (large binary blobs).
   const UNSEARCHABLE_TYPES = ['blob', 'binary', 'image', 'bytea'];
@@ -37,6 +40,9 @@
   }
 
   interface Target {
+    /** The relation may point at a different connection/database entirely. */
+    connectionId: string;
+    database: string;
     table: string;
     column: string;
     /** All searchable columns on the referenced table, target first. */
@@ -75,35 +81,89 @@
 
   let searchToken = 0;
 
-  async function resolveTarget(): Promise<Target | null> {
-    try {
-      const fks = await schemaApi.listForeignKeys(connectionId, database ?? '', table);
-      const fk = fks.find((f) => f.columns.includes(column));
-      if (!fk) return null;
+  interface RawTarget {
+    connectionId: string;
+    database: string;
+    table: string;
+    column: string;
+  }
+
+  /** Real FK first, then a virtual relation, then a polymorphic virtual relation. */
+  async function resolveRawTarget(): Promise<RawTarget | null> {
+    const fks = await schemaApi.listForeignKeys(connectionId, database ?? '', table);
+    const fk = fks.find((f) => f.columns.includes(column));
+    if (fk) {
       const idx = fk.columns.indexOf(column);
       const refCol = fk.referencedColumns[idx] ?? fk.referencedColumns[0];
-      if (!refCol) return null;
+      if (refCol) {
+        return {
+          connectionId,
+          database: database ?? '',
+          table: fk.referencedTable,
+          column: refCol,
+        };
+      }
+    }
 
-      const allColumns = await schemaApi.listColumns(
-        connectionId,
-        database ?? '',
-        fk.referencedTable,
-      );
+    const vr = vrStore.forwardFrom({ connectionId, database: database ?? '', table, column })[0];
+    if (vr) {
+      return {
+        connectionId: vr.to.connectionId,
+        database: vr.to.database,
+        table: vr.to.table,
+        column: vr.to.column,
+      };
+    }
+
+    const pvr = vrStore.findPolymorphicForValueColumn(connectionId, database ?? '', table, column);
+    if (pvr) {
+      const typeValue = String(rowContext[pvr.typeColumn] ?? '');
+      const mapping = pvr.mappings.find((m) => m.typeValue === typeValue);
+      if (mapping) {
+        return {
+          connectionId: mapping.to.connectionId,
+          database: mapping.to.database,
+          table: mapping.to.table,
+          column: mapping.to.column,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  async function resolveTarget(): Promise<Target | null> {
+    try {
+      const raw = await resolveRawTarget();
+      if (!raw) return null;
+
+      if (raw.connectionId !== connectionId && !connections.isActive(raw.connectionId)) {
+        await connections.connect(raw.connectionId);
+      }
+
+      const allColumns = await schemaApi.listColumns(raw.connectionId, raw.database, raw.table);
       const searchColumns = [
-        refCol,
+        raw.column,
         ...allColumns
-          .filter((c) => c.name !== refCol && isSearchable(c.dataType))
+          .filter((c) => c.name !== raw.column && isSearchable(c.dataType))
           .map((c) => c.name),
       ];
       const previewColumns = [
-        refCol,
+        raw.column,
         ...allColumns
-          .filter((c) => c.name !== refCol && isSearchable(c.dataType))
+          .filter((c) => c.name !== raw.column && isSearchable(c.dataType))
           .slice(0, 5)
           .map((c) => c.name),
       ];
 
-      return { table: fk.referencedTable, column: refCol, searchColumns, previewColumns };
+      return {
+        connectionId: raw.connectionId,
+        database: raw.database,
+        table: raw.table,
+        column: raw.column,
+        searchColumns,
+        previewColumns,
+      };
     } catch {
       return null;
     }
@@ -116,8 +176,8 @@
     loading = true;
     error = null;
 
-    const d = connections.getById(connectionId)?.dialectInfo ?? defaultDialectInfo;
-    const qTable = tableRef(database ?? '', resolvedTarget.table, d);
+    const d = connections.getById(resolvedTarget.connectionId)?.dialectInfo ?? defaultDialectInfo;
+    const qTable = tableRef(resolvedTarget.database, resolvedTarget.table, d);
     const qPreviewCols = resolvedTarget.previewColumns.map((c) => qi(c, d));
     const qTargetCol = qi(resolvedTarget.column, d);
 
@@ -149,7 +209,13 @@
       : `SELECT ${qPreviewCols.join(', ')} FROM ${qTable} ${where} ORDER BY ${qTargetCol} LIMIT 50`.trim();
 
     try {
-      const result = await executeQuery(connectionId, sql, 1, 50, database ?? null);
+      const result = await executeQuery(
+        resolvedTarget.connectionId,
+        sql,
+        1,
+        50,
+        resolvedTarget.database,
+      );
       if (token !== searchToken) return;
       if (result.error) {
         error = result.error;
@@ -174,7 +240,7 @@
     target = await resolveTarget();
     if (!target) {
       loading = false;
-      error = 'No foreign key found for this column';
+      error = 'No related table found for this column';
       return;
     }
     await runSearch('');

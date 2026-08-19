@@ -41,6 +41,7 @@
     colName?: string;
     tableName?: string;
     isForeignKey?: boolean;
+    rowContext?: Record<string, CellValue>;
   }
 
   let {
@@ -65,6 +66,7 @@
     colName,
     tableName,
     isForeignKey = false,
+    rowContext,
   }: Props = $props();
 
   const canPickForeignKey = $derived(isForeignKey && !!connectionId && !!tableName && !!colName);
@@ -567,6 +569,7 @@
         database={database ?? null}
         table={tableName!}
         column={colName!}
+        rowContext={rowContext ?? {}}
         onSelect={(v) => {
           textValue = v === null ? '' : String(v);
           showFkPicker = false;
