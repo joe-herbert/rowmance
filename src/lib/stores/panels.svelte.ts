@@ -536,10 +536,6 @@ export function usePanels() {
       if (content.kind === 'query_editor' && !content.editorId) {
         content = { ...content, editorId: createId() };
       }
-      if (content.kind === 'table_browser' && content.initialFilter) {
-        clearTableFilterCache(`${content.connectionId}:${content.database}:${content.table}`);
-      }
-
       if (content.kind !== 'empty') {
         // If already visible in some split, focus that split and switch to the tab
         const existingSplitId = findSplitForContent(content);
@@ -550,6 +546,7 @@ export function usePanels() {
             const newItems = [...state.openItems];
             // Update the content so initialFilter propagates
             if (content.kind === 'table_browser' && content.initialFilter) {
+              clearTableFilterCache(`item:${newItems[itemIdx].id}`);
               newItems[itemIdx] = { ...newItems[itemIdx], content };
             }
             setSplitState(existingSplitId, {
@@ -612,10 +609,6 @@ export function usePanels() {
       if (content.kind === 'query_editor' && !content.editorId) {
         content = { ...content, editorId: createId() };
       }
-      if (content.kind === 'table_browser' && content.initialFilter) {
-        clearTableFilterCache(`${content.connectionId}:${content.database}:${content.table}`);
-      }
-
       if (content.kind !== 'empty') {
         const allowDuplicate =
           (content.kind === 'table_browser' && !content.initialFilter) ||
@@ -624,6 +617,13 @@ export function usePanels() {
         if (!allowDuplicate) {
           const existingSplitId = findSplitForContent(content);
           if (existingSplitId) {
+            if (content.kind === 'table_browser' && content.initialFilter) {
+              const existingState = getSplitState(existingSplitId);
+              const existingItem = existingState.openItems.find((i) =>
+                sameContent(i.content, content),
+              );
+              if (existingItem) clearTableFilterCache(`item:${existingItem.id}`);
+            }
             focusedSplitIdState = existingSplitId;
             return;
           }
@@ -683,7 +683,10 @@ export function usePanels() {
       const state = getSplitState(focusedSplitIdState);
       const items = state.openItems;
       if (items.length === 0) return;
-      const current = Math.max(0, items.findIndex((i) => i.id === state.focusedItemId));
+      const current = Math.max(
+        0,
+        items.findIndex((i) => i.id === state.focusedItemId),
+      );
       const next = items[(current + 1) % items.length];
       setSplitState(focusedSplitIdState, {
         ...state,
@@ -697,7 +700,10 @@ export function usePanels() {
       const state = getSplitState(focusedSplitIdState);
       const items = state.openItems;
       if (items.length === 0) return;
-      const current = Math.max(0, items.findIndex((i) => i.id === state.focusedItemId));
+      const current = Math.max(
+        0,
+        items.findIndex((i) => i.id === state.focusedItemId),
+      );
       const prev = items[(current - 1 + items.length) % items.length];
       setSplitState(focusedSplitIdState, {
         ...state,

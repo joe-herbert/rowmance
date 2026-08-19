@@ -200,6 +200,10 @@
 
   const PAGE_SIZE = $derived(settings.settings.pageSize);
   const liveKey = $derived(`${connectionId}:${database}:${table}`);
+  // Filter/search/page state is per-tab, not shared across tabs viewing the same table.
+  const filterCacheKey = $derived(
+    itemId ? `item:${itemId}` : `${connectionId}:${database}:${table}`,
+  );
 
   function toggleLive(): void {
     liveView.toggleTableLive(liveKey, {
@@ -218,7 +222,7 @@
   let page = $state(1);
   let filterEditorState = $state<FilterEditorState>(
     untrack(() => {
-      const saved = tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`);
+      const saved = tableBrowserFilterCache.get(filterCacheKey);
       if (saved) return saved.filterEditorState;
       return initialFilter?.trim()
         ? { mode: 'sql', groupJunction: 'AND', groups: [], sql: initialFilter }
@@ -997,7 +1001,7 @@
     const _filter = initialFilter;
 
     const cacheKey = `${_conn}:${_db}:${_tbl}`;
-    const saved = tableBrowserFilterCache.get(cacheKey);
+    const saved = tableBrowserFilterCache.get(filterCacheKey);
 
     if (saved) {
       filterEditorState = saved.filterEditorState;
@@ -1106,20 +1110,16 @@
   // ── Local search ──────────────────────────────────────────────────────────
 
   let showLocalSearch = $state(
-    untrack(
-      () => !!tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm,
-    ),
+    untrack(() => !!tableBrowserFilterCache.get(filterCacheKey)?.searchTerm),
   );
   let localSearchTerm = $state(
-    untrack(
-      () => tableBrowserFilterCache.get(`${connectionId}:${database}:${table}`)?.searchTerm ?? '',
-    ),
+    untrack(() => tableBrowserFilterCache.get(filterCacheKey)?.searchTerm ?? ''),
   );
   let localSearchInputEl = $state<HTMLInputElement | null>(null);
 
   // Persist filter, search, and page state so it survives tab switches (remounts).
   $effect(() => {
-    const key = `${connectionId}:${database}:${table}`;
+    const key = filterCacheKey;
     const snapshot = $state.snapshot({ filterEditorState, searchTerm: localSearchTerm, page });
     untrack(() => {
       tableBrowserFilterCache.set(key, {
@@ -1890,9 +1890,7 @@
                 }}
               >
                 <span class="live-dot-slot" aria-hidden="true">
-                  <span
-                    class="live-dot"
-                    class:live-dot--active={liveView.isTableLive(liveKey)}
+                  <span class="live-dot" class:live-dot--active={liveView.isTableLive(liveKey)}
                   ></span>
                 </span>
                 <span>Live</span>
