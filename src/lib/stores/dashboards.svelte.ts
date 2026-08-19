@@ -240,6 +240,21 @@ export function useDashboards() {
       void persist(dashboardId);
     },
 
+    duplicateWidget(dashboardId: string, widgetId: string): DashboardWidget | undefined {
+      const existing = dashboards.find((d) => d.id === dashboardId);
+      const source = existing?.widgets.find((w) => w.id === widgetId);
+      if (!existing || !source) return undefined;
+      const pos = findFreePosition(existing.widgets, source.w, source.h);
+      const newWidget: DashboardWidget = { ...source, id: crypto.randomUUID(), ...pos };
+      dashboards = dashboards.map((d) =>
+        d.id === dashboardId
+          ? { ...d, widgets: [...d.widgets, newWidget], updatedAt: new Date().toISOString() }
+          : d,
+      );
+      void persist(dashboardId);
+      return newWidget;
+    },
+
     deleteWidget(dashboardId: string, widgetId: string) {
       dashboards = dashboards.map((d) =>
         d.id === dashboardId

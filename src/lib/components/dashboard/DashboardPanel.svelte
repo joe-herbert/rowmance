@@ -607,6 +607,7 @@
               dashboardVariables={dashboard?.variables ?? []}
               {editMode}
               onEdit={() => (editingWidget = widget)}
+              onDuplicate={() => dashboardsStore.duplicateWidget(dashboardId, widget.id)}
               onDelete={() => handleDeleteWidget(widget.id)}
               onDragStart={(e) => startDrag(widget.id, e)}
               onResizeStart={(e) => startResize(widget.id, e)}

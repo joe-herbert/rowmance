@@ -11,6 +11,7 @@
   import { tableSchemaCache } from '$lib/stores/tableDataCache';
   import DragHandleIcon from '$lib/components/icons/DragHandleIcon.svelte';
   import EditIcon from '$lib/components/icons/EditIcon.svelte';
+  import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
   import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
   import ExternalLinkIcon from '$lib/components/icons/ExternalLinkIcon.svelte';
   import RotateCcwIcon from '$lib/components/icons/RotateCcwIcon.svelte';
@@ -31,6 +32,7 @@
     dashboardVariables: DashboardVariable[];
     editMode: boolean;
     onEdit: () => void;
+    onDuplicate: () => void;
     onDelete: () => void;
     onDragStart?: (_e: PointerEvent) => void;
     onResizeStart?: (_e: PointerEvent) => void;
@@ -43,6 +45,7 @@
     dashboardVariables,
     editMode,
     onEdit,
+    onDuplicate,
     onDelete,
     onDragStart,
     onResizeStart,
@@ -464,6 +467,9 @@
           <button class="action-btn" onclick={onEdit} title="Edit widget" type="button">
             <EditIcon width={12} height={12} strokeWidth={2} />
           </button>
+          <button class="action-btn" onclick={onDuplicate} title="Duplicate widget" type="button">
+            <CopyIcon width={12} height={12} />
+          </button>
           <button
             class="action-btn action-btn--danger"
             onclick={onDelete}
@@ -647,12 +653,7 @@
       {/if}
     {:else if widget.displayType === 'button'}
       <div class="button-display">
-        <button
-          class="run-btn"
-          onclick={handleButtonClick}
-          disabled={running}
-          type="button"
-        >
+        <button class="run-btn" onclick={handleButtonClick} disabled={running} type="button">
           {#if running}
             <Spinner size={13} />
           {/if}
