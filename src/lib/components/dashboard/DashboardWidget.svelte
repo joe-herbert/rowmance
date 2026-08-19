@@ -265,26 +265,28 @@
 
   const chartMax = $derived(Math.max(...chartData.map((p) => p.value), 0) || 1);
 
-  const CHART_H = 140;
   const CHART_PAD_LEFT = 36;
   const CHART_PAD_BOTTOM = 24;
 
-  function barPoints(idx: number, total: number, chartWidth: number) {
+  function barPoints(idx: number, total: number, chartWidth: number, chartHeight: number) {
     const usableW = chartWidth - CHART_PAD_LEFT;
     const barW = Math.max(4, usableW / total - 4);
     const x = CHART_PAD_LEFT + idx * (usableW / total) + (usableW / total - barW) / 2;
-    const barH = ((chartData[idx]?.value ?? 0) / chartMax) * (CHART_H - CHART_PAD_BOTTOM - 10);
-    const y = CHART_H - CHART_PAD_BOTTOM - barH;
+    const barH =
+      ((chartData[idx]?.value ?? 0) / chartMax) * (chartHeight - CHART_PAD_BOTTOM - 10);
+    const y = chartHeight - CHART_PAD_BOTTOM - barH;
     return { x, y, w: barW, h: barH };
   }
 
-  function linePath(chartWidth: number): string {
+  function linePath(chartWidth: number, chartHeight: number): string {
     if (chartData.length === 0) return '';
     const usableW = chartWidth - CHART_PAD_LEFT;
     const pts = chartData.map((p, i) => {
       const x = CHART_PAD_LEFT + (i / Math.max(chartData.length - 1, 1)) * usableW;
       const y =
-        CHART_H - CHART_PAD_BOTTOM - (p.value / chartMax) * (CHART_H - CHART_PAD_BOTTOM - 10);
+        chartHeight -
+        CHART_PAD_BOTTOM -
+        (p.value / chartMax) * (chartHeight - CHART_PAD_BOTTOM - 10);
       return `${x},${y}`;
     });
     return `M ${pts.join(' L ')}`;
@@ -292,11 +294,15 @@
 
   let chartEl = $state<SVGSVGElement | undefined>(undefined);
   let chartWidth = $state(300);
+  let chartHeight = $state(140);
 
   $effect(() => {
     if (!chartEl) return;
     const ro = new ResizeObserver((entries) => {
-      chartWidth = entries[0]?.contentRect.width ?? 300;
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      chartWidth = rect.width;
+      chartHeight = rect.height;
     });
     ro.observe(chartEl);
     return () => ro.disconnect();
@@ -499,13 +505,14 @@
             bind:this={chartEl}
             class="chart-svg"
             width="100%"
-            height={CHART_H}
-            viewBox="0 0 {chartWidth} {CHART_H}"
+            height="100%"
+            viewBox="0 0 {chartWidth} {chartHeight}"
             aria-label="{widget.title} chart"
           >
             <!-- Y-axis ticks -->
             {#each [0, 0.25, 0.5, 0.75, 1] as frac}
-              {@const y = CHART_H - CHART_PAD_BOTTOM - frac * (CHART_H - CHART_PAD_BOTTOM - 10)}
+              {@const y =
+                chartHeight - CHART_PAD_BOTTOM - frac * (chartHeight - CHART_PAD_BOTTOM - 10)}
               <line x1={CHART_PAD_LEFT} y1={y} x2={chartWidth} y2={y} class="grid-line" />
               <text x={CHART_PAD_LEFT - 4} y={y + 4} class="axis-label" text-anchor="end">
                 {formatYTick(frac * chartMax)}
@@ -514,11 +521,11 @@
 
             {#if widget.displayType === 'bar_chart'}
               {#each chartData as point, i}
-                {@const b = barPoints(i, chartData.length, chartWidth)}
+                {@const b = barPoints(i, chartData.length, chartWidth, chartHeight)}
                 <rect x={b.x} y={b.y} width={b.w} height={b.h} class="bar" rx="2" />
                 <text
                   x={b.x + b.w / 2}
-                  y={CHART_H - CHART_PAD_BOTTOM + 14}
+                  y={chartHeight - CHART_PAD_BOTTOM + 14}
                   class="axis-label"
                   text-anchor="middle"
                 >
@@ -528,10 +535,10 @@
             {:else}
               <!-- Line chart area fill -->
               {#if chartData.length > 1}
-                {@const pathD = linePath(chartWidth)}
+                {@const pathD = linePath(chartWidth, chartHeight)}
                 {@const firstX = CHART_PAD_LEFT}
                 {@const lastX = chartWidth}
-                {@const baseY = CHART_H - CHART_PAD_BOTTOM}
+                {@const baseY = chartHeight - CHART_PAD_BOTTOM}
                 <path d="{pathD} L {lastX},{baseY} L {firstX},{baseY} Z" class="line-area" />
                 <path d={pathD} class="line-path" />
               {/if}
@@ -541,14 +548,14 @@
                   CHART_PAD_LEFT +
                   (i / Math.max(chartData.length - 1, 1)) * (chartWidth - CHART_PAD_LEFT)}
                 {@const y =
-                  CHART_H -
+                  chartHeight -
                   CHART_PAD_BOTTOM -
-                  (point.value / chartMax) * (CHART_H - CHART_PAD_BOTTOM - 10)}
+                  (point.value / chartMax) * (chartHeight - CHART_PAD_BOTTOM - 10)}
                 <circle cx={x} cy={y} r="3" class="line-dot" />
                 {#if i % Math.ceil(chartData.length / 8) === 0}
                   <text
                     {x}
-                    y={CHART_H - CHART_PAD_BOTTOM + 14}
+                    y={chartHeight - CHART_PAD_BOTTOM + 14}
                     class="axis-label"
                     text-anchor="middle"
                   >
@@ -561,9 +568,9 @@
             <!-- X axis -->
             <line
               x1={CHART_PAD_LEFT}
-              y1={CHART_H - CHART_PAD_BOTTOM}
+              y1={chartHeight - CHART_PAD_BOTTOM}
               x2={chartWidth}
-              y2={CHART_H - CHART_PAD_BOTTOM}
+              y2={chartHeight - CHART_PAD_BOTTOM}
               class="axis-line"
             />
           </svg>
