@@ -938,7 +938,11 @@
             title={dashboard.name}
             type="button"
           >
-            <span class="pinned-dash-icon" aria-hidden="true">{@html dashboard.icon}</span>
+            <span
+              class="pinned-dash-icon"
+              aria-hidden="true"
+              style:color={dashboard.color || undefined}>{@html dashboard.icon}</span
+            >
             <span class="pinned-dash-name">{dashboard.name}</span>
           </button>
         {/each}

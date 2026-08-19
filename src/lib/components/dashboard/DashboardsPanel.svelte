@@ -225,6 +225,7 @@
               <button
                 class="pin-btn"
                 class:pin-btn--active={isPinned}
+                style:color={isPinned ? dashboard.color || undefined : undefined}
                 onclick={() => dashboardsStore.togglePin(dashboard.id)}
                 title={isPinned
                   ? 'Unpin from title bar'
