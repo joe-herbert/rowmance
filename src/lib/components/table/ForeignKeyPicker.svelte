@@ -7,7 +7,7 @@
   returns the target column's value.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import * as schemaApi from '$lib/tauri/schema';
   import { executeQuery } from '$lib/tauri/query';
   import { useConnections } from '$lib/stores/connections.svelte';
@@ -52,6 +52,26 @@
   let focusedIndex = $state(-1);
   let target = $state<Target | null>(null);
   let inputEl = $state<HTMLInputElement | null>(null);
+  let headerRowEl = $state<HTMLTableRowElement | null>(null);
+
+  // Each <th> is its own sticky element, so a background *gradient* set directly
+  // on `.fk-picker-th` would restart at each cell instead of spanning the row.
+  // Instead we measure the header row once rendered and give every cell a
+  // background-size matching the full row width plus a background-position
+  // offset by its own left edge, so together they show one continuous slice.
+  let headerBgSize = $state('100% 100%');
+  let headerBgOffsets = $state<number[]>([]);
+
+  async function measureHeaderGradient(): Promise<void> {
+    await tick();
+    requestAnimationFrame(() => {
+      if (!headerRowEl) return;
+      const totalWidth = headerRowEl.scrollWidth;
+      const cells = Array.from(headerRowEl.children) as HTMLElement[];
+      headerBgSize = `${totalWidth}px 100%`;
+      headerBgOffsets = cells.map((cell) => cell.offsetLeft);
+    });
+  }
 
   let searchToken = 0;
 
@@ -145,6 +165,7 @@
     if (token === searchToken) {
       loading = false;
       focusedIndex = results.length > 0 ? 0 : -1;
+      await measureHeaderGradient();
     }
   }
 
@@ -212,9 +233,15 @@
     {:else}
       <table class="fk-picker-table">
         <thead>
-          <tr>
+          <tr bind:this={headerRowEl}>
             {#each target?.previewColumns ?? [] as colName, ci (colName)}
-              <th class="fk-picker-th" class:fk-picker-th-target={ci === 0}>{colName}</th>
+              <th
+                class="fk-picker-th"
+                class:fk-picker-th-target={ci === 0}
+                style="background-size: {headerBgSize}; background-position: {-(
+                  headerBgOffsets[ci] ?? 0
+                )}px 0;">{colName}</th
+              >
             {/each}
           </tr>
         </thead>
@@ -303,9 +330,8 @@
     font-size: 11px;
     font-weight: var(--font-weight-semibold);
     color: var(--color-text-secondary);
-    /* Flat color, not the app-wide gradient var — a gradient repeats per sticky
-       cell instead of spanning the row, making columns look like separate chips. */
-    background: var(--color-bg-active);
+    background-image: var(--color-table-header-bg);
+    background-repeat: no-repeat;
     border-bottom: 1px solid var(--color-border-strong);
     text-align: left;
     white-space: nowrap;
