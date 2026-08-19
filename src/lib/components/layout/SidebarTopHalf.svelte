@@ -4,7 +4,7 @@
   Multiple splits: group headers per split with items beneath.
 -->
 <script lang="ts">
-  import { usePanels, sameContent, dirtyKeyForContent } from '$lib/stores/panels.svelte';
+  import { usePanels, dirtyKeyForContent } from '$lib/stores/panels.svelte';
   import type { OpenItem } from '$lib/stores/panels.svelte';
   import { useTabDrag } from '$lib/stores/tabDragState.svelte';
   import { useConnections } from '$lib/stores/connections.svelte';
@@ -48,6 +48,7 @@
   // For global header: show total items and new query button
   const allOpenItems = $derived(panelStore.openItems);
   const focusedContent = $derived(panelStore.focusedPanel.content);
+  const focusedItemId = $derived(panelStore.getSplitFocusedItemId(panelStore.focusedSplitId));
   const hasFocusedConnection = $derived(
     focusedContent !== undefined && 'connectionId' in focusedContent,
   );
@@ -287,8 +288,7 @@
           aria-label="Open panels"
         >
           {#each allOpenItems as item (item.id)}
-            {@const isFocused =
-              focusedContent !== undefined && sameContent(focusedContent, item.content)}
+            {@const isFocused = item.id === focusedItemId}
             {@const connInfo = panelConnInfo(item.content)}
             {#if dropTarget?.id === item.id && dropTarget.position === 'before'}
               <div class="drop-indicator" aria-hidden="true"></div>
