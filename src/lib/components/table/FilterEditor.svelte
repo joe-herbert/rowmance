@@ -692,6 +692,9 @@
                       value={rule.rawSql}
                       oninput={(e) =>
                         updateRuleRawSql(group.id, rule.id, (e.target as HTMLInputElement).value)}
+                      onkeydown={(e) => {
+                        if (e.key === 'Enter') applyFilter();
+                      }}
                       aria-label="Raw SQL condition"
                       autocomplete="off"
                       autocapitalize="off"
@@ -748,6 +751,9 @@
                               rule.id,
                               (e.target as HTMLInputElement).value,
                             )}
+                          onkeydown={(e) => {
+                            if (e.key === 'Enter') applyFilter();
+                          }}
                           placeholder="expression"
                           aria-label="Filter value expression"
                           autocomplete="off"
@@ -815,6 +821,9 @@
                                   rule.id,
                                   (e.target as HTMLInputElement).value,
                                 )}
+                              onkeydown={(e) => {
+                                if (e.key === 'Enter') applyFilter();
+                              }}
                               aria-label="Filter value"
                               autocomplete="off"
                               autocapitalize="off"
@@ -850,6 +859,9 @@
                                 rule.id,
                                 (e.target as HTMLInputElement).value,
                               )}
+                            onkeydown={(e) => {
+                              if (e.key === 'Enter') applyFilter();
+                            }}
                             aria-label="Filter value"
                             autocomplete="off"
                             autocapitalize="off"
