@@ -109,6 +109,14 @@
      * page client-side.
      */
     onSort?: (_colName: string, _dir: SortDir) => void;
+    /**
+     * The sort currently applied by the parent's query, used to seed the
+     * sort-arrow display. DataTable can remount (e.g. on page change) while
+     * the parent's sort stays in effect, so this must come from a prop rather
+     * than being derived purely from local state.
+     */
+    initialSortColumn?: string | null;
+    initialSortDir?: SortDir;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -218,6 +226,8 @@
     searchTerm = '',
     highlightEnabled = true,
     onSort,
+    initialSortColumn = null,
+    initialSortDir = 'none',
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -340,8 +350,10 @@
 
   // ── Sort state ────────────────────────────────────────────────────────────
 
-  let sortColIndex = $state(-1);
-  let sortDir = $state<SortDir>('none');
+  let sortColIndex = $state(
+    untrack(() => (initialSortColumn ? columns.findIndex((c) => c.name === initialSortColumn) : -1)),
+  );
+  let sortDir = $state<SortDir>(untrack(() => (sortColIndex === -1 ? 'none' : initialSortDir)));
 
   function toggleSort(originalIndex: number): void {
     if (sortColIndex !== originalIndex) {

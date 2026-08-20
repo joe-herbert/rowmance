@@ -2264,6 +2264,8 @@
           pageSize={PAGE_SIZE}
           bind:pageIndex={dtPageIndex}
           onSort={handleSort}
+          initialSortColumn={sortColumn}
+          initialSortDir={sortColumn ? sortDirection : 'none'}
           editable={!connectionReadOnly}
           {hiddenColumns}
           {addRowTrigger}
