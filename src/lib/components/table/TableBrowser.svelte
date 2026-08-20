@@ -1010,6 +1010,8 @@
       localSearchTerm = saved.searchTerm;
       showLocalSearch = !!saved.searchTerm;
       page = saved.page ?? 1;
+      sortColumn = saved.sortColumn ?? null;
+      sortDirection = saved.sortDirection ?? 'asc';
     } else {
       page = 1;
       filterEditorState = _filter?.trim()
@@ -1017,11 +1019,11 @@
         : emptyFilterState();
       localSearchTerm = '';
       showLocalSearch = false;
+      sortColumn = null;
+      sortDirection = 'asc';
     }
     showFilterEditor = false;
     showColumnPicker = false;
-    sortColumn = null;
-    sortDirection = 'asc';
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
     untrack(() => {
       const cached = tableDataCache.get(cacheKey);
@@ -1124,12 +1126,20 @@
   // Persist filter, search, and page state so it survives tab switches (remounts).
   $effect(() => {
     const key = filterCacheKey;
-    const snapshot = $state.snapshot({ filterEditorState, searchTerm: localSearchTerm, page });
+    const snapshot = $state.snapshot({
+      filterEditorState,
+      searchTerm: localSearchTerm,
+      page,
+      sortColumn,
+      sortDirection,
+    });
     untrack(() => {
       tableBrowserFilterCache.set(key, {
         filterEditorState: snapshot.filterEditorState,
         searchTerm: snapshot.searchTerm,
         page: snapshot.page,
+        sortColumn: snapshot.sortColumn,
+        sortDirection: snapshot.sortDirection,
       });
     });
   });

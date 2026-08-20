@@ -350,10 +350,21 @@
 
   // ── Sort state ────────────────────────────────────────────────────────────
 
-  let sortColIndex = $state(
-    untrack(() => (initialSortColumn ? columns.findIndex((c) => c.name === initialSortColumn) : -1)),
-  );
-  let sortDir = $state<SortDir>(untrack(() => (sortColIndex === -1 ? 'none' : initialSortDir)));
+  let sortColIndex = $state(-1);
+  let sortDir = $state<SortDir>('none');
+
+  // Seeds (and re-syncs) the sort-arrow display from the parent's applied sort.
+  // Runs as an $effect rather than a one-time init because the parent may
+  // only populate initialSortColumn/initialSortDir asynchronously — e.g.
+  // restoring it from a cache after this component has already mounted (such
+  // as when switching back to a tab) — so a plain $state(untrack(...)) seed
+  // would capture the stale pre-restore value and never update.
+  $effect(() => {
+    const col = initialSortColumn;
+    const dir = initialSortDir;
+    sortColIndex = col ? columns.findIndex((c) => c.name === col) : -1;
+    sortDir = sortColIndex === -1 ? 'none' : dir;
+  });
 
   function toggleSort(originalIndex: number): void {
     if (sortColIndex !== originalIndex) {

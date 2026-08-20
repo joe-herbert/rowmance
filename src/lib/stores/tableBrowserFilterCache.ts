@@ -38,6 +38,8 @@ type SavedFilterState = {
   filterEditorState: FilterEditorState;
   searchTerm: string;
   page?: number;
+  sortColumn?: string | null;
+  sortDirection?: 'asc' | 'desc';
 };
 
 export const tableBrowserFilterCache = new Map<string, SavedFilterState>();
