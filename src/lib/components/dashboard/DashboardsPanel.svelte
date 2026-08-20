@@ -410,6 +410,7 @@
   .action-btn--primary:hover:not(:disabled) {
     opacity: 0.9;
     color: #fff;
+    background: var(--color-accent-hover);
   }
 
   .action-btn--primary:disabled {
