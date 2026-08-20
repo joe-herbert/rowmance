@@ -7,7 +7,7 @@
 // keeping it here lets Live mode keep polling and toasting in the background,
 // writing results into the same tableDataCache/queryEditorCache the
 // components already read from on mount.
-import { fetchTableSnapshot } from '$lib/utils/tableSnapshot';
+import { fetchTableSnapshot, type OrderBy } from '$lib/utils/tableSnapshot';
 import { executeMultiQuery } from '$lib/tauri/query';
 import { stripLineComments } from '$lib/utils/sql';
 import { queryEditorCache } from '$lib/stores/queryEditorState';
@@ -24,6 +24,7 @@ export interface TableLiveParams {
   getDialect: () => DialectInfo | undefined;
   getFilterState: () => FilterEditorState;
   getSearchTerm: () => string;
+  getOrderBy?: () => OrderBy | null;
   getPage: () => number;
   getPageSize: () => number;
 }
@@ -181,6 +182,7 @@ async function pollTable(key: string): Promise<void> {
       dialect: params.getDialect(),
       filterEditorState: params.getFilterState(),
       searchTerm: params.getSearchTerm(),
+      orderBy: params.getOrderBy?.() ?? null,
       page: params.getPage(),
       pageSize: params.getPageSize(),
       previousTotalRows: null,

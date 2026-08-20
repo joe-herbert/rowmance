@@ -13,6 +13,11 @@ import { useVirtualRelations } from '$lib/stores/virtualRelations.svelte';
 import { tableSchemaCache, tableDataCache } from '$lib/stores/tableDataCache';
 import type { DialectInfo, QueryResult, ColumnInfo, IndexInfo, ForeignKeyInfo } from '$lib/types';
 
+export interface OrderBy {
+  column: string;
+  direction: 'asc' | 'desc';
+}
+
 export interface TableSnapshotParams {
   connectionId: string;
   database: string;
@@ -21,6 +26,7 @@ export interface TableSnapshotParams {
   dialect: DialectInfo | undefined;
   filterEditorState: FilterEditorState;
   searchTerm: string;
+  orderBy?: OrderBy | null;
   page: number;
   pageSize: number;
   previousTotalRows?: number | null;
@@ -73,8 +79,9 @@ export function buildTableSnapshotSql(params: {
   filterEditorState: FilterEditorState;
   searchTerm: string;
   knownColumns: ColumnInfo[];
+  orderBy?: OrderBy | null;
 }): string {
-  const { table, database, dialect, filterEditorState, searchTerm, knownColumns } = params;
+  const { table, database, dialect, filterEditorState, searchTerm, knownColumns, orderBy } = params;
   const quoteIdentifier = (name: string) => quoteIdentifierFor(name, dialect);
   const quotedTable = quoteIdentifier(table);
   const tblTarget = dialect?.usesSchema ? `${quoteIdentifier(database)}.${quotedTable}` : quotedTable;
@@ -88,6 +95,9 @@ export function buildTableSnapshotSql(params: {
     if (searchWhere) conditions.push(searchWhere);
   }
   if (conditions.length > 0) base += ` WHERE ${conditions.join(' AND ')}`;
+  if (orderBy) {
+    base += ` ORDER BY ${quoteIdentifier(orderBy.column)} ${orderBy.direction === 'desc' ? 'DESC' : 'ASC'}`;
+  }
   return base;
 }
 
@@ -104,6 +114,7 @@ export async function fetchTableSnapshot(params: TableSnapshotParams): Promise<T
     dialect,
     filterEditorState,
     searchTerm,
+    orderBy = null,
     page,
     pageSize,
     previousTotalRows = null,
@@ -135,7 +146,15 @@ export async function fetchTableSnapshot(params: TableSnapshotParams): Promise<T
       });
 
   const knownColumns = cachedSchema?.columns ?? [];
-  const sql = buildTableSnapshotSql({ table, database, dialect, filterEditorState, searchTerm, knownColumns });
+  const sql = buildTableSnapshotSql({
+    table,
+    database,
+    dialect,
+    filterEditorState,
+    searchTerm,
+    knownColumns,
+    orderBy,
+  });
 
   const [queryResult, schema, countResult] = await Promise.all([
     executeQuery(connectionId, sql, page, pageSize, database, instanceDb),

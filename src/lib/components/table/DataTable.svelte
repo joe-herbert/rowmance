@@ -103,6 +103,12 @@
     onHideColumn?: (_colName: string) => void;
     searchTerm?: string;
     highlightEnabled?: boolean;
+    /**
+     * When provided, sorting is delegated to the parent (e.g. to re-query the
+     * whole table with ORDER BY) instead of sorting only the currently loaded
+     * page client-side.
+     */
+    onSort?: (_colName: string, _dir: SortDir) => void;
   }
 
   // ── Pure helper functions (exported for tests) ────────────────────────────
@@ -211,6 +217,7 @@
     onHideColumn,
     searchTerm = '',
     highlightEnabled = true,
+    onSort,
   }: Props = $props();
 
   // ── Column order (drag-to-reorder) ───────────────────────────────────────
@@ -347,6 +354,7 @@
       sortColIndex = -1;
     }
     pageIndex = 0;
+    onSort?.(columns[originalIndex]?.name ?? '', sortDir);
   }
 
   // ── Filter state ──────────────────────────────────────────────────────────
@@ -583,7 +591,10 @@
   // ── Derived: sorted + filtered rows ──────────────────────────────────────
 
   const processedRows = $derived.by(() => {
-    const sorted = sortRows(rows, sortColIndex, sortDir);
+    // When onSort is set, the parent re-queries the whole table with ORDER BY,
+    // so `rows` already arrives sorted — sorting here would only reorder the
+    // current page instead of the full table.
+    const sorted = onSort ? rows : sortRows(rows, sortColIndex, sortDir);
     return filterRows(sorted, filterValues);
   });
 

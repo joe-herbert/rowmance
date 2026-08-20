@@ -214,6 +214,7 @@
       getDialect: () => dialect,
       getFilterState: () => filterEditorState,
       getSearchTerm: () => localSearchTerm,
+      getOrderBy: () => (sortColumn ? { column: sortColumn, direction: sortDirection } : null),
       getPage: () => page,
       getPageSize: () => PAGE_SIZE,
     });
@@ -962,6 +963,7 @@
         dialect,
         filterEditorState,
         searchTerm: localSearchTerm,
+        orderBy: sortColumn ? { column: sortColumn, direction: sortDirection } : null,
         page: untrack(() => page),
         pageSize: PAGE_SIZE,
         previousTotalRows: result?.totalRows ?? null,
@@ -1018,6 +1020,8 @@
     }
     showFilterEditor = false;
     showColumnPicker = false;
+    sortColumn = null;
+    sortDirection = 'asc';
     noPkWarnDismissed = localStorage.getItem(NO_PK_WARN_KEY) === 'true';
     untrack(() => {
       const cached = tableDataCache.get(cacheKey);
@@ -1532,6 +1536,24 @@
   function handleDtPageInfo(info: PageInfo): void {
     dtPageInfo = info;
     dtPageIndex = info.pageIndex;
+  }
+
+  // ── Sort state ────────────────────────────────────────────────────────────
+  // Sorting re-queries the whole table with ORDER BY rather than sorting only
+  // the currently loaded page client-side.
+
+  let sortColumn = $state<string | null>(null);
+  let sortDirection = $state<'asc' | 'desc'>('asc');
+
+  function handleSort(colName: string, dir: 'asc' | 'desc' | 'none'): void {
+    sortColumn = dir === 'none' ? null : colName;
+    sortDirection = dir === 'desc' ? 'desc' : 'asc';
+    page = 1;
+    // background=true keeps DataTable mounted during the refetch — a plain
+    // load() flips isLoading, which unmounts/remounts DataTable via the
+    // {#if isLoading}/{:else if result} template and wipes its local sort
+    // arrow state, making every click look like the first click.
+    load(true);
   }
 
   // ── Table browser ref (for focus detection) ────────────────────────────────
@@ -2241,6 +2263,7 @@
           rowOffset={(page - 1) * PAGE_SIZE}
           pageSize={PAGE_SIZE}
           bind:pageIndex={dtPageIndex}
+          onSort={handleSort}
           editable={!connectionReadOnly}
           {hiddenColumns}
           {addRowTrigger}
